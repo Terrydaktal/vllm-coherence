@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+umask 077
+
+readonly PROGRAM=qwen-radiance-scheduler-status
+readonly CLIENT_STALE_SECONDS=20
+readonly SAMPLE_INTERVAL_SECONDS=0.5
+readonly SAMPLE_SCHEMA=urn:qwen-r9700:scheduler-telemetry:v2
+readonly LEGACY_SAMPLE_SCHEMA=urn:qwen-r9700:scheduler-telemetry:v1
+
+die() {
+	printf '%s: %s\n' "$PROGRAM" "$*" >&2
+	exit 2
+}
+
+validate_state_directory() {
+	local path=$1 details
+	[[ $path == /* && -d $path && ! -L $path ]] || die "unsafe state directory: $path"
+	details=$(stat -c '%u:%a' -- "$path") || die "cannot inspect state directory: $path"
+	[[ $details == "$(id -u):700" ]] || die "unsafe state directory ownership or mode: $path"
+	[[ -d $path/clients && ! -L $path/clients ]] || die "client directory is missing or unsafe: $path/clients"
+	details=$(stat -c '%u:%a' -- "$path/clients") || die "cannot inspect client directory: $path/clients"
+	[[ $details == "$(id -u):700" ]] || die "unsafe client directory ownership or mode: $path/clients"
+}
+
+owned_process() {
+	local pid=$1 expected_start=$2 observed
+	[[ $pid =~ ^[1-9][0-9]*$ && $expected_start =~ ^[1-9][0-9]*$ && -r /proc/$pid/stat ]] || return 1
+	observed=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null) || return 1
+	[[ $observed == "$expected_start" ]]
+}
+
+have_active_client() {
+	local marker filename pid start marker_details marker_mtime now
+	now=$(date +%s)
+	shopt -s nullglob
+	for marker in "$state_directory"/clients/*.heartbeat; do
+		[[ -f $marker && ! -L $marker ]] || continue
+		marker_details=$(stat -c '%u:%h:%a' -- "$marker" 2>/dev/null) || continue
+		[[ $marker_details == "$(id -u):1:600" ]] || continue
+		filename=${marker##*/}
+		if [[ $filename =~ ^([1-9][0-9]*)-([1-9][0-9]*)-[0-9a-f]{16}\.heartbeat$ ]]; then
+			pid=${BASH_REMATCH[1]}
+			start=${BASH_REMATCH[2]}
+		else
+			continue
+		fi
+		marker_mtime=$(stat -c %Y -- "$marker" 2>/dev/null) || continue
+		if ((now - marker_mtime <= CLIENT_STALE_SECONDS)) && owned_process "$pid" "$start"; then
+			return 0
+		fi
+		rm -f -- "$marker"
+	done
+	return 1
+}
+
+write_coverage() {
+	local coverage=$1 name=$2 coverage_stage
+	if [[ $coverage == \{*\} && ${#coverage} -le 65535 && $coverage != *$'\n'* && $coverage != *$'\r'* && $coverage != *$'\t'* ]]; then
+		coverage_stage=$(mktemp "$state_directory/.cache-residency.XXXXXX") || return 1
+		chmod 0600 -- "$coverage_stage"
+		printf '%s\n' "$coverage" >"$coverage_stage"
+		mv -fT -- "$coverage_stage" "$state_directory/$name"
+	fi
+}
+
+write_sample() {
+	local scheduler=$1 worker=$2 coverage=${3:-null} coverage_v2=${4:-null} phases=${5:-null} observed stage legacy_stage
+	write_coverage "$phases" request-phases.json || return 1
+	write_coverage "$coverage" cache-residency.json || return 1
+	write_coverage "$coverage_v2" cache-residency-v2.json || return 1
+	((${#scheduler} >= 2 && ${#scheduler} <= 32767)) || return 1
+	[[ $scheduler == \{*\} && $scheduler != *$'\n'* && $scheduler != *$'\r'* && $scheduler != *$'\t'* ]] || return 1
+	if [[ $worker != null ]]; then
+		((${#worker} >= 2 && ${#worker} <= 32767)) || return 1
+		[[ $worker == \{*\} && $worker != *$'\n'* && $worker != *$'\r'* && $worker != *$'\t'* ]] || return 1
+	fi
+	observed=${EPOCHREALTIME/./}
+	observed=${observed:0:13}
+	[[ $observed =~ ^[0-9]{13}$ ]] || return 1
+	stage=$(mktemp "$state_directory/.scheduler.XXXXXX") || return 1
+	chmod 0600 -- "$stage"
+	printf '{"schema":"%s","observed_at_ms":%s,"backend":{"scheduler":%s,"worker":%s}}\n' \
+		"$SAMPLE_SCHEMA" "$observed" "$scheduler" "$worker" >"$stage"
+	mv -fT -- "$stage" "$state_directory/scheduler-v2.json"
+	legacy_stage=$(mktemp "$state_directory/.scheduler-legacy.XXXXXX") || return 1
+	chmod 0600 -- "$legacy_stage"
+	printf '{"schema":"%s","observed_at_ms":%s,"scheduler":%s}\n' \
+		"$LEGACY_SAMPLE_SCHEMA" "$observed" "$scheduler" >"$legacy_stage"
+	mv -fT -- "$legacy_stage" "$state_directory/scheduler.json"
+}
+
+probe_command() {
+	if [[ $remote_host == local ]]; then
+		"$@"
+	else
+		ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 \
+			-o ServerAliveCountMax=2 "$remote_host" "$@"
+	fi
+}
+
+run_monitor() {
+	local lock_details scheduler worker coverage coverage_v2 phases probe_source cache_root
+	probe_source="${self%/*}/../src/qwen_r9700_lab/radiance_cache_residency.py"
+	[[ -f $probe_source && ! -L $probe_source ]] || die 'cache residency probe source is missing or unsafe'
+	cache_root=${QWEN_RADIANCE_CACHE_ROOT:-/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1}
+	[[ $cache_root =~ ^/[A-Za-z0-9_./-]+$ ]] || die 'invalid cache probe path'
+	validate_state_directory "$state_directory"
+	if [[ -e $state_directory/scheduler-monitor.lock || -L $state_directory/scheduler-monitor.lock ]]; then
+		[[ -f $state_directory/scheduler-monitor.lock && ! -L $state_directory/scheduler-monitor.lock ]] ||
+			die "unsafe monitor lock: $state_directory/scheduler-monitor.lock"
+	fi
+	exec {monitor_lock_fd}>>"$state_directory/scheduler-monitor.lock"
+	chmod 0600 -- "$state_directory/scheduler-monitor.lock"
+	lock_details=$(stat -c '%u:%h:%a' -- "$state_directory/scheduler-monitor.lock") ||
+		die "cannot inspect monitor lock"
+	[[ $lock_details == "$(id -u):1:600" ]] || die "unsafe monitor lock ownership or mode"
+	flock -n "$monitor_lock_fd" || exit 0
+	have_active_client || exit 0
+
+	while IFS=$'\t' read -r scheduler worker coverage coverage_v2 phases; do
+		write_sample "$scheduler" "$worker" "$coverage" "$coverage_v2" "$phases" || true
+		have_active_client || break
+	done < <(
+		probe_command /usr/bin/python3 -u - \
+			"$SAMPLE_INTERVAL_SECONDS" "$cache_root" auto <"$probe_source"
+	)
+}
+
+ensure_monitor() {
+	validate_state_directory "$state_directory"
+	nohup "$self" monitor "$state_directory" "$remote_host" </dev/null >/dev/null 2>&1 &
+}
+
+main() {
+	(($# == 3)) || die "usage: $PROGRAM ensure|monitor STATE_DIRECTORY REMOTE_HOST"
+	local action=$1
+	state_directory=$2
+	remote_host=$3
+	[[ $remote_host =~ ^[A-Za-z0-9_.@:-]{1,255}$ ]] || die "invalid remote host"
+	case $action in
+	ensure) ensure_monitor ;;
+	monitor) run_monitor ;;
+	*) die "unknown action: $action" ;;
+	esac
+}
+
+self=$(readlink -e -- "${BASH_SOURCE[0]}") || die "cannot resolve executable path"
+readonly self
+state_directory=''
+remote_host=''
+main "$@"
