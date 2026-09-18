@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Compatibility entry point for read-only Radiance cache inventory."""
+
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from qwen_r9700_lab.radiance_cache import DEFAULT_ROOT, main
+
+parser = argparse.ArgumentParser(
+    description=__doc__,
+    epilog=(
+        "The old group-number and age-based deletion rules were unsafe: groups 0-5 "
+        "are recurrent state in the qualified model, while groups 6-7 are full attention. "
+        "A missing recurrent tail does not make a full-attention block an orphan. "
+        "Use qwen-radiance-cache list or Pi /cache. Chat-owned generations are retired "
+        "automatically after compaction commits. Unassigned legacy files are preserved."
+    ),
+)
+parser.add_argument("--host", default="ai")
+parser.add_argument("--cache-root", default=DEFAULT_ROOT)
+parser.add_argument("--scan", action="store_true")
+parser.add_argument("--json", action="store_true")
+parser.add_argument("--prune-orphans", action="store_true")
+parser.add_argument("--older-than-hours", type=float)
+parser.add_argument("--older-than-days", type=float)
+parser.add_argument("--apply", action="store_true")
+parser.add_argument("--sync-btrfs", action="store_true")
+args = parser.parse_args()
+if (
+    args.prune_orphans
+    or args.older_than_hours is not None
+    or args.older_than_days is not None
+    or args.apply
+):
+    parser.error(
+        "shared legacy cache ownership cannot be inferred from group numbers "
+        "or timestamps; deletion refused"
+    )
+arguments = ["--host", args.host, "--cache-root", args.cache_root, "list"]
+if args.json:
+    arguments.append("--json")
+raise SystemExit(main(arguments))
