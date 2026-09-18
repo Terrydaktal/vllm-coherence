@@ -1,0 +1,413 @@
+{
+  "schema": "urn:qwen:reviewed-upstream-backports:v1",
+  "release": "radiance-1.0.16",
+  "components": {
+    "python": {
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53292",
+          "head": "15722ec85422f3cfbc459db0e56b0e8ba8ea83a3",
+          "author": "charsyam",
+          "title": "[Bugfix][Spec Decode] Isolate DFlash/DSpark compile cache by depth"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56531",
+          "head": "c323e0c3c6953e8a27a6c5f0659f11defd976958",
+          "author": "vadiklyutiy",
+          "title": "[Bugfix] Route every speculation-capable row through the speculative path so recurrent state stays consistent"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53798",
+          "head": "af5357c2b90b37bd2033578bbc97d0ddfa6cc69f",
+          "author": "ptorsten",
+          "title": "[Bugfix] Seed align-mode Mamba state_idx in Mamba blocks"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56196",
+          "head": "b09ed4fb8697fc443a7a73af9838aa0f769fde49",
+          "author": "yya007",
+          "title": "[Bugfix][Kernel] Mamba: store a short prefill chunk's conv state in its own block"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/52905",
+          "head": "c98d74538b463680d8921e863ee5ef5dace3ed0d",
+          "author": "maithilijoshi20",
+          "title": "[Bugfix][Kernel] Promote BF16 causal-conv operands before accumulation"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54733",
+          "head": "d94e67fcf2891dbbd57090efda92d5c5949bd97c",
+          "author": "YukioZzz",
+          "title": "[Bugfix][DCP] Recover failed KV loads across hybrid cache groups"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53158",
+          "head": "f179777519921feee6a7c601979102e1b7d57e00",
+          "author": "Shivani767",
+          "title": "[Bugfix][KV Cache] Reject stale partial hashes after full-block promotion"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/43569",
+          "head": "660c9326c06aa2afd7170a5fb423cb705ad39d4f",
+          "author": "ZJY0516",
+          "title": "[Core][Bugfix] Roll back eager prefix-cache registration on uncommitted free"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56525",
+          "head": "557596bf7aa40b315d1b743f44e296cab3c423e7",
+          "author": "datacrystals",
+          "title": "[Bugfix][Mamba] Guard state-block prefix-cache hits behind the writing step's commit fence"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56524",
+          "head": "a6c7ca8fc5d00bc40da317870f6a5768dca5b462",
+          "author": "datacrystals",
+          "title": "[Bugfix][Mamba] Zero mamba state blocks on (re)allocation to stop stale-state poisoning on hybrid models"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54979",
+          "head": "fc99cc53652a304834fe9d0deabfa1de369f5742",
+          "author": "kamb-code",
+          "title": "[Bugfix][V1] Register accepted spec-decode tokens before terminal cleanup"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54165",
+          "head": "5317f3eac0dc05e5af6ee82ad5ec14ee4cc0eb86",
+          "author": "Ledgero",
+          "title": "[Bugfix][Spec Decode] Restore hybrid mamba align cache hits under spec decode with a KV connector (related to #53505)"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56113",
+          "head": "832b057ea800bcc82ed216cb9a145f4e82d29222",
+          "author": "Svliverse-1",
+          "title": "[Bugfix][Tool Calling] Fix tool call truncation on multi-token reasoning transitions (#56077)"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56661",
+          "head": "24fbbd82657e09d9cfe5b1989240115eabf0e1c6",
+          "author": "JordiPosthumus",
+          "title": "[Bugfix][Parser] Preserve literal Qwen tool markers and following answers"
+        },
+        {
+          "url": "https://github.com/huggingface/transformers/pull/47855",
+          "head": "e7f47b6a3abacf33fd5a466720349d07118e8514",
+          "author": "ameerhmz",
+          "title": "[Tokenizer] Fix silent data loss when migrating additional_special_tokens (Fixes #47838)"
+        }
+      ],
+      "files": [
+        {
+          "path": "transformers/tokenization_utils_base.py",
+          "before_sha256": "520a914d0dcc873f8c8788e60ad3007f7db032c82c0b2b2c44ee7f44f2cdad8e",
+          "after_sha256": "512e1af2e5a37069b35a1580d1b5796f2a4d6c6b9197f1a8e680719ddd8a5ccc",
+          "patch": "python/transformers__tokenization_utils_base.py.patch",
+          "patch_sha256": "b9765823cf218dcd744ced100befe89883a2b2c54b64748521d84c4b1a0c0ccf"
+        },
+        {
+          "path": "vllm/config/speculative.py",
+          "before_sha256": "bb2955435856aa85633e7d799ce0ba241641952d65ac21ae10f097000ebd98f2",
+          "after_sha256": "c38762593001ca2812c96735f270cf35e4e7a57f1f2d322b035f8cb11e24da94",
+          "patch": "python/vllm__config__speculative.py.patch",
+          "patch_sha256": "aa7ddd0dd2bf8a5598f76625085b2a901036a33073e250b0976aecb361c2d7f3"
+        },
+        {
+          "path": "vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py",
+          "before_sha256": "872dcd8247ee64561ab035c2c56e8bd81eae01b284530d3e1b886ef4eae47246",
+          "after_sha256": "35e8fe7b2e8213e79ee787db0bd92f149a21d486434490837de89833e3298e67",
+          "patch": "python/vllm__distributed__kv_transfer__kv_connector__v1__offloading__scheduler.py.patch",
+          "patch_sha256": "da529d5531f208da81d78cda8f62a9f893c424612b9b4c66582f278794ecb6eb"
+        },
+        {
+          "path": "vllm/model_executor/layers/mamba/ops/causal_conv1d.py",
+          "before_sha256": "85d3715c80905579d9b031e4d4b43c3e041b152064cd3e2388b472a2f80c1a32",
+          "after_sha256": "09c953fff3cd4318d0cbea12811229f9c6d9e555650a9ea0ad54660a14aaa9aa",
+          "patch": "python/vllm__model_executor__layers__mamba__ops__causal_conv1d.py.patch",
+          "patch_sha256": "7fc51ae415897d677720335f71946204b82a7a9cfcf02e37cf7733e23cba179a"
+        },
+        {
+          "path": "vllm/parser/abstract_parser.py",
+          "before_sha256": "f4795bd54c057a05022caf1179271f82d66a70e9894b076d297574154bdbc77e",
+          "after_sha256": "7819b8f66c3d5c040c23b1efe69232551135db8a2686786a35ec81f46dd38a73",
+          "patch": "python/vllm__parser__abstract_parser.py.patch",
+          "patch_sha256": "dd2dfa56007db7492667e324608a1a3e95c47cb6fc8dab5da342752b2be34229"
+        },
+        {
+          "path": "vllm/parser/engine/parser_engine_config.py",
+          "before_sha256": "f7350e0ca9124001684f1f874ee72bf6a34932d3e4b84cc84567bbccf2f3e4b9",
+          "after_sha256": "62963d56fa049ea80210890ab2910d1c7b7c506014cfd28f7f392595b0da98f3",
+          "patch": "python/vllm__parser__engine__parser_engine_config.py.patch",
+          "patch_sha256": "1e6a663375ff6c504721113b28511448ad7be0a003361a4363f6c3e954e77222"
+        },
+        {
+          "path": "vllm/parser/engine/streaming_parser_engine.py",
+          "before_sha256": "d00aba98ad26a2593e022a1faf5d048348d892822f75be40d19cf1dd522570f2",
+          "after_sha256": "2968f7bd2f0d6f76ef8c27bc784fb1111f2e3d93f07491b7861a6e0010589264",
+          "patch": "python/vllm__parser__engine__streaming_parser_engine.py.patch",
+          "patch_sha256": "5d0d015cd51154ebbce3d5c79ad97ca5e99332ee94bbbee63eaa8bc7a13ebe6c"
+        },
+        {
+          "path": "vllm/parser/qwen3.py",
+          "before_sha256": "8a7ee658322de7b736ea5b0f802d70dd07a124b5878b4f8ad2f99eca8e1d35fb",
+          "after_sha256": "c7be0f9176c815128180cd96715523c7f67cdb75c2ca3b9bb0c3adf83741a21d",
+          "patch": "python/vllm__parser__qwen3.py.patch",
+          "patch_sha256": "aa7340776fe1f0c0ce2de2311d275bc468e1066eb3e725bdfc877138359220de"
+        },
+        {
+          "path": "vllm/v1/attention/backends/gdn_attn.py",
+          "before_sha256": "212e3c96c46d18dafa8db54256f449d22495c68d1264ae4401849d1dbb62785c",
+          "after_sha256": "3838cc7da8d6019c7ac2bd76e20cc75d31212bb70baffa7fc655022850067404",
+          "patch": "python/vllm__v1__attention__backends__gdn_attn.py.patch",
+          "patch_sha256": "317491f64e1fef2879f69614582779772e8170fbcfa064ed4b781e34e55e27f2"
+        },
+        {
+          "path": "vllm/v1/core/block_pool.py",
+          "before_sha256": "ddee56dccb2208411b3a035918e917ce8f56a9858471e9ca12b420d5d79bc69c",
+          "after_sha256": "595c433b7c5179615cc71b50a3f1052a4eaede505c325f8c05270700311dd401",
+          "patch": "python/vllm__v1__core__block_pool.py.patch",
+          "patch_sha256": "16f5bc3bb26a961073771c7e06d10e0f2d61b981a8e2d30580419c8e58781758"
+        },
+        {
+          "path": "vllm/v1/core/kv_cache_coordinator.py",
+          "before_sha256": "9e6542c45f138480b1a535a69ed5b16cf489e23b1185ef7e86bee096d4b1ccc6",
+          "after_sha256": "4c2f651229d5ed2cb70def3114a1a8f92ef8b10564553dccb3b601576e7f1cac",
+          "patch": "python/vllm__v1__core__kv_cache_coordinator.py.patch",
+          "patch_sha256": "73400763fa575773128c949500b3cc29c6952f4ff646abbdae7d2caf02b7438f"
+        },
+        {
+          "path": "vllm/v1/core/kv_cache_manager.py",
+          "before_sha256": "2d20c3d98845cfd8d88a2f66b8fc6402ea1fcfbee16879d2364a4a9e45b8fa47",
+          "after_sha256": "0cc7784bb87e9bf14db1f991c2acc2848b58d9df72f90f1c7473f1ef72e19c66",
+          "patch": "python/vllm__v1__core__kv_cache_manager.py.patch",
+          "patch_sha256": "8ea1f3f3f0832a493432e75b89a4e109b233f717789be36f97741e8f769f1fd2"
+        },
+        {
+          "path": "vllm/v1/core/sched/scheduler.py",
+          "before_sha256": "f5cf1c10195398c45dfcd5d9ac5bba8f46c9f28311b9e4ea31e1d69516a78191",
+          "after_sha256": "281563e151be392f16d9d63022a19e656ebf1fb73a1890f6503b2cebe1dfc8a1",
+          "patch": "python/vllm__v1__core__sched__scheduler.py.patch",
+          "patch_sha256": "326c46ae76c4ac581b3b193a8c2e04e6a16cc58eeae586eb5d3136ae289d89ca"
+        },
+        {
+          "path": "vllm/v1/core/single_type_kv_cache_manager.py",
+          "before_sha256": "dc6d2e64cc4cd8cbb3f4bd77d2d035038658d75b6e52f9ace0cf637a4897f71f",
+          "after_sha256": "c10ec7d5ca1344bdffc98b0ff2846886664b5639ff4f51603ad93cc4736b22cb",
+          "patch": "python/vllm__v1__core__single_type_kv_cache_manager.py.patch",
+          "patch_sha256": "9575765a33070ecea00153804a60bbb84bc7f2f8c66aa887b508e707c20d9d6b"
+        },
+        {
+          "path": "vllm/v1/worker/gpu/model_runner.py",
+          "before_sha256": "278c2c33797b15e4f3c623a352d0b4076c9d29a688693353516da21699a0945c",
+          "after_sha256": "53f19d2f0f40caf0439b661935a50a01eec64c7f7f398165cf0f0bbb1cfc6af8",
+          "patch": "python/vllm__v1__worker__gpu__model_runner.py.patch",
+          "patch_sha256": "0b3ab182f11c9db7b027387d02a0b021d84d890bb130984477136ca34bb2628f"
+        },
+        {
+          "path": "vllm/v1/worker/gpu/model_states/interface.py",
+          "before_sha256": "bdf320bfef2a97a08d1a92d89ab01713a852569bbaa20575a28d802e1a8688c5",
+          "after_sha256": "9bfcd0d376bb3840f4ee67791bab4668f8902a19ce117f5fac0e14664eaa0c86",
+          "patch": "python/vllm__v1__worker__gpu__model_states__interface.py.patch",
+          "patch_sha256": "ef168007c89c491c1154f7c1dc2e4ae13ee00cbb3f75f6664b7a79ca43b1a94f"
+        },
+        {
+          "path": "vllm/v1/worker/gpu/model_states/mamba_hybrid.py",
+          "before_sha256": "3d1d3edc157d87f10aa6fb4862fbd25b435ede51499d7c64e68eb713de85e648",
+          "after_sha256": "fc9f89634f79df1e6080440701d20b28b7beb838e325425be085bf4e98329e69",
+          "patch": "python/vllm__v1__worker__gpu__model_states__mamba_hybrid.py.patch",
+          "patch_sha256": "e6d1abb835876968f6dca18c3de5297793b028aff10a7845c3d2a977ff0b17c0"
+        },
+        {
+          "path": "vllm/v1/worker/gpu_model_runner.py",
+          "before_sha256": "ec2d888e404a4a199ce4ecdb1daa7b95548b6c11e5b464fe5cd7c84930b4f29a",
+          "after_sha256": "579f2a7e9b94cc491a1f45c53cc5f2a697637e19bf99af74cedceae46708c065",
+          "patch": "python/vllm__v1__worker__gpu_model_runner.py.patch",
+          "patch_sha256": "86548e152710b40cb72890cd8988e04c214225762f0d2e851018f3feb1929ab6"
+        },
+        {
+          "path": "vllm/v1/worker/utils.py",
+          "before_sha256": "e9d4381d903f7345c9b2fa7e9facfdfe7de7c36c2488bf7e28398183282b7a07",
+          "after_sha256": "fd94bee62aed2ef0ef6939da09892e1a072d790385431f252e132aa505154173",
+          "patch": "python/vllm__v1__worker__utils.py.patch",
+          "patch_sha256": "ab2185b9afcd0c57c9ffa6a57330ddbeeaad41672553bcf769305a6a0d26f0ff"
+        }
+      ],
+      "native_rebuild_required": false,
+      "gpu_qualification": "NOT_RUN"
+    },
+    "triton": {
+      "upstream": [
+        {
+          "url": "https://github.com/triton-lang/triton/pull/10496",
+          "head": "092c52ab812dd085fd429b7a4afadb4c5299ca84",
+          "author": "mgehre-amd",
+          "title": "[AMD] BuiltinFuncToLLVM: use Normal region simplification level"
+        }
+      ],
+      "files": [
+        {
+          "path": "third_party/amd/lib/TritonAMDGPUToLLVM/BuiltinFuncToLLVM.cpp",
+          "before_sha256": "4a9c2e3dc8f374bcc996fdca86725c40d0dbc04d261ad1e23ed750ef2fae7b06",
+          "after_sha256": "3138addb68d59988345cd1473511c2bf65e6be39f8a5b8e9129aa4b8847f441f",
+          "patch": "triton/third_party__amd__lib__TritonAMDGPUToLLVM__BuiltinFuncToLLVM.cpp.patch",
+          "patch_sha256": "560aa7e1b05865463babc67526cc1d7534d1ecb9e2789853c95b509816d9d07b"
+        }
+      ],
+      "native_rebuild_required": true,
+      "gpu_qualification": "NOT_RUN"
+    },
+    "rocr": {
+      "upstream": [
+        {
+          "url": "https://github.com/ROCm/rocm-systems/pull/11140",
+          "head": "fc4fe39b327c6845082624d77398571cc7a5545f",
+          "author": "andmar-amd",
+          "title": "fix(rocr): [ROCM-27751] Make hsa_amd_memory_lock actually pin under the SVM API"
+        }
+      ],
+      "files": [
+        {
+          "path": "projects/rocr-runtime/libhsakmt/include/hsakmt/hsakmttypes.h",
+          "before_sha256": "bfebac6a3f90258fe491079b742442d483e0eb9ac3ebdf5e6023ab1c8518d795",
+          "after_sha256": "1c5e4de4139858e3e3fdf0118677219a1efb05cab21d44d8f89daf69db69d465",
+          "patch": "rocr/projects__rocr-runtime__libhsakmt__include__hsakmt__hsakmttypes.h.patch",
+          "patch_sha256": "d88925ecf73ab572a00c2f12babc6a66dcdf673df1fb37d586c0ab7a7e148f4f"
+        },
+        {
+          "path": "projects/rocr-runtime/libhsakmt/src/fmm.c",
+          "before_sha256": "1d9aff73afdcd1f06d7bfd162165e1432a3870c0cb3b5b8693d0da162886386b",
+          "after_sha256": "c9166ef2294b34c86e28ee946d9366e1cf97dcecc7a058fc3980e674e1bf7c10",
+          "patch": "rocr/projects__rocr-runtime__libhsakmt__src__fmm.c.patch",
+          "patch_sha256": "b069bc19eab18fa85955311a0758cfc78e564a90ff07341a2c94b8c98f0fafae"
+        },
+        {
+          "path": "projects/rocr-runtime/libhsakmt/src/kfdcontext.c",
+          "before_sha256": "58933a848bbeca23c79f2fea4f717428527496ebc725cf3ccfc054806dcf3ac1",
+          "after_sha256": "4ba7ce0a3dee92e91e5093ed43e425b3d353dcc7086b3f679e895ce878132706",
+          "patch": "rocr/projects__rocr-runtime__libhsakmt__src__kfdcontext.c.patch",
+          "patch_sha256": "6a167752fffc62c8e99c464fb1ce9fad8e2096bb70c7660eac38c024d31385d1"
+        },
+        {
+          "path": "projects/rocr-runtime/libhsakmt/src/libhsakmt.h",
+          "before_sha256": "7a1e77f640ad9fa1c46092b9e0ed610699dc8e73b26c5314a46349cd052347b2",
+          "after_sha256": "0eae0ebf7328ecbab681d0834b77b6e504e96013cfa75f379c046e4c91562409",
+          "patch": "rocr/projects__rocr-runtime__libhsakmt__src__libhsakmt.h.patch",
+          "patch_sha256": "0613508a4776a2deb97862e3bb2d4e0e235e4642fd82dc1127334fa462ed5c8f"
+        },
+        {
+          "path": "projects/rocr-runtime/libhsakmt/src/memory.c",
+          "before_sha256": "c8a80246f8b8c1e4cc3cdc750880757e8fcf57711dd8b30ed551c65f0e7c194b",
+          "after_sha256": "74089b91a895f750145aed9ec670e0b892620db364ee7ffa71bb5e302d0ae8e1",
+          "patch": "rocr/projects__rocr-runtime__libhsakmt__src__memory.c.patch",
+          "patch_sha256": "37fd680645dc7a3b68acf34b4c0e40cd3a3e7c47d128a8fc92971f54e8829e83"
+        },
+        {
+          "path": "projects/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_memory_region.cpp",
+          "before_sha256": "25f342eb11abd18a42786b5dac32bad0b0ba85c7aea9a7c89dfbde1534f71612",
+          "after_sha256": "d5bfcb4df10c659b93f88fe068957c9d0412299ed3732c88fb146fd8f3becb3c",
+          "patch": "rocr/projects__rocr-runtime__runtime__hsa-runtime__core__runtime__amd_memory_region.cpp.patch",
+          "patch_sha256": "551d49111b46b495cf784f022a20e990da43c8ef39ba5ecf59b71f61d1d14f53"
+        }
+      ],
+      "native_rebuild_required": true,
+      "gpu_qualification": "NOT_RUN"
+    },
+    "xgrammar": {
+      "upstream": [
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/699",
+          "head": "8eb2e0b665fa69026011af82a924564d3382d59b",
+          "author": "CaiJohn",
+          "title": "fix: make fill_next_token_bitmask stride-aware"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/710",
+          "head": "537f0820478e21fe528d040f0d74c133ad6aeb41",
+          "author": "n0gu-furiosa",
+          "title": "fix: accept stop token when it completes the grammar"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/803",
+          "head": "d4db8e8207e8267cae5de8397707b47fbf92fec5",
+          "author": "wangxuw",
+          "title": "fix(json_schema): emit nothing for property-less XML tool-call objects"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/828",
+          "head": "ba4f4b3575d40d1ee7dd3ac83551a7c9b75c8a64",
+          "author": "filipsajdak",
+          "title": "fix: allow JSON escapes and count code points in length-bounded strings"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/859",
+          "head": "778ea5ed15c75b8e0cd61dc731203dc2f1daf5de",
+          "author": "WetABQ",
+          "title": "[Fix] Desugar anyOf/oneOf/allOf with sibling keywords instead of silently dropping them"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/865",
+          "head": "824fdf71f5d050e8c32f148e5e8fc3d73b7beea3",
+          "author": "alizahidraja",
+          "title": "fix: don't truncate strings at embedded NUL bytes in EscapeString and ByteToLatin1"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/881",
+          "head": "a79fd29630111bd424ef5277e0a024ab675f5622",
+          "author": "LOGO127",
+          "title": "fix: reject malformed function tools falling back to builtins"
+        }
+      ],
+      "files": [
+        {
+          "path": "cpp/grammar_matcher.cc",
+          "before_sha256": "41666dba38499ab2297239e62ed6e4f44768d33c3dedb589631912c652d57199",
+          "after_sha256": "488601c76e3e3ba866bb34b71da6e09b6cbcdd32f237014255a1072857ff8ed4",
+          "patch": "xgrammar/cpp__grammar_matcher.cc.patch",
+          "patch_sha256": "58d0c819640700e3e29f8c017badf67ac0b5c2d269e99f892f37b581625269fd"
+        },
+        {
+          "path": "cpp/json_schema_converter.cc",
+          "before_sha256": "c154c922f455dc4bdf61a7c34f79d4d497062ed9a53fddd67ebed1c8a022618b",
+          "after_sha256": "4d183b8ad7a8fe1f731e41c13ef2c16d902c840a6f7905f614ce7b6c6af11fe5",
+          "patch": "xgrammar/cpp__json_schema_converter.cc.patch",
+          "patch_sha256": "b1d7963360094a7ba41fb0f08fda9956b09c25914ec5dd0c0fe82494d9a39c0a"
+        },
+        {
+          "path": "cpp/json_schema_converter_ext.cc",
+          "before_sha256": "618971ba2e5487ae324d88160f5f8b8d233e7548e7430dd679f3b6c6c58ae608",
+          "after_sha256": "948456cd7c1f0b40621f9466483d7382cdac9f1393b26260264d2454377bd015",
+          "patch": "xgrammar/cpp__json_schema_converter_ext.cc.patch",
+          "patch_sha256": "8d1de03157a3e18e21a1999d0a20bbbae6205a328da83f048c83c88ec4ef2cd6"
+        },
+        {
+          "path": "cpp/support/encoding.h",
+          "before_sha256": "97d64099b016239990c3bfe14349b53e8e3d9a2586744e89dfef782247891cde",
+          "after_sha256": "d291f7afdd46ce27d5475df640c4af1ce4ce3a678c9e8d6de0adc35a8a0209b7",
+          "patch": "xgrammar/cpp__support__encoding.h.patch",
+          "patch_sha256": "d85d1116bbc200097024ba9eaf0995c0fc308f2be481748cdfa3575997dfa142"
+        },
+        {
+          "path": "cpp/support/json_serializer.h",
+          "before_sha256": "a5ffd465e1177ffe9e948dc580dc42d687515fe3545de2a51203fdfd309be5fa",
+          "after_sha256": "f81bb9267eb519458f0ff9625c0befeef44161b246c96dd5a4224467f27f009b",
+          "patch": "xgrammar/cpp__support__json_serializer.h.patch",
+          "patch_sha256": "108a957199c13dde5319bb1d931cd6532be5e24bfd063f9ecbd41ad5a5ac9049"
+        },
+        {
+          "path": "cpp/tokenizer_info.cc",
+          "before_sha256": "d87118120b7c34e1148c629ba5c035d021ddc4d0247a28c071100d8a51f55531",
+          "after_sha256": "b60183c76002651c6ca2e5c398a9ce2fd76face6f0be2337b5e8e651d1268eec",
+          "patch": "xgrammar/cpp__tokenizer_info.cc.patch",
+          "patch_sha256": "334f5e2069cc2ea5c3a5344e5219e4e713f976bcff664e811e05208af47dd3e9"
+        },
+        {
+          "path": "python/xgrammar/openai_tool_call_schema.py",
+          "before_sha256": "62d92f0e58d1c2e6f30fd808b16d23f4ac26d56395b74de69a9e07c1905d70eb",
+          "after_sha256": "5bfb9780bc00114463c9ac4594852328312b2542a2e7ede29987307653bca28b",
+          "patch": "xgrammar/python__xgrammar__openai_tool_call_schema.py.patch",
+          "patch_sha256": "46087c12c2c149c17dc75a2f9dec0d3a7d6c22a467a0f85f2d5af158c4c0e27e"
+        }
+      ],
+      "native_rebuild_required": true,
+      "gpu_qualification": "NOT_RUN"
+    }
+  }
+}

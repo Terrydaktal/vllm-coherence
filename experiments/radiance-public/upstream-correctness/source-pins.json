@@ -1,0 +1,34 @@
+{
+  "schema": "urn:qwen:upstream-backport-source-pins:v1",
+  "build_image": "docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
+  "sources": {
+    "rocr": {
+      "repository": "ROCm/rocm-systems",
+      "revision": "2b22ab0195cc1461cd9abf3b969e9dd7c10af350",
+      "archive_sha256": "e1e71a2df66701e3703aca181e6751623521bef5e042a538fb6ad1ae39ada776",
+      "files": 768,
+      "subset": "projects/rocr-runtime/"
+    },
+    "triton": {
+      "repository": "triton-lang/triton",
+      "revision": "f0b55c07da61c71775bef6d1a15ebf846430ac75",
+      "archive_sha256": "a2af62a15ed602cffd5d44e73eea6e37940e7dea1b5aee70f53594b623f2aa59",
+      "files": 1469,
+      "subset": ""
+    },
+    "xgrammar": {
+      "repository": "mlc-ai/xgrammar",
+      "revision": "557becfb64c503ae9c04344b0047661f43f44320",
+      "archive_sha256": "778eb231ab6e8f15d68d42a89c867c70be0d0f9358458f7e1a30a09ba1cc652e"
+    }
+  },
+  "xgrammar_submodules": {
+    "3rdparty/cpptrace": "6689d14c203eed390ae7bb64f56a983cfd7dff9c",
+    "3rdparty/dlpack": "bbd2f4d32427e548797929af08cfe2a9cbb3cf12",
+    "3rdparty/googletest": "df1544bcee0c7ce35cd5ea0b3eb8cc81855a4140"
+  },
+  "rocr_required_poll_backoff": {
+    "runtime/hsa-runtime/core/runtime/runtime.cpp": "46ea7afeb0910a3c6b99e00e1aef29c8e20043532d3325b70f7206e914f4976b",
+    "runtime/hsa-runtime/core/util/poll_backoff.h": "2dcf4c597ca89721583185f75f0d4746e6a124edcb54d721df5d3e5ab90725b8"
+  }
+}
