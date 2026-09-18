@@ -1,0 +1,20 @@
+--- a/projects/rocr-runtime/libhsakmt/src/memory.c
++++ b/projects/rocr-runtime/libhsakmt/src/memory.c
+@@ -277,6 +277,8 @@
+ 		return HSAKMT_STATUS_SUCCESS;
+ 
+ 	HsaMemFlags flags;
++
++	flags.Value = 0;
+ 	flags.ui32.CoarseGrain = 1;
+ 	flags.ui32.ExtendedCoherent = 0;
+ 	return hsakmt_fmm_register_memory(ctx,
+@@ -306,6 +308,8 @@
+ 
+ 	if (ret == HSAKMT_STATUS_SUCCESS) {
+ 		HsaMemFlags flags;
++
++		flags.Value = 0;
+ 		flags.ui32.CoarseGrain = 1;
+ 		flags.ui32.ExtendedCoherent = 0;
+ 
