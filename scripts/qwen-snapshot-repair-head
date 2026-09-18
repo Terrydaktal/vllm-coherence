@@ -1,0 +1,486 @@
+#!/usr/bin/env python3
+"""Publish an authenticated monotonic repair head from the current head's parent."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import stat
+import tempfile
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
+
+METADATA_DIR = ".qwen-250k-cache-v1"
+REF_SCHEMA = "urn:qwen-r9700:cache-ref:v1"
+MANIFEST_SCHEMA = "urn:qwen-r9700:cache-generation:p8:v1"
+PLAN_SCHEMA = "urn:qwen-r9700:snapshot-repair-head-plan:v1"
+COMPLETE_SCHEMA = "urn:qwen-r9700:snapshot-repair-head-complete:v1"
+SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+class RepairError(RuntimeError):
+    """The requested repair is unsafe, unauthenticated, or raced."""
+
+
+def canonical_bytes(value: object) -> bytes:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+
+
+def digest_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def require_digest(value: object, label: str) -> str:
+    if not isinstance(value, str) or DIGEST_RE.fullmatch(value) is None:
+        raise RepairError(f"{label} is not a lowercase SHA-256 digest")
+    return value
+
+
+def inspect_directory(path: Path, label: str, *, mode: int | None = None) -> None:
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise RepairError(f"cannot inspect {label} {path}: {error}") from error
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise RepairError(f"{label} is not an owned protected real directory: {path}")
+    if mode is not None and stat.S_IMODE(info.st_mode) != mode:
+        raise RepairError(f"{label} mode differs: {path}")
+
+
+def stable_file(
+    path: Path,
+    label: str,
+    *,
+    mode: int | None = None,
+    maximum_bytes: int | None = None,
+) -> tuple[bytes, os.stat_result]:
+    try:
+        before = path.lstat()
+    except OSError as error:
+        raise RepairError(f"cannot inspect {label} {path}: {error}") from error
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_uid != os.getuid()
+        or before.st_nlink != 1
+        or before.st_mode & 0o022
+    ):
+        raise RepairError(f"{label} is not an owned protected single-link file: {path}")
+    if mode is not None and stat.S_IMODE(before.st_mode) != mode:
+        raise RepairError(f"{label} mode differs: {path}")
+    if maximum_bytes is not None and not 1 <= before.st_size <= maximum_bytes:
+        raise RepairError(f"{label} size is unsafe: {path}")
+    try:
+        data = path.read_bytes()
+        after = path.lstat()
+    except OSError as error:
+        raise RepairError(f"cannot read {label} {path}: {error}") from error
+
+    def identity(value: os.stat_result) -> tuple[int, ...]:
+        return (
+            value.st_dev,
+            value.st_ino,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+            value.st_uid,
+            value.st_gid,
+            value.st_mode,
+            value.st_nlink,
+        )
+
+    if identity(before) != identity(after) or len(data) != before.st_size:
+        raise RepairError(f"{label} changed while it was read: {path}")
+    return data, before
+
+
+def load_json(
+    path: Path, label: str, *, mode: int, maximum_bytes: int
+) -> tuple[dict[str, Any], bytes]:
+    data, _ = stable_file(path, label, mode=mode, maximum_bytes=maximum_bytes)
+    try:
+        value = json.loads(data)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RepairError(f"{label} is not valid JSON: {path}") from error
+    if not isinstance(value, dict):
+        raise RepairError(f"{label} is not a JSON object: {path}")
+    return value, data
+
+
+def authenticate_manifest(
+    path: Path,
+    expected_digest: str,
+    *,
+    session_id: str,
+    branch: str,
+    generation: int,
+) -> tuple[dict[str, Any], bytes]:
+    manifest, data = load_json(path, "snapshot manifest", mode=0o400, maximum_bytes=4 * 1024 * 1024)
+    unsigned = dict(manifest)
+    claimed = unsigned.pop("manifest_sha256", None)
+    if (
+        manifest.get("schema") != MANIFEST_SCHEMA
+        or claimed != expected_digest
+        or digest_bytes(canonical_bytes(unsigned)) != expected_digest
+        or manifest.get("generation") != generation
+        or manifest.get("session") != {"branch": branch, "session_id": session_id}
+    ):
+        raise RepairError(f"snapshot manifest identity or self-authentication failed: {path}")
+    return manifest, data
+
+
+def safe_payload(root: Path, value: object) -> Path:
+    if not isinstance(value, str) or not value or value.startswith("/"):
+        raise RepairError("snapshot payload path is not relative")
+    parts = Path(value).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts) or METADATA_DIR in parts:
+        raise RepairError("snapshot payload path escapes its namespace")
+    path = root.joinpath(*parts)
+    if path.suffix != ".bin":
+        raise RepairError("snapshot payload path is not a .bin file")
+    return path
+
+
+def authenticate_source_payload(root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    bindings = manifest.get("bindings")
+    if not isinstance(bindings, dict):
+        raise RepairError("source manifest bindings are missing")
+    require_digest(bindings.get("offload_abi_sha256"), "offload ABI binding")
+    for name in ("target_model", "draft_model", "tokenizer", "runtime"):
+        record = bindings.get(name)
+        if not isinstance(record, dict):
+            raise RepairError(f"source {name} binding is missing")
+        evidence_path = record.get("evidence_path")
+        expected = require_digest(record.get("evidence_sha256"), f"source {name} evidence")
+        if not isinstance(evidence_path, str) or not Path(evidence_path).is_absolute():
+            raise RepairError(f"source {name} evidence path is invalid")
+        evidence, _ = stable_file(Path(evidence_path), f"source {name} evidence")
+        if digest_bytes(evidence) != expected:
+            raise RepairError(f"source {name} evidence digest differs")
+
+    namespace = manifest.get("namespace")
+    if not isinstance(namespace, dict):
+        raise RepairError("source namespace is missing")
+    relative_config = namespace.get("config_relative_path")
+    if not isinstance(relative_config, str) or relative_config.startswith("/"):
+        raise RepairError("source namespace config path is invalid")
+    config_parts = Path(relative_config).parts
+    if not config_parts or any(part in {"", ".", ".."} for part in config_parts):
+        raise RepairError("source namespace config path escapes its namespace")
+    config, _ = stable_file(root.joinpath(*config_parts), "source namespace config")
+    if digest_bytes(config) != require_digest(namespace.get("config_sha256"), "config digest"):
+        raise RepairError("source namespace config digest differs")
+
+    blobs = manifest.get("blobs")
+    if not isinstance(blobs, list) or not blobs:
+        raise RepairError("source manifest payload list is missing")
+    seen: set[str] = set()
+    catalog: list[tuple[str, str]] = []
+    payload_bytes = 0
+    for blob in blobs:
+        if not isinstance(blob, dict):
+            raise RepairError("source manifest contains a non-object payload")
+        relative = blob.get("relative_path")
+        if not isinstance(relative, str) or relative in seen:
+            raise RepairError("source payload path is missing or duplicated")
+        seen.add(relative)
+        path = safe_payload(root, relative)
+        expected_size = blob.get("size")
+        if (
+            not isinstance(expected_size, int)
+            or isinstance(expected_size, bool)
+            or expected_size <= 0
+        ):
+            raise RepairError("source payload size is invalid")
+        payload, info = stable_file(path, "source snapshot payload")
+        if info.st_size != expected_size:
+            raise RepairError(f"source payload size differs: {path}")
+        payload_digest = require_digest(blob.get("payload_sha256"), "source payload digest")
+        if digest_bytes(payload) != payload_digest:
+            raise RepairError(f"source payload digest differs: {path}")
+        payload_bytes += expected_size
+        catalog.append((relative, payload_digest))
+    catalog_digest = digest_bytes(
+        "".join(f"{relative}\0{digest}\n" for relative, digest in sorted(catalog)).encode()
+    )
+    if catalog_digest != require_digest(manifest.get("source_catalog_sha256"), "catalog digest"):
+        raise RepairError("source payload catalog digest differs")
+    if manifest.get("summary") != {"blob_count": len(blobs), "payload_bytes": payload_bytes}:
+        raise RepairError("source payload summary differs")
+    return {
+        "blob_count": len(blobs),
+        "payload_bytes": payload_bytes,
+        "source_catalog_sha256": catalog_digest,
+    }
+
+
+def manifest_boundary(manifest: dict[str, Any], label: str) -> tuple[int, int]:
+    request = manifest.get("request")
+    if not isinstance(request, dict):
+        raise RepairError(f"{label} request is missing")
+    prompt_tokens = request.get("prompt_tokens")
+    replay_tokens = request.get("replay_boundary_tokens")
+    for value, field in (
+        (prompt_tokens, "prompt_tokens"),
+        (replay_tokens, "replay_boundary_tokens"),
+    ):
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise RepairError(f"{label} {field} is invalid")
+    if replay_tokens > prompt_tokens:
+        raise RepairError(f"{label} replay boundary exceeds its prompt")
+    return prompt_tokens, replay_tokens
+
+
+def process_users(root: Path) -> list[int]:
+    prefix = f"{root}/"
+    users: list[int] = []
+    for process in Path("/proc").iterdir():
+        if not process.name.isdigit() or int(process.name) == os.getpid():
+            continue
+        try:
+            descriptors = list((process / "fd").iterdir())
+        except OSError:
+            continue
+        for descriptor in descriptors:
+            try:
+                target = str(descriptor.readlink())
+            except OSError:
+                continue
+            if target == str(root) or target.startswith(prefix):
+                users.append(int(process.name))
+                break
+    return sorted(set(users))
+
+
+def build_plan(arguments: argparse.Namespace) -> tuple[dict[str, Any], bytes, bytes, bytes]:
+    root = arguments.root
+    if not root.is_absolute():
+        raise RepairError("snapshot root must be absolute")
+    for value, label in ((arguments.session_id, "session"), (arguments.branch, "branch")):
+        if SAFE_COMPONENT.fullmatch(value) is None:
+            raise RepairError(f"{label} is invalid")
+    if arguments.repair_generation != arguments.expected_current_generation + 1:
+        raise RepairError("repair generation must immediately follow the current generation")
+    if arguments.source_generation != arguments.expected_current_generation - 1:
+        raise RepairError("source generation must be the current head's immediate parent")
+    if UTC_RE.fullmatch(arguments.updated_at) is None:
+        raise RepairError("updated-at must be a whole-second UTC timestamp")
+    expected_current = require_digest(arguments.expected_current_manifest, "current manifest")
+    source_digest = require_digest(arguments.source_manifest, "source manifest")
+
+    metadata = root / METADATA_DIR
+    manifests = metadata / "manifests"
+    refs = metadata / "refs"
+    ref_directory = refs / arguments.session_id
+    ref_path = ref_directory / f"{arguments.branch}.json"
+    inspect_directory(root, "snapshot root")
+    inspect_directory(metadata, "snapshot metadata", mode=0o700)
+    inspect_directory(manifests, "snapshot manifest directory", mode=0o700)
+    inspect_directory(refs, "snapshot reference directory", mode=0o700)
+    inspect_directory(ref_directory, "snapshot session reference directory", mode=0o700)
+    current_ref, current_ref_data = load_json(
+        ref_path, "current branch reference", mode=0o600, maximum_bytes=64 * 1024
+    )
+    expected_ref = {
+        "branch": arguments.branch,
+        "generation": arguments.expected_current_generation,
+        "manifest_sha256": expected_current,
+        "schema": REF_SCHEMA,
+        "session_id": arguments.session_id,
+        "updated_at": current_ref.get("updated_at"),
+    }
+    if current_ref != expected_ref or not isinstance(current_ref.get("updated_at"), str):
+        raise RepairError(
+            "current branch reference differs from the expected compare-and-swap head"
+        )
+    current_manifest, current_manifest_data = authenticate_manifest(
+        manifests / f"{expected_current}.json",
+        expected_current,
+        session_id=arguments.session_id,
+        branch=arguments.branch,
+        generation=arguments.expected_current_generation,
+    )
+    if current_manifest.get("parent_manifest_sha256") != source_digest:
+        raise RepairError("requested source is not the current manifest's immediate parent")
+    source_manifest, source_manifest_data = authenticate_manifest(
+        manifests / f"{source_digest}.json",
+        source_digest,
+        session_id=arguments.session_id,
+        branch=arguments.branch,
+        generation=arguments.source_generation,
+    )
+    current_boundary = manifest_boundary(current_manifest, "current manifest")
+    source_boundary = manifest_boundary(source_manifest, "source manifest")
+    if source_boundary[0] < current_boundary[0] or source_boundary[1] < current_boundary[1]:
+        raise RepairError(
+            "same-chain repair would move the prompt or replay boundary backwards; "
+            "fork a new snapshot-continuation epoch instead"
+        )
+    payload = authenticate_source_payload(root, source_manifest)
+
+    repair_manifest = dict(source_manifest)
+    repair_manifest["generation"] = arguments.repair_generation
+    repair_manifest["parent_manifest_sha256"] = expected_current
+    repair_manifest.pop("manifest_sha256", None)
+    repair_digest = digest_bytes(canonical_bytes(repair_manifest))
+    repair_manifest["manifest_sha256"] = repair_digest
+    repair_manifest_data = canonical_bytes(repair_manifest) + b"\n"
+    repair_ref = {
+        "branch": arguments.branch,
+        "generation": arguments.repair_generation,
+        "manifest_sha256": repair_digest,
+        "schema": REF_SCHEMA,
+        "session_id": arguments.session_id,
+        "updated_at": arguments.updated_at,
+    }
+    repair_ref_data = canonical_bytes(repair_ref) + b"\n"
+    plan = {
+        "current": {
+            "generation": arguments.expected_current_generation,
+            "manifest_file_sha256": digest_bytes(current_manifest_data),
+            "manifest_sha256": expected_current,
+            "ref_file_sha256": digest_bytes(current_ref_data),
+        },
+        "payload": payload,
+        "repair": {
+            "generation": arguments.repair_generation,
+            "manifest_file_sha256": digest_bytes(repair_manifest_data),
+            "manifest_sha256": repair_digest,
+            "ref_file_sha256": digest_bytes(repair_ref_data),
+            "updated_at": arguments.updated_at,
+        },
+        "root": str(root),
+        "schema": PLAN_SCHEMA,
+        "source": {
+            "generation": arguments.source_generation,
+            "manifest_file_sha256": digest_bytes(source_manifest_data),
+            "manifest_sha256": source_digest,
+            "prompt_token_ids_sha256": source_manifest["request"]["prompt_token_ids_sha256"],
+            "prompt_tokens": source_manifest["request"]["prompt_tokens"],
+        },
+        "target": {"branch": arguments.branch, "session_id": arguments.session_id},
+    }
+    plan["plan_sha256"] = digest_bytes(canonical_bytes(plan))
+    return plan, repair_manifest_data, repair_ref_data, current_ref_data
+
+
+def fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def publish_create_only(path: Path, data: bytes, *, mode: int) -> None:
+    if path.exists() or path.is_symlink():
+        observed, _ = stable_file(path, "existing create-only output", mode=mode)
+        if observed != data:
+            raise RepairError(f"create-only output differs: {path}")
+        return
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except BaseException:
+        with suppress(FileNotFoundError):
+            path.unlink()
+        raise
+    fsync_directory(path.parent)
+
+
+def atomic_replace(path: Path, data: bytes) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.repair-", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        fsync_directory(path.parent)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def apply_plan(arguments: argparse.Namespace, expected_plan_sha256: str) -> dict[str, Any]:
+    metadata = arguments.root / METADATA_DIR
+    lock_path = metadata / "LIFECYCLE.lock"
+    _, lock_info = stable_file(lock_path, "snapshot lifecycle lock", mode=0o600)
+    if lock_info.st_size != 0:
+        raise RepairError("snapshot lifecycle lock is not empty")
+    with lock_path.open("r+b", buffering=0) as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        users = process_users(arguments.root)
+        if users:
+            raise RepairError(f"snapshot root is still open by processes: {users}")
+        plan, manifest_data, ref_data, current_ref_data = build_plan(arguments)
+        if plan["plan_sha256"] != expected_plan_sha256:
+            raise RepairError("repair plan differs from --expected-plan-sha256")
+        manifests = metadata / "manifests"
+        ref_path = metadata / "refs" / arguments.session_id / f"{arguments.branch}.json"
+        manifest_path = manifests / f"{plan['repair']['manifest_sha256']}.json"
+        publish_create_only(manifest_path, manifest_data, mode=0o400)
+        observed_ref, _ = stable_file(ref_path, "current branch reference", mode=0o600)
+        if observed_ref != current_ref_data:
+            raise RepairError("current branch reference changed before publication")
+        atomic_replace(ref_path, ref_data)
+        final_ref, _ = stable_file(ref_path, "repaired branch reference", mode=0o600)
+        if final_ref != ref_data:
+            raise RepairError("repaired branch reference differs after publication")
+        complete = {
+            "plan_sha256": expected_plan_sha256,
+            "ref_file_sha256": digest_bytes(final_ref),
+            "repair_manifest_sha256": plan["repair"]["manifest_sha256"],
+            "schema": COMPLETE_SCHEMA,
+        }
+        return complete
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Publish a monotonic repair head from an authenticated immediate parent."
+    )
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--session-id", required=True)
+    parser.add_argument("--branch", default="main")
+    parser.add_argument("--expected-current-generation", type=int, required=True)
+    parser.add_argument("--expected-current-manifest", required=True)
+    parser.add_argument("--source-generation", type=int, required=True)
+    parser.add_argument("--source-manifest", required=True)
+    parser.add_argument("--repair-generation", type=int, required=True)
+    parser.add_argument("--updated-at", required=True)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--expected-plan-sha256")
+    arguments = parser.parse_args()
+    if arguments.apply != (arguments.expected_plan_sha256 is not None):
+        parser.error("--apply and --expected-plan-sha256 must be provided together")
+    return arguments
+
+
+def main() -> int:
+    arguments = parse_arguments()
+    try:
+        if arguments.apply:
+            expected = require_digest(arguments.expected_plan_sha256, "expected plan")
+            output = apply_plan(arguments, expected)
+        else:
+            output = build_plan(arguments)[0]
+    except RepairError as error:
+        raise SystemExit(f"qwen-snapshot-repair-head: {error}") from error
+    print(json.dumps(output, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
