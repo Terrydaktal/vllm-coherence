@@ -1,0 +1,25 @@
+{
+  "schema": "urn:qwen:radiance-native-binding:v1",
+  "profile": "Radiance 1.0.16 V2 with corrected GDN and DFlash RNG",
+  "files": {
+    "radiance_gdn.py": "e4b4a735804c490f52bee2a11735a7a3b29a9c5209bdc0fa34f452f96595aafb",
+    "radiance_r4d_attn.py": "6d4b4571c938003d79e2edc322d1eadc674e30781597845a59b59b8065a6fd0a",
+    "radiance_mxfp4.py": "7fd10b2d5b6a6c3853583eb71ca10dfcaf6784694c7941bd1e28968addcb88f2",
+    "radiance_verifyhead.py": "dfc66935db5c2b8e162105c2122d2e73cc3182727b37afec48544fb7e8890203",
+    "vllm/model_executor/models/qwen3_5.py": "d5fa8f7c99c5cac89bfb0c0288bab58c846ee27b9733178bf957ca44b9d1392d",
+    "vllm/model_executor/models/qwen3_next.py": "5aeac6c81bfa7c680e517106aecb7741a0a4e90fa52de77f0be1eadebc7516fa",
+    "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py": "05cc80646bf5f91cac2589e9780b7c8071f639f85203612c80a4886135d2065c",
+    "vllm/model_executor/layers/mamba/mamba_utils.py": "fb15e26fcfe4f7ab72a61a64fee8b8ea0c49b7f28a23b6a9dede099e41489231",
+    "vllm/v1/worker/gpu/model_runner.py": "bf423590aa6f9a22638254871be5bcf71dbd313c7987d9e64ef819fdc534cd47",
+    "vllm/v1/worker/gpu/model_states/mamba_hybrid.py": "3d1d3edc157d87f10aa6fb4862fbd25b435ede51499d7c64e68eb713de85e648",
+    "vllm/v1/worker/gpu/states.py": "99418f5df43ca612ded72609fee011620b065b2cab2f249ccb387096bf4ae71a",
+    "vllm/v1/worker/gpu/block_table.py": "da4e6011514c883dbb6bf0f59675294e6a6e76cfcd0e4b534bc575cb4d7adfc5",
+    "vllm/v1/worker/mamba_utils.py": "790ae216cc62650225cf13471d65f923c5ecf33af3047df6c0d22fcd1aba28cd",
+    "vllm/v1/worker/gpu/spec_decode/dflash2/speculator.py": "54e5c70b389a9e3d067fdf21fc28f615ee083fc0374d266bfd486eadbc36fe35",
+    "vllm/v1/worker/gpu/spec_decode/dflash/speculator.py": "9b41c44219af5719e86a11b5489f143f486c43534a6b3d03d7a2f2f68b11ffed"
+  },
+  "live_data_abi": "2ec52392be20945df93b37ee13dc2f605d29bb010b6e0e36d40f5b75d95ac560",
+  "gpu_qualification": "UNPROVED",
+  "scope": "source extraction mapping only; image/compiler/kernel identities must also be recorded per execution",
+  "sha256": "b4877162770e130270cdc5ae26388fd6711e43330b4fa3a807374b2a989a4e0f"
+}

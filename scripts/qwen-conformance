@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+CONFORMANCE_SCRIPT=$(readlink -f -- "${BASH_SOURCE[0]}")
+CONFORMANCE_ROOT=$(cd -- "$(dirname -- "$CONFORMANCE_SCRIPT")/.." && pwd -P)
+readonly CONFORMANCE_ROOT CONFORMANCE_SCRIPT
+conformance_python=${QWEN_CONFORMANCE_PYTHON:-}
+if [[ -z $conformance_python ]]; then
+	if [[ -x $CONFORMANCE_ROOT/.venv/bin/python ]]; then
+		conformance_python=$CONFORMANCE_ROOT/.venv/bin/python
+	else
+		conformance_python=python
+	fi
+fi
+export PYTHONPATH="$CONFORMANCE_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+exec "$conformance_python" -m qwen_r9700_lab.conformance_cli "$@"
