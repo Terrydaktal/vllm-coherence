@@ -1,0 +1,280 @@
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -245,6 +245,7 @@
+         )
+         speculative_config = vllm_config.speculative_config
+         self.use_eagle = False
++        self.drop_last_prefix_cache_block = False
+         self.num_spec_tokens = vllm_config.num_speculative_tokens
+         self.num_lookahead_tokens = vllm_config.num_lookahead_tokens
+         # Positions past the computed tokens that the drafter reads mid-prefill.
+@@ -263,6 +264,9 @@
+                     vllm_num_speculative_tokens=self.num_spec_tokens,
+                 )
+             self.use_eagle = speculative_config.use_eagle()
++            self.drop_last_prefix_cache_block = (
++                speculative_config.use_eagle_preserves_target_kv_cache()
++            )
+             if self.use_eagle:
+                 self.num_prefill_lookahead = (
+                     self.num_spec_tokens
+@@ -279,7 +283,7 @@
+             max_model_len=self.max_model_len,
+             max_in_flight_tokens=vllm_config.max_in_flight_tokens,
+             enable_caching=self.cache_config.enable_prefix_caching,
+-            use_eagle=self.use_eagle,
++            use_eagle=self.drop_last_prefix_cache_block,
+             num_prefill_lookahead=self.num_prefill_lookahead,
+             log_stats=self.log_stats,
+             enable_kv_cache_events=self.enable_kv_cache_events,
+@@ -390,11 +394,13 @@
+             return num_new_tokens
+ 
+         block_size = self.cache_config.block_size
+-        # The last block-aligned position whose state can be cached. With
+-        # Eagle, FullAttn prunes the last matching block, so back off one
+-        # block to avoid a Mamba cache miss.
++        # The last block-aligned position whose state can be cached.
++        # Eagle-family drafters pollute the target's last matching
++        # full-attention block with their lookahead KV write, so back off one
++        # block to avoid a Mamba cache miss. DFlash/DSpark draft from their own
++        # KV cache and never write target blocks.
+         last_cache_position = request.num_tokens - request.num_tokens % block_size
+-        if self.use_eagle:
++        if self.drop_last_prefix_cache_block:
+             last_cache_position = max(last_cache_position - block_size, 0)
+ 
+         end = start + num_new_tokens
+@@ -512,7 +518,10 @@
+         # For logging.
+         scheduled_timestamp = time.monotonic()
+ 
+-        self.kv_cache_manager.new_step_starts()
++        # The step this pass may schedule will get fence seq sched_step_seq + 1
++        # (non-empty steps advance the fence at the end of schedule()); state
++        # hashes published this pass are guarded behind that seq.
++        self.kv_cache_manager.new_step_starts(self.sched_step_seq + 1)
+ 
+         # DP prefill balancing: on a throttled (non-cadence-aligned) step, defer
+         # all prefill compute unless saturated.
+@@ -1307,7 +1316,9 @@
+ 
+         # Advance the fence only for non-empty steps (those that actually
+         # write KV and have their output processed later in update_from_output).
+-        if self.defer_block_free and total_num_scheduled_tokens > 0:
++        # Unconditional (not just defer_block_free): the mamba publish guard
++        # uses this seq to know which schedule pass a state hash belongs to.
++        if total_num_scheduled_tokens > 0:
+             self.sched_step_seq += 1
+ 
+         with record_function_or_nullcontext("schedule: update_after_schedule"):
+@@ -1349,6 +1360,7 @@
+         assert request.status == RequestStatus.RUNNING, (
+             "Only running requests can be preempted"
+         )
++        self.kv_cache_manager.rollback_uncommitted(request.request_id)
+         self._free_request_blocks(request)
+         self.encoder_cache_manager.free(request)
+         self._inflight_prefills.discard(request)
+@@ -1747,9 +1759,14 @@
+ 
+         # Every GPU write enqueued by this and earlier steps has completed, so it is
+         # safe to return deferred-free blocks to the pool.
+-        if self.defer_block_free and scheduler_output.total_num_scheduled_tokens > 0:
++        # processed_step_seq advances for every non-empty step regardless of
++        # defer_block_free: the mamba publish guard consumes it as the commit
++        # fence even when deferred frees are disabled.
++        if scheduler_output.total_num_scheduled_tokens > 0:
+             self.processed_step_seq += 1
+-            self._drain_deferred_frees()
++            self.kv_cache_manager.commit_step(self.processed_step_seq)
++            if self.defer_block_free:
++                self._drain_deferred_frees()
+ 
+         perf_stats: PerfStats | None = None
+         if self.perf_metrics and self.perf_metrics.is_enabled():
+@@ -1976,6 +1993,21 @@
+                 finish_reason = request.get_finished_reason()
+                 finished = self._handle_stopped_request(request)
+                 if finished:
++                    if status_before_stop == RequestStatus.RUNNING:
++                        # Register finalized output tokens before releasing
++                        # their blocks. A terminal request has no later
++                        # allocation pass to do so.
++                        finalized_num_computed_tokens = min(
++                            max(
++                                0,
++                                request.num_computed_tokens
++                                - request.num_in_flight_tokens,
++                            ),
++                            request.num_tokens,
++                        )
++                        self.kv_cache_manager.cache_blocks(
++                            request, finalized_num_computed_tokens, confirmed=True
++                        )
+                     kv_transfer_params, ec_transfer_params = self._free_request(request)
+ 
+                 if status_before_stop == RequestStatus.RUNNING:
+@@ -2391,6 +2423,7 @@
+         self, request: Request, delay_free_blocks: bool = False
+     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+         assert request.is_finished()
++        self.kv_cache_manager.rollback_uncommitted(request.request_id)
+ 
+         self._inflight_prefills.discard(request)
+         connector_delay_free_blocks, kv_xfer_params = self._connector_finished(request)
+@@ -2841,7 +2874,9 @@
+         Identify and update requests affected by invalid KV cache blocks.
+ 
+         This method scans the given requests, detects those with invalid blocks
+-        and adjusts their `num_computed_tokens` to the longest valid prefix.
++        and adjusts their `num_computed_tokens` to the longest valid prefix
++        rounded down to the scheduler block size, so every hybrid cache group
++        resumes on a compatible boundary.
+         For observability, it also accumulates the total number of tokens that
+         will need to be recomputed across all affected requests.
+ 
+@@ -2868,68 +2903,92 @@
+         # these requests must be rescheduled, but only the first will recompute
+         # it. This set tracks blocks already marked for recomputation.
+         marked_invalid_block_ids: set[int] = set()
++        null_block_id = self.kv_cache_manager.null_block_id
++        group_block_sizes = self.kv_cache_manager.group_block_sizes
++        # num_computed_tokens is a single cross-group value, so it can only be
++        # truncated to an alignment every group agrees on. Groups whose own
++        # block is finer than the scheduler block lose a little already-computed
++        # work; a per-group boundary would leave the other groups misaligned.
++        common_block_alignment = self.block_size
+         for request in requests:
+-            is_affected = False
+-            marked_invalid_block = False
+             req_id = request.request_id
+-            # TODO (davidb): add support for hybrid memory allocator
+-            (req_block_ids,) = self.kv_cache_manager.get_block_ids(req_id)
++            req_block_ids_by_group = self.kv_cache_manager.get_block_ids(req_id)
++            group_block_ids = tuple(
++                zip(group_block_sizes, req_block_ids_by_group, strict=True)
++            )
+             # We iterate only over blocks that may contain externally computed
+             # tokens
+             req_num_computed_tokens = (
+                 request.num_computed_tokens - num_scheduled_tokens.get(req_id, 0)
+             )
+ 
+-            req_num_computed_blocks = (
+-                req_num_computed_tokens + self.block_size - 1
+-            ) // self.block_size
+-            for idx, block_id in zip(range(req_num_computed_blocks), req_block_ids):
+-                if block_id not in invalid_block_ids:
+-                    continue
+-
+-                is_affected = True
+-
+-                if block_id in marked_invalid_block_ids:
+-                    # This invalid block is shared with a previous request
+-                    # and was already marked for recomputation.
+-                    # This means this request can still consider this block
+-                    # as computed when rescheduled.
+-                    # Currently this only applies to sync loading; Async
+-                    # loading does not yet support block sharing
+-                    continue
+-
+-                marked_invalid_block_ids.add(block_id)
+-
+-                if marked_invalid_block:
+-                    # This request has already marked an invalid block for
+-                    # recomputation and updated its num_computed_tokens.
+-                    continue
+-
+-                marked_invalid_block = True
+-                # Truncate the computed tokens at the first failed block
+-                request.num_computed_tokens = idx * self.block_size
+-                num_affected_tokens = (
++            invalid_positions: list[tuple[int, int]] = []
++            for group_block_size, req_block_ids in group_block_ids:
++                req_num_computed_blocks = (
++                    req_num_computed_tokens + group_block_size - 1
++                ) // group_block_size
++                invalid_positions.extend(
++                    (idx * group_block_size, block_id)
++                    for idx, block_id in enumerate(
++                        req_block_ids[:req_num_computed_blocks]
++                    )
++                    if block_id != null_block_id and block_id in invalid_block_ids
++                )
++
++            if not invalid_positions:
++                continue
++
++            unmarked_positions = [
++                (token_idx, block_id)
++                for token_idx, block_id in invalid_positions
++                if block_id not in marked_invalid_block_ids
++            ]
++            marked_invalid_block_ids.update(
++                block_id for _, block_id in invalid_positions
++            )
++
++            if unmarked_positions:
++                # Truncate at the earliest failed token boundary across all
++                # hybrid KV-cache groups.
++                earliest_invalid_token = min(
++                    token_idx for token_idx, _ in unmarked_positions
++                )
++                request.num_computed_tokens = (
++                    earliest_invalid_token
++                    - earliest_invalid_token % common_block_alignment
++                )
++                total_affected_tokens += (
+                     req_num_computed_tokens - request.num_computed_tokens
+                 )
+-                total_affected_tokens += num_affected_tokens
+-
+-                # collect invalid block and all downstream dependent blocks
++
+                 if evict_blocks:
+-                    blocks_to_evict.update(req_block_ids[idx:])
+-
+-            if is_affected:
+-                if not marked_invalid_block:
+-                    # All invalid blocks of this request are shared with
+-                    # previous requests and will be recomputed by them.
+-                    # Revert to considering only cached tokens as computed.
+-                    # Currently this only applies to sync loading; Async
+-                    # loading does not yet support block sharing
+-                    total_affected_tokens += (
+-                        request.num_computed_tokens - req_num_computed_tokens
+-                    )
+-                    request.num_computed_tokens = req_num_computed_tokens
+-
+-                affected_req_ids.add(request.request_id)
++                    # Every group can depend on tokens after the failed
++                    # boundary, so evict each group's downstream blocks.
++                    for group_block_size, req_block_ids in group_block_ids:
++                        # The new computed-token boundary is scheduler-block
++                        # aligned, which is a multiple of every group block.
++                        first_invalid_idx = (
++                            request.num_computed_tokens // group_block_size
++                        )
++                        blocks_to_evict.update(
++                            block_id
++                            for block_id in req_block_ids[first_invalid_idx:]
++                            if block_id != null_block_id
++                        )
++            else:
++                # All invalid blocks are shared with previous requests and
++                # will be recomputed by them. Revert to considering only
++                # cached tokens as computed.
++                aligned_computed_tokens = (
++                    req_num_computed_tokens
++                    - req_num_computed_tokens % common_block_alignment
++                )
++                total_affected_tokens += (
++                    request.num_computed_tokens - aligned_computed_tokens
++                )
++                request.num_computed_tokens = aligned_computed_tokens
++
++            affected_req_ids.add(req_id)
+ 
+         return affected_req_ids, total_affected_tokens, blocks_to_evict
+ 

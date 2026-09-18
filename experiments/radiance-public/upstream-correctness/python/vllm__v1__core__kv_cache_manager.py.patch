@@ -1,0 +1,75 @@
+--- a/vllm/v1/core/kv_cache_manager.py
++++ b/vllm/v1/core/kv_cache_manager.py
+@@ -192,6 +192,14 @@
+         # Off-table cow blocks handed to a KV connector for partial-tail
+         # offload; pinned until the request's blocks are freed.
+         self._partial_tail_pins: dict[str, list[KVCacheBlock]] = {}
++
++    @property
++    def group_block_sizes(self) -> tuple[int, ...]:
++        return tuple(m.block_size for m in self.coordinator.single_type_managers)
++
++    @property
++    def null_block_id(self) -> int:
++        return self.block_pool.null_block.block_id
+ 
+     @property
+     def usage(self) -> float:
+@@ -760,16 +768,26 @@
+ 
+         return cached_tokens or 0
+ 
+-    def cache_blocks(self, request: Request, num_computed_tokens: int) -> None:
+-        """Cache the blocks for the request, if enabled.
+-
+-        Args:
+-            request: The request to cache the blocks.
+-            num_computed_tokens: The number of computed tokens, including tokens
+-                that are already cached and tokens to be cached.
+-        """
+-        if self.enable_caching:
++    def cache_blocks(self, request: Request, num_computed_tokens: int, *, confirmed: bool = False) -> None:
++        """Publish a computed prefix, distinguishing completed terminal writes."""
++        if not self.enable_caching:
++            return
++        if not confirmed:
+             self.coordinator.cache_blocks(request, num_computed_tokens)
++            return
++        pool = self.block_pool
++        old_step = pool._publication_step
++        managers = self.coordinator.single_type_managers
++        old_steps = [(m, m._sched_step_seq) for m in managers if hasattr(m, "_sched_step_seq")]
++        pool._publication_step = pool._committed_publication_step
++        for m, _ in old_steps:
++            m._sched_step_seq = m._committed_step_seq
++        try:
++            self.coordinator.cache_blocks(request, num_computed_tokens)
++        finally:
++            pool._publication_step = old_step
++            for m, seq in old_steps:
++                m._sched_step_seq = seq
+ 
+     def create_kv_cache_blocks(
+         self, blocks: tuple[list[KVCacheBlock], ...]
+@@ -882,6 +900,18 @@
+                 )
+         return offloads
+ 
+-    def new_step_starts(self) -> None:
+-        """Notify the coordinator that a new step is starting."""
+-        self.coordinator.new_step_starts()
++    def new_step_starts(self, step_seq: int = 0) -> None:
++        """Start one publication generation; empty passes do not commit it."""
++        self.block_pool.begin_publication_step(step_seq)
++        self.coordinator.new_step_starts(step_seq)
++
++    def commit_step(self, step_seq: int = 0) -> None:
++        self.block_pool.commit_publication_step(step_seq)
++        self.coordinator.commit_step(step_seq)
++
++    def rollback_uncommitted(self, request_id: str) -> None:
++        # Do this before free/preemption makes the block IDs reusable.
++        for manager in self.coordinator.single_type_managers:
++            self.block_pool.rollback_uncommitted(
++                manager.req_to_blocks.get(request_id, ())
++            )

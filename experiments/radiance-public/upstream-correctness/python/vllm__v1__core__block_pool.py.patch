@@ -1,0 +1,112 @@
+--- a/vllm/v1/core/block_pool.py
++++ b/vllm/v1/core/block_pool.py
+@@ -194,6 +194,36 @@
+         self.kv_event_queue: list[KVCacheEvent] = []
+ 
+         self.metrics_collector = metrics_collector
++        self._publication_step = 0
++        self._committed_publication_step = 0
++        # Bind each tentative registration to both block ID and hash. An old
++        # cancellation must never evict a later occupant of a recycled block.
++        self._pending_publications: dict[tuple[int, BlockHashWithGroupId], int] = {}
++
++    def begin_publication_step(self, step_seq: int) -> None:
++        if step_seq < self._committed_publication_step:
++            raise ValueError("publication step precedes completed GPU writes")
++        self._publication_step = step_seq
++
++    def commit_publication_step(self, step_seq: int) -> None:
++        if not self._committed_publication_step <= step_seq <= self._publication_step:
++            raise ValueError("invalid publication completion fence")
++        self._committed_publication_step = step_seq
++        self._pending_publications = {
++            key: seq for key, seq in self._pending_publications.items()
++            if seq > step_seq
++        }
++
++    def rollback_uncommitted(self, blocks: Iterable[KVCacheBlock]) -> None:
++        for block in blocks:
++            hashes = {block.block_hash} | self.cached_block_hashes_by_block.get(
++                block.block_id, set()
++            )
++            if any((block.block_id, h) in self._pending_publications for h in hashes):
++                # A tentative write can modify this physical page. Do not keep
++                # another alias to it, even if that alias predates this write.
++                removed = self._remove_cached_block_hashes(block)
++                self._emit_block_removed_events(removed)
+ 
+     def get_cached_block(
+         self, block_hash: BlockHash, kv_cache_group_ids: list[int]
+@@ -217,7 +247,9 @@
+             block = self.cached_block_hash_to_block.get_one_block(
+                 block_hash_with_group_id
+             )
+-            if not block:
++            if not block or (
++                block.block_id, block_hash_with_group_id
++            ) in self._pending_publications:
+                 return None
+             cached_blocks.append(block)
+         return cached_blocks
+@@ -492,23 +524,32 @@
+         block_hash_with_group_id = make_block_hash_with_group_id(
+             block_hash, kv_cache_group_id
+         )
++        incoming_num_tokens = num_hash_blocks * self.hash_block_size
+         already_cached = block.block_hash == block_hash_with_group_id or (
+             self.cached_block_hash_to_block.contain(
+                 block_hash_with_group_id, block.block_id
+             )
+         )
++        # After full-block promotion the primary hash covers more tokens than
++        # this partial boundary. Do not re-insert the superseded key.
++        if (
++            not already_cached
++            and block.block_hash_num_tokens is not None
++            and block.block_hash_num_tokens >= incoming_num_tokens
++        ):
++            return None
+         if (
+             not already_cached
+             and block.block_hash is not None
+             and block.block_hash_num_tokens is not None
+-            and block.block_hash_num_tokens < num_hash_blocks * self.hash_block_size
++            and block.block_hash_num_tokens < incoming_num_tokens
+         ):
+             removed_hashes = self._remove_cached_block_hashes(block)
+             self._emit_block_removed_events(removed_hashes)
+         self._insert_block_hash(
+             block_hash_with_group_id,
+             block,
+-            num_tokens=num_hash_blocks * self.hash_block_size,
++            num_tokens=incoming_num_tokens,
+         )
+         if self.enable_kv_cache_events and not already_cached:
+             parent_hash, block_start = self._get_partial_block_parent_hash_and_start(
+@@ -581,6 +622,7 @@
+ 
+         removed_hashes: list[BlockHashWithGroupId] = []
+         for block_hash in block_hashes:
++            self._pending_publications.pop((block.block_id, block_hash), None)
+             if (
+                 self.cached_block_hash_to_block.pop(block_hash, block.block_id)
+                 is not None
+@@ -625,6 +667,10 @@
+                 block_hash_with_group_id
+             )
+         self.cached_block_hash_to_block.insert(block_hash_with_group_id, block)
++        if self._publication_step > self._committed_publication_step:
++            self._pending_publications[(block.block_id, block_hash_with_group_id)] = (
++                self._publication_step
++            )
+ 
+     def move_block_hashes(
+         self,
+@@ -781,6 +827,7 @@
+ 
+         # Remove all hashes so that no new blocks will hit.
+         self.cached_block_hash_to_block = BlockHashToBlockMap()
++        self._pending_publications.clear()
+         self.cached_block_hashes_by_block.clear()
+ 
+         # Remove all hashes from all blocks.
