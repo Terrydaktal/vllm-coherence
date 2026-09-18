@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+# ruff: noqa: E501
+"""Apply and authenticate Pi's invisible internal guard-retry patch."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import runpy
+import stat
+import tempfile
+from contextlib import suppress
+from dataclasses import dataclass
+from pathlib import Path
+
+
+class PatchError(RuntimeError):
+    """The runtime is absent, unsafe, or does not match the pinned patch ABI."""
+
+
+@dataclass(frozen=True)
+class FilePatch:
+    relative_path: str
+    preimage_sha256: str
+    old: bytes
+    new: bytes
+
+
+PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="9f065b4a277857db100e3277c4d18316c89cd46b11f6ba8140122f19efbe47c4",
+        old=b"""        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+        // Notify all listeners
+        this._emit(event.type === "agent_end" ? { ...event, willRetry: this._willRetryAfterAgentEnd(event) } : event);
+        // Handle session persistence
+        if (event.type === "message_end") {
+            // Check if this is a custom message from extensions
+            if (event.message.role === "custom") {
+                // Persist as CustomMessageEntry
+                this.sessionManager.appendCustomMessageEntry(event.message.customType, event.message.content, event.message.display, event.message.details);
+            }
+            else if (event.message.role === "user" ||
+                event.message.role === "assistant" ||
+                event.message.role === "toolResult") {
+                // Regular LLM message - persist as SessionMessageEntry
+                this.sessionManager.appendMessage(event.message);
+            }
+""",
+        new=b"""        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+        // A Qwen guard can reject a bad attempt and ask Pi's normal retry controller
+        // to continue it. Hide that process-private sentinel only when retry policy
+        // is enabled, budget remains, and Pi independently classifies it retryable.
+        // Final/exhausted failures therefore remain visible and durable.
+        const retrySettings = event.type === "message_end"
+            ? this.settingsManager.getRetrySettings()
+            : undefined;
+        const internalGuardRetry = event.type === "message_end" &&
+            event.message?.[Symbol.for("qwen-r9700:internal-guard-retry:v1")] === true &&
+            retrySettings.enabled &&
+            this._retryAttempt < retrySettings.maxRetries &&
+            this._isRetryableError(event.message);
+        // Notify all listeners. An internal guard retry has no user-visible message;
+        // agent_end still reports willRetry and the retry indicator remains active.
+        if (!internalGuardRetry) {
+            this._emit(event.type === "agent_end" ? { ...event, willRetry: this._willRetryAfterAgentEnd(event) } : event);
+        }
+        // Handle session persistence
+        if (event.type === "message_end") {
+            // Check if this is a custom message from extensions
+            if (!internalGuardRetry && event.message.role === "custom") {
+                // Persist as CustomMessageEntry
+                this.sessionManager.appendCustomMessageEntry(event.message.customType, event.message.content, event.message.display, event.message.details);
+            }
+            else if (!internalGuardRetry &&
+                (event.message.role === "user" ||
+                    event.message.role === "assistant" ||
+                    event.message.role === "toolResult")) {
+                // Regular LLM message - persist as SessionMessageEntry
+                this.sessionManager.appendMessage(event.message);
+            }
+""",
+    ),
+)
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect {path}: {exc}") from exc
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise PatchError(f"not a single-link regular file: {path}")
+    if before.st_uid != os.getuid() or before.st_mode & 0o022:
+        raise PatchError(f"unsafe ownership or mode: {path}")
+    try:
+        data = path.read_bytes()
+        after = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot read {path}: {exc}") from exc
+    identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        raise PatchError(f"file changed while it was read: {path}")
+    return data, before
+
+
+def classify(data: bytes, patch: FilePatch) -> str:
+    # The installer applies compaction after this patch in agent-session.js.
+    # Reverse only that authenticated later patch before checking our own pin.
+    following = runpy.run_path(str(Path(__file__).with_name("patch-pi-precontinuation-compaction")))
+    for later in reversed(following["PATCHES"]):
+        if later.relative_path == patch.relative_path and data.count(later.new) == 1:
+            candidate = data.replace(later.new, later.old)
+            if sha256(candidate) == later.preimage_sha256:
+                data = candidate
+    old_count = data.count(patch.old)
+    new_count = data.count(patch.new)
+    if old_count == 1 and new_count == 0 and sha256(data) == patch.preimage_sha256:
+        return "unpatched"
+    if new_count == 1:
+        candidate = data.replace(patch.new, patch.old)
+        if sha256(candidate) == patch.preimage_sha256:
+            return "patched"
+    raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
+
+
+def atomic_write(path: Path, data: bytes, source: os.stat_result) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, stat.S_IMODE(source.st_mode))
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def validate_root(root: Path) -> None:
+    if not root.is_absolute():
+        raise PatchError("runtime root must be absolute")
+    try:
+        details = root.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect runtime root {root}: {exc}") from exc
+    if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid():
+        raise PatchError(f"runtime root is not an owned real directory: {root}")
+
+
+def run(root: Path, *, apply: bool) -> None:
+    validate_root(root)
+    for patch in PATCHES:
+        path = root / patch.relative_path
+        data, details = stable_read(path)
+        state = classify(data, patch)
+        if state == "unpatched":
+            if not apply:
+                raise PatchError(f"internal guard-retry patch is absent: {path}")
+            updated = data.replace(patch.old, patch.new)
+            atomic_write(path, updated, details)
+            data, _ = stable_read(path)
+            if classify(data, patch) != "patched":
+                raise PatchError(f"failed to authenticate patched file: {path}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--check", action="store_true")
+    parser.add_argument("runtime", type=Path)
+    arguments = parser.parse_args()
+    try:
+        run(arguments.runtime, apply=arguments.apply)
+    except PatchError as exc:
+        parser.exit(2, f"patch-pi-internal-guard-retry: {exc}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

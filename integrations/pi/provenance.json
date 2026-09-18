@@ -1,0 +1,13 @@
+{
+  "package": "@earendil-works/pi-coding-agent",
+  "version": "0.84.2",
+  "repository": "https://github.com/earendil-works/pi.git",
+  "tag": "v0.84.2",
+  "tagCommit": "914cf1472e715297caa30db4b9535d534a9eb718",
+  "npmGitHead": "914cf1472e715297caa30db4b9535d534a9eb718",
+  "tarball": "https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.84.2.tgz",
+  "tarballSha1": "e4d4c1e769963c816959f5cea02a0a10ccc0495a",
+  "tarballIntegrity": "sha512-l4E+B7hgXKWddRo8bC/eSue2aWZjEgJ9xIpf5p0Og+lq8a2TArCwJ0HCoCPCgaBP/tN4zbYH/wOwvx9pJpeLCA==",
+  "attestation": "https://registry.npmjs.org/-/npm/v1/attestations/@earendil-works%2fpi-coding-agent@0.84.2",
+  "verifiedAt": "2026-08-20"
+}

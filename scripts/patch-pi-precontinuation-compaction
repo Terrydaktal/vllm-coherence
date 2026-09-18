@@ -1,0 +1,573 @@
+#!/usr/bin/env python3
+# ruff: noqa: E501
+"""Apply and authenticate Pi's compaction scheduling, editor and spinner patches."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import stat
+import tempfile
+from contextlib import suppress
+from dataclasses import dataclass
+from pathlib import Path
+
+
+class PatchError(RuntimeError):
+    """The runtime is absent, unsafe, or does not match the pinned patch ABI."""
+
+
+@dataclass(frozen=True)
+class FilePatch:
+    relative_path: str
+    preimage_sha256: str
+    old: bytes
+    new: bytes
+    legacy: tuple[bytes, ...] = ()
+
+
+PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    _installAgentNextTurnRefresh() {
+        const previousPrepareNextTurnWithContext = this.agent.prepareNextTurnWithContext ??
+            (this.agent.prepareNextTurn
+                ? async (_turn, signal) => await this.agent.prepareNextTurn?.(signal)
+                : undefined);
+        this.agent.prepareNextTurnWithContext = async (turn, signal) => {
+            const previousSnapshot = await previousPrepareNextTurnWithContext?.(turn, signal);
+            const previousContext = previousSnapshot?.context ?? turn.context;
+            return {
+                ...previousSnapshot,
+                context: {
+                    ...previousContext,
+                    systemPrompt: this._systemPromptOverride ?? this._baseSystemPrompt,
+                    tools: this.agent.state.tools.slice(),
+                },
+                model: this.agent.state.model,
+                thinkingLevel: this.agent.state.thinkingLevel,
+            };
+        };
+    }
+""",
+        new=b"""    _installAgentNextTurnRefresh() {
+        const previousPrepareNextTurnWithContext = this.agent.prepareNextTurnWithContext ??
+            (this.agent.prepareNextTurn
+                ? async (_turn, signal) => await this.agent.prepareNextTurn?.(signal)
+                : undefined);
+        this.agent.prepareNextTurnWithContext = async (turn, signal) => {
+            const previousSnapshot = await previousPrepareNextTurnWithContext?.(turn, signal);
+            let previousContext = previousSnapshot?.context ?? turn.context;
+            // agent-core owns the multi-tool loop, so agent_end is too late to
+            // prevent a continuation from crossing the context limit. Account
+            // for the newly appended tool result at the final safe boundary
+            // before the next provider request.
+            if (turn.message.stopReason === "toolUse" && turn.toolResults.length > 0) {
+                const settings = this.settingsManager.getCompactionSettings();
+                const contextWindow = this.model?.contextWindow ?? 0;
+                const measuredTokens = turn.message.usage
+                    ? calculateContextTokens(turn.message.usage)
+                    : 0;
+                const projectedTokens = measuredTokens > 0
+                    ? measuredTokens + estimateMessagesTokens(turn.toolResults)
+                    : estimateMessagesTokens(turn.context.messages);
+                if (settings.enabled && shouldCompact(projectedTokens, contextWindow, settings)) {
+                    const beforeCompactionId = getLatestCompactionEntry(this.sessionManager.getBranch())?.id;
+                    await this._runAutoCompaction("threshold", false);
+                    const afterCompactionId = getLatestCompactionEntry(this.sessionManager.getBranch())?.id;
+                    if (!afterCompactionId || afterCompactionId === beforeCompactionId) {
+                        throw new Error("Automatic compaction was required before a tool continuation but did not commit");
+                    }
+                    const sessionContext = this.sessionManager.buildSessionContext();
+                    this.agent.state.messages = sessionContext.messages;
+                    previousContext = {
+                        ...previousContext,
+                        messages: sessionContext.messages,
+                    };
+                }
+            }
+            return {
+                ...previousSnapshot,
+                context: {
+                    ...previousContext,
+                    systemPrompt: this._systemPromptOverride ?? this._baseSystemPrompt,
+                    tools: this.agent.state.tools.slice(),
+                },
+                model: this.agent.state.model,
+                thinkingLevel: this.agent.state.thinkingLevel,
+            };
+        };
+    }
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""            setWorkingMessage: (message) => {
+                this.workingMessage = message;
+                if (this.activeStatusIndicator?.kind === "working") {
+                    this.activeStatusIndicator.setMessage(message ?? this.defaultWorkingMessage);
+                }
+            },
+""",
+        new=b"""            setWorkingMessage: (message) => {
+                this.workingMessage = message;
+                if (this.activeStatusIndicator?.kind === "working") {
+                    this.activeStatusIndicator.setMessage(message ?? this.defaultWorkingMessage);
+                }
+                else if (this.activeStatusIndicator?.kind === "compaction" && message !== undefined) {
+                    // Extension compaction progress belongs to the existing
+                    // spinner. compaction_end owns disposal and Escape cleanup;
+                    // clearing the override must not stop an ongoing compaction.
+                    this.activeStatusIndicator.setMessage(message);
+                }
+                else if (this.activeStatusIndicator === undefined && message !== undefined &&
+                    this.workingVisible && this.session.isStreaming) {
+                    // A compaction can end between provider requests in one tool
+                    // loop. That continuation has no new agent_start event, so
+                    // restore the ordinary working indicator when progress resumes.
+                    this.showStatusIndicator(new WorkingStatusIndicator(this.ui, message, this.workingIndicatorOptions));
+                }
+            },
+""",
+        legacy=(b"""            setWorkingMessage: (message) => {
+                this.workingMessage = message;
+                if (this.activeStatusIndicator?.kind === "working") {
+                    this.activeStatusIndicator.setMessage(message ?? this.defaultWorkingMessage);
+                }
+                else if (this.activeStatusIndicator?.kind === "compaction" && message !== undefined) {
+                    // Extension compaction progress belongs to the existing
+                    // spinner. compaction_end owns disposal and Escape cleanup;
+                    // clearing the override must not stop an ongoing compaction.
+                    this.activeStatusIndicator.setMessage(message);
+                }
+            },
+""",),
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""                else if (event.result) {
+                    this.chatContainer.clear();
+                    this.rebuildChatFromMessages();
+                    this.addMessageToChat(createCompactionSummaryMessage(event.result.summary, event.result.tokensBefore, new Date().toISOString()));
+                    this.footer.invalidate();
+                }
+""",
+        new=b"""                else if (event.result) {
+                    this.chatContainer.clear();
+                    this.rebuildChatFromMessages();
+                    const message = createCompactionSummaryMessage(event.result.summary, event.result.tokensBefore, new Date().toISOString());
+                    const elapsedMs = event.result.details?.elapsedMs;
+                    if (Number.isSafeInteger(elapsedMs) && elapsedMs >= 0) {
+                        message.elapsedMs = elapsedMs;
+                    }
+                    this.addMessageToChat(message);
+                    this.footer.invalidate();
+                }
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""    addCustomEntryToChat(entry) {
+        const renderer = this.session.extensionRunner.getEntryRenderer(entry.customType);
+        if (!renderer) {
+            return;
+        }
+        const component = new CustomEntryComponent(entry, renderer);
+        component.setExpanded(this.toolOutputExpanded);
+        if (!component.hasContent()) {
+            return;
+        }
+        if (this.streamingComponent) {
+            const streamingIndex = this.chatContainer.children.indexOf(this.streamingComponent);
+            if (streamingIndex >= 0) {
+                this.chatContainer.children.splice(streamingIndex, 0, component);
+                return;
+            }
+        }
+        this.chatContainer.addChild(component);
+    }
+""",
+        new=b"""    addCustomEntryToChat(entry) {
+        if (entry.customType === "qwen-radiance-compaction-timing-v1") {
+            const timing = entry.data;
+            if (timing && typeof timing.compactionEntryId === "string" &&
+                Number.isSafeInteger(timing.elapsedMs) && timing.elapsedMs >= 0) {
+                for (let index = this.chatContainer.children.length - 1; index >= 0; index--) {
+                    const component = this.chatContainer.children[index];
+                    if (component instanceof CompactionSummaryMessageComponent) {
+                        component.setElapsedMs(timing.elapsedMs);
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        const renderer = this.session.extensionRunner.getEntryRenderer(entry.customType);
+        if (!renderer) {
+            return;
+        }
+        const component = new CustomEntryComponent(entry, renderer);
+        component.setExpanded(this.toolOutputExpanded);
+        if (!component.hasContent()) {
+            return;
+        }
+        if (this.streamingComponent) {
+            const streamingIndex = this.chatContainer.children.indexOf(this.streamingComponent);
+            if (streamingIndex >= 0) {
+                this.chatContainer.children.splice(streamingIndex, 0, component);
+                return;
+            }
+        }
+        this.chatContainer.addChild(component);
+    }
+""",
+        legacy=(b"""    addCustomEntryToChat(entry) {
+        if (entry.customType === "qwen-radiance-compaction-timing-v1") {
+            const timing = entry.data;
+            if (timing && entry.parentId === timing.compactionEntryId &&
+                Number.isSafeInteger(timing.elapsedMs) && timing.elapsedMs >= 0) {
+                for (let index = this.chatContainer.children.length - 1; index >= 0; index--) {
+                    const component = this.chatContainer.children[index];
+                    if (component instanceof CompactionSummaryMessageComponent) {
+                        component.setElapsedMs(timing.elapsedMs);
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        const renderer = this.session.extensionRunner.getEntryRenderer(entry.customType);
+        if (!renderer) {
+            return;
+        }
+        const component = new CustomEntryComponent(entry, renderer);
+        component.setExpanded(this.toolOutputExpanded);
+        if (!component.hasContent()) {
+            return;
+        }
+        if (this.streamingComponent) {
+            const streamingIndex = this.chatContainer.children.indexOf(this.streamingComponent);
+            if (streamingIndex >= 0) {
+                this.chatContainer.children.splice(streamingIndex, 0, component);
+                return;
+            }
+        }
+        this.chatContainer.addChild(component);
+    }
+""",),
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""            case "compaction_end": {
+                if (this.settingsManager.getShowTerminalProgress()) {
+""",
+        new=b"""            case "compaction_end": {
+                this.protectCompactionDraft();
+                if (this.settingsManager.getShowTerminalProgress()) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""    // UI helpers
+    // =========================================================================
+    clearEditor() {
+        this.editor.setText("");
+        this.ui.requestRender();
+    }
+""",
+        new=b"""    // UI helpers
+    // =========================================================================
+    protectCompactionDraft() {
+        this.releaseCompactionDraftGuard?.();
+        const editor = this.editor;
+        if (!editor?.getText() || !this.ui.addInputListener) {
+            return;
+        }
+        // Keep the current editor itself, including its cursor, undo history and
+        // paste buffers. Completion redraws and deferred cleanup may not clear
+        // unsent input, including when typing continues after compaction. Clears
+        // during keyboard handling remain intentional; async completion callbacks
+        // run after that scope closes. Emptying the draft releases protection.
+        // Nothing is copied to session history, diagnostics or the filesystem.
+        const ownSetText = Object.getOwnPropertyDescriptor(editor, "setText");
+        const setText = editor.setText;
+        let handlingInput = false;
+        let active = true;
+        const guardedSetText = function (text) {
+            if (text === "" && this.getText() !== "" && !handlingInput) {
+                return;
+            }
+            return setText.call(this, text);
+        };
+        editor.setText = guardedSetText;
+        let unsubscribe;
+        const release = () => {
+            if (!active) return;
+            active = false;
+            unsubscribe?.();
+            if (editor.setText === guardedSetText) {
+                if (ownSetText) Object.defineProperty(editor, "setText", ownSetText);
+                else delete editor.setText;
+            }
+            if (this.releaseCompactionDraftGuard === release) {
+                this.releaseCompactionDraftGuard = undefined;
+            }
+        };
+        this.releaseCompactionDraftGuard = release;
+        unsubscribe = this.ui.addInputListener(() => {
+            handlingInput = true;
+            queueMicrotask(() => {
+                handlingInput = false;
+                if (active && editor.getText() === "") release();
+            });
+        });
+    }
+    clearEditor() {
+        this.editor.setText("");
+        this.ui.requestRender();
+    }
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""    resetExtensionUI() {
+        if (this.extensionSelector) {
+""",
+        new=b"""    resetExtensionUI() {
+        this.releaseCompactionDraftGuard?.();
+        if (this.extensionSelector) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""    setCustomEditorComponent(factory) {
+        this.editorComponentFactory = factory;
+""",
+        new=b"""    setCustomEditorComponent(factory) {
+        this.releaseCompactionDraftGuard?.();
+        this.editorComponentFactory = factory;
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""    async handleOpenExternalEditor() {
+        const editorCmd = this.settingsManager.getExternalEditorCommand();
+""",
+        new=b"""    async handleOpenExternalEditor() {
+        this.releaseCompactionDraftGuard?.();
+        const editorCmd = this.settingsManager.getExternalEditorCommand();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+        preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
+        old=b"""    stop(fullscreenExitOutput = this.settingsManager.getFullscreenExitOutput()) {
+        this.disposeActiveSelector();
+""",
+        new=b"""    stop(fullscreenExitOutput = this.settingsManager.getFullscreenExitOutput()) {
+        this.releaseCompactionDraftGuard?.();
+        this.disposeActiveSelector();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/compaction-summary-message.js",
+        preimage_sha256="87d366e0c6864cb969e9059ff437ebc7d103b0ab5b3f6ce8b9ec7249e99fd19a",
+        old=b"""    updateDisplay() {
+        this.clear();
+        const tokenStr = this.message.tokensBefore.toLocaleString();
+        const label = theme.fg("customMessageLabel", `\\x1b[1m[compaction]\\x1b[22m`);
+        this.addChild(new Text(label, 0, 0));
+        this.addChild(new Spacer(1));
+        if (this.expanded) {
+            const header = `**Compacted from ${tokenStr} tokens**\\n\\n`;
+            this.addChild(new Markdown(header + this.message.summary, 0, 0, this.markdownTheme, {
+                color: (text) => theme.fg("customMessageText", text),
+            }));
+        }
+        else {
+            this.addChild(new Text(theme.fg("customMessageText", `Compacted from ${tokenStr} tokens (`) +
+                theme.fg("dim", keyText("app.tools.expand")) +
+                theme.fg("customMessageText", " to expand)"), 0, 0));
+        }
+    }
+""",
+        new=b"""    setElapsedMs(elapsedMs) {
+        if (!Number.isSafeInteger(elapsedMs) || elapsedMs < 0) {
+            return;
+        }
+        this.message.elapsedMs = elapsedMs;
+        this.updateDisplay();
+    }
+    updateDisplay() {
+        this.clear();
+        const tokenStr = this.message.tokensBefore.toLocaleString();
+        const elapsedMs = this.message.elapsedMs;
+        const elapsed = Number.isSafeInteger(elapsedMs) && elapsedMs >= 0
+            ? elapsedMs < 60000
+                ? `${(elapsedMs / 1000).toFixed(1)}s`
+                : `${Math.floor(elapsedMs / 60000)}m ${Math.floor((elapsedMs % 60000) / 1000)}s`
+            : undefined;
+        const timing = elapsed ? ` in ${elapsed}` : "";
+        const label = theme.fg("customMessageLabel", `\\x1b[1m[compaction]\\x1b[22m`);
+        this.addChild(new Text(label, 0, 0));
+        this.addChild(new Spacer(1));
+        if (this.expanded) {
+            const header = `**Compacted from ${tokenStr} tokens${timing}**\\n\\n`;
+            this.addChild(new Markdown(header + this.message.summary, 0, 0, this.markdownTheme, {
+                color: (text) => theme.fg("customMessageText", text),
+            }));
+        }
+        else {
+            this.addChild(new Text(theme.fg("customMessageText", `Compacted from ${tokenStr} tokens${timing} (`) +
+                theme.fg("dim", keyText("app.tools.expand")) +
+                theme.fg("customMessageText", " to expand)"), 0, 0));
+        }
+    }
+""",
+    ),
+)
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect {path}: {exc}") from exc
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise PatchError(f"not a single-link regular file: {path}")
+    if before.st_uid != os.getuid() or before.st_mode & 0o022:
+        raise PatchError(f"unsafe ownership or mode: {path}")
+    try:
+        data = path.read_bytes()
+        after = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot read {path}: {exc}") from exc
+    identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        raise PatchError(f"file changed while it was read: {path}")
+    return data, before
+
+
+def classify(data: bytes, patches: FilePatch | tuple[FilePatch, ...]) -> str:
+    if isinstance(patches, FilePatch):
+        patches = (patches,)
+    preimages = {patch.preimage_sha256 for patch in patches}
+    relative_paths = {patch.relative_path for patch in patches}
+    if len(preimages) != 1 or len(relative_paths) != 1:
+        raise PatchError("grouped patches disagree about their file or preimage")
+    candidate = data
+    applied = 0
+    legacy_applied = 0
+    for patch in patches:
+        old_count = candidate.count(patch.old)
+        new_count = candidate.count(patch.new)
+        if old_count == 1 and new_count == 0:
+            continue
+        if old_count == 0 and new_count == 1:
+            candidate = candidate.replace(patch.new, patch.old)
+            applied += 1
+            continue
+        matching_legacy = [legacy for legacy in patch.legacy if candidate.count(legacy) == 1]
+        if old_count == 0 and new_count == 0 and len(matching_legacy) == 1:
+            candidate = candidate.replace(matching_legacy[0], patch.old)
+            legacy_applied += 1
+            continue
+        raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
+    if sha256(candidate) != next(iter(preimages)):
+        raise PatchError(f"file differs from both pinned patch states: {patches[0].relative_path}")
+    if applied == 0 and legacy_applied == 0:
+        return "unpatched"
+    if applied == len(patches) and legacy_applied == 0:
+        return "patched"
+    return "partial"
+
+
+def atomic_write(path: Path, data: bytes, source: os.stat_result) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, stat.S_IMODE(source.st_mode))
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def validate_root(root: Path) -> None:
+    if not root.is_absolute():
+        raise PatchError("runtime root must be absolute")
+    try:
+        details = root.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect runtime root {root}: {exc}") from exc
+    if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid():
+        raise PatchError(f"runtime root is not an owned real directory: {root}")
+
+
+def run(root: Path, *, apply: bool) -> None:
+    validate_root(root)
+    grouped: dict[str, list[FilePatch]] = {}
+    for patch in PATCHES:
+        grouped.setdefault(patch.relative_path, []).append(patch)
+    for relative_path, file_patches in grouped.items():
+        patches = tuple(file_patches)
+        path = root / relative_path
+        data, details = stable_read(path)
+        state = classify(data, patches)
+        if state != "patched":
+            if not apply:
+                raise PatchError(f"pre-continuation compaction patch is absent: {path}")
+            updated = data
+            for patch in patches:
+                if patch.old in updated and patch.new not in updated:
+                    updated = updated.replace(patch.old, patch.new)
+                    continue
+                for legacy in patch.legacy:
+                    if legacy in updated and patch.new not in updated:
+                        updated = updated.replace(legacy, patch.new)
+                        break
+            atomic_write(path, updated, details)
+            data, _ = stable_read(path)
+            if classify(data, patches) != "patched":
+                raise PatchError(f"failed to authenticate patched file: {path}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--check", action="store_true")
+    parser.add_argument("runtime", type=Path)
+    arguments = parser.parse_args()
+    try:
+        run(arguments.runtime, apply=arguments.apply)
+    except PatchError as exc:
+        parser.exit(2, f"patch-pi-precontinuation-compaction: {exc}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
