@@ -1,0 +1,24 @@
+--- a/vllm/v1/attention/backends/gdn_attn.py
++++ b/vllm/v1/attention/backends/gdn_attn.py
+@@ -308,18 +308,9 @@
+         _r_np = _RADIANCE_GDN_META and num_decode_draft_tokens_cpu is not None
+         _ndt_np = num_decode_draft_tokens_cpu.numpy() if _r_np else None
+         _mask_np = None if _ndt_np is None else _ndt_np >= 0
+-        if (
+-            not self.use_spec_decode
+-            or num_decode_draft_tokens_cpu is None
+-            or (
+-                int(_ndt_np[_mask_np].sum()) == 0
+-                if _r_np
+-                else num_decode_draft_tokens_cpu[num_decode_draft_tokens_cpu >= 0]
+-                .sum()
+-                .item()
+-                == 0
+-            )
+-        ):
++        # Zero proposals still carry the previous accepted-state offset.
++        # The >=0 row count below distinguishes them from prefill/padding.
++        if not self.use_spec_decode or num_decode_draft_tokens_cpu is None:
+             spec_sequence_masks = None
+             num_spec_decodes = 0
+         else:
