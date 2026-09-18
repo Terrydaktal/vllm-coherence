@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly PROVIDER_ID='qwen-r9700'
+readonly MODEL_ID='qwen3.8-27b-frozenlock'
+
+usage() {
+	cat <<'EOF'
+NAME
+    deploy-pi-models-config - safely add the Qwen R9700 provider to Pi
+
+SYNOPSIS
+    deploy-pi-models-config [--source PATH] [--destination PATH]
+        [--replace-provider] [--qualification-greedy-sampling]
+    deploy-pi-models-config --help
+
+DESCRIPTION
+    Validates a tracked Pi models.json template and atomically creates the user
+    configuration when absent. If models.json already exists, it adds qwen-r9700
+    only when that provider key is absent. Existing providers are preserved. A
+    differing qwen-r9700 provider is a conflict and is never overwritten unless
+    --replace-provider is explicitly supplied for a wrapper-managed profile.
+
+OPTIONS
+    --source PATH
+        Template to deploy. Default: integrations/pi/models.json in this project.
+
+    --destination PATH
+        Pi configuration destination. Default: $HOME/.pi/agent/models.json.
+
+    --replace-provider
+        Reconcile an existing qwen-r9700 provider with the source while retaining
+        every unrelated provider and top-level setting. The destination must be a
+        regular, non-symbolic-link file owned by the invoking user. This option is
+        intended for generated per-profile files, not the default user config.
+
+    --qualification-greedy-sampling
+        Render the qwen3.8-27b-frozenlock model with the controlled A/B sampling
+        tuple temperature=0, top_p=1, and top_k=1. The source must contain exactly
+        one matching model with the tracked 1.0/0.95/20 tuple or deployment fails.
+        This does not alter thinking, reasoning, tool, or compatibility settings.
+
+    -h, --help
+        Show this help text and exit.
+
+OPERATION
+    The source and any existing destination are parsed with jq. Output is built
+    beside the destination with mode 0600, then published atomically. A SHA-256
+    recheck prevents replacing a destination that changed during a merge. Provider
+    replacement changes only providers.qwen-r9700. The qualification switch changes
+    only that provider's matching model samplingParams object.
+
+EXAMPLES
+    scripts/deploy-pi-models-config
+
+    scripts/deploy-pi-models-config \
+        --destination /tmp/pi-home/.pi/agent/models.json
+
+    scripts/deploy-pi-models-config \
+        --qualification-greedy-sampling \
+        --destination /tmp/pi-greedy/.pi/agent/models.json
+
+FILES
+    integrations/pi/models.json
+        Tracked qwen-r9700 provider template.
+
+    $HOME/.pi/agent/models.json
+        Default Pi user model configuration.
+
+PATHS
+    Both --source and --destination must resolve to regular JSON files. Symbolic
+    links are refused for the destination.
+
+SECURITY NOTES
+    No credentials are read or written. The local API key is a non-secret vLLM
+    placeholder. Existing configuration is never silently replaced; the explicit
+    replacement mode is ownership-checked and retains unrelated configuration. The
+    qualification override is explicit, validates its tracked baseline, and refuses
+    an ambiguous or already-changed model entry.
+
+EXIT STATUS
+    0 on creation, safe merge/reconciliation, or an already-identical provider;
+    2 on invalid input or I/O failure; 3 when an existing qwen-r9700 provider
+    differs and --replace-provider was not supplied.
+
+AUTHORS
+    Qwen R9700 inference lab maintainers.
+EOF
+}
+
+die() {
+	printf 'deploy-pi-models-config: %s\n' "$*" >&2
+	exit 2
+}
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+project_root=$(cd -- "$script_dir/.." && pwd -P)
+source_path="$project_root/integrations/pi/models.json"
+: "${HOME:?HOME must be set}"
+destination="$HOME/.pi/agent/models.json"
+replace_provider=0
+qualification_greedy_sampling=0
+
+while (($# > 0)); do
+	case $1 in
+	--source)
+		(($# >= 2)) || die '--source requires a value'
+		source_path=$2
+		shift 2
+		;;
+	--destination)
+		(($# >= 2)) || die '--destination requires a value'
+		destination=$2
+		shift 2
+		;;
+	--replace-provider)
+		replace_provider=1
+		shift
+		;;
+	--qualification-greedy-sampling)
+		qualification_greedy_sampling=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		die "unknown option: $1"
+		;;
+	esac
+done
+
+command -v jq >/dev/null 2>&1 || die 'jq is required'
+[[ -f $source_path && ! -L $source_path ]] || die "source is not a regular file: $source_path"
+[[ $destination == /* ]] || die "destination must be absolute: $destination"
+[[ ! -L $destination ]] || die "destination is a symbolic link: $destination"
+[[ ! -e $destination || -f $destination ]] || die "destination is not a regular file: $destination"
+if ((replace_provider == 1)) && [[ -e $destination ]]; then
+	[[ $(stat -c '%u' -- "$destination") == "$(id -u)" ]] ||
+		die "replacement destination has the wrong owner: $destination"
+fi
+
+desired_provider=$(jq -ce --arg provider "$PROVIDER_ID" '
+    .providers as $providers
+    | select(type == "object" and ($providers | type) == "object")
+    | $providers[$provider]
+    | select(type == "object")
+' "$source_path") || die "source does not contain provider $PROVIDER_ID"
+if ((qualification_greedy_sampling == 1)); then
+	desired_provider=$(jq -ce --arg model "$MODEL_ID" '
+	        if (.models | type) != "array" then
+	            error("qualification sampling requires a models array")
+	        else
+	            .
+	        end
+	        | [.models[] | select(.id == $model)] as $models
+	        | if ($models | length) != 1 then
+            error("qualification sampling requires exactly one matching model")
+          elif $models[0].samplingParams != {
+              "temperature": 1.0,
+              "top_p": 0.95,
+              "top_k": 20
+          } then
+            error("qualification sampling baseline is not the tracked 1.0/0.95/20 tuple")
+          else
+            .models |= map(
+                if .id == $model then
+                    .samplingParams = {
+                        "temperature": 0,
+                        "top_p": 1,
+                        "top_k": 1
+                    }
+                else
+                    .
+                end
+            )
+          end
+    ' <<<"$desired_provider") ||
+		die "cannot apply qualification sampling to $PROVIDER_ID/$MODEL_ID"
+fi
+
+destination_dir=$(dirname -- "$destination")
+if [[ ! -d $destination_dir ]]; then
+	mkdir -p -- "$destination_dir" || die "cannot create destination directory: $destination_dir"
+fi
+[[ -d $destination_dir && ! -L $destination_dir ]] ||
+	die "destination directory is not a regular directory: $destination_dir"
+
+umask 077
+stage_path=$(mktemp "$destination_dir/.models.json.stage.XXXXXX") ||
+	die "cannot create staging file in $destination_dir"
+
+cleanup_stage() {
+	if [[ -n ${stage_path:-} && (-e $stage_path || -L $stage_path) ]]; then
+		case $stage_path in
+		"$destination_dir"/.models.json.stage.*)
+			rm -f -- "$stage_path"
+			;;
+		esac
+	fi
+}
+trap cleanup_stage EXIT
+
+if [[ ! -e $destination ]]; then
+	jq -S --arg provider "$PROVIDER_ID" --argjson value "$desired_provider" \
+		'.providers[$provider] = $value' "$source_path" >"$stage_path" ||
+		die 'cannot render source configuration'
+	chmod 0600 -- "$stage_path"
+	if ! ln -- "$stage_path" "$destination"; then
+		die "destination appeared during creation; no file was replaced: $destination"
+	fi
+	rm -f -- "$stage_path"
+	stage_path=''
+	printf 'created %s with provider %s\n' "$destination" "$PROVIDER_ID"
+	exit 0
+fi
+
+[[ ! -L $destination && -f $destination ]] || die "destination changed type: $destination"
+jq -e 'type == "object" and (.providers | type) == "object"' "$destination" >/dev/null ||
+	die "existing destination does not contain a providers object: $destination"
+
+current_provider=$(jq -cS --arg provider "$PROVIDER_ID" '.providers[$provider] // null' "$destination") ||
+	die "cannot read existing destination: $destination"
+canonical_desired=$(jq -cS . <<<"$desired_provider") || die 'cannot canonicalize desired provider'
+
+if [[ $current_provider != 'null' ]]; then
+	if [[ $current_provider == "$canonical_desired" ]]; then
+		printf '%s already contains the exact provider %s\n' "$destination" "$PROVIDER_ID"
+		exit 0
+	fi
+	if ((replace_provider == 0)); then
+		printf 'deploy-pi-models-config: conflict: %s already contains a different %s provider; left unchanged\n' \
+			"$destination" "$PROVIDER_ID" >&2
+		exit 3
+	fi
+fi
+
+original_sha256=$(sha256sum -- "$destination") || die "cannot hash destination: $destination"
+original_sha256=${original_sha256%% *}
+original_mode=$(stat -c '%a' -- "$destination") || die "cannot read destination mode: $destination"
+
+jq -S --arg provider "$PROVIDER_ID" --argjson value "$desired_provider" \
+	'.providers[$provider] = $value' "$destination" >"$stage_path" ||
+	die 'cannot render merged configuration'
+chmod "$original_mode" -- "$stage_path"
+
+[[ ! -L $destination && -f $destination ]] || die "destination changed type: $destination"
+current_sha256=$(sha256sum -- "$destination") || die "cannot rehash destination: $destination"
+current_sha256=${current_sha256%% *}
+[[ $current_sha256 == "$original_sha256" ]] ||
+	die "destination changed during merge; left unchanged: $destination"
+
+mv -T -- "$stage_path" "$destination" || die "cannot publish merged configuration: $destination"
+stage_path=''
+if [[ $current_provider == 'null' ]]; then
+	printf 'added provider %s to %s; existing providers were preserved\n' "$PROVIDER_ID" "$destination"
+else
+	printf 'reconciled provider %s in %s; unrelated configuration was preserved\n' \
+		"$PROVIDER_ID" "$destination"
+fi

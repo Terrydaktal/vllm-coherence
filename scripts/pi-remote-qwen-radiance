@@ -1,0 +1,777 @@
+#!/usr/bin/env bash
+
+launcher_original_script=${QWEN_PI_RADIANCE_ORIGINAL_SCRIPT:-}
+if [[ ${QWEN_PI_RADIANCE_SOURCE_SEALED:-0} != 1 ]]; then
+	launcher_source=$(readlink -e -- "${BASH_SOURCE[0]}") || {
+		printf 'pi-remote-qwen-radiance: cannot resolve its launcher source\n' >&2
+		exit 2
+	}
+	exec /usr/bin/python3 -c '
+import fcntl
+import os
+import sys
+
+source_path = sys.argv[1]
+source_fd = os.open(source_path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+before = os.fstat(source_fd)
+source = bytearray()
+while chunk := os.read(source_fd, 1024 * 1024):
+    source.extend(chunk)
+after = os.fstat(source_fd)
+os.close(source_fd)
+identity = lambda value: (
+    value.st_dev,
+    value.st_ino,
+    value.st_size,
+    value.st_mtime_ns,
+    value.st_ctime_ns,
+)
+if identity(before) != identity(after) or len(source) != before.st_size:
+    raise SystemExit("pi-remote-qwen-radiance: source changed while sealing")
+sealed_fd = os.memfd_create("pi-remote-qwen-radiance", os.MFD_ALLOW_SEALING)
+offset = 0
+while offset < len(source):
+    offset += os.write(sealed_fd, source[offset:])
+os.lseek(sealed_fd, 0, os.SEEK_SET)
+fcntl.fcntl(
+    sealed_fd,
+    fcntl.F_ADD_SEALS,
+    fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE,
+)
+os.set_inheritable(sealed_fd, True)
+environment = os.environ.copy()
+environment["QWEN_PI_RADIANCE_SOURCE_SEALED"] = "1"
+environment["QWEN_PI_RADIANCE_ORIGINAL_SCRIPT"] = source_path
+os.execve(
+    "/usr/bin/bash",
+    ["/usr/bin/bash", f"/proc/self/fd/{sealed_fd}", *sys.argv[2:]],
+    environment,
+)
+' "$launcher_source" "$@"
+fi
+unset QWEN_PI_RADIANCE_SOURCE_SEALED QWEN_PI_RADIANCE_ORIGINAL_SCRIPT
+
+set -euo pipefail
+umask 077
+
+readonly PROGRAM=pi-remote-qwen-radiance
+readonly PI_VERSION=0.84.2
+readonly MODEL_ID=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
+readonly PI_MODEL="qwen-r9700/$MODEL_ID"
+readonly SNAPSHOT_ABI=ae24d7a7e462ab1812f3ded42bd5a69065ee572b59e2c3e91a03ea22d50503b7
+readonly SNAPSHOT_DATA_ABI=36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5
+readonly SNAPSHOT_PATCH_SHA256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
+readonly REMOTE_LAUNCHER_SHA256=e4d622cd4556c59004f6ba055d87564f696824c351b1a3525a4c565cd8e11a81
+readonly IMAGE_ID=4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf
+readonly DEFAULT_REMOTE=lewis@ai
+readonly AUTO_LOCAL_PORT_FIRST=8012
+readonly AUTO_LOCAL_PORT_LAST=8099
+readonly DEFAULT_THINKING=xhigh
+readonly REMOTE_PORT=8080
+readonly REMOTE_ROOT=/home/lewis/projects/r9700-radiance-1.0.16-20260913
+readonly REMOTE_CACHE=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
+readonly CONTAINER=qwen38-27b-uncensored-mxfp4-public-snapshot-candidate
+
+usage() {
+	cat <<'EOF'
+NAME
+    pi-remote-qwen-radiance - run Pi on the snapshot-qualified public Radiance lane
+
+SYNOPSIS
+    pi-remote-qwen-radiance [OPTIONS] [-- PI_OPTIONS...]
+    pi-remote-qwen-radiance --help
+
+DESCRIPTION
+    Authenticates or starts the isolated Qwen3.8 unrestricted MXFP4 Radiance
+    backend on lewis@ai, opens a loopback-only SSH tunnel, and launches Pi.
+    Durable hybrid snapshots are content-addressed by the exact model/runtime
+    ABI and restore attention KV plus GDN/convolution state across restarts.
+    Eleven tools are enabled by default, including bounded repository searches,
+    web research, and archived-output retrieval. Pi operating preferences are
+    appended directly; AGENTS.md and CLAUDE.md discovery is disabled.
+
+OPTIONS
+    --remote HOST
+        SSH destination. Default: lewis@ai.
+
+    --local-port PORT
+        Require this exact local loopback port for the forward to remote port
+        8080. When omitted, atomically reserve the first available port in
+        8012..8099.
+
+    --thinking LEVEL
+        Pi reasoning effort: off, low, medium, or xhigh. Default: xhigh.
+
+    --session PATH|ID|last
+        Resume a project-local Pi session. A UUID or unambiguous prefix is
+        resolved from <cwd>/.pi/sessions. `last` selects its newest session.
+        An absolute path remains supported for explicit cross-project use.
+
+    --no-install
+        Require the existing verified Pi 0.84.2 installation.
+
+    --reuse-existing
+        Refuse to start a backend; attach only to an authenticated compatible lane.
+
+    --preflight-only
+        Authenticate local and remote release inputs without starting the GPU.
+
+    --dry-run
+        Validate local arguments and print the selected immutable contract.
+
+    -h, --help
+        Show this help text and exit.
+
+OPERATION
+    The launcher rejects unknown listeners and containers. When port 8080 is
+    free it starts the hash-pinned launcher detached, waits for the exact served
+    model, then starts Pi. Pi exit closes only this invocation's SSH tunnel; the
+    backend remains available for another chat and may be stopped explicitly.
+    Automatic local-port locks are held for the lifetime of Pi and released by
+    the kernel on exit, so concurrent launchers cannot choose the same port.
+	GPU edge/junction temperatures come from one host-keyed monitor shared by
+	every Pi window. Its sample and client heartbeats live only in user tmpfs;
+	the monitor exits after the final client disappears.
+	Scheduler state uses one additional host-keyed stream shared by every Pi
+	window. It carries only chat/generation hashes, request state, and token
+	counts so Pi can name GPU queueing, pauses, and prompt/KV preparation.
+
+EXAMPLES
+    scripts/pi-remote-qwen-radiance --no-install --thinking xhigh
+
+    scripts/pi-remote-qwen-radiance --no-install --local-port 8012 \
+        --thinking xhigh --session /path/to/session.jsonl
+
+    scripts/pi-remote-qwen-radiance --reuse-existing --no-install \
+        --thinking xhigh --session last
+
+    scripts/pi-remote-qwen-radiance --reuse-existing --no-install -- \
+        -p "Call the bash tool once, then report its output."
+
+FILES
+    integrations/pi/models-radiance-public-clean-snapshot.json
+        Single-model Pi provider contract using the public stochastic sampling.
+
+    experiments/radiance-public/snapshot-abi-chat-cache-v1.json
+        Authenticated model, runtime, serving, and durable-snapshot ABI.
+
+    experiments/radiance-public/launch_public_clean_snapshot_server.sh
+        Exact remote backend launcher.
+
+	integrations/pi/qwen-gpu-temperature.mjs
+		Publishes the shared edge/junction sample into Pi's inline footer.
+
+	integrations/pi/qwen-radiance-scheduler-telemetry.mjs
+		Maps content-free scheduler state to the active Pi chat.
+
+	scripts/qwen-radiance-gpu-temperature
+		Singleton monitor using one persistent remote hwmon stream.
+
+	scripts/qwen-radiance-scheduler-status
+		Singleton monitor using one persistent remote scheduler-status stream.
+
+PATHS
+    ~/.local/state/qwen-r9700/pi-remote/radiance-public-clean-candidate/
+        Generated Pi configuration and tunnel/backend logs.
+
+    ~/.local/state/qwen-r9700/pi-remote/radiance-public-clean-candidate/port-locks/
+        Persistent zero-byte lock files. Advisory locks, rather than file
+        presence, record which local ports are currently reserved.
+
+    <working-directory>/.pi/sessions/
+        Model-independent project history used for new sessions and lookup.
+
+	$XDG_RUNTIME_DIR/qwen-radiance-gpu-temperature/<host-hash>/
+		Shared tmpfs temperature and scheduler samples, singleton locks, and
+		live Pi client heartbeats.
+
+    /home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1/snapshots/
+        Remote content-addressed durable hybrid snapshots.
+
+SECURITY NOTES
+    All local API listeners are loopback-only. Remote files, image identity,
+    snapshot ABI, container arguments, and served model are checked before Pi
+    is launched. An occupied but unauthenticated endpoint is never stopped.
+
+EXIT STATUS
+    0 when Pi exits successfully; 2 for validation, startup, or health failure;
+    otherwise Pi's exit status.
+
+AUTHORS
+    Qwen R9700 inference lab maintainers.
+EOF
+}
+
+die() {
+	printf '%s: %s\n' "$PROGRAM" "$*" >&2
+	exit 2
+}
+
+is_port() {
+	[[ $1 =~ ^[0-9]+$ ]] && ((1 <= 10#$1 && 10#$1 <= 65535))
+}
+
+owned_process() {
+	local pid=$1 start=$2 observed
+	[[ $pid =~ ^[1-9][0-9]*$ && $start =~ ^[1-9][0-9]*$ && -r /proc/$pid/stat ]] || return 1
+	observed=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null) || return 1
+	[[ $observed == "$start" ]]
+}
+
+prepare_local_port_state() {
+	if [[ -e $state_root || -L $state_root ]]; then
+		[[ -d $state_root && ! -L $state_root && $(stat -c '%u' -- "$state_root") == "$(id -u)" ]] ||
+			die "local state root is unsafe: $state_root"
+	else
+		mkdir -p -- "$state_root" || die "cannot create local state root: $state_root"
+	fi
+	[[ -d $state_root && ! -L $state_root && $(stat -c '%u' -- "$state_root") == "$(id -u)" ]] ||
+		die "local state root changed during creation: $state_root"
+	chmod 0700 -- "$state_root" || die "cannot secure local state root: $state_root"
+
+	if [[ -e $port_lock_dir || -L $port_lock_dir ]]; then
+		[[ -d $port_lock_dir && ! -L $port_lock_dir && $(stat -c '%u' -- "$port_lock_dir") == "$(id -u)" ]] ||
+			die "local port lock directory is unsafe: $port_lock_dir"
+	else
+		mkdir -p -- "$port_lock_dir" || die "cannot create local port lock directory: $port_lock_dir"
+	fi
+	[[ -d $port_lock_dir && ! -L $port_lock_dir && $(stat -c '%u' -- "$port_lock_dir") == "$(id -u)" ]] ||
+		die "local port lock directory changed during creation: $port_lock_dir"
+	chmod 0700 -- "$port_lock_dir" || die "cannot secure local port lock directory: $port_lock_dir"
+}
+
+prepare_gpu_temperature_state() {
+	local runtime_base temperature_root host_key path details
+	runtime_base=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+	[[ $runtime_base == /* && -d $runtime_base && ! -L $runtime_base ]] ||
+		die "GPU temperature runtime directory is unsafe: $runtime_base"
+	details=$(stat -c '%u:%a' -- "$runtime_base") ||
+		die "cannot inspect GPU temperature runtime directory: $runtime_base"
+	[[ $details == "$(id -u):700" ]] ||
+		die "GPU temperature runtime directory must be owned by this user with mode 0700: $runtime_base"
+	temperature_root="$runtime_base/qwen-radiance-gpu-temperature"
+	host_key=$(printf '%s' "$remote_host" | sha256sum | awk '{print $1}')
+	gpu_temperature_state="$temperature_root/$host_key"
+	for path in "$temperature_root" "$gpu_temperature_state" "$gpu_temperature_state/clients"; do
+		if [[ ! -e $path && ! -L $path ]] && ! mkdir -- "$path" 2>/dev/null; then
+			# Another launcher may have created the shared path after our check.
+			[[ -d $path && ! -L $path ]] || die "cannot create GPU temperature state path: $path"
+		fi
+		[[ -d $path && ! -L $path ]] || die "GPU temperature state path is unsafe: $path"
+		chmod 0700 -- "$path" || die "cannot secure GPU temperature state path: $path"
+		details=$(stat -c '%u:%a' -- "$path") || die "cannot inspect GPU temperature state path: $path"
+		[[ $details == "$(id -u):700" ]] || die "unsafe GPU temperature state ownership or mode: $path"
+	done
+}
+
+try_reserve_local_port() {
+	local candidate=$1 candidate_fd listeners lock_path lock_status
+	lock_path="$port_lock_dir/$candidate.lock"
+	if [[ -e $lock_path || -L $lock_path ]]; then
+		[[ -f $lock_path && ! -L $lock_path && $(stat -c '%u:%h' -- "$lock_path") == "$(id -u):1" ]] ||
+			die "local port lock file is unsafe: $lock_path"
+	fi
+	exec {candidate_fd}>>"$lock_path" || die "cannot open local port lock: $lock_path"
+	chmod 0600 -- "$lock_path" || {
+		exec {candidate_fd}>&-
+		die "cannot secure local port lock: $lock_path"
+	}
+	[[ -f $lock_path && ! -L $lock_path && $(stat -c '%u:%h' -- "$lock_path") == "$(id -u):1" ]] || {
+		exec {candidate_fd}>&-
+		die "local port lock changed while opening: $lock_path"
+	}
+	if flock -n "$candidate_fd"; then
+		:
+	else
+		lock_status=$?
+		exec {candidate_fd}>&-
+		((lock_status == 1)) && return 1
+		die "cannot lock local TCP port $candidate"
+	fi
+	listeners=$(ss -H -ltn "sport = :$candidate") || {
+		exec {candidate_fd}>&-
+		die "cannot inspect local TCP port $candidate"
+	}
+	if [[ -n $listeners ]]; then
+		exec {candidate_fd}>&-
+		return 2
+	fi
+	local_port=$candidate
+	local_port_lock_fd=$candidate_fd
+}
+
+reserve_local_port() {
+	local candidate result
+	if ((local_port_explicit)); then
+		if try_reserve_local_port "$local_port"; then
+			local_port_selection=explicit
+			return
+		else
+			result=$?
+		fi
+		if ((result == 1)); then
+			die "local TCP port $local_port is reserved by another Radiance launcher"
+		fi
+		die "local TCP port $local_port is already listening"
+	fi
+
+	for ((candidate = AUTO_LOCAL_PORT_FIRST; candidate <= AUTO_LOCAL_PORT_LAST; candidate++)); do
+		if try_reserve_local_port "$candidate"; then
+			local_port_selection=automatic
+			return
+		fi
+	done
+	die "no local TCP port is available in $AUTO_LOCAL_PORT_FIRST..$AUTO_LOCAL_PORT_LAST"
+}
+
+resolve_project_session_args() {
+	local index selector replacement
+	for ((index = 0; index < ${#pi_args[@]}; index++)); do
+		case ${pi_args[index]} in
+		--session)
+			((index + 1 < ${#pi_args[@]})) || die '--session requires a value'
+			selector=${pi_args[index + 1]}
+			[[ $selector == /* ]] || {
+				replacement=$("$history_program" resolve --cwd "$project_cwd" "$selector") ||
+					die "cannot resolve project session: $selector"
+				pi_args[index + 1]=$replacement
+			}
+			index=$((index + 1))
+			;;
+		--session=*)
+			selector=${pi_args[index]#--session=}
+			[[ $selector == /* ]] || {
+				replacement=$("$history_program" resolve --cwd "$project_cwd" "$selector") ||
+					die "cannot resolve project session: $selector"
+				pi_args[index]="--session=$replacement"
+			}
+			;;
+		esac
+	done
+}
+
+project_root=$(cd "$(dirname "${launcher_original_script:-${BASH_SOURCE[0]}}")/.." && pwd)
+project_cwd=$(pwd -P)
+readonly project_cwd
+readonly state_root="$HOME/.local/state/qwen-r9700/pi-remote/radiance-public-clean-candidate"
+readonly port_lock_dir="$state_root/port-locks"
+remote_host=$DEFAULT_REMOTE
+local_port=''
+local_port_explicit=0
+local_port_lock_fd=''
+local_port_selection=''
+thinking=$DEFAULT_THINKING
+no_install=0
+reuse_existing=0
+preflight_only=0
+dry_run=0
+declare -a pi_args=()
+
+while (($# > 0)); do
+	case $1 in
+	--remote)
+		(($# >= 2)) || die '--remote requires a value'
+		remote_host=$2
+		shift 2
+		;;
+	--local-port)
+		(($# >= 2)) || die '--local-port requires a value'
+		local_port=$2
+		local_port_explicit=1
+		shift 2
+		;;
+	--thinking)
+		(($# >= 2)) || die '--thinking requires a value'
+		thinking=$2
+		shift 2
+		;;
+	--no-install)
+		no_install=1
+		shift
+		;;
+	--reuse-existing)
+		reuse_existing=1
+		shift
+		;;
+	--preflight-only)
+		preflight_only=1
+		shift
+		;;
+	--dry-run)
+		dry_run=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--)
+		shift
+		pi_args=("$@")
+		break
+		;;
+	--session | --session=*)
+		pi_args=("$@")
+		break
+		;;
+	*) die "unknown launcher option: $1 (pass Pi options after --)" ;;
+	esac
+done
+
+if ((local_port_explicit)); then
+	is_port "$local_port" || die "invalid local port: $local_port"
+fi
+case $thinking in off | low | medium | xhigh) ;; *) die "unsupported thinking level: $thinking" ;; esac
+((dry_run == 0 || preflight_only == 0)) || die '--dry-run and --preflight-only are mutually exclusive'
+
+readonly models_source="$project_root/integrations/pi/models-radiance-public-clean-snapshot.json"
+readonly settings_source="$project_root/integrations/pi/settings-radiance.json"
+readonly operating_prompt="$project_root/integrations/pi/qwen-radiance-operating-prompt.md"
+readonly abi_source="$project_root/experiments/radiance-public/snapshot-abi-chat-cache-v1.json"
+readonly launcher_source="$project_root/experiments/radiance-public/launch_public_clean_snapshot_server.sh"
+readonly patch_source="$project_root/experiments/radiance-public/patch_streaming_snapshot.py"
+readonly cache_module="$project_root/src/qwen_r9700_lab/radiance_cache.py"
+readonly memory_module="$project_root/src/qwen_r9700_lab/radiance_memory.py"
+readonly cache_tier_module="$project_root/experiments/radiance-public/radiance_chat_tier.py"
+readonly fair_scheduler_module="$project_root/experiments/radiance-public/radiance_fair_scheduler.py"
+readonly cache_patch_module="$project_root/experiments/radiance-public/patch_chat_snapshot.py"
+readonly install_script="$project_root/scripts/install-pi-coding-agent"
+readonly deploy_script="$project_root/scripts/deploy-pi-models-config"
+readonly progress_extension="$project_root/integrations/pi/qwen-progress.mjs"
+readonly scheduler_telemetry_module="$project_root/integrations/pi/qwen-radiance-scheduler-telemetry.mjs"
+readonly cache_residency_module="$project_root/integrations/pi/qwen-cache-residency.mjs"
+readonly cache_residency_probe="$project_root/src/qwen_r9700_lab/radiance_cache_residency.py"
+readonly scheduler_status_helper="$project_root/scripts/qwen-radiance-scheduler-status"
+readonly gpu_temperature_extension="$project_root/integrations/pi/qwen-gpu-temperature.mjs"
+readonly gpu_temperature_helper="$project_root/scripts/qwen-radiance-gpu-temperature"
+readonly tool_output_extension="$project_root/integrations/pi/qwen-tool-output-condense.mjs"
+readonly rehydrate_extension="$project_root/integrations/pi/qwen-tool-turn-rehydrate.mjs"
+readonly searchtool_extension=/home/lewis/tasks/searchtool/index.ts
+readonly searchtool_recovery_extension="$project_root/integrations/pi/qwen-searchtool-recovery.mjs"
+readonly compaction_extension="$project_root/integrations/pi/qwen-radiance-compaction.ts"
+readonly compaction_core="$project_root/integrations/pi/qwen-radiance-compaction.mjs"
+readonly backend_errors_module="$project_root/integrations/pi/qwen-radiance-errors.mjs"
+readonly backend_errors_probe="$project_root/src/qwen_r9700_lab/radiance_error_report.py"
+readonly compaction_progress="$project_root/integrations/pi/qwen-radiance-compaction-progress.mjs"
+readonly cache_extension="$project_root/integrations/pi/qwen-radiance-cache.mjs"
+readonly compaction_prompt="$project_root/integrations/pi/qwen-loss-sensitive-compact-prompt.md"
+readonly history_program="$project_root/scripts/pi-session-history"
+
+for command_name in awk chmod cmp curl date env flock id jq mkdir mktemp mv nohup readlink sha256sum sleep ss ssh stat tr; do
+	command -v "$command_name" >/dev/null 2>&1 || die "required command is missing: $command_name"
+done
+[[ -f $gpu_temperature_extension && ! -L $gpu_temperature_extension &&
+	$(stat -c '%u:%h' -- "$gpu_temperature_extension") == "$(id -u):1" ]] ||
+	die "GPU temperature extension is missing or unsafe: $gpu_temperature_extension"
+[[ -f $gpu_temperature_helper && ! -L $gpu_temperature_helper && -x $gpu_temperature_helper &&
+	$(stat -c '%u:%h' -- "$gpu_temperature_helper") == "$(id -u):1" ]] ||
+	die "GPU temperature helper is missing or unsafe: $gpu_temperature_helper"
+[[ -f $scheduler_status_helper && ! -L $scheduler_status_helper && -x $scheduler_status_helper &&
+	$(stat -c '%u:%h' -- "$scheduler_status_helper") == "$(id -u):1" ]] ||
+	die "scheduler status helper is missing or unsafe: $scheduler_status_helper"
+[[ -f $models_source && ! -L $models_source ]] || die 'Pi model configuration is missing or unsafe'
+for config_file in "$settings_source" "$operating_prompt" "$rehydrate_extension" "$scheduler_telemetry_module" "$cache_residency_module" "$cache_residency_probe"; do
+	[[ -f $config_file && ! -L $config_file &&
+		$(stat -c '%u:%h' -- "$config_file") == "$(id -u):1" ]] ||
+		die "Pi configuration dependency is missing or unsafe: $config_file"
+done
+jq -e '.defaultTools | type == "array" and length > 0 and all(.[]; type == "string")' \
+	"$settings_source" >/dev/null || die 'Pi default tool configuration is invalid'
+[[ -f $abi_source && ! -L $abi_source ]] || die 'snapshot ABI is missing or unsafe'
+[[ -f $launcher_source && ! -L $launcher_source ]] || die 'server launcher is missing or unsafe'
+[[ -f $patch_source && ! -L $patch_source ]] || die 'snapshot patch is missing or unsafe'
+[[ -f $searchtool_extension && ! -L $searchtool_extension &&
+	$(stat -c '%u:%h' -- "$searchtool_extension") == "$(id -u):1" ]] ||
+	die "searchtool extension is missing or unsafe: $searchtool_extension"
+[[ -f $searchtool_recovery_extension && ! -L $searchtool_recovery_extension &&
+	$(stat -c '%u:%h' -- "$searchtool_recovery_extension") == "$(id -u):1" ]] ||
+	die "recovery extension is missing or unsafe: $searchtool_recovery_extension"
+for compaction_file in "$compaction_extension" "$compaction_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe"; do
+	[[ -f $compaction_file && ! -L $compaction_file &&
+		$(stat -c '%u:%h' -- "$compaction_file") == "$(id -u):1" ]] ||
+		die "prefix compaction dependency is missing or unsafe: $compaction_file"
+done
+[[ -f $history_program && ! -L $history_program && -x $history_program &&
+	$(stat -c '%u:%h' -- "$history_program") == "$(id -u):1" ]] ||
+	die "project session history helper is missing or unsafe: $history_program"
+[[ $(sha256sum -- "$abi_source" | awk '{print $1}') == "$SNAPSHOT_ABI" ]] || die 'local snapshot ABI hash mismatch'
+[[ $(jq -r '.storage.data_abi' "$abi_source") == "$SNAPSHOT_DATA_ABI" ]] || die 'local snapshot data ABI mismatch'
+[[ $(sha256sum -- "$launcher_source" | awk '{print $1}') == "$REMOTE_LAUNCHER_SHA256" ]] || die 'local server launcher hash mismatch'
+[[ $(sha256sum -- "$patch_source" | awk '{print $1}') == "$SNAPSHOT_PATCH_SHA256" ]] || die 'local snapshot patch hash mismatch'
+for module in "$cache_module" "$memory_module" "$cache_tier_module" "$fair_scheduler_module" "$cache_patch_module"; do
+	[[ -f $module && ! -L $module ]] || die "missing chat storage module: $module"
+	expected=$(jq -r --arg name "${module##*/}" '.runtime.chat_storage.modules[$name]' "$abi_source")
+	[[ $(sha256sum "$module" | awk '{print $1}') == "$expected" ]] || die "chat storage module hash mismatch: $module"
+done
+declare -a release_preflight=()
+while IFS=$'\t' read -r module expected; do
+	path="${launcher_source%/*}/$module"
+	[[ -f $path && ! -L $path && $(sha256sum "$path" | awk '{print $1}') == "$expected" ]] ||
+		die "release integration hash mismatch: $module"
+	release_preflight+=("$REMOTE_ROOT/radiance-vllm-mxfp4/$module" "$expected")
+done < <(jq -r '.runtime.release_files | to_entries[] | [.key, .value] | @tsv' "$abi_source")
+jq -e --arg model "$MODEL_ID" '
+  [.providers["qwen-r9700"].models[] | select(.id == $model)] as $models
+  | ($models | length) == 1
+  and $models[0].contextWindow == 253792
+  and $models[0].maxTokens == $models[0].contextWindow
+	  and $models[0].samplingParams == {temperature: 1, top_p: 0.95, top_k: 20}
+' "$models_source" >/dev/null || die 'local Pi model contract is invalid'
+
+if ((dry_run)); then
+	printf 'model:        %s\n' "$PI_MODEL"
+	printf 'remote:       %s:%s\n' "$remote_host" "$REMOTE_PORT"
+	if ((local_port_explicit)); then
+		printf 'local API:    http://127.0.0.1:%s/v1 (explicit)\n' "$local_port"
+	else
+		printf 'local API:    automatic; first free port in %s..%s\n' \
+			"$AUTO_LOCAL_PORT_FIRST" "$AUTO_LOCAL_PORT_LAST"
+	fi
+	printf 'runtime ABI:  %s\n' "$SNAPSHOT_ABI"
+	printf 'snapshot ABI: %s\n' "$SNAPSHOT_DATA_ABI"
+	printf 'context:      253792\n'
+	printf 'generation:   all remaining context; no separate output or thinking cap\n'
+	printf 'sampling:     public stochastic 1/0.95/20\n'
+	printf 'default tools: %s\n' "$(jq -r '.defaultTools | join(", ")' "$settings_source")"
+	printf 'preferences:  %s\n' "$operating_prompt"
+	printf 'context files: disabled\n'
+	printf 'recovery:     all Radiance chats; hidden continuation after omitted tool announcements; max 2 per user message\n'
+	exit 0
+fi
+
+if ((preflight_only == 0)); then
+	project_history_dir=$("$history_program" prepare --cwd "$project_cwd") ||
+		die "cannot prepare project session history: $project_cwd"
+	readonly project_history_dir
+	resolve_project_session_args
+fi
+
+remote_launcher="$REMOTE_ROOT/launch_public_clean_snapshot_server.sh"
+remote_patch="$REMOTE_ROOT/radiance-vllm-mxfp4/patch_streaming_snapshot.py"
+remote_abi="$REMOTE_CACHE/snapshots/$SNAPSHOT_ABI/abi.json"
+
+ssh -T "$remote_host" /usr/bin/bash -s -- \
+	"$remote_launcher" "$REMOTE_LAUNCHER_SHA256" \
+	"$remote_patch" "$SNAPSHOT_PATCH_SHA256" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_cache.py" "$(jq -r '.runtime.chat_storage.modules["radiance_cache.py"]' "$abi_source")" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_memory.py" "$(jq -r '.runtime.chat_storage.modules["radiance_memory.py"]' "$abi_source")" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_chat_tier.py" "$(jq -r '.runtime.chat_storage.modules["radiance_chat_tier.py"]' "$abi_source")" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_fair_scheduler.py" "$(jq -r '.runtime.chat_storage.modules["radiance_fair_scheduler.py"]' "$abi_source")" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/patch_chat_snapshot.py" "$(jq -r '.runtime.chat_storage.modules["patch_chat_snapshot.py"]' "$abi_source")" \
+	"$remote_abi" "$SNAPSHOT_ABI" "${release_preflight[@]}" <<'REMOTE_PREFLIGHT'
+set -euo pipefail
+while (($#)); do
+    path=$1
+    expected=$2
+    shift 2
+    [[ -f $path && ! -L $path && $(stat -c '%U:%h' -- "$path") == 'lewis:1' ]] || exit 2
+    [[ $(sha256sum -- "$path" | awk '{print $1}') == "$expected" ]] || exit 2
+done
+REMOTE_PREFLIGHT
+
+((preflight_only == 0)) || exit 0
+
+backend_log=$(
+	ssh -T "$remote_host" /usr/bin/bash -s -- \
+		"$CONTAINER" "$MODEL_ID" "$IMAGE_ID" "$REMOTE_PORT" \
+		"$remote_launcher" "$REMOTE_CACHE" "$SNAPSHOT_DATA_ABI" "$reuse_existing" "$SNAPSHOT_ABI" \
+		"$(jq -r '.runtime.memory_report.compatible_runtime_abis | join(" ")' "$abi_source")" <<'REMOTE_BACKEND'
+set -euo pipefail
+container=$1
+model=$2
+image_id=$3
+port=$4
+launcher=$5
+cache=$6
+abi=$7
+reuse=$8
+runtime_abi=$9
+# SSH's command string can omit the final empty compatibility argument.
+compatible_runtime_abi=${10-}
+
+validate_backend() {
+    local inspect models args candidate runtime_matches=0
+    local -a compatible_runtime_abis=()
+    inspect=$(podman inspect "$container") || return 1
+	jq -e --arg image "$image_id" --arg name "$container" '
+      length == 1 and .[0].State.Running == true
+      and .[0].Image == $image and .[0].Name == $name
+    ' <<<"$inspect" >/dev/null || return 1
+    args=$(jq -r '.[0].Args | join(" ")' <<<"$inspect") || return 1
+    # Diagnostic additions preserve the exact qualified predecessors while live.
+    read -r -a compatible_runtime_abis <<<"$compatible_runtime_abi"
+    for candidate in "$runtime_abi" "${compatible_runtime_abis[@]}"; do
+        [[ $candidate =~ ^[0-9a-f]{64}$ ]] || continue
+        if [[ $args == *"qwen-radiance-public-clean-${candidate:0:16}"* ]]; then
+            runtime_matches=1
+            break
+        fi
+    done
+    ((runtime_matches == 1)) || return 1
+    [[ $args == *"--served-model-name $model"* \
+        && $args == *'--max-model-len 253792'* \
+		        && $args == *"/cache/snapshots/$abi/data"* \
+			        && $args == *'qwen_chat_fs'* \
+        && $args == *'--kv-cache-dtype fp8'* \
+        && $args == *'--speculative-config'* ]] || return 1
+    models=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/v1/models") || return 1
+    jq -e --arg model "$model" '.data | length == 1 and .[0].id == $model' \
+        <<<"$models" >/dev/null
+}
+
+if podman container exists "$container"; then
+    validate_backend || {
+        echo 'existing Radiance container differs from the authenticated lane' >&2
+        exit 2
+    }
+    printf 'existing\n'
+    exit 0
+fi
+if curl -fsS --max-time 2 "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+    echo "remote port $port is occupied by an unowned endpoint" >&2
+    exit 2
+fi
+((reuse == 0)) || {
+    echo 'the authenticated Radiance backend is not running' >&2
+    exit 2
+}
+
+mkdir -p "$cache/logs"
+log="$cache/logs/pi-radiance-$(date -u +%Y%m%dT%H%M%SZ).log"
+nohup "$launcher" >"$log" 2>&1 </dev/null &
+for _ in {1..1200}; do
+    if validate_backend 2>/dev/null; then
+        printf '%s\n' "$log"
+        exit 0
+    fi
+    if ! kill -0 $! 2>/dev/null && ! podman container exists "$container"; then
+        tail -n 80 "$log" >&2 || true
+        exit 2
+    fi
+    sleep 0.2
+done
+tail -n 80 "$log" >&2 || true
+exit 2
+REMOTE_BACKEND
+) || die 'remote Radiance backend authentication/startup failed'
+
+prepare_local_port_state
+prepare_gpu_temperature_state
+reserve_local_port
+readonly local_port local_port_lock_fd local_port_selection
+readonly gpu_temperature_state
+printf 'Radiance local tunnel reserved: 127.0.0.1:%s (%s)\n' \
+	"$local_port" "$local_port_selection" >&2
+
+readonly agent_dir="$state_root/agent-$local_port"
+mkdir -p "$agent_dir"
+chmod 0700 "$state_root" "$agent_dir"
+readonly config_destination="$agent_dir/models.json"
+config_stage=$(mktemp "$state_root/.models.json.XXXXXX") || die 'cannot create Pi model configuration stage'
+cleanup_stage() {
+	[[ -z ${config_stage:-} || ! -f $config_stage || -L $config_stage ]] || rm -f -- "$config_stage"
+}
+trap cleanup_stage EXIT
+jq -S --arg base "http://127.0.0.1:$local_port/v1" \
+	'.providers["qwen-r9700"].baseUrl = $base' "$models_source" >"$config_stage" ||
+	die 'cannot render Pi model configuration'
+if [[ -e $config_destination || -L $config_destination ]]; then
+	[[ -f $config_destination && ! -L $config_destination && $(stat -c '%u' -- "$config_destination") == "$(id -u)" ]] ||
+		die 'existing Pi model configuration is unsafe'
+	"$deploy_script" --replace-provider --source "$config_stage" --destination "$config_destination" >/dev/null
+else
+	"$deploy_script" --source "$config_stage" --destination "$config_destination" >/dev/null
+fi
+rm -f -- "$config_stage"
+config_stage=$(mktemp "$agent_dir/.settings.json.XXXXXX") || die 'cannot create Pi settings stage'
+readonly settings="$agent_dir/settings.json"
+if [[ -e $settings || -L $settings ]]; then
+	[[ -f $settings && ! -L $settings && $(stat -c '%u:%h' -- "$settings") == "$(id -u):1" ]] ||
+		die 'existing Pi settings are unsafe'
+	jq -S --slurpfile defaults "$settings_source" '$defaults[0] * .' "$settings" >"$config_stage" ||
+		die 'cannot merge Pi default settings'
+else
+	jq -S . "$settings_source" >"$config_stage" || die 'cannot render Pi default settings'
+fi
+chmod 0600 "$config_stage"
+if cmp -s -- "$config_stage" "$settings"; then
+	rm -f -- "$config_stage"
+else
+	mv -f -- "$config_stage" "$settings"
+fi
+config_stage=''
+trap - EXIT
+
+pi_link="$HOME/.local/bin/pi"
+if ((no_install)); then
+	[[ -L $pi_link && -x $pi_link ]] || die "verified Pi link is missing: $pi_link"
+elif [[ ! -L $pi_link || ! -x $pi_link ]] || ! "$pi_link" --version 2>/dev/null | grep -qx "$PI_VERSION"; then
+	"$install_script" >/dev/null
+fi
+[[ -L $pi_link && -x $pi_link && $("$pi_link" --version) == "$PI_VERSION" ]] || die "Pi $PI_VERSION is unavailable"
+
+tunnel_log="$state_root/tunnel-$local_port-$(date -u +%Y%m%dT%H%M%SZ).log"
+ssh -N -T -o ExitOnForwardFailure=yes \
+	-L "127.0.0.1:$local_port:127.0.0.1:$REMOTE_PORT" "$remote_host" \
+	{local_port_lock_fd}>&- >"$tunnel_log" 2>&1 &
+tunnel_pid=$!
+tunnel_start=$(awk '{print $22}' "/proc/$tunnel_pid/stat" 2>/dev/null || true)
+[[ $tunnel_start =~ ^[1-9][0-9]*$ ]] || die 'cannot authenticate SSH tunnel process'
+cleanup() {
+	local status=$?
+	if owned_process "$tunnel_pid" "$tunnel_start"; then
+		kill -TERM "$tunnel_pid" 2>/dev/null || true
+		wait "$tunnel_pid" 2>/dev/null || true
+	fi
+	exec {local_port_lock_fd}>&-
+	exit "$status"
+}
+trap cleanup EXIT HUP INT TERM
+for _ in {1..100}; do
+	if curl -fsS --max-time 2 "http://127.0.0.1:$local_port/health" >/dev/null 2>&1; then
+		break
+	fi
+	owned_process "$tunnel_pid" "$tunnel_start" || die 'SSH tunnel exited during startup'
+	sleep 0.2
+done
+models=$(curl -fsS --max-time 5 "http://127.0.0.1:$local_port/v1/models") || die 'local Radiance endpoint is unavailable'
+jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$models" >/dev/null ||
+	die 'local endpoint advertises the wrong model'
+
+printf 'Radiance unrestricted backend ready; local API 127.0.0.1:%s; snapshot ABI %s; backend log %s\n' \
+	"$local_port" "$SNAPSHOT_DATA_ABI" "$backend_log" >&2
+declare -a pi_options=(
+	--session-dir "$project_history_dir"
+	--no-context-files
+	--append-system-prompt "$operating_prompt"
+	--no-extensions
+	--extension "$progress_extension"
+	--extension "$gpu_temperature_extension"
+	--extension "$tool_output_extension"
+	--extension "$rehydrate_extension"
+	--extension "$searchtool_extension"
+	--extension "$compaction_extension"
+	--extension "$cache_extension"
+	--extension "$searchtool_recovery_extension"
+)
+if [[ -t 0 && -t 1 ]]; then
+	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \
+		UV_CACHE_DIR=/data/.cache/uv \
+		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
+		QWEN_RADIANCE_GPU_TEMPERATURE_STATE="$gpu_temperature_state" \
+		QWEN_RADIANCE_GPU_TEMPERATURE_HELPER="$gpu_temperature_helper" \
+		QWEN_RADIANCE_SCHEDULER_HELPER="$scheduler_status_helper" \
+		QWEN_RADIANCE_CACHE_HOST="$remote_host" QWEN_RADIANCE_CACHE_ROOT="$REMOTE_CACHE" QWEN_RADIANCE_CACHE_ABI="$SNAPSHOT_DATA_ABI" \
+		"$pi_link" --model "$PI_MODEL" --thinking "$thinking" \
+		"${pi_options[@]}" "${pi_args[@]}" {local_port_lock_fd}>&- </dev/tty
+else
+	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \
+		UV_CACHE_DIR=/data/.cache/uv \
+		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
+		QWEN_RADIANCE_GPU_TEMPERATURE_STATE="$gpu_temperature_state" \
+		QWEN_RADIANCE_GPU_TEMPERATURE_HELPER="$gpu_temperature_helper" \
+		QWEN_RADIANCE_SCHEDULER_HELPER="$scheduler_status_helper" \
+		QWEN_RADIANCE_CACHE_HOST="$remote_host" QWEN_RADIANCE_CACHE_ROOT="$REMOTE_CACHE" QWEN_RADIANCE_CACHE_ABI="$SNAPSHOT_DATA_ABI" \
+		"$pi_link" --model "$PI_MODEL" --thinking "$thinking" \
+		"${pi_options[@]}" "${pi_args[@]}" {local_port_lock_fd}>&-
+fi

@@ -1,0 +1,1485 @@
+#!/usr/bin/env bash
+
+launcher_original_script=${QWEN_PI_AGGRESSIVE_ORIGINAL_SCRIPT:-}
+if [[ ${QWEN_PI_AGGRESSIVE_SOURCE_SEALED:-0} != 1 ]]; then
+	launcher_source=$(readlink -e -- "${BASH_SOURCE[0]}") || {
+		printf 'pi-remote-qwen-aggressive: cannot resolve its launcher source\n' >&2
+		exit 2
+	}
+	exec /usr/bin/python3 -c '
+import fcntl
+import os
+import sys
+
+source_path = sys.argv[1]
+source_fd = os.open(source_path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+before = os.fstat(source_fd)
+source = bytearray()
+while chunk := os.read(source_fd, 1024 * 1024):
+    source.extend(chunk)
+after = os.fstat(source_fd)
+os.close(source_fd)
+identity = lambda value: (
+    value.st_dev,
+    value.st_ino,
+    value.st_size,
+    value.st_mtime_ns,
+    value.st_ctime_ns,
+)
+if identity(before) != identity(after) or len(source) != before.st_size:
+    raise SystemExit("pi-remote-qwen-aggressive: source changed while sealing")
+sealed_fd = os.memfd_create("pi-remote-qwen-aggressive", os.MFD_ALLOW_SEALING)
+offset = 0
+while offset < len(source):
+    offset += os.write(sealed_fd, source[offset:])
+os.lseek(sealed_fd, 0, os.SEEK_SET)
+fcntl.fcntl(
+    sealed_fd,
+    fcntl.F_ADD_SEALS,
+    fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE,
+)
+os.set_inheritable(sealed_fd, True)
+environment = os.environ.copy()
+environment["QWEN_PI_AGGRESSIVE_SOURCE_SEALED"] = "1"
+environment["QWEN_PI_AGGRESSIVE_ORIGINAL_SCRIPT"] = source_path
+os.execve(
+    "/usr/bin/bash",
+    ["/usr/bin/bash", f"/proc/self/fd/{sealed_fd}", *sys.argv[2:]],
+    environment,
+)
+' "$launcher_source" "$@"
+fi
+unset QWEN_PI_AGGRESSIVE_SOURCE_SEALED QWEN_PI_AGGRESSIVE_ORIGINAL_SCRIPT
+
+set -euo pipefail
+
+readonly PROGRAM='pi-remote-qwen-aggressive'
+readonly PI_VERSION='0.84.2'
+readonly VANILLA_MODEL='qwen3.8-27b-frozenlock'
+readonly DEFAULT_REMOTE='lewis@ai'
+readonly DEFAULT_REMOTE_PROJECT='/home/lewis/projects/qwen-r9700'
+readonly DEFAULT_LOCAL_PORT='8000'
+readonly DEFAULT_THINKING='xhigh'
+readonly REMOTE_PORT='8000'
+readonly BASE_PROMPT_ABI='base-v1'
+readonly SEARCHTOOL_PROMPT_ABI='searchtool-v1'
+readonly TOOL_ARCHIVE_PROMPT_ABI='searchtool-toolarchive-v1'
+readonly OUTCOME_PROMPT_ABI='searchtool-toolarchive-outcome-v1'
+readonly SNAPSHOT_CONTINUATION_ABI='fixed-slot-continuation-v3'
+readonly SNAPSHOT_STAGE_MINIMUM_TOKENS='8258'
+readonly SNAPSHOT_STAGE_INCREMENT_TOKENS='8240'
+readonly SNAPSHOT_STAGE_CONTROLLER_SHA256='391dacba8468fefb2ea1981066045a3ec52a71664ac65193c18a946a166771c8'
+readonly SNAPSHOT_HEAD_ADVANCE_SHA256='e0db6026a26da2d89279385cbf1bf0a4d44357ecdf3bc952f45f331abb3caa29'
+readonly SNAPSHOT_VERIFY_SHA256='7cfb601b77b4a185ac0000457a0a60c628397281d37dea707fb427aafc45d3dc'
+readonly SNAPSHOT_BACKGROUND_PUBLISHER_SHA256='150de9693e940bfd40b4d856d89784c8ac1bfb60e6b67af15fb88441bb8d3600'
+readonly REMOTE_SNAPSHOT_VERIFY_SHA256='bcad235c98a88b13d622937a67a7f711182837815f4333b2d7cfc133a62ff745'
+readonly FIXED_SLOT_EXTENSION_SHA256='ae660a29d3ab016fdff10d20202179ded64f4ff86fa61eb0782de6b21916b45a'
+readonly JSON_OUTCOME_ROUTER_SHA256='03abf4c81a54676aede6487192fda6affa5d533e4a64739e3e129462b4f44c8d'
+readonly JSON_OUTCOME_ROUTER_BYTES='13741'
+
+aggressive_variant=${QWEN_PI_AGGRESSIVE_VARIANT:-hauhau-delta}
+unset QWEN_PI_AGGRESSIVE_VARIANT
+case $aggressive_variant in
+hauhau-delta | hauhau-autoround | hauhau-fast)
+	readonly AGGRESSIVE_VARIANT='hauhau-delta'
+	readonly MODEL_LABEL='HauhauCS Delta Aggressive AutoRound W4A16'
+	readonly PI_MODEL='qwen-r9700/qwen3.8-27b-hauhau-delta-aggressive'
+	readonly SERVED_MODEL='qwen3.8-27b-hauhau-delta-aggressive'
+	readonly MODEL_PATH='/home/lewis/models/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-int4-AutoRound-v1'
+	readonly FORMAT_DESCRIPTION='direct-delta AutoRound W4A16 symmetric group-128'
+	readonly DRAFT_DESCRIPTION='DFlash2 W4A16 speculative draft depth 7'
+	readonly MODELS_SOURCE_RELATIVE='integrations/pi/models-hauhau-delta-aggressive.json'
+	readonly STATE_KEY='hauhau-delta-aggressive'
+	readonly REMOTE_FS_CACHE_ROOT='/home/lewis/.local/share/qwen-r9700/kv-cache/dflash-agent262-hauhau-delta-autoround-v1'
+	readonly REMOTE_SELECTION_ROOT='/home/lewis/.local/share/qwen-r9700/cache-selections/dflash-agent262-hauhau-delta-autoround-v1'
+	readonly REMOTE_SERVER_RELATIVE='artifacts/qualifications/20260905T-hauhau-partial-width-lm-head-v14-create-only/candidate/command.sh'
+	readonly REMOTE_MANIFEST_RELATIVE='artifacts/qualifications/20260905T-hauhau-partial-width-lm-head-v14-create-only/candidate/manifest.json'
+	readonly REMOTE_SERVER_MODE='700'
+	readonly REMOTE_SERVER_SHA256='8a0c1123459ab2e159b8a360af0e949251cd711e647e0b4239ffd7fc8a3c89e0'
+	readonly REMOTE_MANIFEST_SHA256='dcb7d6095a030bcb4d78f3b8640433c69279280a13d83fb15d4d018273693536'
+	readonly MODEL_VERIFIER_RELATIVE=''
+	readonly MODEL_VERIFIER_SHA256=''
+	readonly MODEL_RECIPE_RELATIVE=''
+	readonly MODEL_RECIPE_SHA256=''
+	readonly MODEL_ENV_LINE_1='QWEN_TARGET_MODEL_RECIPE_ID=qwen3.8-27b-hauhau-delta-symmetric-autoround-w4a16-v1'
+	readonly MODEL_ENV_LINE_2='QWEN_TARGET_SERVED_MODEL=qwen3.8-27b-hauhau-delta-aggressive'
+	readonly MODEL_RUNTIME_ENV_LINE='QWEN_HAUHAU_PARTIAL_WIDTH_RUNTIME_SITE_SHA256=5da2f7ff88f8afeffc647e98c435973fa03de0d3bb1748b5aceda92a0eb144c5'
+	readonly EXPECTED_SAMPLING_JSON='{"temperature":0,"top_p":1,"top_k":1}'
+	readonly SAMPLING_DESCRIPTION='qualified greedy temperature 0 / top-p 1 / top-k 1; bounded stochastic recovery only after a rejected response'
+	readonly ALTERNATE_SERVED_MODEL='qwen3.8-27b-hauhau-aggressive'
+	readonly ALTERNATE_MODEL_PATH='/home/lewis/models/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-AWQ-MTP'
+	readonly ALTERNATE_ENV_LINE_1='QWEN_HAUHAU_AGGRESSIVE=1'
+	readonly ALTERNATE_ENV_LINE_2='QWEN_HAUHAU_MODEL_MANIFEST_SHA256=38c7e87d96f78f0420c908c07d58ff553cfd42204af916abe9596921ac7bbe73'
+	readonly ALTERNATE_RUNTIME_ENV_LINE='none'
+	readonly SECOND_ALTERNATE_SERVED_MODEL='qwen3.8-27b-philbert-aggressive'
+	readonly SECOND_ALTERNATE_MODEL_PATH='/home/lewis/models/Qwen3.8-27B-Uncensored-Philbert-Aggressive-int4-AutoRound'
+	readonly SECOND_ALTERNATE_ENV_LINE_1='QWEN_TARGET_MODEL_RECIPE_ID=qwen3.8-27b-philbert-aggressive-symmetric-autoround-w4a16-v1'
+	readonly SECOND_ALTERNATE_ENV_LINE_2='QWEN_TARGET_SERVED_MODEL=qwen3.8-27b-philbert-aggressive'
+	readonly SECOND_ALTERNATE_RUNTIME_ENV_LINE='QWEN_LIVE62_PHILBERT_AGGRESSIVE_SITE_SHA256=29b8d15192272fdb9e49c1607413d74ff23d88584c541bbfac6932bcbb325d75'
+	;;
+*)
+	printf '%s: model variant %s is retired; only hauhau-delta remains available\n' \
+		"$PROGRAM" "$aggressive_variant" >&2
+	exit 2
+	;;
+esac
+
+usage() {
+	cat <<'EOF'
+NAME
+    pi-remote-qwen-aggressive - run Pi with authenticated Hauhau-delta Qwen3.8
+
+SYNOPSIS
+    pi-remote-qwen-aggressive [OPTIONS] [-- PI_OPTIONS...]
+    pi-remote-qwen-aggressive --help
+
+DESCRIPTION
+	Starts or attaches to the authenticated Hauhau-delta model selected by
+	pi-remote-qwen, opens a loopback-only SSH tunnel, and runs Pi locally. The
+	former Philbert and original Hauhau aggressive lanes are retired and rejected.
+		The Pi JSONL transcript is shared with vanilla when the same --session is
+		supplied. DFlash derivative models keep authenticated continuation heads in
+		model-, chat-, prompt-ABI-, and backend-release-specific namespaces; they
+		never consume another model or backend release's KV state. The first launch
+		for a backend release captures and fills one complete prompt.
+		Completed turns advance the durable head in the background, and later turns
+		and restarts compute only the suffix after that head.
+
+OPTIONS
+    --remote HOST
+        SSH destination. Default: lewis@ai.
+
+    --remote-project PATH
+        Remote qwen-r9700 project. Default: /home/lewis/projects/qwen-r9700.
+
+    --local-port PORT
+        Local loopback port forwarded to remote port 8000. Default: 8000.
+
+    --thinking LEVEL
+        Pi reasoning effort. Default: xhigh.
+
+    --session PATH|ID|last
+        Resume a session from the current development folder. `last` selects
+        its newest session; an absolute path can select another project.
+
+    --no-install
+        Require the already-verified Pi 0.84.2 installation.
+
+	    --reuse-existing
+	        Attach only to an already-running authenticated aggressive backend.
+	        If none is running, fail instead of starting one.
+
+	    --fresh-state
+	        Do not inject, create, publish, or reuse a fixed-slot continuation
+	        snapshot. Recompute each request from the exact Pi transcript. This is
+	        the fail-safe mode when snapshot-state equivalence is not certified.
+
+	    --dry-run
+	        Print the selected model/backend contract without network or GPU work.
+
+	    --preflight-only
+	        Authenticate and initialize every remote startup prerequisite, then exit
+	        without loading the model or touching the GPU.
+
+    -h, --help
+        Show this help text and exit.
+
+OPERATION
+    An occupied remote port is classified before mutation. An authenticated
+    vanilla live62 backend is TERM-stopped only when an aggressive launch was
+    requested; unrelated services are refused. New backends are started through
+    the pinned aggressive server launcher. On exit, a backend started by this
+    wrapper is TERM-stopped after Pi is reaped. The transcript remains durable.
+
+EXAMPLES
+		scripts/pi-remote-qwen --model aggressive --no-install --thinking xhigh
+		scripts/pi-remote-qwen --model philbert --no-install --thinking xhigh
+		scripts/pi-remote-qwen --model hauhau-delta --no-install --thinking xhigh
+
+    scripts/pi-remote-qwen --model aggressive --no-install --local-port 8011 \
+        --thinking xhigh --session /path/to/session.jsonl
+
+FILES
+	integrations/pi/models-hauhau-aggressive.json
+	    Single-model Pi provider contract for the Hauhau backend.
+
+		integrations/pi/models-philbert-aggressive.json
+		    Single-model Pi provider contract for the Philbert backend.
+
+		integrations/pi/models-hauhau-delta-aggressive.json
+		    Single-model Pi provider contract for the reconstructed Hauhau-delta backend.
+
+	scripts/qwen-vllm-hauhau-aggressive
+	    Remote authenticated Hauhau vLLM launcher.
+
+		artifacts/qualifications/20260903T-live62-philbert-aggressive-v17-create-only/command.sh
+		    Create-only Philbert derivative of the optimized live62 command.
+
+		artifacts/qualifications/20260905T-hauhau-partial-width-lm-head-v14-create-only/candidate/command.sh
+		    Authenticated Hauhau row-exact Q/K/V/gate, serial-equivalent DFlash context-KV,
+		    request widths 1..8 for all bulk recurrent-state transactions, partial-width
+		    recurrent-state, and row-exact LM-head lane, with the
+		    state-qualified Qwen3 parameter-tool repair and generic external KV isolation.
+
+PATHS
+	Local generated state is below
+	$HOME/.local/state/qwen-r9700/pi-remote/aggressive or
+		$HOME/.local/state/qwen-r9700/pi-remote/philbert-aggressive, or
+		$HOME/.local/state/qwen-r9700/pi-remote/hauhau-delta-aggressive. Remote model
+	files remain below /home/lewis/models and are never copied to the client.
+
+SECURITY NOTES
+	This model is intentionally uncensored. The API is bound remotely and
+	locally to loopback only. Backend replacement requires exact process,
+	environment, listener, model, launcher, and start-time authentication.
+		SIGKILL and automatic cache deletion are not used. A token-prefix mismatch
+		fails before generation rather than silently falling back to a cold fill.
+
+EXIT STATUS
+    Pi's status on a normal session; 2 for invalid input, unsafe state, backend
+    authentication failure, startup failure, or runtime health loss.
+
+AUTHORS
+	Qwen R9700 inference lab maintainers.
+EOF
+}
+
+die() {
+	printf '%s: %s\n' "$PROGRAM" "$*" >&2
+	exit 2
+}
+
+script_path=${launcher_original_script:-${BASH_SOURCE[0]}}
+while [[ -L $script_path ]]; do
+	script_dir=$(cd -- "$(dirname -- "$script_path")" && pwd -P)
+	script_path=$(readlink -- "$script_path")
+	[[ $script_path == /* ]] || script_path="$script_dir/$script_path"
+done
+script_dir=$(cd -- "$(dirname -- "$script_path")" && pwd -P)
+project_root=$(cd -- "$script_dir/.." && pwd -P)
+
+remote_host=$DEFAULT_REMOTE
+remote_project=$DEFAULT_REMOTE_PROJECT
+local_port=$DEFAULT_LOCAL_PORT
+thinking=$DEFAULT_THINKING
+no_install=0
+reuse_existing=0
+fresh_state=0
+dry_run=0
+preflight_only=0
+declare -a pi_extra_args=()
+
+while (($# > 0)); do
+	case $1 in
+	--remote)
+		(($# >= 2)) || die '--remote requires a value'
+		remote_host=$2
+		shift 2
+		;;
+	--remote-project)
+		(($# >= 2)) || die '--remote-project requires a value'
+		remote_project=$2
+		shift 2
+		;;
+	--local-port)
+		(($# >= 2)) || die '--local-port requires a value'
+		local_port=$2
+		shift 2
+		;;
+	--thinking)
+		(($# >= 2)) || die '--thinking requires a value'
+		thinking=$2
+		shift 2
+		;;
+	--no-install)
+		no_install=1
+		shift
+		;;
+	--reuse-existing)
+		reuse_existing=1
+		shift
+		;;
+	--fresh-state)
+		fresh_state=1
+		shift
+		;;
+	--dry-run)
+		dry_run=1
+		shift
+		;;
+	--preflight-only)
+		preflight_only=1
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--)
+		shift
+		pi_extra_args=("$@")
+		break
+		;;
+	--session | --session=*)
+		pi_extra_args=("$@")
+		break
+		;;
+	*) die "unknown option: $1 (pass Pi options after --)" ;;
+	esac
+done
+
+if [[ ! $local_port =~ ^[0-9]+$ ]] || ((10#$local_port < 1024 || 10#$local_port > 65535)); then
+	die '--local-port must be an integer from 1024 through 65535'
+fi
+case $thinking in
+off | minimal | low | medium | high | xhigh | max) ;;
+*) die "unsupported thinking effort: $thinking" ;;
+esac
+prompt_abi=${QWEN_PI_AGGRESSIVE_PROMPT_ABI:-$BASE_PROMPT_ABI}
+case $prompt_abi in
+"$BASE_PROMPT_ABI" | "$SEARCHTOOL_PROMPT_ABI" | "$TOOL_ARCHIVE_PROMPT_ABI" | "$OUTCOME_PROMPT_ABI") ;;
+*) die "unsupported inherited prompt ABI: $prompt_abi" ;;
+esac
+
+if ((dry_run == 1)); then
+	cat <<EOF
+model choice:     $AGGRESSIVE_VARIANT
+Pi model:         $PI_MODEL
+served model:     $SERVED_MODEL
+weights:          $MODEL_PATH
+format:           $FORMAT_DESCRIPTION
+state source:     $(if ((fresh_state == 1)); then printf 'fresh transcript reconstruction (snapshot disabled)'; else printf 'authenticated fixed-slot continuation when a session is supplied'; fi)
+draft:            $DRAFT_DESCRIPTION
+sampling:         $SAMPLING_DESCRIPTION
+remote:           $remote_host
+remote project:   $remote_project
+local API:        http://127.0.0.1:$local_port/v1
+context:          253792
+thinking:         $thinking
+chat prompt ABI:  $prompt_abi
+reuse existing:   $reuse_existing
+vanilla KV reuse: forbidden
+EOF
+	exit 0
+fi
+
+: "${HOME:?HOME must be set}"
+install_script="$project_root/scripts/install-pi-coding-agent"
+deploy_script="$project_root/scripts/deploy-pi-models-config"
+models_source="$project_root/$MODELS_SOURCE_RELATIVE"
+progress_extension="$project_root/integrations/pi/qwen-progress.mjs"
+tool_output_condense_extension="$project_root/integrations/pi/qwen-tool-output-condense.mjs"
+repetition_guard_extension="$project_root/integrations/pi/qwen-repetition-guard.mjs"
+tool_call_integrity_extension="$project_root/integrations/pi/qwen-tool-call-integrity.mjs"
+json_outcome_router_extension="$project_root/integrations/pi/qwen-json-outcome-router.mjs"
+tool_turn_rehydrate_extension="$project_root/integrations/pi/qwen-tool-turn-rehydrate.mjs"
+fixed_slot_resume_extension="$project_root/integrations/pi/qwen-fixed-slot-resume.mjs"
+snapshot_stage_controller="$project_root/scripts/qwen-snapshot-stage-controller"
+snapshot_head_advance="$project_root/scripts/qwen-snapshot-head-advance"
+snapshot_background_publisher="$project_root/scripts/qwen-snapshot-background-publisher"
+snapshot_verify_source="$project_root/scripts/qwen-snapshot-verify"
+remote_snapshot_verify="$project_root/scripts/qwen-remote-snapshot-verify"
+history_program="$project_root/scripts/pi-session-history"
+searchtool_extension='/home/lewis/tasks/searchtool/index.ts'
+pi_link="$HOME/.local/bin/pi"
+state_parent="$HOME/.local/state/qwen-r9700"
+state_root="$state_parent/pi-remote/$STATE_KEY"
+agent_dir="$state_root/agent-$local_port"
+tool_result_root="$state_root/tool-results"
+mkdir -p -- "$state_parent" "$state_parent/pi-remote" "$state_root" "$agent_dir" "$tool_result_root"
+chmod 0700 -- "$state_parent" "$state_parent/pi-remote" "$state_root" "$agent_dir" "$tool_result_root"
+[[ -f $history_program && ! -L $history_program && -x $history_program &&
+	$(stat -c '%u:%h' -- "$history_program") == "$(id -u):1" ]] ||
+	die "project session history helper is missing or unsafe: $history_program"
+
+project_cwd=$(pwd -P)
+resolved_argument_session=''
+resolved_argument_index=-1
+resolved_argument_joined=0
+resolve_project_session_argument() {
+	local index argument selector replacement found=0
+	for ((index = 0; index < ${#pi_extra_args[@]}; index++)); do
+		argument=${pi_extra_args[index]}
+		if [[ $argument == --session=* ]]; then
+			selector=${argument#--session=}
+		elif [[ $argument == --session ]]; then
+			((index + 1 < ${#pi_extra_args[@]})) || die '--session requires a value'
+			index=$((index + 1))
+			selector=${pi_extra_args[index]}
+		else
+			continue
+		fi
+		((found += 1))
+		((found == 1)) || die 'only one --session argument is supported'
+		if [[ $selector == /* ]]; then
+			replacement=$selector
+		else
+			replacement=$("$history_program" resolve "$selector" --cwd "$project_cwd") ||
+				die "cannot resolve project session: $selector"
+		fi
+		if [[ $argument == --session=* ]]; then
+			pi_extra_args[index]="--session=$replacement"
+			resolved_argument_index=$index
+			resolved_argument_joined=1
+		else
+			pi_extra_args[index]=$replacement
+			resolved_argument_index=$index
+			resolved_argument_joined=0
+		fi
+		resolved_argument_session=$replacement
+	done
+}
+resolve_project_session_argument
+
+ensure_protected_directory() {
+	local directory=$1
+	if [[ ! -e $directory && ! -L $directory ]]; then
+		mkdir -m 0700 -- "$directory" || return 1
+	fi
+	[[ -d $directory && ! -L $directory ]] || return 1
+	[[ $(stat -c '%u:%a' -- "$directory") == "$(id -u):700" ]]
+}
+
+resolved_session_environment=${QWEN_PI_AGGRESSIVE_RESOLVED_SESSION:-}
+unset QWEN_PI_AGGRESSIVE_RESOLVED_SESSION
+resolved_session=$resolved_argument_session
+if [[ -z $resolved_session && -n $resolved_session_environment ]]; then
+	if [[ $resolved_session_environment == /* ]]; then
+		resolved_session=$resolved_session_environment
+	else
+		resolved_session=$("$history_program" resolve "$resolved_session_environment" --cwd "$project_cwd") ||
+			die "cannot resolve inherited project session: $resolved_session_environment"
+	fi
+fi
+
+snapshot_continuation=0
+snapshot_session_id=''
+snapshot_branch='main'
+snapshot_root=''
+snapshot_backend_abi=''
+snapshot_bootstrap_root=''
+snapshot_token_root=''
+snapshot_plan_root=''
+snapshot_journal_root=''
+snapshot_background_run_id=''
+snapshot_background_pid=''
+snapshot_background_start=''
+snapshot_background_status=0
+snapshot_head=''
+snapshot_tokens=''
+snapshot_replay_tokens=''
+snapshot_replay_sha256=''
+snapshot_bootstrap_clone=''
+snapshot_bootstrap_output=''
+snapshot_bootstrap_token_file=''
+snapshot_stage_plan=''
+snapshot_stage_journal_root=''
+
+if [[ $REMOTE_FS_CACHE_ROOT != none && -n $resolved_session && $fresh_state == 0 ]]; then
+	[[ $resolved_session == /* && -f $resolved_session && ! -L $resolved_session ]] ||
+		die "resolved Pi session is missing or unsafe: $resolved_session"
+	if [[ $(stat -c '%h' -- "$resolved_session") != 1 ]]; then
+		unverified_session=$resolved_session
+		resolved_session=$("$history_program" verify "$unverified_session" --cwd "$project_cwd") ||
+			die "cannot authenticate project session hard links: $unverified_session"
+	fi
+	if ((resolved_argument_index >= 0)); then
+		if ((resolved_argument_joined)); then
+			pi_extra_args[resolved_argument_index]="--session=$resolved_session"
+		else
+			pi_extra_args[resolved_argument_index]=$resolved_session
+		fi
+	fi
+	resolved_session_identity=$(stat -c '%u:%a:%h' -- "$resolved_session")
+	case $resolved_session_identity in
+	"$(id -u):600:1" | "$(id -u):640:1" | "$(id -u):644:1" | \
+		"$(id -u):600:2" | "$(id -u):640:2" | "$(id -u):644:2") ;;
+	*) die 'resolved Pi session ownership, mode, or link count is unsafe' ;;
+	esac
+	session_base=${resolved_session##*/}
+	if [[ $session_base =~ _([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\.jsonl$ ]]; then
+		session_uuid=${BASH_REMATCH[1],,}
+	else
+		die "cannot derive the Pi session UUID from: $resolved_session"
+	fi
+	# A KV/GDN/convolution continuation is meaningful only under the exact
+	# backend semantics that produced it.  Prompt tokens alone cannot authenticate
+	# that state: a repaired kernel can accept the same token vector while an old
+	# head contains numerically divergent recurrent state.  Derive a release ABI
+	# from every pinned model/backend identity and put it in both the durable path
+	# and remote session namespace.  Any semantic backend change therefore gets a
+	# clean fill automatically instead of inheriting an older release's state.
+	snapshot_backend_abi=$(
+		printf '%s\n' \
+			"$SNAPSHOT_CONTINUATION_ABI" \
+			"$REMOTE_SERVER_SHA256" \
+			"$REMOTE_MANIFEST_SHA256" \
+			"$MODEL_ENV_LINE_1" \
+			"$MODEL_ENV_LINE_2" \
+			"$MODEL_RUNTIME_ENV_LINE" |
+			sha256sum | awk '{print $1}'
+	) || die 'cannot derive the aggressive backend state ABI'
+	[[ $snapshot_backend_abi =~ ^[a-f0-9]{64}$ ]] ||
+		die 'derived aggressive backend state ABI is invalid'
+	snapshot_session_id="pi-$session_uuid-$STATE_KEY-$prompt_abi-${snapshot_backend_abi:0:28}"
+	[[ $snapshot_session_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] ||
+		die 'derived aggressive snapshot session ID is invalid'
+	snapshot_continuation=1
+	snapshot_root="$state_root/$SNAPSHOT_CONTINUATION_ABI/$prompt_abi/$snapshot_backend_abi/$snapshot_session_id/$snapshot_branch"
+	snapshot_bootstrap_root="$snapshot_root/bootstrap"
+	snapshot_token_root="$snapshot_root/latest-tokens"
+	snapshot_plan_root="$snapshot_root/plans"
+	snapshot_journal_root="$snapshot_root/journal"
+	# The controller binds the exact verifier adapter into immutable evidence.
+	# A corrected adapter therefore receives a new create-only journal namespace
+	# while older failed evidence remains available for audit.
+	snapshot_stage_journal_root="$snapshot_bootstrap_root/journal-$REMOTE_SNAPSHOT_VERIFY_SHA256"
+	for directory in \
+		"$state_root/$SNAPSHOT_CONTINUATION_ABI" \
+		"$state_root/$SNAPSHOT_CONTINUATION_ABI/$prompt_abi" \
+		"$state_root/$SNAPSHOT_CONTINUATION_ABI/$prompt_abi/$snapshot_backend_abi" \
+		"$state_root/$SNAPSHOT_CONTINUATION_ABI/$prompt_abi/$snapshot_backend_abi/$snapshot_session_id" \
+		"$snapshot_root" "$snapshot_bootstrap_root" "$snapshot_stage_journal_root" \
+		"$snapshot_token_root" "$snapshot_token_root/vectors" \
+		"$snapshot_plan_root" "$snapshot_journal_root"; do
+		ensure_protected_directory "$directory" ||
+			die "aggressive snapshot state directory is unsafe: $directory"
+	done
+	snapshot_bootstrap_clone="$snapshot_bootstrap_root/session.jsonl"
+	snapshot_bootstrap_output="$snapshot_bootstrap_root/token-export.json"
+	snapshot_bootstrap_token_file="$snapshot_bootstrap_root/prompt-tokens.qwenstg1"
+	snapshot_stage_plan="$snapshot_bootstrap_root/staged-plan.json"
+fi
+
+for file in "$install_script" "$deploy_script"; do
+	[[ -x $file && ! -L $file ]] || die "required program is missing or unsafe: $file"
+done
+for file in "$models_source" "$progress_extension" "$tool_output_condense_extension" \
+	"$repetition_guard_extension" "$tool_call_integrity_extension" "$json_outcome_router_extension" \
+	"$tool_turn_rehydrate_extension"; do
+	[[ -f $file && ! -L $file ]] || die "required integration is missing or unsafe: $file"
+done
+[[ $(stat -c '%u:%a:%s:%h' -- "$json_outcome_router_extension") == "$(id -u):644:$JSON_OUTCOME_ROUTER_BYTES:1" &&
+$(sha256sum -- "$json_outcome_router_extension" | awk '{print $1}') == "$JSON_OUTCOME_ROUTER_SHA256" ]] ||
+	die 'JSON-outcome router differs from the qualified protocol bytes'
+if ((snapshot_continuation == 1)); then
+	for file in "$fixed_slot_resume_extension" "$snapshot_stage_controller" \
+		"$snapshot_head_advance" "$snapshot_background_publisher" \
+		"$snapshot_verify_source" "$remote_snapshot_verify"; do
+		[[ -f $file && ! -L $file ]] || die "snapshot continuation program is missing or unsafe: $file"
+	done
+	[[ $(stat -c '%u:%a:%h' -- "$snapshot_stage_controller") == "$(id -u):755:1" &&
+	$(sha256sum -- "$snapshot_stage_controller" | awk '{print $1}') == "$SNAPSHOT_STAGE_CONTROLLER_SHA256" ]] ||
+		die 'snapshot stage controller differs from the qualified ABI'
+	[[ $(stat -c '%u:%a:%h' -- "$snapshot_head_advance") == "$(id -u):755:1" &&
+	$(sha256sum -- "$snapshot_head_advance" | awk '{print $1}') == "$SNAPSHOT_HEAD_ADVANCE_SHA256" ]] ||
+		die 'snapshot head-advance controller differs from the qualified ABI'
+	[[ $(stat -c '%u:%a:%h' -- "$snapshot_background_publisher") == "$(id -u):755:1" &&
+	$(sha256sum -- "$snapshot_background_publisher" | awk '{print $1}') == "$SNAPSHOT_BACKGROUND_PUBLISHER_SHA256" ]] ||
+		die 'snapshot background publisher differs from the qualified ABI'
+	[[ $(stat -c '%u:%a:%h' -- "$snapshot_verify_source") == "$(id -u):755:1" &&
+	$(sha256sum -- "$snapshot_verify_source" | awk '{print $1}') == "$SNAPSHOT_VERIFY_SHA256" ]] ||
+		die 'snapshot verifier differs from the qualified ABI'
+	[[ $(stat -c '%u:%a:%h' -- "$remote_snapshot_verify") == "$(id -u):755:1" &&
+	$(sha256sum -- "$remote_snapshot_verify" | awk '{print $1}') == "$REMOTE_SNAPSHOT_VERIFY_SHA256" ]] ||
+		die 'remote snapshot verifier adapter differs from the qualified ABI'
+	[[ $(stat -c '%u:%a:%h' -- "$fixed_slot_resume_extension") == "$(id -u):644:1" &&
+	$(sha256sum -- "$fixed_slot_resume_extension" | awk '{print $1}') == "$FIXED_SLOT_EXTENSION_SHA256" ]] ||
+		die 'fixed-slot Pi extension differs from the qualified ABI'
+fi
+
+if [[ $prompt_abi != "$BASE_PROMPT_ABI" ]]; then
+	[[ -f $searchtool_extension && ! -L $searchtool_extension &&
+		$(stat -c '%u:%h' -- "$searchtool_extension") == "$(id -u):1" ]] ||
+		die "inherited searchtool extension is missing or unsafe: $searchtool_extension"
+fi
+
+if ((no_install == 1)); then
+	[[ -L $pi_link && -x $pi_link ]] || die "verified Pi link is missing: $pi_link"
+else
+	if [[ ! -L $pi_link || ! -x $pi_link ]] ||
+		! "$pi_link" --version 2>/dev/null | grep -qx "$PI_VERSION"; then
+		"$install_script" >/dev/null
+	fi
+fi
+[[ -L $pi_link && -x $pi_link ]] || die "Pi command is not an executable symbolic link: $pi_link"
+[[ $("$pi_link" --version) == "$PI_VERSION" ]] || die "Pi version is not $PI_VERSION"
+
+config_destination="$agent_dir/models.json"
+config_tmp=$(mktemp "$state_root/.models.json.XXXXXX") || die 'cannot create model config stage'
+# shellcheck disable=SC2329  # Invoked through the staging EXIT trap.
+cleanup_config_stage() {
+	if [[ -n ${config_tmp:-} && -f $config_tmp && ! -L $config_tmp ]]; then
+		rm -f -- "$config_tmp"
+	fi
+}
+trap cleanup_config_stage EXIT
+jq -S --arg base "http://127.0.0.1:$local_port/v1" \
+	'.providers["qwen-r9700"].baseUrl = $base' "$models_source" >"$config_tmp" ||
+	die 'cannot render aggressive Pi model configuration'
+if [[ -e $config_destination || -L $config_destination ]]; then
+	[[ -f $config_destination && ! -L $config_destination &&
+		$(stat -c '%u' -- "$config_destination") == "$(id -u)" ]] ||
+		die 'generated aggressive Pi model configuration is unsafe'
+	"$deploy_script" --replace-provider --source "$config_tmp" \
+		--destination "$config_destination" >/dev/null
+else
+	"$deploy_script" --source "$config_tmp" --destination "$config_destination" >/dev/null
+fi
+rm -f -- "$config_tmp"
+config_tmp=''
+trap - EXIT
+jq -e --arg model "$SERVED_MODEL" --argjson sampling "$EXPECTED_SAMPLING_JSON" '
+	    [.providers["qwen-r9700"].models[] | select(.id == $model)] as $models
+	    | ($models | length) == 1
+	    and $models[0].contextWindow == 253792
+	    and $models[0].maxTokens == 32768
+	    and $models[0].samplingParams == $sampling
+	' "$config_destination" >/dev/null || die 'deployed aggressive model configuration is invalid'
+
+remote_server="$remote_project/$REMOTE_SERVER_RELATIVE"
+remote_manifest="$remote_project/$REMOTE_MANIFEST_RELATIVE"
+remote_model_verifier=${MODEL_VERIFIER_RELATIVE:+"$remote_project/$MODEL_VERIFIER_RELATIVE"}
+remote_model_recipe=${MODEL_RECIPE_RELATIVE:+"$remote_project/$MODEL_RECIPE_RELATIVE"}
+ssh -T "$remote_host" /usr/bin/bash -s -- \
+	"$remote_server" "$REMOTE_SERVER_MODE" "$REMOTE_SERVER_SHA256" \
+	"$remote_manifest" "$REMOTE_MANIFEST_SHA256" \
+	"${remote_model_verifier:-none}" "${MODEL_VERIFIER_SHA256:-none}" \
+	"${remote_model_recipe:-none}" "${MODEL_RECIPE_SHA256:-none}" "$MODEL_PATH" <<'REMOTE'
+set -euo pipefail
+server=$1
+server_mode=$2
+server_sha=$3
+manifest=$4
+manifest_sha=$5
+verifier=$6
+verifier_sha=$7
+recipe=$8
+recipe_sha=$9
+model_path=${10}
+[[ -f $server && ! -L $server && $(stat -c '%U:%a:%h' -- "$server") == "lewis:$server_mode:1" ]] || exit 2
+[[ -f $manifest && ! -L $manifest && $(stat -c '%U:%a:%h' -- "$manifest") == 'lewis:600:1' ]] || exit 2
+[[ $(sha256sum -- "$server" | awk '{print $1}') == "$server_sha" ]] || exit 2
+[[ $(sha256sum -- "$manifest" | awk '{print $1}') == "$manifest_sha" ]] || exit 2
+if [[ -n $verifier && $verifier != 'none' ]]; then
+    [[ -f $verifier && ! -L $verifier && $(stat -c '%U:%a:%h' -- "$verifier") == 'lewis:755:1' ]] || exit 2
+    [[ -f $recipe && ! -L $recipe && $(stat -c '%U:%a:%h' -- "$recipe") == 'lewis:644:1' ]] || exit 2
+    [[ $(sha256sum -- "$verifier" | awk '{print $1}') == "$verifier_sha" ]] || exit 2
+    [[ $(sha256sum -- "$recipe" | awk '{print $1}') == "$recipe_sha" ]] || exit 2
+    /usr/bin/python3 "$verifier" --recipe "$recipe" --verify-output "$model_path" >/dev/null || exit 2
+fi
+REMOTE
+
+remote_backend_identity() {
+	ssh -T "$remote_host" /usr/bin/bash -s -- \
+		"$REMOTE_PORT" "$SERVED_MODEL" "$VANILLA_MODEL" "$MODEL_PATH" \
+		"$MODEL_ENV_LINE_1" "$MODEL_ENV_LINE_2" "$ALTERNATE_SERVED_MODEL" \
+		"$ALTERNATE_MODEL_PATH" "$ALTERNATE_ENV_LINE_1" "$ALTERNATE_ENV_LINE_2" \
+		"$MODEL_RUNTIME_ENV_LINE" "$ALTERNATE_RUNTIME_ENV_LINE" \
+		"$SECOND_ALTERNATE_SERVED_MODEL" "$SECOND_ALTERNATE_MODEL_PATH" \
+		"$SECOND_ALTERNATE_ENV_LINE_1" "$SECOND_ALTERNATE_ENV_LINE_2" \
+		"$SECOND_ALTERNATE_RUNTIME_ENV_LINE" <<'REMOTE'
+set -euo pipefail
+port=$1
+aggressive=$2
+vanilla=$3
+model_path=$4
+model_env_line_1=$5
+model_env_line_2=$6
+alternate=$7
+alternate_model_path=$8
+alternate_env_line_1=$9
+alternate_env_line_2=${10}
+model_runtime_env_line=${11}
+alternate_runtime_env_line=${12}
+second_alternate=${13}
+second_alternate_model_path=${14}
+second_alternate_env_line_1=${15}
+second_alternate_env_line_2=${16}
+second_alternate_runtime_env_line=${17}
+lines=$(ss -H -ltnp "sport = :$port" || true)
+if [[ -z $lines ]]; then
+    printf 'none\n'
+    exit 0
+fi
+mapfile -t pids < <(sed -nE 's/.*pid=([0-9]+).*/\1/p' <<<"$lines" | sort -u)
+((${#pids[@]} == 1)) || exit 2
+pid=${pids[0]}
+[[ -r /proc/$pid/stat && -r /proc/$pid/cmdline ]] || exit 2
+start=$(awk '{print $22}' "/proc/$pid/stat")
+[[ $start =~ ^[1-9][0-9]*$ ]] || exit 2
+cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline")
+models=$(curl -fsS --max-time 3 "http://127.0.0.1:$port/v1/models") || exit 2
+mapfile -t ids < <(jq -er '.data[].id' <<<"$models" | sort -u)
+((${#ids[@]} == 1)) || exit 2
+	if [[ ${ids[0]} == "$aggressive" ]]; then
+    [[ $cmd == *"$model_path"* && $cmd == *"--served-model-name $aggressive"* ]] || exit 2
+	    environment=$(tr '\0' '\n' <"/proc/$pid/environ") || exit 2
+	    grep -qx 'VLLM_NO_USAGE_STATS=1' <<<"$environment" || exit 2
+		    grep -qx 'VLLM_ENFORCE_STRICT_TOOL_CALLING=1' <<<"$environment" || exit 2
+		    grep -Fqx -- "$model_env_line_1" <<<"$environment" || exit 2
+		    grep -Fqx -- "$model_env_line_2" <<<"$environment" || exit 2
+		    if [[ $model_runtime_env_line != none ]]; then
+		        grep -Fqx -- "$model_runtime_env_line" <<<"$environment" || exit 2
+		    fi
+	    printf 'aggressive %s %s\n' "$pid" "$start"
+	elif [[ ${ids[0]} == "$alternate" ]]; then
+	    [[ $cmd == *"$alternate_model_path"* && $cmd == *"--served-model-name $alternate"* ]] || exit 2
+	    environment=$(tr '\0' '\n' <"/proc/$pid/environ") || exit 2
+	    grep -qx 'VLLM_NO_USAGE_STATS=1' <<<"$environment" || exit 2
+	    grep -qx 'VLLM_ENFORCE_STRICT_TOOL_CALLING=1' <<<"$environment" || exit 2
+	    grep -Fqx -- "$alternate_env_line_1" <<<"$environment" || exit 2
+		    grep -Fqx -- "$alternate_env_line_2" <<<"$environment" || exit 2
+		    if [[ $alternate_runtime_env_line != none ]]; then
+		        grep -Fqx -- "$alternate_runtime_env_line" <<<"$environment" || exit 2
+		    fi
+	    printf 'other-aggressive %s %s\n' "$pid" "$start"
+	elif [[ ${ids[0]} == "$second_alternate" ]]; then
+	    [[ $cmd == *"$second_alternate_model_path"* && $cmd == *"--served-model-name $second_alternate"* ]] || exit 2
+	    environment=$(tr '\0' '\n' <"/proc/$pid/environ") || exit 2
+	    grep -qx 'VLLM_NO_USAGE_STATS=1' <<<"$environment" || exit 2
+	    grep -qx 'VLLM_ENFORCE_STRICT_TOOL_CALLING=1' <<<"$environment" || exit 2
+	    grep -Fqx -- "$second_alternate_env_line_1" <<<"$environment" || exit 2
+	    grep -Fqx -- "$second_alternate_env_line_2" <<<"$environment" || exit 2
+	    if [[ $second_alternate_runtime_env_line != none ]]; then
+	        grep -Fqx -- "$second_alternate_runtime_env_line" <<<"$environment" || exit 2
+	    fi
+	    printf 'other-aggressive-2 %s %s\n' "$pid" "$start"
+elif [[ ${ids[0]} == "$vanilla" ]]; then
+    environment=$(tr '\0' '\n' <"/proc/$pid/environ") || exit 2
+    grep -qx 'QWEN_LIVE62=1' <<<"$environment" || exit 2
+    [[ $cmd == *"--served-model-name $vanilla"* ]] || exit 2
+    printf 'vanilla %s %s\n' "$pid" "$start"
+else
+    exit 2
+fi
+REMOTE
+}
+
+stop_remote_backend() {
+	local expected_kind=$1
+	local expected_pid=$2
+	local expected_start=$3
+	ssh -T "$remote_host" /usr/bin/bash -s -- \
+		"$REMOTE_PORT" "$expected_kind" "$expected_pid" "$expected_start" \
+		"$SERVED_MODEL" "$VANILLA_MODEL" "$MODEL_PATH" "$ALTERNATE_SERVED_MODEL" \
+		"$ALTERNATE_MODEL_PATH" "$SECOND_ALTERNATE_SERVED_MODEL" \
+		"$SECOND_ALTERNATE_MODEL_PATH" <<'REMOTE'
+set -euo pipefail
+port=$1
+kind=$2
+pid=$3
+start=$4
+aggressive=$5
+vanilla=$6
+model_path=$7
+alternate=$8
+alternate_model_path=$9
+second_alternate=${10}
+second_alternate_model_path=${11}
+[[ -r /proc/$pid/stat && -r /proc/$pid/cmdline ]] || exit 2
+[[ $(awk '{print $22}' "/proc/$pid/stat") == "$start" ]] || exit 2
+cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline")
+case $kind in
+aggressive)
+	    [[ $cmd == *"$model_path"* && $cmd == *"--served-model-name $aggressive"* ]] || exit 2
+	    ;;
+other-aggressive)
+	    [[ $cmd == *"$alternate_model_path"* && $cmd == *"--served-model-name $alternate"* ]] || exit 2
+	    ;;
+other-aggressive-2)
+	    [[ $cmd == *"$second_alternate_model_path"* && $cmd == *"--served-model-name $second_alternate"* ]] || exit 2
+	    ;;
+vanilla)
+    environment=$(tr '\0' '\n' <"/proc/$pid/environ") || exit 2
+    grep -qx 'QWEN_LIVE62=1' <<<"$environment" || exit 2
+    [[ $cmd == *"--served-model-name $vanilla"* ]] || exit 2
+    ;;
+*) exit 2 ;;
+esac
+lines=$(ss -H -ltnp "sport = :$port" || true)
+grep -q "pid=$pid," <<<"$lines" || exit 2
+kill -TERM "$pid"
+for _ in {1..900}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+        [[ -z $(ss -H -ltn "sport = :$port" || true) ]] || exit 2
+        exit 0
+    fi
+    [[ -r /proc/$pid/stat && $(awk '{print $22}' "/proc/$pid/stat") == "$start" ]] || exit 2
+    sleep 0.1
+done
+exit 2
+REMOTE
+}
+
+prepare_remote_runtime() {
+	[[ $REMOTE_FS_CACHE_ROOT != none && $REMOTE_SELECTION_ROOT != none ]] || return 0
+	ssh -T "$remote_host" /usr/bin/bash -s -- \
+		"$REMOTE_FS_CACHE_ROOT" "$REMOTE_SELECTION_ROOT" <<'REMOTE'
+set -euo pipefail
+fs_root=$1
+selection_root=$2
+kv_parent=/home/lewis/.local/share/qwen-r9700/kv-cache
+selection_parent=/home/lewis/.local/share/qwen-r9700/cache-selections
+metadata_root=$fs_root/.qwen-250k-cache-v1
+lifecycle_lock=$metadata_root/LIFECYCLE.lock
+expected_user=lewis
+
+[[ $fs_root =~ ^/home/lewis/\.local/share/qwen-r9700/kv-cache/dflash-agent262-[A-Za-z0-9._-]+$ ]] || exit 2
+[[ $selection_root =~ ^/home/lewis/\.local/share/qwen-r9700/cache-selections/dflash-agent262-[A-Za-z0-9._-]+$ ]] || exit 2
+for parent in /home/lewis/.local/share/qwen-r9700 "$kv_parent" "$selection_parent"; do
+    [[ -d $parent && ! -L $parent && $(stat -c '%U' -- "$parent") == "$expected_user" ]] || exit 2
+done
+[[ $(stat -c '%a' -- "$kv_parent") == 700 && $(stat -c '%a' -- "$selection_parent") == 700 ]] || exit 2
+
+umask 077
+for directory in "$fs_root" "$metadata_root" "$selection_root"; do
+    if [[ ! -e $directory && ! -L $directory ]]; then
+        mkdir -m 0700 -- "$directory"
+    fi
+    [[ -d $directory && ! -L $directory ]] || exit 2
+    [[ $(stat -c '%U:%a' -- "$directory") == "$expected_user:700" ]] || exit 2
+done
+if [[ ! -e $lifecycle_lock && ! -L $lifecycle_lock ]]; then
+    (set -o noclobber && : >"$lifecycle_lock") 2>/dev/null || exit 2
+fi
+[[ -f $lifecycle_lock && ! -L $lifecycle_lock ]] || exit 2
+[[ $(stat -c '%U:%a:%h:%s' -- "$lifecycle_lock") == "$expected_user:600:1:0" ]] || exit 2
+/usr/bin/flock --exclusive --nonblock "$lifecycle_lock" /usr/bin/true || exit 2
+if find "$fs_root" "$selection_root" -xdev -type l -print -quit | grep -q .; then
+    exit 2
+fi
+
+disk_available=$(df -B1 --output=avail "$fs_root" | awk 'NR == 2 {print $1}')
+shm_available=$(df -B1 --output=avail /dev/shm | awk 'NR == 2 {print $1}')
+memory_available_kib=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+[[ $disk_available =~ ^[0-9]+$ && $shm_available =~ ^[0-9]+$ && $memory_available_kib =~ ^[0-9]+$ ]] || exit 2
+((disk_available >= 16 * 1024 * 1024 * 1024)) || exit 2
+((shm_available >= 12 * 1024 * 1024 * 1024)) || exit 2
+((memory_available_kib >= 32 * 1024 * 1024)) || exit 2
+REMOTE
+}
+
+read_remote_snapshot_head() {
+	((snapshot_continuation == 1)) || return 1
+	local namespace_state
+	namespace_state=$(
+		ssh -T "$remote_host" /usr/bin/bash -s -- "$REMOTE_FS_CACHE_ROOT" <<'REMOTE'
+set -euo pipefail
+root=$1
+metadata=$root/.qwen-250k-cache-v1
+[[ $root =~ ^/home/lewis/\.local/share/qwen-r9700/kv-cache/dflash-agent262-[A-Za-z0-9._-]+$ ]] || exit 2
+[[ -d $root && ! -L $root && $(stat -c '%U:%a' -- "$root") == lewis:700 ]] || exit 2
+[[ -d $metadata && ! -L $metadata && $(stat -c '%U:%a' -- "$metadata") == lewis:700 ]] || exit 2
+lock=$metadata/LIFECYCLE.lock
+[[ -f $lock && ! -L $lock && $(stat -c '%U:%a:%h:%s' -- "$lock") == lewis:600:1:0 ]] || exit 2
+if find "$metadata" -xdev -type l -print -quit | grep -q .; then
+    exit 2
+fi
+manifests=$metadata/manifests
+	refs=$metadata/refs
+	if [[ ! -e $manifests && ! -L $manifests && ! -e $refs && ! -L $refs ]]; then
+    mapfile -d '' -t entries < <(find "$metadata" -mindepth 1 -maxdepth 1 -print0)
+    ((${#entries[@]} == 1)) || exit 2
+    [[ ${entries[0]} == "$lock" ]] || exit 2
+    printf 'empty\n'
+	elif [[ -d $manifests && ! -L $manifests && -d $refs && ! -L $refs ]]; then
+	    [[ $(stat -c '%U:%a' -- "$manifests") == lewis:700 ]] || exit 2
+	    [[ $(stat -c '%U:%a' -- "$refs") == lewis:700 ]] || exit 2
+    printf 'populated\n'
+else
+    exit 2
+fi
+REMOTE
+	) || return 1
+	if [[ $namespace_state == empty ]]; then
+		jq -cn --arg session "$snapshot_session_id" --arg branch "$snapshot_branch" '{
+			branch: $branch,
+			schema: "urn:qwen-r9700:authenticated-snapshot-head-missing:v1",
+			session_id: $session
+		}'
+		return
+	fi
+	[[ $namespace_state == populated ]] || return 1
+	QWEN_REMOTE_SNAPSHOT_VERIFY_HOST="$remote_host" \
+		QWEN_REMOTE_SNAPSHOT_VERIFY_SOURCE="$snapshot_verify_source" \
+		"$remote_snapshot_verify" \
+		--root "$REMOTE_FS_CACHE_ROOT" \
+		--session-id "$snapshot_session_id" \
+		--branch "$snapshot_branch" \
+		--allow-missing --deep
+}
+
+adopt_remote_snapshot_head() {
+	local document=$1 schema
+	schema=$(jq -er '.schema' <<<"$document") || return 1
+	if [[ $schema == 'urn:qwen-r9700:authenticated-snapshot-head-missing:v1' ]]; then
+		jq -e --arg session "$snapshot_session_id" --arg branch "$snapshot_branch" '
+			type == "object"
+			and keys == ["branch", "schema", "session_id"]
+			and .session_id == $session
+			and .branch == $branch
+		' <<<"$document" >/dev/null || return 1
+		snapshot_head=''
+		return 0
+	fi
+	jq -e --arg session "$snapshot_session_id" --arg branch "$snapshot_branch" '
+		.schema == "urn:qwen-r9700:authenticated-snapshot-head:v1"
+		and .session_id == $session
+		and .branch == $branch
+		and (.generation | type == "number" and floor == . and . >= 1)
+		and (.manifest_sha256 | type == "string" and test("^[a-f0-9]{64}$"))
+		and (.prefix_token_ids_sha256 | type == "string" and test("^[a-f0-9]{64}$"))
+		and (.prompt_tokens | type == "number" and floor == . and . >= 8258 and . <= 253792)
+		and (.replay_boundary_tokens | type == "number" and floor == . and . >= 1)
+		and .replay_boundary_tokens <= .prompt_tokens
+		and (.replay_prefix_token_ids_sha256 | type == "string" and test("^[a-f0-9]{64}$"))
+		and .store_drained == true
+		and .deep_evidence.all_groups_verified == true
+		and .deep_evidence.total_groups == 69
+	' <<<"$document" >/dev/null || return 1
+	snapshot_head=$document
+	snapshot_tokens=$(jq -er '.prompt_tokens' <<<"$document") || return 1
+	snapshot_replay_tokens=$(jq -er '.replay_boundary_tokens' <<<"$document") || return 1
+	snapshot_replay_sha256=$(jq -er '.replay_prefix_token_ids_sha256' <<<"$document") || return 1
+}
+
+reap_remote_stale_offload_regions() {
+	ssh -T "$remote_host" /usr/bin/bash -s <<'REMOTE'
+set -euo pipefail
+shm_root=/dev/shm
+expected_user=lewis
+[[ -d $shm_root && ! -L $shm_root && $(stat -c '%U:%a' -- "$shm_root") == root:1777 ]] || exit 2
+if /usr/bin/fuser /dev/kfd >/dev/null 2>&1; then
+    exit 2
+fi
+mapfile -d '' -t candidates < <(find "$shm_root" -maxdepth 1 -type f -name 'vllm_offload_*.mmap' -print0)
+((${#candidates[@]} <= 8)) || exit 2
+for candidate in "${candidates[@]}"; do
+    [[ $candidate =~ ^/dev/shm/vllm_offload_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mmap$ ]] || exit 2
+    [[ -f $candidate && ! -L $candidate ]] || exit 2
+    [[ $(stat -c '%U:%a:%h' -- "$candidate") == "$expected_user:600:1" ]] || exit 2
+    for process_dir in /proc/[0-9]*; do
+        [[ -d $process_dir ]] || continue
+        [[ $(stat -c '%U' -- "$process_dir" 2>/dev/null || true) == "$expected_user" ]] || continue
+        for fd in "$process_dir"/fd/*; do
+            [[ -L $fd ]] || continue
+            link=$(readlink -- "$fd" 2>/dev/null || true)
+            [[ $link != "$candidate" && $link != "$candidate (deleted)" ]] || exit 2
+        done
+    done
+done
+if ((${#candidates[@]} > 0)); then
+    rm -- "${candidates[@]}"
+fi
+for candidate in "${candidates[@]}"; do
+    [[ ! -e $candidate && ! -L $candidate ]] || exit 2
+done
+REMOTE
+}
+
+read -r backend_kind backend_pid backend_start < <(remote_backend_identity) ||
+	die "remote port $REMOTE_PORT is occupied by an unauthenticated backend"
+backend_owned=0
+backend_ssh_pid=''
+tunnel_pid=''
+pi_pid=''
+watch_pid=''
+shutdown_status=0
+
+owned_local_process() {
+	local pid=$1
+	local start=$2
+	[[ $pid =~ ^[1-9][0-9]*$ && $start =~ ^[1-9][0-9]*$ && -r /proc/$pid/stat ]] || return 1
+	[[ $(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null) == "$start" ]]
+}
+
+# shellcheck disable=SC2329  # Invoked through the EXIT trap.
+cleanup() {
+	local status=$?
+	trap - EXIT INT TERM
+	if [[ -n $snapshot_background_pid ]] &&
+		owned_local_process "$snapshot_background_pid" "$snapshot_background_start"; then
+		kill -TERM "$snapshot_background_pid" 2>/dev/null || true
+		wait "$snapshot_background_pid" 2>/dev/null || true
+	fi
+	if [[ -n $watch_pid ]] && kill -0 "$watch_pid" 2>/dev/null; then
+		kill -TERM "$watch_pid" 2>/dev/null || true
+		wait "$watch_pid" 2>/dev/null || true
+	fi
+	if [[ -n $tunnel_pid ]] && owned_local_process "$tunnel_pid" "$tunnel_start"; then
+		kill -TERM "$tunnel_pid" 2>/dev/null || true
+		wait "$tunnel_pid" 2>/dev/null || true
+	fi
+	if ((backend_owned == 1)); then
+		set +e
+		identity=$(remote_backend_identity)
+		identity_status=$?
+		set -e
+		if ((identity_status == 0)); then
+			read -r current_kind current_pid current_start <<<"$identity"
+			if [[ $current_kind == aggressive && $current_pid == "$backend_pid" &&
+				$current_start == "$backend_start" ]]; then
+				stop_remote_backend aggressive "$backend_pid" "$backend_start" || status=2
+			fi
+		else
+			status=2
+		fi
+	fi
+	if [[ -n $backend_ssh_pid ]]; then
+		wait "$backend_ssh_pid" 2>/dev/null || true
+	fi
+	exit "$status"
+}
+
+# shellcheck disable=SC2329  # Invoked through the signal traps.
+request_shutdown() {
+	local signal=$1
+	case $signal in
+	INT) shutdown_status=130 ;;
+	TERM) shutdown_status=143 ;;
+	esac
+	if [[ -n $pi_pid ]] && kill -0 "$pi_pid" 2>/dev/null; then
+		kill -TERM "$pi_pid" 2>/dev/null || true
+	fi
+}
+
+trap cleanup EXIT
+trap 'request_shutdown INT' INT
+trap 'request_shutdown TERM' TERM
+
+if ((preflight_only == 1)) && [[ $backend_kind != none ]]; then
+	die 'preflight-only requires remote port 8000 to be free'
+fi
+
+case $backend_kind in
+none)
+	((reuse_existing == 0)) || die '--reuse-existing requested but no aggressive backend is running'
+	;;
+aggressive)
+	printf 'attaching to authenticated aggressive backend pid %s\n' "$backend_pid" >&2
+	;;
+vanilla)
+	((reuse_existing == 0)) || die '--reuse-existing found vanilla, not the aggressive backend'
+	printf 'stopping authenticated vanilla live62 backend pid %s for requested model switch\n' \
+		"$backend_pid" >&2
+	stop_remote_backend vanilla "$backend_pid" "$backend_start" ||
+		die 'authenticated vanilla backend did not stop cleanly'
+	backend_kind=none
+	;;
+other-aggressive)
+	((reuse_existing == 0)) || die '--reuse-existing found the other aggressive model, not the requested backend'
+	printf 'stopping authenticated %s backend pid %s for requested model switch\n' \
+		"$ALTERNATE_SERVED_MODEL" "$backend_pid" >&2
+	stop_remote_backend other-aggressive "$backend_pid" "$backend_start" ||
+		die 'authenticated alternate aggressive backend did not stop cleanly'
+	backend_kind=none
+	;;
+other-aggressive-2)
+	((reuse_existing == 0)) || die '--reuse-existing found the other aggressive model, not the requested backend'
+	printf 'stopping authenticated %s backend pid %s for requested model switch\n' \
+		"$SECOND_ALTERNATE_SERVED_MODEL" "$backend_pid" >&2
+	stop_remote_backend other-aggressive-2 "$backend_pid" "$backend_start" ||
+		die 'authenticated second alternate aggressive backend did not stop cleanly'
+	backend_kind=none
+	;;
+*) die 'remote backend classifier returned an invalid result' ;;
+esac
+
+if ((preflight_only == 1)); then
+	reap_remote_stale_offload_regions || die 'remote stale offload scratch failed authentication or cleanup'
+	prepare_remote_runtime || die 'remote aggressive cache namespace failed preflight or initialization'
+	printf 'authenticated startup preflight complete for %s; GPU remains unloaded\n' "$MODEL_LABEL"
+	exit 0
+fi
+
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+backend_log="$state_root/backend-$timestamp.log"
+tunnel_log="$state_root/tunnel-$timestamp.log"
+if [[ $backend_kind == none ]]; then
+	reap_remote_stale_offload_regions || die 'remote stale offload scratch failed authentication or cleanup'
+	prepare_remote_runtime || die 'remote aggressive cache namespace failed preflight or initialization'
+	[[ ! -e $backend_log && ! -L $backend_log ]] || die 'backend log path already exists'
+	ssh -T "$remote_host" /usr/bin/bash -s -- "$remote_server" "$REMOTE_PORT" >"$backend_log" 2>&1 <<'REMOTE' &
+set -euo pipefail
+server=$1
+port=$2
+umask 077
+exec "$server" --port "$port"
+REMOTE
+	backend_ssh_pid=$!
+	backend_ssh_start=$(awk '{print $22}' "/proc/$backend_ssh_pid/stat" 2>/dev/null || true)
+	[[ $backend_ssh_start =~ ^[1-9][0-9]*$ ]] || die 'cannot authenticate backend SSH process'
+	printf 'starting authenticated %s backend; log: %s\n' "$MODEL_LABEL" "$backend_log" >&2
+	for _ in {1..900}; do
+		if ! kill -0 "$backend_ssh_pid" 2>/dev/null; then
+			tail -80 -- "$backend_log" >&2 || true
+			die 'aggressive backend exited during startup'
+		fi
+		set +e
+		identity=$(remote_backend_identity 2>/dev/null)
+		identity_status=$?
+		set -e
+		if ((identity_status == 0)); then
+			read -r current_kind current_pid current_start <<<"$identity"
+			if [[ $current_kind == aggressive ]]; then
+				backend_kind=$current_kind
+				backend_pid=$current_pid
+				backend_start=$current_start
+				backend_owned=1
+				break
+			fi
+		fi
+		sleep 1
+	done
+	((backend_owned == 1)) || die 'aggressive backend health/model authentication timed out'
+fi
+
+if ss -H -ltn "sport = :$local_port" | grep -q .; then
+	die "local TCP port $local_port is already listening"
+fi
+ssh -N -T -L "127.0.0.1:$local_port:127.0.0.1:$REMOTE_PORT" "$remote_host" \
+	>"$tunnel_log" 2>&1 &
+tunnel_pid=$!
+tunnel_start=$(awk '{print $22}' "/proc/$tunnel_pid/stat" 2>/dev/null || true)
+[[ $tunnel_start =~ ^[1-9][0-9]*$ ]] || die 'cannot authenticate SSH tunnel process'
+for _ in {1..100}; do
+	if curl -fsS --max-time 2 "http://127.0.0.1:$local_port/health" >/dev/null 2>&1; then
+		break
+	fi
+	owned_local_process "$tunnel_pid" "$tunnel_start" || die 'SSH tunnel exited during startup'
+	sleep 0.2
+done
+models=$(curl -fsS --max-time 5 "http://127.0.0.1:$local_port/v1/models") ||
+	die 'aggressive backend model endpoint is unavailable'
+jq -e --arg model "$SERVED_MODEL" \
+	'.data | length == 1 and .[0].id == $model' <<<"$models" >/dev/null ||
+	die 'backend did not advertise only the selected aggressive model'
+
+settings="$agent_dir/settings.json"
+if [[ ! -e $settings ]]; then
+	printf '%s\n' '{"httpIdleTimeoutMs":0}' >"$settings"
+	chmod 0600 -- "$settings"
+fi
+
+declare -a extensions=(
+	--extension "$progress_extension"
+	--extension "$tool_output_condense_extension"
+	--extension "$tool_call_integrity_extension"
+	--extension "$json_outcome_router_extension"
+	--extension "$repetition_guard_extension"
+	--extension "$tool_turn_rehydrate_extension"
+)
+if [[ $prompt_abi != "$BASE_PROMPT_ABI" ]]; then
+	extensions+=(--extension "$searchtool_extension")
+	if ((snapshot_continuation == 0)); then
+		extensions=(--no-extensions "${extensions[@]}")
+	fi
+fi
+declare -a environment=(
+	"PI_CODING_AGENT_DIR=$agent_dir"
+	'PI_OFFLINE=1'
+	"QWEN_PI_TOOL_RESULT_DIR=$tool_result_root"
+)
+if [[ -n ${QWEN_PI_AGGRESSIVE_TOOL_ARCHIVE_ROOT:-} ]]; then
+	environment+=("QWEN_PI_TOOL_TURN_ARCHIVE_ROOT=$QWEN_PI_AGGRESSIVE_TOOL_ARCHIVE_ROOT")
+fi
+
+replace_snapshot_session_argument() {
+	local replacement=$1 index value found=0
+	for ((index = 0; index < ${#snapshot_capture_args[@]}; index++)); do
+		value=${snapshot_capture_args[index]}
+		if [[ $value == --session=* ]]; then
+			snapshot_capture_args[index]="--session=$replacement"
+			found=1
+			break
+		fi
+		if [[ $value == --session ]] && ((index + 1 < ${#snapshot_capture_args[@]})); then
+			snapshot_capture_args[index + 1]=$replacement
+			found=1
+			break
+		fi
+	done
+	((found == 1)) || die 'cannot locate the Pi session argument for append-isolated snapshot capture'
+}
+
+prepare_snapshot_bootstrap_clone() {
+	local clone_bytes source_bytes
+	if [[ ! -e $snapshot_bootstrap_clone && ! -L $snapshot_bootstrap_clone ]]; then
+		cp --reflink=auto -- "$resolved_session" "$snapshot_bootstrap_clone"
+		chmod 0600 -- "$snapshot_bootstrap_clone"
+	fi
+	[[ -f $snapshot_bootstrap_clone && ! -L $snapshot_bootstrap_clone &&
+		$(stat -c '%u:%a:%h' -- "$snapshot_bootstrap_clone") == "$(id -u):600:1" ]] ||
+		die 'snapshot bootstrap transcript clone is unsafe'
+	# A completed token export is the immutable bootstrap input on every retry.
+	# Pi appends a hidden bootstrap-control entry and its aborted synthetic turn
+	# to the isolated clone while exporting, so that post-export clone is
+	# intentionally longer than the untouched source transcript.  The receipt
+	# and token vector are fully authenticated below; the eventual resume hook
+	# also proves their token prefix against Pi's current exact provider prompt.
+	# Do not require those clone-only audit records to appear in the user's
+	# transcript.
+	if [[ -f $snapshot_bootstrap_output && ! -L $snapshot_bootstrap_output &&
+		$(stat -c '%u:%a:%h' -- "$snapshot_bootstrap_output") == "$(id -u):600:1" &&
+		-f $snapshot_bootstrap_token_file && ! -L $snapshot_bootstrap_token_file &&
+		$(stat -c '%u:%a:%h' -- "$snapshot_bootstrap_token_file") == "$(id -u):600:1" ]]; then
+		return 0
+	fi
+	clone_bytes=$(stat -c '%s' -- "$snapshot_bootstrap_clone")
+	source_bytes=$(stat -c '%s' -- "$resolved_session")
+	[[ $clone_bytes =~ ^[1-9][0-9]*$ && $source_bytes =~ ^[1-9][0-9]*$ ]] ||
+		die 'snapshot bootstrap transcript sizes are invalid'
+	((10#$source_bytes >= 10#$clone_bytes)) ||
+		die 'snapshot bootstrap source no longer contains the captured transcript prefix'
+	cmp --silent -n "$clone_bytes" -- "$snapshot_bootstrap_clone" "$resolved_session" ||
+		die 'snapshot bootstrap source changed before its captured transcript boundary'
+}
+
+capture_snapshot_token_vector() {
+	prepare_snapshot_bootstrap_clone
+	if [[ ! -e $snapshot_bootstrap_output && ! -L $snapshot_bootstrap_output ]]; then
+		local capture_status
+		declare -a snapshot_capture_args=("${pi_extra_args[@]}")
+		replace_snapshot_session_argument "$snapshot_bootstrap_clone"
+		printf 'capturing the exact %s prompt once for its isolated continuation branch\n' \
+			"$MODEL_LABEL" >&2
+		set +e
+		if [[ -t 0 && -t 1 ]]; then
+			env "${environment[@]}" \
+				'QWEN_PI_FIXED_SLOT_RESUME=1' \
+				"QWEN_PI_FIXED_SLOT_TARGET_MODEL=$SERVED_MODEL" \
+				"QWEN_PI_FIXED_SLOT_SESSION_ID=$snapshot_session_id" \
+				"QWEN_PI_FIXED_SLOT_BRANCH=$snapshot_branch" \
+				'QWEN_PI_FIXED_SLOT_MODE=capture_checkpoint' \
+				"QWEN_PI_FIXED_SLOT_SNAPSHOT_TOKENS=$SNAPSHOT_STAGE_MINIMUM_TOKENS" \
+				"QWEN_PI_FIXED_SLOT_BOOTSTRAP_BASE_URL=http://127.0.0.1:$local_port" \
+				"QWEN_PI_FIXED_SLOT_BOOTSTRAP_OUTPUT=$snapshot_bootstrap_output" \
+				"QWEN_PI_FIXED_SLOT_BOOTSTRAP_TOKEN_FILE=$snapshot_bootstrap_token_file" \
+				'QWEN_PI_FIXED_SLOT_BOOTSTRAP_AUTOSTART=1' \
+				"$pi_link" --model "$PI_MODEL" --thinking "$thinking" \
+				"${extensions[@]}" --extension "$fixed_slot_resume_extension" \
+				"${snapshot_capture_args[@]}" </dev/tty
+			capture_status=$?
+		else
+			env "${environment[@]}" \
+				'QWEN_PI_FIXED_SLOT_RESUME=1' \
+				"QWEN_PI_FIXED_SLOT_TARGET_MODEL=$SERVED_MODEL" \
+				"QWEN_PI_FIXED_SLOT_SESSION_ID=$snapshot_session_id" \
+				"QWEN_PI_FIXED_SLOT_BRANCH=$snapshot_branch" \
+				'QWEN_PI_FIXED_SLOT_MODE=capture_checkpoint' \
+				"QWEN_PI_FIXED_SLOT_SNAPSHOT_TOKENS=$SNAPSHOT_STAGE_MINIMUM_TOKENS" \
+				"QWEN_PI_FIXED_SLOT_BOOTSTRAP_BASE_URL=http://127.0.0.1:$local_port" \
+				"QWEN_PI_FIXED_SLOT_BOOTSTRAP_OUTPUT=$snapshot_bootstrap_output" \
+				"QWEN_PI_FIXED_SLOT_BOOTSTRAP_TOKEN_FILE=$snapshot_bootstrap_token_file" \
+				'QWEN_PI_FIXED_SLOT_BOOTSTRAP_AUTOSTART=1' \
+				"$pi_link" --model "$PI_MODEL" --thinking "$thinking" \
+				"${extensions[@]}" --extension "$fixed_slot_resume_extension" \
+				"${snapshot_capture_args[@]}"
+			capture_status=$?
+		fi
+		set -e
+		((capture_status == 0 || capture_status == 130)) ||
+			die "snapshot prompt capture failed with status $capture_status"
+	fi
+	[[ -f $snapshot_bootstrap_output && ! -L $snapshot_bootstrap_output &&
+		$(stat -c '%u:%a:%h' -- "$snapshot_bootstrap_output") == "$(id -u):600:1" ]] ||
+		die 'snapshot token-export receipt is missing or unsafe'
+	[[ -f $snapshot_bootstrap_token_file && ! -L $snapshot_bootstrap_token_file &&
+		$(stat -c '%u:%a:%h' -- "$snapshot_bootstrap_token_file") == "$(id -u):600:1" ]] ||
+		die 'snapshot token vector is missing or unsafe'
+	jq -e --arg session "$snapshot_session_id" --arg branch "$snapshot_branch" \
+		--arg model "$SERVED_MODEL" --arg file "$snapshot_bootstrap_token_file" '
+		.schema == "urn:qwen-r9700:pi-fixed-slot-token-export:v1"
+		and .capture_mode == "capture_checkpoint"
+		and .session_id == $session and .branch == $branch and .model == $model
+		and .token_file == $file
+		and (.prompt_tokens | type == "number" and floor == . and . >= 8258 and . <= 253792)
+		and (.prefix_token_ids_sha256 | type == "string" and test("^[a-f0-9]{64}$"))
+		and (.token_file_sha256 | type == "string" and test("^[a-f0-9]{64}$"))
+	' "$snapshot_bootstrap_output" >/dev/null || die 'snapshot token-export receipt is invalid'
+	observed_token_file_sha256=$(sha256sum -- "$snapshot_bootstrap_token_file" | awk '{print $1}')
+	receipt_token_file_sha256=$(jq -er '.token_file_sha256' "$snapshot_bootstrap_output")
+	[[ $observed_token_file_sha256 == "$receipt_token_file_sha256" ]] ||
+		die 'snapshot token vector differs from its authenticated receipt'
+}
+
+bootstrap_snapshot_head() {
+	local controller_status result
+	capture_snapshot_token_vector
+	declare -a plan_arguments=(
+		--plan "$snapshot_stage_plan"
+		--token-file "$snapshot_bootstrap_token_file"
+		--session-id "$snapshot_session_id"
+		--branch "$snapshot_branch"
+		--model "$SERVED_MODEL"
+		--minimum-stage-tokens "$SNAPSHOT_STAGE_MINIMUM_TOKENS"
+		--stage-increment-tokens "$SNAPSHOT_STAGE_INCREMENT_TOKENS"
+		--verify-evidence-sha256 "$SNAPSHOT_VERIFY_SHA256"
+	)
+	QWEN_REMOTE_SNAPSHOT_VERIFY_HOST="$remote_host" \
+		QWEN_REMOTE_SNAPSHOT_VERIFY_SOURCE="$snapshot_verify_source" \
+		"$snapshot_stage_controller" "${plan_arguments[@]}" --prepare-only >/dev/null ||
+		die 'cannot create or authenticate the aggressive staged snapshot plan'
+	printf 'advancing the one-time prompt capture as restartable verified checkpoints\n' >&2
+	set +e
+	result=$(QWEN_REMOTE_SNAPSHOT_VERIFY_HOST="$remote_host" \
+		QWEN_REMOTE_SNAPSHOT_VERIFY_SOURCE="$snapshot_verify_source" \
+		"$snapshot_stage_controller" "${plan_arguments[@]}" \
+		--base-url "http://127.0.0.1:$local_port" \
+		--snapshot-root "$REMOTE_FS_CACHE_ROOT" \
+		--verify-program "$remote_snapshot_verify" \
+		--journal-root "$snapshot_stage_journal_root" \
+		--request-timeout-seconds 900 --commit-timeout-seconds 600 --poll-seconds 1)
+	controller_status=$?
+	set -e
+	if ((controller_status == 75)); then
+		printf '%s: staged capture remains safe and restartable; rerun the identical command\n' \
+			"$PROGRAM" >&2
+		exit 75
+	fi
+	((controller_status == 0)) || die "staged snapshot controller failed with status $controller_status"
+	adopt_remote_snapshot_head "$result" || die 'staged snapshot controller returned an invalid head'
+	[[ -n $snapshot_head ]] || die 'staged snapshot controller did not publish a head'
+	printf 'authenticated initial continuation head through %s prompt tokens\n' "$snapshot_tokens" >&2
+}
+
+start_snapshot_background_publisher() {
+	((snapshot_continuation == 1)) || return 0
+	local ready_file="$snapshot_token_root/publisher-ready.json" attempt log_file
+	[[ $snapshot_background_run_id =~ ^run-[a-f0-9]{32}$ ]] ||
+		die 'snapshot publisher run ID is missing or invalid'
+	log_file="$snapshot_root/background-$snapshot_background_run_id.log"
+	(umask 077 && set -o noclobber && : >"$log_file") ||
+		die 'cannot create the snapshot publisher log'
+	QWEN_REMOTE_SNAPSHOT_VERIFY_HOST="$remote_host" \
+		QWEN_REMOTE_SNAPSHOT_VERIFY_SOURCE="$snapshot_verify_source" \
+		"$snapshot_background_publisher" \
+		--token-root "$snapshot_token_root" \
+		--plan-root "$snapshot_plan_root" \
+		--journal-root "$snapshot_journal_root" \
+		--head-advance "$snapshot_head_advance" \
+		--base-url "http://127.0.0.1:$local_port" \
+		--snapshot-root "$REMOTE_FS_CACHE_ROOT" \
+		--verify-program "$remote_snapshot_verify" \
+		--verify-evidence-sha256 "$SNAPSHOT_VERIFY_SHA256" \
+		--session-id "$snapshot_session_id" \
+		--branch "$snapshot_branch" \
+		--model "$SERVED_MODEL" \
+		--run-id "$snapshot_background_run_id" \
+		--pi-pid "$pi_pid" --pi-start-ticks "$pi_start" >>"$log_file" 2>&1 &
+	snapshot_background_pid=$!
+	snapshot_background_start=$(awk '{print $22}' "/proc/$snapshot_background_pid/stat" 2>/dev/null || true)
+	[[ $snapshot_background_start =~ ^[1-9][0-9]*$ ]] ||
+		die 'cannot authenticate the snapshot publisher process'
+	for ((attempt = 1; attempt <= 50; attempt++)); do
+		if ! owned_local_process "$snapshot_background_pid" "$snapshot_background_start"; then
+			wait "$snapshot_background_pid" 2>/dev/null || true
+			die "snapshot publisher exited before readiness; inspect $log_file"
+		fi
+		if [[ -f $ready_file && ! -L $ready_file &&
+			$(stat -c '%u:%a:%h' -- "$ready_file") == "$(id -u):600:1" ]] &&
+			jq -e --arg run "$snapshot_background_run_id" '
+				.schema == "urn:qwen-r9700:snapshot-background-publisher-ready:v1"
+				and .run_id == $run and .state == "ready"
+			' "$ready_file" >/dev/null; then
+			return 0
+		fi
+		sleep 0.1
+	done
+	die 'snapshot publisher did not publish an authenticated readiness receipt'
+}
+
+if ((snapshot_continuation == 1)); then
+	extensions=(--no-extensions "${extensions[@]}")
+	remote_head=$(read_remote_snapshot_head) || die 'cannot authenticate the aggressive snapshot branch'
+	adopt_remote_snapshot_head "$remote_head" || die 'aggressive snapshot branch has an invalid contract'
+	if [[ -z $snapshot_head ]]; then
+		bootstrap_snapshot_head
+	elif [[ -f $snapshot_bootstrap_output && ! -L $snapshot_bootstrap_output ]]; then
+		# A valid partial stage is progress, not bootstrap completion.  Authenticate
+		# the existing capture and resume the staged transaction until its full
+		# token vector is covered.  A later conversational head may legitimately be
+		# longer than the original bootstrap capture.
+		capture_snapshot_token_vector
+		bootstrap_prompt_tokens=$(jq -er '.prompt_tokens' "$snapshot_bootstrap_output") ||
+			die 'cannot read the authenticated bootstrap prompt length'
+		if ((10#$snapshot_tokens < 10#$bootstrap_prompt_tokens)); then
+			bootstrap_snapshot_head
+		fi
+	fi
+	snapshot_background_run_id="run-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+	[[ $snapshot_background_run_id =~ ^run-[a-f0-9]{32}$ ]] ||
+		die 'cannot create the snapshot publisher run ID'
+	environment+=(
+		'QWEN_PI_FIXED_SLOT_RESUME=1'
+		"QWEN_PI_FIXED_SLOT_TARGET_MODEL=$SERVED_MODEL"
+		"QWEN_PI_FIXED_SLOT_SESSION_ID=$snapshot_session_id"
+		"QWEN_PI_FIXED_SLOT_BRANCH=$snapshot_branch"
+		'QWEN_PI_FIXED_SLOT_MODE=resume_checkpoint'
+		"QWEN_PI_FIXED_SLOT_SNAPSHOT_TOKENS=$snapshot_tokens"
+		"QWEN_PI_FIXED_SLOT_RESUME_PREFIX_TOKENS=$snapshot_replay_tokens"
+		"QWEN_PI_FIXED_SLOT_PREFIX_SHA256=$snapshot_replay_sha256"
+		"QWEN_PI_FIXED_SLOT_BOOTSTRAP_BASE_URL=http://127.0.0.1:$local_port"
+		"QWEN_PI_FIXED_SLOT_LATEST_TOKEN_ROOT=$snapshot_token_root"
+		"QWEN_PI_FIXED_SLOT_BACKGROUND_RUN_ID=$snapshot_background_run_id"
+	)
+	extensions+=(--extension "$fixed_slot_resume_extension")
+	printf 'authenticated %s continuation head %s/%s at %s prompt tokens\n' \
+		"$MODEL_LABEL" "$snapshot_session_id" "$snapshot_branch" "$snapshot_tokens" >&2
+fi
+
+printf 'aggressive backend ready; launching Pi %s (tunnel log: %s)\n' "$PI_MODEL" "$tunnel_log" >&2
+if [[ -t 0 && -t 1 ]]; then
+	env "${environment[@]}" "$pi_link" --model "$PI_MODEL" --thinking "$thinking" \
+		"${extensions[@]}" "${pi_extra_args[@]}" </dev/tty &
+else
+	env "${environment[@]}" "$pi_link" --model "$PI_MODEL" --thinking "$thinking" \
+		"${extensions[@]}" "${pi_extra_args[@]}" &
+fi
+pi_pid=$!
+pi_start=$(awk '{print $22}' "/proc/$pi_pid/stat" 2>/dev/null || true)
+[[ $pi_start =~ ^[1-9][0-9]*$ ]] || die 'cannot authenticate Pi process start time'
+start_snapshot_background_publisher
+
+(
+	failures=0
+	while owned_local_process "$pi_pid" "$pi_start"; do
+		if curl -fsS --max-time 3 "http://127.0.0.1:$local_port/health" >/dev/null 2>&1; then
+			failures=0
+		else
+			((failures += 1))
+			if ((failures >= 3)); then
+				printf '%s: backend health lost; stopping Pi\n' "$PROGRAM" >&2
+				kill -TERM "$pi_pid" 2>/dev/null || true
+				exit 2
+			fi
+		fi
+		sleep 2
+	done
+) &
+watch_pid=$!
+
+set +e
+wait "$pi_pid"
+pi_status=$?
+if ((shutdown_status != 0)); then
+	while owned_local_process "$pi_pid" "$pi_start"; do
+		wait "$pi_pid" 2>/dev/null
+	done
+	pi_status=$shutdown_status
+fi
+set -e
+if ((snapshot_continuation == 1)); then
+	set +e
+	wait "$snapshot_background_pid"
+	snapshot_background_status=$?
+	set -e
+	snapshot_background_pid=''
+	if ((snapshot_background_status != 0)); then
+		printf '%s: background continuation publication failed safely; the prior durable head remains valid\n' \
+			"$PROGRAM" >&2
+		pi_status=2
+	fi
+fi
+exit "$pi_status"

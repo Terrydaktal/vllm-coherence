@@ -1,0 +1,351 @@
+#!/usr/bin/env python3
+"""Unify Pi session filenames per project without opening transcript contents."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+SCHEMA = "urn:qwen-r9700:pi-project-history:v1"
+INDEX = ".identity.json"
+HELP = """NAME
+    pi-session-history - maintain project-local Pi session history
+
+SYNOPSIS
+    pi-session-history prepare [--cwd PATH] [--source-root PATH]...
+    pi-session-history resolve SELECTOR [--cwd PATH] [--source-root PATH]...
+    pi-session-history verify SESSION [--cwd PATH] [--source-root PATH]...
+    pi-session-history --help
+
+DESCRIPTION
+    Creates .pi/sessions below a development directory and hard-links standard
+    Pi session files from model-specific agent stores into that directory. The
+    files remain compatible with every Pi model and consume no duplicate payload
+    storage. The command inspects filenames and filesystem metadata only.
+
+OPTIONS
+    --cwd PATH
+        Project directory. Default: the current working directory.
+
+    --source-root PATH
+        Pi state root to scan. Repeatable. Defaults to ~/.local/state/qwen-r9700/
+        pi-remote and ~/.pi.
+
+    -h, --help
+        Show this help text and exit.
+
+OPERATION
+    prepare creates or updates PATH/.pi/sessions and prints that directory.
+    resolve also resolves `last`, a session UUID, or an unambiguous UUID prefix
+    to a project-local JSONL path. An absolute legacy path is canonicalized to
+    its project-local hard link when one exists. verify additionally authenticates
+    that a multiply-linked session has exactly the indexed local and legacy names.
+    Existing divergent filename collisions fail closed.
+
+EXAMPLES
+    pi-session-history prepare --cwd /home/lewis/tasks/money
+    pi-session-history resolve last --cwd /home/lewis/tasks/money
+    pi-session-history resolve 01a067d9 --cwd /home/lewis/tasks/money
+    pi-session-history verify /absolute/session.jsonl --cwd /home/lewis/tasks/money
+
+FILES
+    .pi/sessions/*.jsonl
+        Project-local hard links to Pi history files and all newly created Pi
+        sessions when a launcher uses this directory.
+
+    .pi/sessions/.identity.json
+        Content-free mapping that preserves existing Radiance cache identities
+        when a historical session is opened through its project-local path.
+
+PATHS
+    ~/.local/bin/pi-session-history
+        User-local symbolic link to this tracked command.
+
+    ~/.local/state/qwen-r9700/pi-remote/
+    ~/.pi/
+        Default legacy roots scanned for standard agent session directories.
+
+SECURITY NOTES
+    Transcript contents are never opened, parsed, copied, hashed, or printed.
+    Directories and files must be owned by the invoking user and symbolic links
+    are rejected. Hard links require the project and source to share a filesystem.
+
+EXIT STATUS
+    0 on success; 2 for invalid arguments; 3 for unsafe state or a collision;
+    4 when no session matches the requested selector.
+
+AUTHORS
+    Qwen R9700 inference lab maintainers.
+"""
+
+
+class HistoryError(Exception):
+    def __init__(self, message: str, status: int = 3) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+def project_key(cwd: Path) -> str:
+    value = str(cwd.resolve(strict=True))
+    return f"--{value.lstrip('/').replace('/', '-').replace(':', '-')}--"
+
+
+def ensure_private_directory(path: Path) -> None:
+    if os.path.lexists(path):
+        info = path.lstat()
+        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise HistoryError(f"unsafe history directory: {path}")
+        if info.st_uid != os.getuid():
+            raise HistoryError(f"history directory has the wrong owner: {path}")
+        path.chmod(0o700)
+        return
+    path.mkdir(mode=0o700)
+
+
+def source_roots(values: list[str] | None) -> list[Path]:
+    if values:
+        return [Path(value).expanduser().resolve(strict=False) for value in values]
+    return [
+        Path.home() / ".local/state/qwen-r9700/pi-remote",
+        Path.home() / ".pi",
+    ]
+
+
+def standard_sources(roots: list[Path], key: str) -> list[Path]:
+    found: list[Path] = []
+    for root in roots:
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for current, directories, files in os.walk(root, followlinks=False):
+            directories[:] = [
+                name for name in directories if not (Path(current) / name).is_symlink()
+            ]
+            directory = Path(current)
+            if directory.name != key or directory.parent.name != "sessions":
+                continue
+            agent_name = directory.parent.parent.name
+            if agent_name != "agent" and not agent_name.startswith("agent-"):
+                continue
+            directories[:] = []
+            found.extend(directory / name for name in files if name.endswith(".jsonl"))
+    return sorted(found, key=str)
+
+
+def load_index(path: Path) -> dict:
+    if not os.path.lexists(path):
+        return {"schema": SCHEMA, "sessions": {}}
+    info = path.lstat()
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or stat.S_ISLNK(info.st_mode)
+        or info.st_uid != os.getuid()
+        or info.st_nlink != 1
+        or info.st_mode & 0o022
+    ):
+        raise HistoryError(f"unsafe history identity index: {path}")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise HistoryError(f"cannot read history identity index: {error}") from error
+    if value.get("schema") != SCHEMA or not isinstance(value.get("sessions"), dict):
+        raise HistoryError(f"invalid history identity index: {path}")
+    return value
+
+
+def write_index(path: Path, value: dict) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, sort_keys=True, separators=(",", ":"))
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        if os.path.lexists(temporary):
+            temporary.unlink()
+
+
+def prepare(cwd_value: str, roots: list[Path]) -> Path:
+    cwd = Path(cwd_value).expanduser().resolve(strict=True)
+    info = cwd.stat()
+    if not cwd.is_dir() or info.st_uid != os.getuid():
+        raise HistoryError(f"project directory is not owned by the invoking user: {cwd}")
+    history_root = cwd / ".pi"
+    history = history_root / "sessions"
+    ensure_private_directory(history_root)
+    ensure_private_directory(history)
+    index_path = history / INDEX
+    index = load_index(index_path)
+    changed = False
+    unique_sources: dict[str, tuple[Path, os.stat_result]] = {}
+    for source in standard_sources(roots, project_key(cwd)):
+        source_info = source.lstat()
+        if not stat.S_ISREG(source_info.st_mode) or stat.S_ISLNK(source_info.st_mode):
+            continue
+        if source_info.st_uid != os.getuid():
+            raise HistoryError(f"session file has the wrong owner: {source}")
+        previous = unique_sources.get(source.name)
+        if previous and (previous[1].st_dev, previous[1].st_ino) != (
+            source_info.st_dev,
+            source_info.st_ino,
+        ):
+            raise HistoryError(f"divergent legacy session filename collision: {source.name}")
+        unique_sources.setdefault(source.name, (source, source_info))
+    for source, source_info in unique_sources.values():
+        destination = history / source.name
+        if os.path.lexists(destination):
+            destination_info = destination.lstat()
+            if not stat.S_ISREG(destination_info.st_mode) or stat.S_ISLNK(destination_info.st_mode):
+                raise HistoryError(f"unsafe project session file: {destination}")
+            if (destination_info.st_dev, destination_info.st_ino) != (
+                source_info.st_dev,
+                source_info.st_ino,
+            ):
+                raise HistoryError(f"divergent session filename collision: {destination.name}")
+        else:
+            try:
+                os.link(source, destination, follow_symlinks=False)
+            except OSError as error:
+                raise HistoryError(f"cannot hard-link {source} into {history}: {error}") from error
+        sessions = index["sessions"]
+        existing_identity = sessions.get(source.name)
+        if existing_identity is not None and (
+            existing_identity.get("device"),
+            existing_identity.get("inode"),
+        ) != (source_info.st_dev, source_info.st_ino):
+            raise HistoryError(f"stale history identity collision: {source.name}")
+        if existing_identity is None:
+            sessions[source.name] = {
+                "identity_path": str(source.absolute()),
+                "device": source_info.st_dev,
+                "inode": source_info.st_ino,
+            }
+            changed = True
+    if changed or not index_path.exists():
+        write_index(index_path, index)
+    return history
+
+
+def resolve_selector(history: Path, selector: str) -> Path:
+    candidates: list[tuple[Path, os.stat_result]] = []
+    for path in history.glob("*.jsonl"):
+        if path.is_symlink():
+            continue
+        info = path.lstat()
+        if stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid():
+            candidates.append((path, info))
+    if selector == "last":
+        if not candidates:
+            raise HistoryError(f"no project session exists in {history}", status=4)
+        return max(candidates, key=lambda item: (item[1].st_mtime_ns, item[0].name))[0]
+    selected = Path(selector).expanduser()
+    if selected.is_absolute():
+        try:
+            selected_info = selected.lstat()
+        except OSError as error:
+            raise HistoryError(f"cannot inspect session {selected}: {error}", status=4) from error
+        if (
+            not stat.S_ISREG(selected_info.st_mode)
+            or stat.S_ISLNK(selected_info.st_mode)
+            or selected_info.st_uid != os.getuid()
+        ):
+            raise HistoryError(f"session is missing or unsafe: {selected}")
+        local = [
+            path
+            for path, info in candidates
+            if (info.st_dev, info.st_ino) == (selected_info.st_dev, selected_info.st_ino)
+        ]
+        if len(local) > 1:
+            raise HistoryError(f"session has multiple project-local names: {selected}")
+        return local[0] if local else selected
+    folded = selector.casefold()
+    matches = [path for path, _info in candidates if folded in path.name.casefold()]
+    if not matches:
+        raise HistoryError(f"no project session matches {selector!r} in {history}", status=4)
+    if len(matches) > 1:
+        raise HistoryError(f"project session selector is ambiguous: {selector!r}")
+    return matches[0]
+
+
+def verify_session(path: Path) -> Path:
+    actual = path.absolute()
+    try:
+        info = actual.lstat()
+    except OSError as error:
+        raise HistoryError(f"cannot inspect session {actual}: {error}") from error
+    if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode) or info.st_uid != os.getuid():
+        raise HistoryError(f"session is missing or unsafe: {actual}")
+    if info.st_nlink == 1:
+        return actual
+    if info.st_nlink != 2:
+        raise HistoryError(f"session has an unauthenticated hard-link count: {actual}")
+    identity_history = actual.parent
+    if identity_history.name != "sessions" or identity_history.parent.name != ".pi":
+        raise HistoryError(f"multiply-linked session is not in project history: {actual}")
+    index = load_index(identity_history / INDEX)
+    record = index["sessions"].get(actual.name)
+    if (
+        not isinstance(record, dict)
+        or record.get("device") != info.st_dev
+        or record.get("inode") != info.st_ino
+        or not isinstance(record.get("identity_path"), str)
+        or not record["identity_path"].startswith("/")
+    ):
+        raise HistoryError(f"session hard link has no matching identity record: {actual}")
+    legacy = Path(record["identity_path"])
+    try:
+        legacy_info = legacy.lstat()
+    except OSError as error:
+        raise HistoryError(f"cannot authenticate legacy session link {legacy}: {error}") from error
+    if (
+        legacy == actual
+        or not stat.S_ISREG(legacy_info.st_mode)
+        or stat.S_ISLNK(legacy_info.st_mode)
+        or legacy_info.st_uid != os.getuid()
+        or (legacy_info.st_dev, legacy_info.st_ino) != (info.st_dev, info.st_ino)
+    ):
+        raise HistoryError(f"legacy session link does not match project history: {legacy}")
+    return actual
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(add_help=False)
+    result.add_argument("-h", "--help", action="store_true")
+    commands = result.add_subparsers(dest="command")
+    for name in ("prepare", "resolve", "verify"):
+        command = commands.add_parser(name, add_help=False)
+        command.add_argument("--cwd", default=str(Path.cwd()))
+        command.add_argument("--source-root", action="append")
+        if name in ("resolve", "verify"):
+            command.add_argument("selector")
+    return result
+
+
+def main() -> int:
+    arguments = parser().parse_args()
+    if arguments.help or arguments.command is None:
+        print(HELP, end="")
+        return 0 if arguments.help else 2
+    try:
+        history = prepare(arguments.cwd, source_roots(arguments.source_root))
+        if arguments.command == "prepare":
+            output = history
+        else:
+            output = resolve_selector(history, arguments.selector)
+            if arguments.command == "verify":
+                output = verify_session(output)
+        print(output)
+        return 0
+    except HistoryError as error:
+        print(f"pi-session-history: {error}", file=sys.stderr)
+        return error.status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
