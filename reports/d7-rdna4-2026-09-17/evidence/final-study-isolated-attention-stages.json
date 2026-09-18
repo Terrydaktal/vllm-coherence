@@ -1,0 +1,5304 @@
+{
+  "aggregation": "A position passes only when all layer instances of that stage match",
+  "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+  "inventory": {
+    "Attention KV write": {
+      "columns": [
+        "final_modes",
+        "fix1_modes",
+        "fixed",
+        "old"
+      ],
+      "instances": [
+        "11",
+        "15",
+        "19",
+        "23",
+        "27",
+        "3",
+        "31",
+        "35",
+        "39",
+        "43",
+        "47",
+        "51",
+        "55",
+        "59",
+        "63",
+        "7"
+      ]
+    },
+    "Attention Q/K normalization, RoPE and layout": {
+      "columns": [
+        "final_modes",
+        "fix1_modes",
+        "fixed",
+        "old"
+      ],
+      "instances": [
+        "11",
+        "15",
+        "19",
+        "23",
+        "27",
+        "3",
+        "31",
+        "35",
+        "39",
+        "43",
+        "47",
+        "51",
+        "55",
+        "59",
+        "63",
+        "7"
+      ]
+    },
+    "Attention output gating": {
+      "columns": [
+        "final_modes",
+        "fix1_modes",
+        "fixed",
+        "old"
+      ],
+      "instances": [
+        "11",
+        "15",
+        "19",
+        "23",
+        "27",
+        "3",
+        "31",
+        "35",
+        "39",
+        "43",
+        "47",
+        "51",
+        "55",
+        "59",
+        "63",
+        "7"
+      ]
+    },
+    "MLP SiLU and gating": {
+      "columns": [
+        "final_modes",
+        "fix1_modes",
+        "fixed",
+        "old"
+      ],
+      "instances": [
+        "0",
+        "1",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "2",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "29",
+        "3",
+        "30",
+        "31",
+        "32",
+        "33",
+        "34",
+        "35",
+        "36",
+        "37",
+        "38",
+        "39",
+        "4",
+        "40",
+        "41",
+        "42",
+        "43",
+        "44",
+        "45",
+        "46",
+        "47",
+        "48",
+        "49",
+        "5",
+        "50",
+        "51",
+        "52",
+        "53",
+        "54",
+        "55",
+        "56",
+        "57",
+        "58",
+        "59",
+        "6",
+        "60",
+        "61",
+        "62",
+        "63",
+        "7",
+        "8",
+        "9"
+      ]
+    }
+  },
+  "local_checks": {
+    "Attention KV write": {
+      "final_eager_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "final_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "fix1_eager_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "fix1_m1": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "fix1_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "old_m1": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "old_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      }
+    },
+    "Attention Q/K normalization, RoPE and layout": {
+      "final_eager_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "final_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "fix1_eager_m8": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 0,
+        "native_suffix_replays": 640
+      },
+      "fix1_m1": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 0,
+        "native_suffix_replays": 640
+      },
+      "fix1_m8": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 0,
+        "native_suffix_replays": 640
+      },
+      "old_m1": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 0,
+        "native_suffix_replays": 640
+      },
+      "old_m8": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 0,
+        "native_suffix_replays": 640
+      }
+    },
+    "Attention output gating": {
+      "final_eager_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "final_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "fix1_eager_m8": {
+        "invocations": 640,
+        "local_output_exact": 640,
+        "local_state_exact": 640,
+        "native_suffix_replays": 0
+      },
+      "fix1_m1": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 640,
+        "native_suffix_replays": 640
+      },
+      "fix1_m8": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 640,
+        "native_suffix_replays": 640
+      },
+      "old_m1": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 640,
+        "native_suffix_replays": 640
+      },
+      "old_m8": {
+        "invocations": 640,
+        "local_output_exact": 0,
+        "local_state_exact": 640,
+        "native_suffix_replays": 640
+      }
+    },
+    "MLP SiLU and gating": {
+      "final_eager_m8": {
+        "invocations": 2560,
+        "local_output_exact": 2560,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 0
+      },
+      "final_m8": {
+        "invocations": 2560,
+        "local_output_exact": 2560,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 0
+      },
+      "fix1_eager_m8": {
+        "invocations": 2560,
+        "local_output_exact": 2560,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 0
+      },
+      "fix1_m1": {
+        "invocations": 2560,
+        "local_output_exact": 0,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 2560
+      },
+      "fix1_m8": {
+        "invocations": 2560,
+        "local_output_exact": 0,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 2560
+      },
+      "old_m1": {
+        "invocations": 2560,
+        "local_output_exact": 0,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 2560
+      },
+      "old_m8": {
+        "invocations": 2560,
+        "local_output_exact": 0,
+        "local_state_exact": 2560,
+        "native_suffix_replays": 2560
+      }
+    }
+  },
+  "per_instance": {
+    "Attention KV write": {
+      "11": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "15": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "19": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "23": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "27": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "3": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "31": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "35": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "39": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "43": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "47": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "51": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "55": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "59": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "63": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "7": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      }
+    },
+    "Attention Q/K normalization, RoPE and layout": {
+      "11": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 36,
+          "top10_set_exact": 187,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 103
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "15": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 43,
+          "top10_set_exact": 184,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 109
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "19": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 37,
+          "top10_set_exact": 190,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 119
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "23": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 39,
+          "top10_set_exact": 180,
+          "top1_order_exact": 317,
+          "top1_set_exact": 317,
+          "top20_order_exact": 1,
+          "top20_set_exact": 112
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "27": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 44,
+          "top10_set_exact": 193,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 116
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "3": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 37,
+          "top10_set_exact": 187,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 1,
+          "top20_set_exact": 106
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "31": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 30,
+          "top10_set_exact": 182,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 118
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "35": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 43,
+          "top10_set_exact": 186,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 127
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "39": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 48,
+          "top10_set_exact": 205,
+          "top1_order_exact": 317,
+          "top1_set_exact": 317,
+          "top20_order_exact": 1,
+          "top20_set_exact": 129
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "43": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 44,
+          "top10_set_exact": 197,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 145
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "47": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 51,
+          "top10_set_exact": 210,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 155
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "51": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 63,
+          "top10_set_exact": 220,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 1,
+          "top20_set_exact": 152
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "55": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 78,
+          "top10_set_exact": 233,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 1,
+          "top20_set_exact": 179
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "59": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 87,
+          "top10_set_exact": 246,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 7,
+          "top20_set_exact": 195
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "63": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 219,
+          "top10_set_exact": 296,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 72,
+          "top20_set_exact": 266
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "7": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 33,
+          "top10_set_exact": 179,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 107
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      }
+    },
+    "Attention output gating": {
+      "11": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 36,
+          "top10_set_exact": 188,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 117
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "15": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 40,
+          "top10_set_exact": 192,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 129
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "19": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 31,
+          "top10_set_exact": 179,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 2,
+          "top20_set_exact": 119
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "23": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 42,
+          "top10_set_exact": 199,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 107
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "27": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 41,
+          "top10_set_exact": 188,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 129
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "3": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 35,
+          "top10_set_exact": 182,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 2,
+          "top20_set_exact": 121
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "31": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 45,
+          "top10_set_exact": 186,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 112
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "35": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 35,
+          "top10_set_exact": 196,
+          "top1_order_exact": 317,
+          "top1_set_exact": 317,
+          "top20_order_exact": 0,
+          "top20_set_exact": 121
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "39": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 39,
+          "top10_set_exact": 200,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 123
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "43": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 39,
+          "top10_set_exact": 202,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 133
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "47": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 44,
+          "top10_set_exact": 220,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 129
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "51": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 68,
+          "top10_set_exact": 233,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 3,
+          "top20_set_exact": 150
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "55": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 81,
+          "top10_set_exact": 246,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 3,
+          "top20_set_exact": 175
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "59": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 89,
+          "top10_set_exact": 243,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 10,
+          "top20_set_exact": 191
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "63": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 201,
+          "top10_set_exact": 294,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 52,
+          "top20_set_exact": 252
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "7": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 37,
+          "top10_set_exact": 193,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 126
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      }
+    },
+    "MLP SiLU and gating": {
+      "0": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 45,
+          "top10_set_exact": 194,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 1,
+          "top20_set_exact": 120
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "1": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 37,
+          "top10_set_exact": 197,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 115
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "10": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 34,
+          "top10_set_exact": 181,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 0,
+          "top20_set_exact": 118
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "11": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 43,
+          "top10_set_exact": 185,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 112
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "12": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 34,
+          "top10_set_exact": 183,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 128
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "13": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 38,
+          "top10_set_exact": 181,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 136
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "14": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 33,
+          "top10_set_exact": 184,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 119
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "15": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 34,
+          "top10_set_exact": 186,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 108
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "16": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 31,
+          "top10_set_exact": 195,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 118
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "17": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 34,
+          "top10_set_exact": 199,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 113
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "18": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 32,
+          "top10_set_exact": 185,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 118
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "19": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 42,
+          "top10_set_exact": 184,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 125
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "2": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 38,
+          "top10_set_exact": 188,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 111
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "20": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 33,
+          "top10_set_exact": 190,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 124
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "21": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 36,
+          "top10_set_exact": 193,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 110
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "22": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 33,
+          "top10_set_exact": 184,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 110
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "23": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 40,
+          "top10_set_exact": 195,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 1,
+          "top20_set_exact": 113
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "24": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 41,
+          "top10_set_exact": 192,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 115
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "25": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 32,
+          "top10_set_exact": 191,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 113
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "26": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 50,
+          "top10_set_exact": 202,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 107
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "27": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 36,
+          "top10_set_exact": 198,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 136
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "28": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 41,
+          "top10_set_exact": 198,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 3,
+          "top20_set_exact": 119
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "29": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 37,
+          "top10_set_exact": 201,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 2,
+          "top20_set_exact": 124
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "3": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 33,
+          "top10_set_exact": 177,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 122
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "30": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 46,
+          "top10_set_exact": 193,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 112
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "31": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 41,
+          "top10_set_exact": 191,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 2,
+          "top20_set_exact": 127
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "32": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 34,
+          "top10_set_exact": 216,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 117
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "33": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 42,
+          "top10_set_exact": 197,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 128
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "34": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 40,
+          "top10_set_exact": 201,
+          "top1_order_exact": 317,
+          "top1_set_exact": 317,
+          "top20_order_exact": 0,
+          "top20_set_exact": 133
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "35": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 53,
+          "top10_set_exact": 207,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 2,
+          "top20_set_exact": 122
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "36": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 43,
+          "top10_set_exact": 200,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 126
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "37": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 43,
+          "top10_set_exact": 205,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 128
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "38": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 49,
+          "top10_set_exact": 210,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 129
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "39": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 38,
+          "top10_set_exact": 211,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 126
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "4": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 35,
+          "top10_set_exact": 190,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 1,
+          "top20_set_exact": 108
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "40": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 46,
+          "top10_set_exact": 206,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 131
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "41": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 49,
+          "top10_set_exact": 213,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 132
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "42": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 41,
+          "top10_set_exact": 213,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 128
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "43": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 39,
+          "top10_set_exact": 214,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 128
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "44": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 47,
+          "top10_set_exact": 208,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 134
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "45": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 35,
+          "top10_set_exact": 218,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 3,
+          "top20_set_exact": 145
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "46": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 43,
+          "top10_set_exact": 198,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 126
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "47": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 46,
+          "top10_set_exact": 225,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 144
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "48": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 68,
+          "top10_set_exact": 231,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 2,
+          "top20_set_exact": 148
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "49": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 57,
+          "top10_set_exact": 209,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 1,
+          "top20_set_exact": 145
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "5": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 42,
+          "top10_set_exact": 196,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 120
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "50": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 60,
+          "top10_set_exact": 224,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 141
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "51": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 51,
+          "top10_set_exact": 228,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 153
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "52": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 56,
+          "top10_set_exact": 229,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 3,
+          "top20_set_exact": 167
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "53": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 72,
+          "top10_set_exact": 235,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 3,
+          "top20_set_exact": 163
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "54": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 76,
+          "top10_set_exact": 243,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 4,
+          "top20_set_exact": 178
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "55": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 88,
+          "top10_set_exact": 234,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 3,
+          "top20_set_exact": 186
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "56": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 84,
+          "top10_set_exact": 237,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 4,
+          "top20_set_exact": 168
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "57": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 93,
+          "top10_set_exact": 256,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 3,
+          "top20_set_exact": 187
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "58": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 82,
+          "top10_set_exact": 238,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 7,
+          "top20_set_exact": 188
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "59": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 100,
+          "top10_set_exact": 240,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 12,
+          "top20_set_exact": 185
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "6": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 41,
+          "top10_set_exact": 185,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 0,
+          "top20_set_exact": 111
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "60": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 114,
+          "top10_set_exact": 252,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 12,
+          "top20_set_exact": 207
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "61": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 121,
+          "top10_set_exact": 263,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 12,
+          "top20_set_exact": 214
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "62": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 158,
+          "top10_set_exact": 276,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 25,
+          "top20_set_exact": 242
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "63": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 268,
+          "top10_set_exact": 311,
+          "top1_order_exact": 319,
+          "top1_set_exact": 319,
+          "top20_order_exact": 160,
+          "top20_set_exact": 292
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "7": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 40,
+          "top10_set_exact": 203,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 123
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "8": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 33,
+          "top10_set_exact": 201,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 0,
+          "top20_set_exact": 115
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      },
+      "9": {
+        "final_modes": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "fix1_modes": {
+          "full_logits_exact": 0,
+          "positions": 320,
+          "top10_order_exact": 44,
+          "top10_set_exact": 188,
+          "top1_order_exact": 318,
+          "top1_set_exact": 318,
+          "top20_order_exact": 0,
+          "top20_set_exact": 117
+        },
+        "fixed": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        },
+        "old": {
+          "full_logits_exact": 320,
+          "positions": 320,
+          "top10_order_exact": 320,
+          "top10_set_exact": 320,
+          "top1_order_exact": 320,
+          "top1_set_exact": 320,
+          "top20_order_exact": 320,
+          "top20_set_exact": 320
+        }
+      }
+    }
+  },
+  "positions": 320,
+  "prefill_bridge_exact": true,
+  "prefix_tokens": 60000,
+  "receipts": {
+    "config": "432aecc6926718c31777ae7ef03fa0689583bba63dc87179834e474ca7d5f9ab",
+    "groups": [
+      "d3a629ec0debc3bd980e8e3d58946bc1bb82fd29ede6d5372db023838a63016a",
+      "8a16b727faa7fb6e291da7afb4129e7982cabec00187490fc6f94db8d24172ff",
+      "e27f6631b773505afb49d18ad52141a57e24522824cc2822eaa85e04aa57748a",
+      "51456bd9bd64577527f0f1715b7321fcc628b9417d3b079db47d884d8f3fb7fb",
+      "b11aaee22e69a1d0eb91f43febe49e2c6015b0b89d853855ab99ccea387665ef",
+      "40800410d075a19b0bbfb433f09dc95c83671a6240a2b93819e7e572f2da0f0b",
+      "453a809cb7d934e9551fe09256c5d97606c558ef2213ad9694771e035abe0c3b",
+      "59ddb39d6e579550ca33ecbca3a2bbbb7a57369792f6eecb59caa9dbaaaadb2e",
+      "a58cc92ff8257aecfe93726409eecdef4768b9f6f6aadd63753d05a4919449ab",
+      "5f449882ac1af2047a7ec67daf738b45f410ae15aa29218a55f595e308c53550",
+      "e43bc42e854c2cf53ba28882867be4a72c1fe706af94080312746dcd9db4ae7e",
+      "69994a98e23bede43535d7566eecef5bc917aaadd244396b7ef8d845ee07d4b5",
+      "ad15fa951d77bdc1e27476511f31d10ef65bf666cd1d04bf96ac3093b4ee5bca",
+      "50e3c9803ffcf7dd13251f42fcafb55a74a2ee63df2a7af24b806990c833b2fd",
+      "eb564f715cb960c39bba7c910ce169becc8f85654f5dec78e2ef4aa069fa121b",
+      "ed3e08c80e32c137029103277d78cef2729ae6e3f7e5021d09d2e22ed257fad2",
+      "5576a718d5a61b630e602f1f842ac7e694d86ffb44b4c66f547a7647552c3059",
+      "e518ff2d2b23040003a12025840d406e151647959073a8d35638f04b58419156",
+      "f6d86731958f038199941703f9dfd057d9380292577fe00e9af9c82575d02c30",
+      "83e294ce2db9ae52ef4d77c9a4c490a6bbe95bd124fde90b3eaee66a459891be",
+      "c8aef74dd5c560cc2c1131d26d8453fff9dabc05a2045676bdd3eb38e6f89c65",
+      "68258c8ce790e8e74b6fc96f7689cb91240862915788c04d863499497959c5a7",
+      "8cb1cca24d49cf3afdd066aae7cf4e809dc69fe231651cf207c8e831c6131563",
+      "0f685e98a30ed1102e1446c333457651ec7d6583eb7c8d358f16529b77c27751",
+      "0a815afda94e1ea9e746c3641632114bb7e666fdbea836e46129452164eac436",
+      "63f9654f57bcab614a6a0356711800778459c817348c8ae877a484d6dbe9177a",
+      "c4bd45b39f0e56aaeffca6299619d9701630b61cc2e4fadf29616976ec75b3cc",
+      "c9e771962789db548da2d3f2444aae2f0c81d950b3a044f76cfe5ee670035614",
+      "1b3a75556cfb6d1d1ae9fbc74531af8aedb44ea5b58bccc437020bd0758552b3",
+      "40288d028f1bd657794fd9e145afe3e78a03119a42eca2eeab5ada2d1e1865c4",
+      "522ca64ed72ad3cfb3ae7b59ff31a9c6f9547b3a44795bc05a87bef6f66e497f",
+      "8923485f50416522bcec5e3f6fd36e6d3d5d2390f72d12bbdbfdf8f696596a79",
+      "b4cd1d77c76522869a9986b428c50b0de03547035f14eb0f082b7b589b7980c5",
+      "99463bc5c952ca285ac33aa5fa7fe5d4a75eec9e199566206690bf43f47fe10a",
+      "ccece5661ca8a40fac98afb2fe03ad36dab4a3093f7b7756c586594a2af06075",
+      "730a03c4a77e56eeecebdec87ea1e984f1c95692aefbc2842a39796f149af159",
+      "499a07585b09e3413a9c4db637f96df2e5a7ce7602b5a683768de50f097e12a6",
+      "ac50d9435d751329ec36bd2413e4c987edb371ac5ef761fc0ec79eb520b9624d",
+      "bb9d7c6dc41730791683b58ae8da0c5f5d3e72cafdb6cae24cab64d16844bf2b",
+      "42a31821ae0a084d56185436b0cd7f251d4aec5122121782dea334e573004ed5"
+    ],
+    "measurement": "ce620acbedd6357e40f12d93adc62a11594d345588621a86e76cd59352aa7640",
+    "release_rows": "5c54e2a21c2a29f3d47039cdc163d53b4fbcbe3f426c62cb351f989732cd47e8",
+    "rows": "1a640d61fa78371de496df5a23c60d77e46f2b1563d67ea95eab6a8109c5dc81",
+    "runtime": "ae72d951a38f6420db6f01c0b8bd772e7deb4f9a6ec58234c8b6646498f75f51",
+    "sample": "38ae59ebda924b124f6b5ab522d191f4218d4de50fd064c8a39ba706b309e870",
+    "summary": "ec77734e2c382fde444b8a7f261641134869d9673d5b84d60e1f3e8baa419675"
+  },
+  "release_full_vector_bridge": 320,
+  "schema": "qwen.native-isolated-stage-matrix.v1",
+  "scope": "One stage/layer at a time on final-correct inputs, through the native full BF16 head",
+  "sha256": "8b2f2731a5560cedca03a9cddb9c878de6663c62023703321e726af0ad506f43",
+  "source_files": {
+    "benchmark_native_tape_d7.py": "d132220f7567d60e98bb6e90f25c46fa7dab80ae61d623d704b4f67e109fea41",
+    "native_d7_attention_stages.py": "44bf563d1bd6aef09173696dea994d3d571d5d9692a123e7ef65533c40c5b32c",
+    "native_d7_historical_stages.py": "b039689b387579a4c6b8d41a841500a8ec2427c6f4f1d90505c060f0347894c8",
+    "native_d7_replay_tape.py": "09a183450c9a7a9378a9cd179c65dd5ec731c0bd03a3e8215116815f8edcc5bf",
+    "native_d7_stage_matrix.py": "d426bfb91e99f6a51a57bc17fca52cf02af6bd18350a9a8c3bf2127c1692c43a",
+    "native_d7_state_stages.py": "35ab25d08875b1c84bdd0d79eda8c5ba679280f70bb30b2044826e2f9cda7eac",
+    "native_d7_tape_worker.py": "9884344bf60c01f1f4eb5d0c92a74289ee6ff8451d3916fca3fac05d7aa108b7"
+  },
+  "stages": {
+    "Attention KV write": {
+      "final_modes": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "fix1_modes": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "fixed": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "old": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      }
+    },
+    "Attention Q/K normalization, RoPE and layout": {
+      "final_modes": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "fix1_modes": {
+        "full_logits_exact": 0,
+        "positions": 320,
+        "top10_order_exact": 1,
+        "top10_set_exact": 63,
+        "top1_exact": 314,
+        "top1_order_exact": 314,
+        "top1_set_exact": 314,
+        "top20_order_exact": 0,
+        "top20_set_exact": 14
+      },
+      "fixed": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "old": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      }
+    },
+    "Attention output gating": {
+      "final_modes": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "fix1_modes": {
+        "full_logits_exact": 0,
+        "positions": 320,
+        "top10_order_exact": 1,
+        "top10_set_exact": 65,
+        "top1_exact": 317,
+        "top1_order_exact": 317,
+        "top1_set_exact": 317,
+        "top20_order_exact": 0,
+        "top20_set_exact": 20
+      },
+      "fixed": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "old": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      }
+    },
+    "MLP SiLU and gating": {
+      "final_modes": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "fix1_modes": {
+        "full_logits_exact": 0,
+        "positions": 320,
+        "top10_order_exact": 1,
+        "top10_set_exact": 51,
+        "top1_exact": 315,
+        "top1_order_exact": 315,
+        "top1_set_exact": 315,
+        "top20_order_exact": 0,
+        "top20_set_exact": 15
+      },
+      "fixed": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "old": {
+        "full_logits_exact": 320,
+        "positions": 320,
+        "top10_order_exact": 320,
+        "top10_set_exact": 320,
+        "top1_exact": 320,
+        "top1_order_exact": 320,
+        "top1_set_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      }
+    }
+  },
+  "status": "SAMPLE_CHECKED"
+}

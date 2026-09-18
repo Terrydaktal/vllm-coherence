@@ -1,0 +1,94 @@
+{
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 93,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 93,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 125,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 125,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 320,
+    "positions": 320
+  },
+  "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+  "passes": [
+    "1c9e267c972b8fb973f0335a6ad9c3308f179d4dd689c9d0faa2f2eb6fe1b42d",
+    "2c0dbf4a683d6b6a76fbd14a365a33dcb8a2a0f0d91d6a27ebfdfbb335733402"
+  ],
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 1,
+    "positions": 1
+  },
+  "rows": [
+    "2e12da6df4d3763350c12f1cb72d4e035094f52d1db80ecea03be8f3f79f7f18",
+    "76b6f8c4d1906795b8dbb8552dda94de829a3e7db899365a81979c69474f0cb4"
+  ],
+  "schema": "qwen.pinned-m1-m8-output-crosscheck.v1",
+  "scope": "Aligned outputs of completed compiled M1/M8 controls only; cache allocation shapes differ and boundary state equivalence is not asserted.",
+  "sha256": "224670bc3ea1ea899dfb54045443f2f9c8a42df5b8cabe9a4867dd3cd43f19a3"
+}

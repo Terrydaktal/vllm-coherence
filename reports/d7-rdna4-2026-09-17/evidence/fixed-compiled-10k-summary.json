@@ -1,0 +1,87 @@
+{
+  "corpus": "e6ba30145c4e1325fd681d1ae4d6707524e89e289696a4383ad5d500de1ab1ef",
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 107,
+      "inclusive_tie_set_exact": 10000,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 10000,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 107,
+      "retained_scores_exact": 10000,
+      "set_exact": 10000,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 2694,
+      "inclusive_tie_set_exact": 10000,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 10000,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 2694,
+      "retained_scores_exact": 10000,
+      "set_exact": 10000,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 4345,
+      "inclusive_tie_set_exact": 10000,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 10000,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 4345,
+      "retained_scores_exact": 10000,
+      "set_exact": 10000,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 10000,
+    "positions": 10000
+  },
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 2,
+      "inclusive_tie_set_exact": 23,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 23,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 2,
+      "retained_scores_exact": 23,
+      "set_exact": 23,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 10,
+      "inclusive_tie_set_exact": 23,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 23,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 10,
+      "retained_scores_exact": 23,
+      "set_exact": 23,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 23,
+      "inclusive_tie_set_exact": 23,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 23,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 23,
+      "retained_scores_exact": 23,
+      "set_exact": 23,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 23,
+    "positions": 23
+  },
+  "responses": 23,
+  "scope": "compiled GPU-graph forced-token M1/M8; full BF16 target head; full-vocabulary hashes and top-k; not arbitrary-input or latent-state proof",
+  "sha256": "740f52b749130d91ecb870153a02e8b28c232489c87997423146c2af2d5496f8",
+  "status": "MEASURED"
+}

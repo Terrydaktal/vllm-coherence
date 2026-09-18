@@ -1,0 +1,312 @@
+{
+  "admission": {
+    "arm": "m8",
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      true,
+      true
+    ],
+    "declared_change": {
+      "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": [
+        "0",
+        "1"
+      ],
+      "emulate_precision_casts": [
+        false,
+        true
+      ]
+    },
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "eager",
+      "compiled-no-graphs"
+    ],
+    "normalized_receipts": [
+      [
+        "06ae24c52c32c7b758db25414b6e80eeb64b2c3284bc6c13b29ef4956c6df1a2",
+        "4b35beadfb37d13e376b9e51aaea3972889f043c02a550a4e10ee85a6abd70e4",
+        "2828490aa89c7d36da32bd7a8a592c8a21d9a6bb96f51bae68b00db6019414e2",
+        "7d70df65b27c3d413b469ee8fd3ba43813f32f0e299197c4441efaf1868261f2"
+      ],
+      [
+        "29bbfb4f0b1447cd23e3d53c01eaaf4340f447f3a04ffa81297736fc3d870279",
+        "eeb12656f73ed475379593dae3a1bc8edbf3080b999d2f0a9f31ad7452226c1f",
+        "03e3a907612227dd339d4a9f1fa5ade00abf70d25047eea5b274444bb16e3d93",
+        "6e4ae5b309ba3fde0d8cc69c568357fa34818c7dea481c24b8bbc5887a1c67be"
+      ]
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "observed_compiler_settings": {
+      "emulate_precision_casts": false
+    },
+    "original_receipts": [
+      [
+        "06ae24c52c32c7b758db25414b6e80eeb64b2c3284bc6c13b29ef4956c6df1a2",
+        "4b35beadfb37d13e376b9e51aaea3972889f043c02a550a4e10ee85a6abd70e4",
+        "2828490aa89c7d36da32bd7a8a592c8a21d9a6bb96f51bae68b00db6019414e2",
+        "7d70df65b27c3d413b469ee8fd3ba43813f32f0e299197c4441efaf1868261f2"
+      ],
+      [
+        "29bbfb4f0b1447cd23e3d53c01eaaf4340f447f3a04ffa81297736fc3d870279",
+        "eeb12656f73ed475379593dae3a1bc8edbf3080b999d2f0a9f31ad7452226c1f",
+        "eaf07c14938a665cd08c51d606803b398074c84591fbc21a366a20f3187d5946",
+        "6e4ae5b309ba3fde0d8cc69c568357fa34818c7dea481c24b8bbc5887a1c67be"
+      ]
+    ],
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.precision-casts-intervention-admission.v1",
+    "scope": "Metadata admission modulo one explicit, observed compiler rounding option. Generated kernels may change; this is not a mode-only comparison.",
+    "sha256": "7e704f56b67917e0bfe7ee65d69d720f8e449a48669ca49bdd9153f67553df43",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_DECLARED_INTERVENTION"
+  },
+  "bridges": [
+    "de49c80eb92d34b95decf7013214e2fe0a5132689be7848a1ded6a9ef815b602",
+    "6e3f4c858ea2ef2e534f06f726cab4e78f3c9b8b40e2f1c55885181cb3e06956"
+  ],
+  "captures": {
+    "decode": [
+      "31e4f5048f985c6eefbfca500620cbda170e467e1780ae0ff227e0e31ac6be5a",
+      "9d1924fcee80ae6c2c12841a710f7f4491d851ef3aadbb5da6489c4f3c877eae"
+    ],
+    "prefill": [
+      "12f5769c50fd198e25195439c7a3bf312fb400a76c366c8b3a90986a969b41ca",
+      "02bb21d14754dd3dda11342ffe931ee3ae38015400e516dc9162b7e0c8054053"
+    ]
+  },
+  "layer": 3,
+  "results": {
+    "decode": {
+      "attention_output": {
+        "compared_elements": 1966080,
+        "different_elements": 1335594,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "gate_input": {
+        "compared_elements": 1966080,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "gated_attention_output": {
+        "compared_elements": 1966080,
+        "different_elements": 1282380,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "key_after_normalization": {
+        "compared_elements": 327680,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "key_after_rotation": {
+        "compared_elements": 327680,
+        "different_elements": 30984,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "qkv_projection": {
+        "compared_elements": 4587520,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "query_after_normalization": {
+        "compared_elements": 1966080,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "query_after_rotation": {
+        "compared_elements": 1966080,
+        "different_elements": 184437,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "value": {
+        "compared_elements": 327680,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      }
+    },
+    "prefill": {
+      "attention_output": {
+        "compared_elements": 55296,
+        "different_elements": 16764,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "gate_input": {
+        "compared_elements": 55296,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "gated_attention_output": {
+        "compared_elements": 55296,
+        "different_elements": 15677,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "key_after_normalization": {
+        "compared_elements": 9216,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "key_after_rotation": {
+        "compared_elements": 9216,
+        "different_elements": 289,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "qkv_projection": {
+        "compared_elements": 129024,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "query_after_normalization": {
+        "compared_elements": 55296,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "query_after_rotation": {
+        "compared_elements": 55296,
+        "different_elements": 1836,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "value": {
+        "compared_elements": 9216,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      }
+    }
+  },
+  "rotary_formulae": {
+    "decode": {
+      "key/rne_products/left": {
+        "compared_elements": 327680,
+        "different_elements": 30984,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "key/rne_products/right": {
+        "compared_elements": 327680,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "key/rtz_products/left": {
+        "compared_elements": 327680,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "key/rtz_products/right": {
+        "compared_elements": 327680,
+        "different_elements": 30984,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "query/rne_products/left": {
+        "compared_elements": 1966080,
+        "different_elements": 184437,
+        "exact_positions": 0,
+        "positions": 320
+      },
+      "query/rne_products/right": {
+        "compared_elements": 1966080,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "query/rtz_products/left": {
+        "compared_elements": 1966080,
+        "different_elements": 0,
+        "exact_positions": 320,
+        "positions": 320
+      },
+      "query/rtz_products/right": {
+        "compared_elements": 1966080,
+        "different_elements": 184437,
+        "exact_positions": 0,
+        "positions": 320
+      }
+    },
+    "prefill": {
+      "key/rne_products/left": {
+        "compared_elements": 9216,
+        "different_elements": 289,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "key/rne_products/right": {
+        "compared_elements": 9216,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "key/rtz_products/left": {
+        "compared_elements": 9216,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "key/rtz_products/right": {
+        "compared_elements": 9216,
+        "different_elements": 289,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "query/rne_products/left": {
+        "compared_elements": 55296,
+        "different_elements": 1836,
+        "exact_positions": 1,
+        "positions": 9
+      },
+      "query/rne_products/right": {
+        "compared_elements": 55296,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "query/rtz_products/left": {
+        "compared_elements": 55296,
+        "different_elements": 0,
+        "exact_positions": 9,
+        "positions": 9
+      },
+      "query/rtz_products/right": {
+        "compared_elements": 55296,
+        "different_elements": 1836,
+        "exact_positions": 1,
+        "positions": 9
+      }
+    }
+  },
+  "schema": "qwen.attention-cut-comparison.v1",
+  "scope": "Captured Q/K, rotary outputs, values, attention and gating. Attention state is not captured; inherited differences do not establish an attention kernel defect. No isolated vocabulary or universal claim.",
+  "sha256": "9a0344e3fc94414e011f8ebf62069d8084b2fffd96dc3140472cd820e4bebeba",
+  "status": "COMPARED_CAPTURED_SUB_BOUNDARIES"
+}

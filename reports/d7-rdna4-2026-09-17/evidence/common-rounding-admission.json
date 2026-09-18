@@ -1,0 +1,116 @@
+{
+  "binding": {
+    "base_driver": "45afe12e4bffadad2e39c94b2b0955bea547269646c45f0bb6a181ec7f6037b6",
+    "experiment_driver": "6e4616099257a233bd5aee3dd590fae375d3cd256f560abe78ca56278a07ddd5",
+    "isolated_native_evidence": "5cb6a3df3deed60f991e34523485e36b0ac19bfd37e933931f79b725b5e8c252",
+    "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+    "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+    "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+    "schema": "qwen.rotary-intervention-binding.v1",
+    "sha256": "7e93a4cbaa649b10b1eef36b460bb986b777ffbf197953a2595f070d6f1f9451",
+    "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+  },
+  "captures": [
+    true,
+    true
+  ],
+  "normalized_admission": {
+    "arm": "m8",
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      true,
+      true
+    ],
+    "declared_change": {
+      "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": [
+        "0",
+        "1"
+      ],
+      "emulate_precision_casts": [
+        false,
+        true
+      ]
+    },
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "eager",
+      "compiled-no-graphs"
+    ],
+    "normalized_receipts": [
+      [
+        "3f744e5f236de58d23324e9e14eae6711573d45167990a3bd3be8d0b5a95a0e4",
+        "477334e8395c00ddb900ef25f1c3b3ad2c81870465832344ed631123f6882685",
+        "9f1904eb03a1ee5c2f61acab46c5ef31db1522732da65140ab0e3e05be76c00b",
+        "6eb8804a8a2c51bae992e3336248d059c3ef6fc63210508822b48d3c07582cb0"
+      ],
+      [
+        "29bbfb4f0b1447cd23e3d53c01eaaf4340f447f3a04ffa81297736fc3d870279",
+        "eeb12656f73ed475379593dae3a1bc8edbf3080b999d2f0a9f31ad7452226c1f",
+        "03e3a907612227dd339d4a9f1fa5ade00abf70d25047eea5b274444bb16e3d93",
+        "6e4ae5b309ba3fde0d8cc69c568357fa34818c7dea481c24b8bbc5887a1c67be"
+      ]
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "observed_compiler_settings": {
+      "emulate_precision_casts": false
+    },
+    "original_receipts": [
+      [
+        "3f744e5f236de58d23324e9e14eae6711573d45167990a3bd3be8d0b5a95a0e4",
+        "477334e8395c00ddb900ef25f1c3b3ad2c81870465832344ed631123f6882685",
+        "9f1904eb03a1ee5c2f61acab46c5ef31db1522732da65140ab0e3e05be76c00b",
+        "6eb8804a8a2c51bae992e3336248d059c3ef6fc63210508822b48d3c07582cb0"
+      ],
+      [
+        "29bbfb4f0b1447cd23e3d53c01eaaf4340f447f3a04ffa81297736fc3d870279",
+        "eeb12656f73ed475379593dae3a1bc8edbf3080b999d2f0a9f31ad7452226c1f",
+        "eaf07c14938a665cd08c51d606803b398074c84591fbc21a366a20f3187d5946",
+        "6e4ae5b309ba3fde0d8cc69c568357fa34818c7dea481c24b8bbc5887a1c67be"
+      ]
+    ],
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.precision-casts-intervention-admission.v1",
+    "scope": "Metadata admission modulo one explicit, observed compiler rounding option. Generated kernels may change; this is not a mode-only comparison.",
+    "sha256": "6014b95151f67b8c1c5a49054c087fe0a02eeb3846670631adf448b96bd4fa1e",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_DECLARED_INTERVENTION"
+  },
+  "original_receipts": [
+    [
+      "06ae24c52c32c7b758db25414b6e80eeb64b2c3284bc6c13b29ef4956c6df1a2",
+      "4b35beadfb37d13e376b9e51aaea3972889f043c02a550a4e10ee85a6abd70e4",
+      "2828490aa89c7d36da32bd7a8a592c8a21d9a6bb96f51bae68b00db6019414e2",
+      "7d70df65b27c3d413b469ee8fd3ba43813f32f0e299197c4441efaf1868261f2"
+    ],
+    [
+      "b738f86bdd676b343c4bb53e5b201a8228efd6f4b356d5c94ba58c49ab1b99f4",
+      "477334e8395c00ddb900ef25f1c3b3ad2c81870465832344ed631123f6882685",
+      "9f1904eb03a1ee5c2f61acab46c5ef31db1522732da65140ab0e3e05be76c00b",
+      "6eb8804a8a2c51bae992e3336248d059c3ef6fc63210508822b48d3c07582cb0"
+    ],
+    [
+      "29bbfb4f0b1447cd23e3d53c01eaaf4340f447f3a04ffa81297736fc3d870279",
+      "eeb12656f73ed475379593dae3a1bc8edbf3080b999d2f0a9f31ad7452226c1f",
+      "eaf07c14938a665cd08c51d606803b398074c84591fbc21a366a20f3187d5946",
+      "6e4ae5b309ba3fde0d8cc69c568357fa34818c7dea481c24b8bbc5887a1c67be"
+    ]
+  ],
+  "schema": "qwen.rotary-and-casts-admission.v1",
+  "scope": "RNE RoPE and compiler cast preservation; other controls checked.",
+  "sha256": "e522920145b4982817111f5007dc5efe5c0d34d420eda3fe9698be8649173d2f",
+  "status": "ADMITTED_TWO_DECLARED_INTERVENTIONS"
+}

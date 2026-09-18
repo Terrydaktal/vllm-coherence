@@ -1,0 +1,12 @@
+{
+  "scope": "current upstream kernel and row policy; full upstream integration untested",
+  "source_sha256": "b33fb784c5af8dd16a24d3096dda7a74c0ac4f8e6965b71a17a30dc20aa68b7a",
+  "gpu": "AMD Radeon AI PRO R9700",
+  "counts": {
+    "cases": 32,
+    "original_output_differences": 4,
+    "original_rstd_differences": 1044,
+    "fixed_output_differences": 0,
+    "fixed_rstd_differences": 0
+  }
+}

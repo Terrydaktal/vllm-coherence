@@ -1,0 +1,605 @@
+{
+  "analyzer_sha256": "539dc91396dfe1650b14a6d2d9dd24fdb0b9d894f06eddef50f4eb51e5c5a483",
+  "common": {
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "configuration": {
+      "attention_backend": "R4D",
+      "disable_log_stats": true,
+      "enable_prefix_caching": true,
+      "gpu_memory_utilization": 0.97,
+      "kv_cache_dtype": "fp8",
+      "kv_cache_memory_bytes": 10000000000,
+      "language_model_only": true,
+      "mamba_cache_mode": "align",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "model": "/models/Qwen3.8-27B-Uncensored-MXFP4-awq",
+      "skip_mm_profiling": true,
+      "tensor_parallel_size": 1
+    },
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "flags_except_casts": {
+      "GPU_MAX_HW_QUEUES": null,
+      "HSA_ENABLE_MWAITX": null,
+      "RADIANCE_DYNAMIC_SPEC_WIDTH": null,
+      "RADIANCE_FP8_STREAM": "0",
+      "RADIANCE_GDN_NORMQUANT_FUSION": null,
+      "RADIANCE_MXFP4": "1",
+      "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+      "RADIANCE_MXFP4_DECODE_NT": "1",
+      "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+      "RADIANCE_MXFP4_W4A8": "1",
+      "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+      "RADIANCE_MXFP4_WPERM": "1",
+      "RADIANCE_NORMQUANT_FUSION": "0",
+      "RADIANCE_PREFILL_FP8": null,
+      "RADIANCE_TILED_PREFILL": null,
+      "RADIANCE_VERIFY_HEAD": "0",
+      "RADIANCE_VERIFY_HEAD_TOPK": null,
+      "VLLM_ATTENTION_BACKEND": null,
+      "VLLM_ROCM_USE_AITER": "1",
+      "VLLM_USE_V2_MODEL_RUNNER": "1"
+    },
+    "kernel": "7.1.8-1-cachyos",
+    "logical_capacity": {
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2
+    },
+    "packages": {
+      "aiter": null,
+      "libr4d": null,
+      "numpy": "2.3.5",
+      "torch": "2.12.0+rocm7.14",
+      "triton": "3.7.1+gitf0b55c07",
+      "vllm": "0.28.0"
+    },
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    }
+  },
+  "comparisons": {
+    "final_compiled_eager_m8": {
+      "cases": [
+        "final-eager-m8",
+        "final-m8"
+      ],
+      "decode": {
+        "1": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 320,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "ranked_exact": 320,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 320,
+          "set_exact": 320,
+          "set_exact_percent": 100.0
+        },
+        "10": {
+          "candidate_boundary_tied": 89,
+          "inclusive_tie_set_exact": 320,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "ranked_exact": 320,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 89,
+          "retained_scores_exact": 320,
+          "set_exact": 320,
+          "set_exact_percent": 100.0
+        },
+        "20": {
+          "candidate_boundary_tied": 139,
+          "inclusive_tie_set_exact": 320,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "ranked_exact": 320,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 139,
+          "retained_scores_exact": 320,
+          "set_exact": 320,
+          "set_exact_percent": 100.0
+        },
+        "full_logits_exact": 320,
+        "positions": 320
+      },
+      "prefill": {
+        "1": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "10": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "20": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 1,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "full_logits_exact": 1,
+        "positions": 1
+      }
+    },
+    "fix1_compiled_eager_m8": {
+      "cases": [
+        "fix1-eager-m8",
+        "fix1-m8"
+      ],
+      "decode": {
+        "1": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 317,
+          "mean_overlap_percent": 99.6875,
+          "mean_overlap_tokens": 0.996875,
+          "ranked_exact": 319,
+          "ranked_exact_percent": 99.6875,
+          "reference_boundary_tied": 1,
+          "retained_scores_exact": 65,
+          "set_exact": 319,
+          "set_exact_percent": 99.6875
+        },
+        "10": {
+          "candidate_boundary_tied": 93,
+          "inclusive_tie_set_exact": 121,
+          "mean_overlap_percent": 93.28125,
+          "mean_overlap_tokens": 9.328125,
+          "ranked_exact": 14,
+          "ranked_exact_percent": 4.375,
+          "reference_boundary_tied": 83,
+          "retained_scores_exact": 0,
+          "set_exact": 146,
+          "set_exact_percent": 45.625
+        },
+        "20": {
+          "candidate_boundary_tied": 125,
+          "inclusive_tie_set_exact": 56,
+          "mean_overlap_percent": 93.3125,
+          "mean_overlap_tokens": 18.6625,
+          "ranked_exact": 0,
+          "ranked_exact_percent": 0.0,
+          "reference_boundary_tied": 135,
+          "retained_scores_exact": 0,
+          "set_exact": 66,
+          "set_exact_percent": 20.625
+        },
+        "full_logits_exact": 0,
+        "positions": 320
+      },
+      "prefill": {
+        "1": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 0,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "10": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "ranked_exact": 0,
+          "ranked_exact_percent": 0.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 0,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "20": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 0,
+          "mean_overlap_percent": 95.0,
+          "mean_overlap_tokens": 19.0,
+          "ranked_exact": 0,
+          "ranked_exact_percent": 0.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 0,
+          "set_exact": 0,
+          "set_exact_percent": 0.0
+        },
+        "full_logits_exact": 0,
+        "positions": 1
+      }
+    },
+    "fix1_compiled_m8_m1": {
+      "cases": [
+        "fix1-m1",
+        "fix1-m8"
+      ],
+      "decode": {
+        "1": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 320,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "ranked_exact": 320,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 1,
+          "retained_scores_exact": 320,
+          "set_exact": 320,
+          "set_exact_percent": 100.0
+        },
+        "10": {
+          "candidate_boundary_tied": 93,
+          "inclusive_tie_set_exact": 320,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "ranked_exact": 320,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 93,
+          "retained_scores_exact": 320,
+          "set_exact": 320,
+          "set_exact_percent": 100.0
+        },
+        "20": {
+          "candidate_boundary_tied": 125,
+          "inclusive_tie_set_exact": 320,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "ranked_exact": 320,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 125,
+          "retained_scores_exact": 320,
+          "set_exact": 320,
+          "set_exact_percent": 100.0
+        },
+        "full_logits_exact": 320,
+        "positions": 320
+      },
+      "prefill": {
+        "1": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "10": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "20": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 1,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "full_logits_exact": 1,
+        "positions": 1
+      }
+    },
+    "original_compiled_m8_m1": {
+      "cases": [
+        "original-m1",
+        "original-m8"
+      ],
+      "decode": {
+        "1": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 315,
+          "mean_overlap_percent": 98.4375,
+          "mean_overlap_tokens": 0.984375,
+          "ranked_exact": 315,
+          "ranked_exact_percent": 98.4375,
+          "reference_boundary_tied": 1,
+          "retained_scores_exact": 58,
+          "set_exact": 315,
+          "set_exact_percent": 98.4375
+        },
+        "10": {
+          "candidate_boundary_tied": 87,
+          "inclusive_tie_set_exact": 133,
+          "mean_overlap_percent": 93.59375,
+          "mean_overlap_tokens": 9.359375,
+          "ranked_exact": 18,
+          "ranked_exact_percent": 5.625,
+          "reference_boundary_tied": 95,
+          "retained_scores_exact": 0,
+          "set_exact": 157,
+          "set_exact_percent": 49.0625
+        },
+        "20": {
+          "candidate_boundary_tied": 136,
+          "inclusive_tie_set_exact": 65,
+          "mean_overlap_percent": 93.96875,
+          "mean_overlap_tokens": 18.79375,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 0.3125,
+          "reference_boundary_tied": 155,
+          "retained_scores_exact": 0,
+          "set_exact": 83,
+          "set_exact_percent": 25.9375
+        },
+        "full_logits_exact": 0,
+        "positions": 320
+      },
+      "prefill": {
+        "1": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "ranked_exact": 1,
+          "ranked_exact_percent": 100.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 1,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "10": {
+          "candidate_boundary_tied": 0,
+          "inclusive_tie_set_exact": 1,
+          "mean_overlap_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "ranked_exact": 0,
+          "ranked_exact_percent": 0.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 0,
+          "set_exact": 1,
+          "set_exact_percent": 100.0
+        },
+        "20": {
+          "candidate_boundary_tied": 1,
+          "inclusive_tie_set_exact": 0,
+          "mean_overlap_percent": 95.0,
+          "mean_overlap_tokens": 19.0,
+          "ranked_exact": 0,
+          "ranked_exact_percent": 0.0,
+          "reference_boundary_tied": 0,
+          "retained_scores_exact": 0,
+          "set_exact": 0,
+          "set_exact_percent": 0.0
+        },
+        "full_logits_exact": 0,
+        "positions": 1
+      }
+    }
+  },
+  "runs": {
+    "final-eager-m8": {
+      "execution_mode": "eager",
+      "graph_replays": 0,
+      "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+      "physical_capacity": {
+        "block_size": 1648,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 370
+      },
+      "precision_casts": true,
+      "receipts": {
+        "config": "f00707d576963788f7ec4a9ea0d2c35d3afbf41900f8a2029778dcb841d407b8",
+        "measurement": "c1be58295f478e3a2ce6c5a9376767fff6b2b8b2c5b67418513f82f10c43bfa0",
+        "pass": "d016b839a31c84642c65e197cfbc042ec9231e95d03d2d390cc5f092ed121d1f",
+        "rows": "af8136da672438ae405cc01190cac76cc64d38fc9c0b752f3022683301dbfaf6",
+        "runtime": "6ed4e55b50eef91fad1adccd7000478a3bff412bc9002b25fdb89c4ce4749160",
+        "summary": "5d85a61b83a018a7154ae6953cc270db4dd0de834ae09f60239041ab7804abd3"
+      },
+      "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+      "rotary_intervention": {
+        "calls": 1344,
+        "identity": {
+          "installed_before_load": true,
+          "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+          "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+          "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+          "schema": "qwen.rotary-rne-worker.v1",
+          "scope": "Eager native MRoPE product rounding only; no installed files changed.",
+          "sha256": "17aa5ab70f2e12df93221501012bdbfc46c18b02f790ca3f8f31b6122e0075b2",
+          "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+        }
+      },
+      "target_rows": 8
+    },
+    "final-m8": {
+      "execution_mode": "compiled",
+      "graph_replays": 2600,
+      "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+      "physical_capacity": {
+        "block_size": 1648,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 370
+      },
+      "precision_casts": true,
+      "receipts": {
+        "config": "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "measurement": "6d1646cedc86f6740545d54fb853b03301bb7c833cb0a208e6580e6812aae17a",
+        "pass": "9805dfea263cd60a1e4a0af6b53df6a677424bd5b4f2c355ddd84d4408b6c734",
+        "rows": "5c54e2a21c2a29f3d47039cdc163d53b4fbcbe3f426c62cb351f989732cd47e8",
+        "runtime": "f4c5e7c9ff99bc14b42c353b8a7fca61ee28e1434e70b7c12d1e23ce6b5b960a",
+        "summary": "2263785745b0330329c0676fd2b7a1d851c614dc17645a95f565884087e5bb28"
+      },
+      "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+      "rotary_intervention": null,
+      "target_rows": 8
+    },
+    "fix1-eager-m8": {
+      "execution_mode": "eager",
+      "graph_replays": 0,
+      "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+      "physical_capacity": {
+        "block_size": 1648,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 370
+      },
+      "precision_casts": false,
+      "receipts": {
+        "config": "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+        "measurement": "1c9e0352610e1ce7f092712097c1c1025aa0b1104ed4211eff6aa8ff50dd043f",
+        "pass": "93f5045bb6fa1ba088f5e20645e0466b689c12acd8d39e660774316696b24979",
+        "rows": "3466ebd86100f46e83f9885df916bc7951586845c0eb07bf1f660426598ad1ea",
+        "runtime": "61400fb169d03b5ccc363b8a93336b4c7d11adacba2647edfe9b39ffe04814a1",
+        "summary": "57a10d275e14f6fa701294467f4132734520d760564e51da14ffbcefc75c0838"
+      },
+      "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+      "rotary_intervention": null,
+      "target_rows": 8
+    },
+    "fix1-m1": {
+      "execution_mode": "compiled",
+      "graph_replays": 20800,
+      "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+      "physical_capacity": {
+        "block_size": 1568,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 194
+      },
+      "precision_casts": false,
+      "receipts": {
+        "config": "65959590a7b2d0be9e18322be47f135adae2c562f301ba66c27a4324427b85f1",
+        "measurement": "befdc9f8b7b6daccb594f2dd560f9d27eae7fdb4ddc431795cbdbef0c57af48d",
+        "pass": "dffb73a27bf7d73ea8160cd1ea58cd8a29eb1904dd86f7cef401e2779f0f5f77",
+        "rows": "4a6c023f377223e9dcb335a24ebd26d6c6c76142091cff3d49846febcce357ec",
+        "runtime": "26bb110274af3903b47b81e7fa687f89d7e3ba53b0fa92473f30de628555d9e4",
+        "summary": "0f3f5386fc9e62c8330b6c847579d7298fac5362e71600eb4ce28b658a5129d4"
+      },
+      "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+      "rotary_intervention": null,
+      "target_rows": 1
+    },
+    "fix1-m8": {
+      "execution_mode": "compiled",
+      "graph_replays": 2600,
+      "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+      "physical_capacity": {
+        "block_size": 1648,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 370
+      },
+      "precision_casts": false,
+      "receipts": {
+        "config": "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "measurement": "6d1646cedc86f6740545d54fb853b03301bb7c833cb0a208e6580e6812aae17a",
+        "pass": "2fc66de87b3ccdb093a9d0352c9e65f0418276309d75a8eeb1a55eeb0a3e965d",
+        "rows": "b70bea578c5b59f85bd449f99124e9d8e84beaf7d4bf1001ad14b87060b20db1",
+        "runtime": "02f0ec5b2c8ead2c99e51f6a62ae4f3e28a3e295acf6f6799f7feda412093f5e",
+        "summary": "67a5f85e00cfa726d3b0a30fb2edf1d1912d78232e5c2a6c8b24e49e431b51df"
+      },
+      "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+      "rotary_intervention": null,
+      "target_rows": 8
+    },
+    "original-m1": {
+      "execution_mode": "compiled",
+      "graph_replays": 20800,
+      "performance": null,
+      "physical_capacity": {
+        "block_size": 1568,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 194
+      },
+      "precision_casts": false,
+      "receipts": {
+        "config": "65959590a7b2d0be9e18322be47f135adae2c562f301ba66c27a4324427b85f1",
+        "measurement": "1670dac8190eed2dbb227dc17cbf11e2c606d2d152ffd3378cf964877772ef4d",
+        "pass": "d70663e4bdedfcbaedd0573b8a55b49ee004e83df750903ee69b91858c7ddbe3",
+        "rows": "9bfee89191c777ae1790c6f5af205cc5acc429675e1d3eb891ca77f022ea3ba5",
+        "runtime": "3bd18dcda1e0de218564c86e1ce4d7bf6ccba81070f55dabfe2a793625c9a9ea",
+        "summary": "3444a8ea9b5f7963f4472f180cee93c38b0df8fb163729e60c3d62ef97a8ffff"
+      },
+      "repair": null,
+      "rotary_intervention": null,
+      "target_rows": 1
+    },
+    "original-m8": {
+      "execution_mode": "compiled",
+      "graph_replays": 2600,
+      "performance": null,
+      "physical_capacity": {
+        "block_size": 1648,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 370
+      },
+      "precision_casts": false,
+      "receipts": {
+        "config": "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "measurement": "616e7db255a1ea9cea22d0cd942cf2fe262c91568c7a51074c10de5d3f9be3b3",
+        "pass": "6cf086c17d32a18563e0f5333530d91dcd132ba3db5da3b90aab4015ea9cac8b",
+        "rows": "f98b65f2d41104af454b369a9cdf990be23a737d0241b3083fa13d9717d54859",
+        "runtime": "18b15be429ea6af5f117ca1bf1d8efdd272f9a02a0e62db7cb89bd3e12353eb8",
+        "summary": "9d7eee47bd6e67dc37287086f82dc372c3b9890aaa55f00ad6d2b4f0d3d08c55"
+      },
+      "repair": null,
+      "rotary_intervention": null,
+      "target_rows": 8
+    }
+  },
+  "schema": "qwen.two-fix-native-comparisons.v1",
+  "scope": "Four whole-model comparisons on 320 aligned decode positions and one prefill prediction. These are not isolated-stage measurements or arbitrary-input proofs.",
+  "sha256": "b4a252cd55c3e2bd7d570926243947bb250115b73b53e2b021cfe4cd2e7d89d5",
+  "status": "MEASURED"
+}

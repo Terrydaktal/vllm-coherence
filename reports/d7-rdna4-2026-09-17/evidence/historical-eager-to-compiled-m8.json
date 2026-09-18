@@ -1,0 +1,212 @@
+{
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 107,
+      "inclusive_tie_set_exact": 9732,
+      "mean_overlap_percent": 98.11,
+      "mean_overlap_tokens": 0.9811,
+      "ranked_exact": 9811,
+      "ranked_exact_percent": 98.11,
+      "reference_boundary_tied": 115,
+      "retained_scores_exact": 1904,
+      "set_exact": 9811,
+      "set_exact_percent": 98.11
+    },
+    "10": {
+      "candidate_boundary_tied": 2694,
+      "inclusive_tie_set_exact": 4256,
+      "mean_overlap_percent": 93.447,
+      "mean_overlap_tokens": 9.3447,
+      "ranked_exact": 756,
+      "ranked_exact_percent": 7.56,
+      "reference_boundary_tied": 2695,
+      "retained_scores_exact": 0,
+      "set_exact": 4845,
+      "set_exact_percent": 48.45
+    },
+    "20": {
+      "candidate_boundary_tied": 4345,
+      "inclusive_tie_set_exact": 1769,
+      "mean_overlap_percent": 93.327,
+      "mean_overlap_tokens": 18.6654,
+      "ranked_exact": 4,
+      "ranked_exact_percent": 0.04,
+      "reference_boundary_tied": 4313,
+      "retained_scores_exact": 0,
+      "set_exact": 2227,
+      "set_exact_percent": 22.27
+    },
+    "full_logits_exact": 0,
+    "positions": 10000
+  },
+  "differences_requiring_control": [
+    "eager runner max_num_seqs=1; compiled runner max_num_seqs=2",
+    "earlier eager repairs versus final performance repairs and compiled dispatch bindings",
+    "eager execution versus Inductor and piecewise GPU graphs"
+  ],
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 2,
+      "inclusive_tie_set_exact": 21,
+      "mean_overlap_percent": 91.30434782608695,
+      "mean_overlap_tokens": 0.9130434782608695,
+      "ranked_exact": 21,
+      "ranked_exact_percent": 91.30434782608695,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 4,
+      "set_exact": 21,
+      "set_exact_percent": 91.30434782608695
+    },
+    "10": {
+      "candidate_boundary_tied": 10,
+      "inclusive_tie_set_exact": 8,
+      "mean_overlap_percent": 96.52173913043478,
+      "mean_overlap_tokens": 9.652173913043478,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 5,
+      "retained_scores_exact": 0,
+      "set_exact": 15,
+      "set_exact_percent": 65.21739130434783
+    },
+    "20": {
+      "candidate_boundary_tied": 23,
+      "inclusive_tie_set_exact": 2,
+      "mean_overlap_percent": 94.1304347826087,
+      "mean_overlap_tokens": 18.82608695652174,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 15,
+      "retained_scores_exact": 0,
+      "set_exact": 4,
+      "set_exact_percent": 17.391304347826086
+    },
+    "full_logits_exact": 0,
+    "positions": 23
+  },
+  "schema": "qwen.historical-eager-to-compiled-m8.v1",
+  "scope": "Earlier repaired eager M8 versus final optimized compiled M8 on the same 23 saved Pi histories; not a same-build mode-only experiment or isolated-stage diagnosis. No new GPU run.",
+  "sha256": "ae4bd67bffd874eadc41c488c93cbcdca23b8bd5ebf02406e348bff6da1fa9c8",
+  "sources": [
+    {
+      "compiled_m8_rows": "5c8eae87611b86fc6d7d6dc82314ddcbd6cf187a095b6065f8ab382ed336cce6",
+      "eager_m8_rows": "d75945377673f65302aa8711a370446bbc270d7554fdd91ee2e5f77ee35979a8",
+      "index": 0
+    },
+    {
+      "compiled_m8_rows": "1a2c2595fcb6621e7598db1264ae93adbb41b41dc3bedbffdc2199da22932a3d",
+      "eager_m8_rows": "3d207bc72bbaeff58218465e48a2df135d92c757c563f99615abb94968462748",
+      "index": 1
+    },
+    {
+      "compiled_m8_rows": "b5ad483e9f2de54e944186ebc9460970e1b1dd5ceed4bc871d7b24292a40feef",
+      "eager_m8_rows": "3551278db8549816b41e5f4ebea15c9e00fe265108940a96c26b6d1e07015f23",
+      "index": 2
+    },
+    {
+      "compiled_m8_rows": "160c18f9d7b491a82ae64bea9f712ac99b63d8ac3ea6d8d4564b493af56a7ead",
+      "eager_m8_rows": "c5e99ce54683f4cb5e43478bb8fde1105872d5b2c8b5b9fde4c6cfd94812f541",
+      "index": 3
+    },
+    {
+      "compiled_m8_rows": "3a37e320307a3b5f3b46eed6ecf502d58db7091d6f013ee21d9b7e7e6ff7cba4",
+      "eager_m8_rows": "927706e0dfdb69b5f5fd0bf86004d220a3ed06d1d7eaa8367380268821673438",
+      "index": 4
+    },
+    {
+      "compiled_m8_rows": "003de3c1608e56a5a771543ca9d8bd28cc55717e2af3808c83608c07b93635f8",
+      "eager_m8_rows": "6d618c47fc16a9d79f5cf3cfa7b4447acd1658b359deaf61c392b987ab556fd4",
+      "index": 5
+    },
+    {
+      "compiled_m8_rows": "4de84329e73f43a92b17b4b7137fde72e2c1e9ef77d0489abf7e9933837eddd9",
+      "eager_m8_rows": "ba5cc8afcceee54a3b52b51a7c145b8d5974089aeb3bf5cad26a3af348cdaa59",
+      "index": 6
+    },
+    {
+      "compiled_m8_rows": "49f3effdec4b2c0f8bbd205e52e25826b28291a427da31929d7489db607a12a1",
+      "eager_m8_rows": "4cf0650010d61953cc1cd6d5a9f7114e2a7dd8085413467a502af34d9a1382c3",
+      "index": 7
+    },
+    {
+      "compiled_m8_rows": "c78ed6e1242fd8f94400006155e754d1320d5788b19d3277ebfbc88e6c2e94e9",
+      "eager_m8_rows": "191aa6cac6bef412ebf49877b683daab4f9f6e0dd7c53e3d878efe09124f3b5f",
+      "index": 8
+    },
+    {
+      "compiled_m8_rows": "9e8541a40b0d87800d3209c8b7e006bfd0f8b2b40ddd8194d0778ab2f400b25a",
+      "eager_m8_rows": "e665d4ea51f18a00f023e3a12a1881dff96e13d6707fb0c99a4279723061a9a0",
+      "index": 9
+    },
+    {
+      "compiled_m8_rows": "128c8908e43cd5a950dfc1c071af568e784f5afc18a310752c859d868251fb9f",
+      "eager_m8_rows": "a7064d81cc8368663bd80970fee4a7b89d664f19d97c9fd29917ab194729ca87",
+      "index": 10
+    },
+    {
+      "compiled_m8_rows": "3f337e56843ef17eb976748c0c661cf5b06fadf6f3adacf33aec3d7d88196e9f",
+      "eager_m8_rows": "6272fc5435687b9556767205e392af714a33bdee729f59b68320319137193197",
+      "index": 11
+    },
+    {
+      "compiled_m8_rows": "19fbb9d2527cf3064327cce739331db8ab71dcc9dac3e27c7a9e8a6b25672dac",
+      "eager_m8_rows": "31eea50a3338b210a30d6406451dc390a9f1b520157519d5b9317c576eab4d74",
+      "index": 12
+    },
+    {
+      "compiled_m8_rows": "769f369465b60b29a39aead181c9be4f144ed021bd91614b5cafc7112f85e875",
+      "eager_m8_rows": "1215453a5871ed4e28d634329660309244b70e0f7b7f294799dd2fba60d84d89",
+      "index": 13
+    },
+    {
+      "compiled_m8_rows": "b84f752a31d80b063c5dd26c32e18c25c978b4950ae8802d90c03d820f0747ec",
+      "eager_m8_rows": "c91bd59eaf22e9a2c2d0d21181456d734abdf5eb9b37daa1e72d4e6ba6683888",
+      "index": 14
+    },
+    {
+      "compiled_m8_rows": "3a0749405ca8cb9f24ad7d3a511c796e6fed9e6973e63fa1e7d23949a5604253",
+      "eager_m8_rows": "78157f6cec4f64efa5bc1721db7ed353dded88c3a85956409140ef2adbb5b1e0",
+      "index": 15
+    },
+    {
+      "compiled_m8_rows": "53a586949db98fb5025444dd131d595d4020348e21ea99150098fb3b1c463608",
+      "eager_m8_rows": "d571f8c7d76756d832554837723779cc8dadbb4e674c9647d7258ddbce400e48",
+      "index": 16
+    },
+    {
+      "compiled_m8_rows": "243ed8f99b6f09bdaed43e333b10f3266c9de8dd72e39474452d0c94a4cfea70",
+      "eager_m8_rows": "b291e360bce9dae2e7a505e77c14c7e14ae481ea6385a99a71bbfcdfa79a7d8d",
+      "index": 17
+    },
+    {
+      "compiled_m8_rows": "4a203885aae9ea54d6df4787d36184234d758f14eaa7554500afe29e2d3a1f0a",
+      "eager_m8_rows": "3bfa2e553baac6d05b20f332080723f4e741cccc9d76a56405cf51dbd5f43e31",
+      "index": 18
+    },
+    {
+      "compiled_m8_rows": "62199858dcccf980603f8fa1be2b56ca36a4743d264f9c7f2aa26a5b91a85786",
+      "eager_m8_rows": "17f5e6583e3c818499c7f99b388f95e4ac2e06c287e9024dda5b63b3a5998ac8",
+      "index": 19
+    },
+    {
+      "compiled_m8_rows": "1e3328b8f692d3aa5b783bd89982df3bd8b2be630cbcb7b159511071a7bdb541",
+      "eager_m8_rows": "43547513310e485a4becb369553c35e6c42b6eb7e51bebe601af1be412e25758",
+      "index": 20
+    },
+    {
+      "compiled_m8_rows": "5bb93187bad3454bbc6f7c7662bc135aa811fe68548c6c7a3a1c13cb9e93d66b",
+      "eager_m8_rows": "faadc1401d2d957782b969c5e9f71ead49a3ab61284bfbdadbc0707e21b8b359",
+      "index": 21
+    },
+    {
+      "compiled_m8_rows": "42fd0446fad85e34a588baefe4132ddea2885b221d0eb088c2327772d06420a2",
+      "eager_m8_rows": "c455e591ee906b8e4bb985b396b1073580e71a2e17e8196ba015c67301926622",
+      "index": 22
+    }
+  ],
+  "status": "COMPARED_SAVED_EVIDENCE",
+  "within_mode_m1_m8_exact": {
+    "compiled": 10000,
+    "eager": 10000
+  }
+}

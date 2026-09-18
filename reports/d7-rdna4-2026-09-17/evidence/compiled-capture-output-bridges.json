@@ -1,0 +1,78 @@
+{
+  "pilot8": {
+    "bridge": {
+      "schema": "qwen.compiled-capture-output-bridge.v1",
+      "status": "MATCHED",
+      "positions": 8,
+      "full_logits_exact": 8,
+      "prefill_exact": true,
+      "same_saved_inputs": true,
+      "release_rows_sha256": "a1dc2c1f486ebe5073182f74cf799b1a10539d8500a5d821a008fad55e85cb78",
+      "captured_rows_sha256": "56a25653ed9c664f4d51f9b0dfcb43d980ab0d3de2d0407551daaf3da0056a48",
+      "capture_manifest_sha256": "28637915d5666a375523ebbce6660f87c39cc58251ee697be34a54a3c947fa17",
+      "reference_fixture_sha256": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+      "capture_fixture_sha256": "7c29c9a2c84cc608ccc8e7ef8b0c8068d1ece18b16b69d1960c34651ebe037c3",
+      "scope": "Observed compiled outputs and position coverage only; not isolated-stage or hidden-state qualification",
+      "sha256": "f762d454b7e87e5f21600ee02df2f70b11f374c508ad7c98084a7b24c4811d21"
+    },
+    "operation_counts": {
+      "inductor/triton_poi_fused_1": 16,
+      "inductor/triton_poi_fused__to_copy_embedding_0": 1,
+      "inductor/triton_poi_fused_add_1": 3,
+      "inductor/triton_poi_fused_add_2": 2,
+      "inductor/triton_poi_fused_add_cat_mul_slice_split_sub_unsqueeze_3": 16,
+      "inductor/triton_poi_fused_add_cat_mul_slice_split_sub_unsqueeze_4": 16,
+      "inductor/triton_poi_fused_arange_bitwise_and_eq_index_lt_remainder_select_split_where_2": 16,
+      "inductor/triton_poi_fused_mul_mxfp4_linear_sigmoid_view_0": 16,
+      "inductor/triton_poi_fused_mul_mxfp4_linear_silu_slice_0": 48,
+      "inductor/triton_poi_fused_mul_mxfp4_linear_silu_slice_1": 16,
+      "qwen_d7_qualified.gdn.default": 48,
+      "qwen_d7_qualified.gemma.default": 33,
+      "qwen_d7_qualified.gemma_residual.default": 128,
+      "radiance.mxfp4_linear.default": 256,
+      "vllm.qwen_gdn_attention_core.default": 48,
+      "vllm.unified_attention_with_output.default": 16,
+      "vllm.unified_kv_cache_update.default": 16
+    },
+    "capture_source_sha256": "a1e38518ed4819b14fcedbe2ff5c2e25e05d1f6b465c13113394ebd35e67db68",
+    "groups": 1
+  },
+  "capture320": {
+    "bridge": {
+      "schema": "qwen.compiled-capture-output-bridge.v1",
+      "status": "MATCHED",
+      "positions": 320,
+      "full_logits_exact": 320,
+      "prefill_exact": true,
+      "same_saved_inputs": true,
+      "release_rows_sha256": "a1dc2c1f486ebe5073182f74cf799b1a10539d8500a5d821a008fad55e85cb78",
+      "captured_rows_sha256": "3a88958e281ddc6b27dd9f7c0cafa99791b918975024a9f9754953182e31249b",
+      "capture_manifest_sha256": "1f08bd4adae7502be3a22f1779a611dadd75ff31849ea12494f9965e7b37abf6",
+      "reference_fixture_sha256": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+      "capture_fixture_sha256": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+      "scope": "Observed compiled outputs and position coverage only; not isolated-stage or hidden-state qualification",
+      "sha256": "78115f6dc8a980b0db9a318a5f66b69dcea1c32e79557be0b1ef161c3e02fab6"
+    },
+    "operation_counts": {
+      "inductor/triton_poi_fused_1": 640,
+      "inductor/triton_poi_fused__to_copy_embedding_0": 40,
+      "inductor/triton_poi_fused_add_1": 120,
+      "inductor/triton_poi_fused_add_2": 80,
+      "inductor/triton_poi_fused_add_cat_mul_slice_split_sub_unsqueeze_3": 640,
+      "inductor/triton_poi_fused_add_cat_mul_slice_split_sub_unsqueeze_4": 640,
+      "inductor/triton_poi_fused_arange_bitwise_and_eq_index_lt_remainder_select_split_where_2": 640,
+      "inductor/triton_poi_fused_mul_mxfp4_linear_sigmoid_view_0": 640,
+      "inductor/triton_poi_fused_mul_mxfp4_linear_silu_slice_0": 1920,
+      "inductor/triton_poi_fused_mul_mxfp4_linear_silu_slice_1": 640,
+      "qwen_d7_qualified.gdn.default": 1920,
+      "qwen_d7_qualified.gemma.default": 1320,
+      "qwen_d7_qualified.gemma_residual.default": 5120,
+      "radiance.mxfp4_linear.default": 10240,
+      "vllm.qwen_gdn_attention_core.default": 1920,
+      "vllm.unified_attention_with_output.default": 640,
+      "vllm.unified_kv_cache_update.default": 640
+    },
+    "capture_source_sha256": "a1e38518ed4819b14fcedbe2ff5c2e25e05d1f6b465c13113394ebd35e67db68",
+    "groups": 40
+  }
+}

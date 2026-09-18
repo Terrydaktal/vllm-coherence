@@ -1,0 +1,34 @@
+{
+  "scope": "Current upstream kernel extraction, BF16 arithmetic helpers and native launch; full vLLM dispatch/build integration untested",
+  "cases": [
+    {
+      "scale": 0.0,
+      "m1_m8_differences": 0,
+      "m4_m8_differences": 0,
+      "graph_differences": 0
+    },
+    {
+      "scale": 0.01,
+      "m1_m8_differences": 0,
+      "m4_m8_differences": 0,
+      "graph_differences": 0
+    },
+    {
+      "scale": 1.0,
+      "m1_m8_differences": 0,
+      "m4_m8_differences": 0,
+      "graph_differences": 0
+    },
+    {
+      "scale": 16.0,
+      "m1_m8_differences": 0,
+      "m4_m8_differences": 0,
+      "graph_differences": 0
+    }
+  ],
+  "positions": 32,
+  "compared_values_per_comparison": 7946240,
+  "source_sha256": "c5ffff8d8a22fbfb7217b6bbe756da0b3fb388fafee9adec36856db703a8cbbe",
+  "gpu": "AMD Radeon AI PRO R9700",
+  "compute_units": 32
+}

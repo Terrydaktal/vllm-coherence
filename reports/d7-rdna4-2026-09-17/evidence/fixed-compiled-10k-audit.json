@@ -1,0 +1,32 @@
+{
+  "arms": {
+    "m1": {
+      "head_shapes": {
+        "(1, 248320)": 10925
+      },
+      "instrumented_replay_seconds": 1458.7500242830429,
+      "positions": 10000,
+      "responses": 23,
+      "target_graph_replays": 650000
+    },
+    "m8": {
+      "head_shapes": {
+        "(1, 248320)": 875,
+        "(8, 248320)": 1250
+      },
+      "instrumented_replay_seconds": 976.5663125439751,
+      "positions": 10000,
+      "responses": 23,
+      "target_graph_replays": 81250
+    }
+  },
+  "corpus": "e6ba30145c4e1325fd681d1ae4d6707524e89e289696a4383ad5d500de1ab1ef",
+  "runtime_receipts": {
+    "m1": "9116f1fc225fcf21b70b14202dd316b621194161687c1dfeeb63d177f47d6e5e",
+    "m8": "a1675f6c7dad28ba40e3985c7066190af9fed39e139b2b6a8e29a261edeb8d2e"
+  },
+  "scope": "evidence integrity, compiled execution, aligned 10K rows and 23 prefills",
+  "sha256": "9c2bc5fdf825c05af3cb4c3ea3ca8e330a21fb1c385eb759c630a2b61b2624e2",
+  "status": "AUDITED",
+  "summary": "740f52b749130d91ecb870153a02e8b28c232489c87997423146c2af2d5496f8"
+}
