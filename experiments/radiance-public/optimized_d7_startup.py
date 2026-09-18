@@ -7,6 +7,7 @@ Restore every binding before the worker admits real requests.
 """
 
 import contextlib
+import os
 
 from qwen_r9700_lab.conformance_instrumentation import HookSet
 from qwen_r9700_lab.conformance_topk import require
@@ -46,6 +47,17 @@ def startup_prefill_compatibility(repairs, torch, attention_impl=None, *, max_to
         require(0 < mixed_qkv.shape[0] <= max_tokens, "unexpected synthetic graph warm-up batch")
         uncaptured()
         counts["synthetic_gdn_calls"] += 1
+        if os.environ.get("QWEN_STOCK_GDN_LAZY") == "1":
+            # The old synthetic speculative operator assumes 8 physical state
+            # columns. A lazy cache has 2. This excluded warm-up boundary may
+            # not mutate that cache through the old ABI. Real requests always
+            # use the corrected adapter restored by the context manager.
+            md = native._metadata(layer)
+            if md is not None and md.num_spec_decodes:
+                output.zero_()
+                layer.__dict__.pop("_radiance_z", None)
+                counts["lazy_synthetic_spec_skips"] = counts.get("lazy_synthetic_spec_skips", 0) + 1
+                return True
         return prefill.original(layer, mixed_qkv, b, a, output)
 
     for name, original in originals.items():

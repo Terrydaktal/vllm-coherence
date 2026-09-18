@@ -1,0 +1,109 @@
+{
+  "schema": "qwen-radiance-release-v1",
+  "release": "1.0.16",
+  "source_repository": "https://github.com/magiccodingman/vllm-radiance",
+  "source_commit": "f295b9ef51ad413a68e4192371e0377741a354ce",
+  "source_archive_sha256": "f9895eaaf47d98863873abbcb7599249c8c1cad0547609eacf6deda713b029c1",
+  "image": "docker.io/magiccodingman/vllm-radiance:1.0.16",
+  "image_digest": "sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
+  "image_id": "4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf",
+  "package_versions": {
+    "vllm": "0.28.0",
+    "torch": "2.12.0+rocm7.14",
+    "triton": "3.7.1+gitf0b55c07",
+    "amd-aiter": "0.1.20",
+    "transformers": "5.15.0",
+    "xgrammar": "0.2.3"
+  },
+  "kernel_hashes": {
+    "radiance_mxfp4_fp8.so": "8c895e15556970efeb325b3930807dbb41d9149058e29c9d9cbe497ecd7dcd51",
+    "r4d.so": "daa7a3bf79d2a1e0a7909a6ed9ddac2f0f3ac74b878569f4eabc2ccae839aecc"
+  },
+  "source_preimages": {
+    "vllm/entrypoints/openai/chat_completion/serving.py": "a2440b6b76ad87de86bcf6fc7061ad5d02ab67c1c3c89ca7de3eeb29aa12aa2f",
+    "vllm/v1/engine/core.py": "f4b1e07b6d91fac1549bc74a5c804e5a88793d663b5dc045c9e455db6550f5ad",
+    "vllm/v1/worker/gpu_worker.py": "5e8faf3e00649289c81c2917dd4557a80b0b351c33295d8e0c4b204a304e6552",
+    "vllm/v1/worker/gpu/model_runner.py": "278c2c33797b15e4f3c623a352d0b4076c9d29a688693353516da21699a0945c",
+    "vllm/v1/core/sched/output.py": "51643386fab3a56b7747aa784ad657833966ebe823acee1f37222e33c1e5696a",
+    "vllm/v1/core/sched/scheduler.py": "f5cf1c10195398c45dfcd5d9ac5bba8f46c9f28311b9e4ea31e1d69516a78191",
+    "vllm/v1/core/kv_cache_manager.py": "2d20c3d98845cfd8d88a2f66b8fc6402ea1fcfbee16879d2364a4a9e45b8fa47",
+    "vllm/v1/core/single_type_kv_cache_manager.py": "dc6d2e64cc4cd8cbb3f4bd77d2d035038658d75b6e52f9ace0cf637a4897f71f",
+    "vllm/v1/kv_cache_interface.py": "932e9175796706506c34c3014cc3c69b146e199426dbbacf19f24056f7332ec3",
+    "vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py": "872dcd8247ee64561ab035c2c56e8bd81eae01b284530d3e1b886ef4eae47246",
+    "vllm/v1/kv_offload/base.py": "8c999cc328d61e8cbaa0bc27b9f2488eb5323218807717ded69e9f6ecdfe7ef4",
+    "vllm/v1/kv_offload/tiering/base.py": "09f82242f462d275aeab96d5092ac82344aa446d23c455b1e990327ac3b0b043",
+    "vllm/v1/kv_offload/tiering/factory.py": "8c8f1c35c3466722bfd48a4a4804044d7f2c5730abb106d83b281b19f1b444b2",
+    "vllm/v1/kv_offload/tiering/fs/manager.py": "772d31bd1b50b1e8ff8c31a7b5819a9fcb759ba5699ffad9d813ddec3dc8672c",
+    "radiance_verifyhead.py": "7fc05ceb76672aa9eae3cd7715046873b6294857c1bf56abbfda322ef4536789",
+    "radiance_drafthead.py": "0de6f82cbf22d7ef6ac254748df60c72b329834fbc839cdb7d8f3cbf337bba92",
+    "torch/cuda/memory.py": "e6da277701a58d2b7c6a50ffe5680abb4a35f9b8f610c60a04a270f2758746e4"
+  },
+  "chat_template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+  "kernel_environment": {
+    "RADIANCE_MXFP4": "1",
+    "RADIANCE_MXFP4_W4A8": "1",
+    "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+    "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+    "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+    "RADIANCE_MXFP4_WPERM": "1",
+    "RADIANCE_MXFP4_DECODE_NT": "1",
+    "RADIANCE_MXFP4_A_TILED_MIN_M": "0",
+    "RADIANCE_GDN_NORM_QUANT": "0",
+    "RADIANCE_NORMQUANT_FUSION": "0",
+    "RADIANCE_FP8_STREAM": "0",
+    "RADIANCE_FAST_DRAFT": "1",
+    "RADIANCE_DRAFT_RERANK": "80",
+    "RADIANCE_VERIFY_HEAD": "1",
+    "RADIANCE_VERIFY_HEAD_MAX_M": "32",
+    "RADIANCE_DYNAMIC_WIDTH": "0",
+    "VLLM_USE_V2_MODEL_RUNNER": "1",
+    "QWEN_STOCK_GDN_LAZY": "0",
+    "RADIANCE_MXFP4_HOIST_QUANT": "1",
+    "RADIANCE_MXFP4_TRACED_QUANT": "0",
+    "RADIANCE_MXFP4_PUREQUANT": "0",
+    "RADIANCE_GDN_LAZY": "0",
+    "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1",
+    "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"
+  },
+  "rollback": {
+    "commit": "27fe00f04e3bdea9de6320b016f625dda90263ff",
+    "runtime_abi": "b34a3997455831069a0294a5cd55c3816f36cfb7a82251122d4d98ef0c05805c",
+    "data_abi": "74aef30706ffab186ee2fb89d3827c9895496918bdfb3d61188196daeced5b94",
+    "launcher_root": "/home/lewis/projects/r9700-public-clean-20260906/qwen3.6-vllm-gfx1201-launchers"
+  },
+  "optimized_d7": {
+    "manifest_sha256": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
+    "state_layout": "existing-nine-slot",
+    "worker": "optimized_d7_worker.OptimizedWorker",
+    "arithmetic": {
+      "repair_sha256": "991ddb0bf613aef9e5dd10c4fc4eb07f158d52ef92d5b3e827f67c315c9babd3",
+      "performance_sha256": "17ecdb689820bd0dba678ca092aa7166cbd71859446122d0fe38875c16dadbaf",
+      "precision_casts": "preserve eager BF16 rounding during compilation",
+      "state_layout": "existing-nine-slot",
+      "target_head": "full BF16 with qualified M4-pair dispatch"
+    },
+    "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-256 output-head selection is approximate and is recorded separately.",
+    "admission_changes": [
+      {
+        "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
+        "old_sha256": "a4b2780ea07ac2996c48c014f5abc4e42454dd62cd706d6920899d2bbaccd66f",
+        "new_sha256": "47d7add2e465e50550172fe1b59ee297d9d995326c1c1e041adff5e509751e0b",
+        "scope": "Admit graph-padded buffers and slice their live query/output prefix; unchanged native attention arithmetic and existing state layout. Earlier numerical evidence covers the parent implementation."
+      }
+    ],
+    "target_head": {
+      "mode": "global256",
+      "candidate_count": 256,
+      "selection": "full-vocabulary INT2 top-256 then BF16-weight rerank",
+      "fallback": "installed corrected full BF16 head with qualified M4-pair dispatch",
+      "approximate": true,
+      "source_sha256": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
+      "cache_state": "unchanged for an identical processed token prefix"
+    },
+    "performance_qualification": {
+      "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",
+      "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
+      "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
+    }
+  }
+}
