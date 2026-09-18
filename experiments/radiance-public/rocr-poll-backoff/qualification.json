@@ -1,0 +1,201 @@
+{
+  "schema": "qwen-rocr-poll-backoff-qualification-v1",
+  "recorded_at": "2026-09-14T23:06:30.672955+00:00",
+  "library_sha256": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda",
+  "runtime_abi": "5050972c884aefe227c416fc824fb8dae6cc2165c3bd36f7274ffa8e7d70d2d3",
+  "data_abi_unchanged": "2ec52392be20945df93b37ee13dc2f605d29bb010b6e0e36d40f5b75d95ac560",
+  "native_events": {
+    "original": {
+      "idle_cpu_percent": 99.6371,
+      "polling": {
+        "callbacks": 200,
+        "p50_us": 0.22,
+        "p99_us": 6.38,
+        "max_us": 7.69
+      },
+      "interrupt": {
+        "callbacks": 200,
+        "p50_us": 0.12,
+        "p99_us": 0.53,
+        "max_us": 0.58
+      },
+      "passed": true
+    },
+    "backoff": {
+      "idle_cpu_percent": 0.523704,
+      "polling": {
+        "callbacks": 200,
+        "p50_us": 148.973,
+        "p99_us": 241.214,
+        "max_us": 251.635
+      },
+      "interrupt": {
+        "callbacks": 200,
+        "p50_us": 148.953,
+        "p99_us": 231.914,
+        "max_us": 251.444
+      },
+      "passed": true
+    }
+  },
+  "live_engine_idle": {
+    "pid": 2117167,
+    "start_ticks": "72731268",
+    "seconds": 2.0000707609578967,
+    "requests_before": 0,
+    "requests_after": 0,
+    "engine_cpu_percent": 1.0,
+    "active_threads": [
+      {
+        "tid": 2117372,
+        "cpu_percent": 0.5,
+        "wchan": "hrtimer_nanosleep",
+        "start": "72732657"
+      },
+      {
+        "tid": 2117411,
+        "cpu_percent": 0.5,
+        "wchan": "__x64_sys_epoll_wait",
+        "start": "72733183"
+      }
+    ]
+  },
+  "flushed_tail_tokens": [
+    195862
+  ],
+  "inference_before": {
+    "generations": [
+      {
+        "index": 0,
+        "seconds": 41.30640257894993,
+        "output_tokens": 128,
+        "tokens_sha256": "bc7709dff59126312e86908f8935c6c30363febc22af348c52a7efebae06d9f2",
+        "usage": {
+          "prompt_tokens": 22,
+          "total_tokens": 150,
+          "completion_tokens": 128,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "created_cache_tokens": null,
+            "multimodal_tokens": null
+          },
+          "completion_tokens_details": null
+        }
+      },
+      {
+        "index": 1,
+        "seconds": 16.989611017052084,
+        "output_tokens": 128,
+        "tokens_sha256": "bc7709dff59126312e86908f8935c6c30363febc22af348c52a7efebae06d9f2",
+        "usage": {
+          "prompt_tokens": 22,
+          "total_tokens": 150,
+          "completion_tokens": 128,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "created_cache_tokens": null,
+            "multimodal_tokens": null
+          },
+          "completion_tokens_details": null
+        }
+      },
+      {
+        "index": 2,
+        "seconds": 1.0154074860038236,
+        "output_tokens": 128,
+        "tokens_sha256": "bc7709dff59126312e86908f8935c6c30363febc22af348c52a7efebae06d9f2",
+        "usage": {
+          "prompt_tokens": 22,
+          "total_tokens": 150,
+          "completion_tokens": 128,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "created_cache_tokens": null,
+            "multimodal_tokens": null
+          },
+          "completion_tokens_details": null
+        }
+      }
+    ],
+    "tool_call_passed": true
+  },
+  "inference_after": {
+    "generations": [
+      {
+        "index": 0,
+        "seconds": 2.5024793799966574,
+        "output_tokens": 128,
+        "tokens_sha256": "041d937b36b36f803677e5e54c4350cb93cea1ce65ae45ad7a9e3dfc964ce4c3",
+        "usage": {
+          "prompt_tokens": 22,
+          "total_tokens": 150,
+          "completion_tokens": 128,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "created_cache_tokens": null,
+            "multimodal_tokens": null
+          },
+          "completion_tokens_details": null
+        }
+      },
+      {
+        "index": 1,
+        "seconds": 15.970724581042305,
+        "output_tokens": 128,
+        "tokens_sha256": "041d937b36b36f803677e5e54c4350cb93cea1ce65ae45ad7a9e3dfc964ce4c3",
+        "usage": {
+          "prompt_tokens": 22,
+          "total_tokens": 150,
+          "completion_tokens": 128,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "created_cache_tokens": null,
+            "multimodal_tokens": null
+          },
+          "completion_tokens_details": null
+        }
+      },
+      {
+        "index": 2,
+        "seconds": 1.0054945360170677,
+        "output_tokens": 128,
+        "tokens_sha256": "041d937b36b36f803677e5e54c4350cb93cea1ce65ae45ad7a9e3dfc964ce4c3",
+        "usage": {
+          "prompt_tokens": 22,
+          "total_tokens": 150,
+          "completion_tokens": 128,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "created_cache_tokens": null,
+            "multimodal_tokens": null
+          },
+          "completion_tokens_details": null
+        }
+      }
+    ],
+    "tool_call_passed": true
+  },
+  "greedy_hash_matches_across_restart": false,
+  "greedy_equivalence": "UNPROVED: differing pre/post token hashes; separate runtime starts and concurrent chat activity. Do not attribute the difference to backoff or dismiss it as harmless without further isolation.",
+  "checks": {
+    "cpu_backoff_ctest": "passed",
+    "existing_frontend_admission_tests": 27,
+    "shellcheck": "passed",
+    "shfmt": "passed",
+    "ruff": "passed",
+    "source_binary_and_manifest_pins": "passed"
+  },
+  "recipe_files": {
+    "CMakeLists.txt": "423be9d949c33a4a2b7fa63a99eb09e3f12009f19001396a059dd0b7991035d8",
+    "async-events-backoff.patch": "006d647e34ca098e1f72c61e1ec4174c22dad2fe4d2fdc4659443a7b42fc1e26",
+    "async_event_smoke.cpp": "33e686b229cfb816455226172cb8a47c6c243e3ab2605e238d8ff132cded5ae8",
+    "build.sh": "e768dacacbec2727cdd4a96e993910a1719175bf89a28a357ee3ae5f93fa6e1a",
+    "inference_smoke.py": "9577d8e75067ce8a8654797b89a8b868fd65925bbd7b79598674a294ee308448",
+    "poll_backoff_test.cpp": "1a6bf635efe4e0266a8a935b0eadb36c7dfae5265a97be3958f4c5b828b71ac8",
+    "runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138",
+    "toolchain/clang/ClangConfig.cmake": "9c79529cce39c19168a0bc6eeee2ea69bf1d2b673d77b7b01857f15014a80e3c",
+    "toolchain/llvm/LLVMConfig.cmake": "a481b5580988ccf74818d22582eb1fb3700160f991bc796d26831d551a58b2c1"
+  },
+  "privacy": "Synthetic requests only. No private transcript, summary or token IDs read.",
+  "live_status": "HTTP health 200; expected library mapped in EngineCore; generation and forced tool call completed."
+}
