@@ -1,0 +1,12 @@
+--- a/vllm/parser/engine/parser_engine_config.py
++++ b/vllm/parser/engine/parser_engine_config.py
+@@ -96,6 +96,9 @@
+     # Reject tool calls whose names are absent from the request tools.
+     validate_tool_names: bool = False
+ 
++    # Commit a tool opener only after its function-name marker is observed.
++    validate_tool_preamble: bool = False
++
+     @cached_property
+     def terminal_defs(self):
+         from vllm.parser.engine.incremental_lexer import terminals_from_literals
