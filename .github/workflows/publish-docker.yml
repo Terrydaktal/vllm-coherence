@@ -1,0 +1,2 @@
+# GitHub Actions intentionally disabled.
+# Docker publishing is handled exclusively by .gitlab-ci.yml on GitLab.

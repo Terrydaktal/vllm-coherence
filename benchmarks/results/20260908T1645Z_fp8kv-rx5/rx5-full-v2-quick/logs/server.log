@@ -1,0 +1,752 @@
+
+[1;38;5;39m┌─[ RADIANCE · GPU TOPOLOGY & BANDWIDTH (rocm-bandwidth-test) ]──[0m
+..................................................................
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test (rocm_bandwidth -a + rocm_bandwidth -A)
+
+
+          Device: 0,  AMD Ryzen 5 9600X 6-Core Processor
+          Device: 1,  AMD Radeon AI PRO R9700,  GPU-c0ce1236bf8e5298,  03:0.0
+          Device: 2,  AMD Radeon AI PRO R9700,  GPU-bd5f75146909555f,  07:0.0
+          Device: 3,  AMD Radeon Graphics,  GPU-XX,  7f:0.0
+
+          Inter-Device Access
+
+          D/D       0         1         2         3         
+
+          0         1         1         1         1         
+
+          1         1         1         1         1         
+
+          2         1         1         1         1         
+
+          3         1         1         1         1         
+
+
+          Inter-Device Numa Distance
+
+          D/D       0         1         2         3         
+
+          0         0         20        20        20        
+
+          1         20        0         40        40        
+
+          2         20        40        0         40        
+
+          3         20        40        40        0         
+
+
+          Unidirectional copy peak bandwidth GB/s
+
+          D/D       0           1           2           3           
+
+          0         N/A         28.743      28.746      32.802      
+
+          1         28.199      378.713     28.198      28.199      
+
+          2         28.198      28.198      408.995     28.198      
+
+          3         32.896      16.331      16.348      16.556      
+
+
+          Bidirectional copy peak bandwidth GB/s
+
+          D/D       0           1           2           3           
+
+          0         N/A         50.719      51.085      33.113      
+
+          1         50.719      N/A         55.643      32.666      
+
+          2         51.085      55.643      N/A         32.674      
+
+          3         33.113      32.666      32.674      N/A         
+[1;38;5;39m└─[ end bandwidth report ]──────────────────────────────[0m
+[38;5;39;1m[0m
+[38;5;39;1m██████╗  █████╗ ██████╗ ██╗ █████╗ ███╗   ██╗ ██████╗███████╗[0m
+[38;5;39;1m██╔══██╗██╔══██╗██╔══██╗██║██╔══██╗████╗  ██║██╔════╝██╔════╝[0m
+[38;5;39;1m██████╔╝███████║██║  ██║██║███████║██╔██╗ ██║██║     █████╗[0m
+[38;5;39;1m██╔══██╗██╔══██║██║  ██║██║██╔══██║██║╚██╗██║██║     ██╔══╝[0m
+[38;5;39;1m██║  ██║██║  ██║██████╔╝██║██║  ██║██║ ╚████║╚██████╗███████╗[0m
+[38;5;39;1m╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝╚══════╝[0m
+[2m  vLLM inference server · AMD Radeon AI PRO R9700 · gfx1201 / RDNA4[0m
+[2m  radiance [0m[38;5;39mv0.9.3-dev.vllm0.28.0-r4d0.5.0-mxfp4.rx4.dflash2.xgrammar.openobj.kvoffload.restore2[0m
+
+[38;5;39;1m───[ GPUs ]──────────────────────────────────────────────────────[0m
+  detected : [32;1m2[0m GPU(s)[2m  (HIP_VISIBLE_DEVICES=0,1)[0m
+  [0] AMD Radeon AI PRO R9700    gfx1201    31.9 GiB   [32;1m✓ gfx1201[0m
+  [1] AMD Radeon AI PRO R9700    gfx1201    31.9 GiB   [32;1m✓ gfx1201[0m
+  arch check : [32;1mPASS[0m [2m(2/2 gfx1201)[0m
+  P2P access : [32;1mENABLED[0m   0↔1 [32;1m✓[0m
+
+[38;5;39;1m───[ RADIANCE optimizations ]────────────────────────────────────[0m
+  [2mfeature toggles (set to 0 to disable):[0m
+    [32;1mON [0m RADIANCE_USE_R4D           [2mhand-written gfx1201 kernels: attention, gated delta net, vision, all-reduce, DFlash GEMMs[0m
+    [32;1mON [0m RADIANCE_USE_R4D_GDN       [2mR4D gated-delta-net prefill and speculative-decode path[0m
+    [32;1mON [0m RADIANCE_USE_R4D_AR        [2mP2P one-shot all-reduce for TP=2, byte-identical to RCCL[0m
+    [32;1mON [0m RADIANCE_USE_R4D_AR_QUANT  [2mcompressed all-reduce payload for large messages: rotated 6-bit (on; not RCCL-identical)[0m
+    [32;1mON [0m RADIANCE_SKINNY_GEMM       [2mmeasured BF16 skinny GEMMs; use 'all' only as an explicit experiment[0m
+    [32;1mON [0m RADIANCE_GDN_META          [2mbyte-identical low-overhead GDN metadata construction[0m
+    [32;1mON [0m RADIANCE_GDN_SHARED_BUILD  [2mshare speculative GDN metadata work across equivalent KV groups[0m
+    [32;1mON [0m RADIANCE_TOPK_TRITON_MIN_ROWS [2mTriton top-k/top-p threshold on gfx1201[0m
+    [32;1mON [0m RADIANCE_TOPK_COMPOSITE    [2mmulti-block small-k sampling mask (KCAP-controlled)[0m
+    [32;1mON [0m RADIANCE_MXFP4             [2mnative gfx1201 Quark/OCP MXFP4 routing (opt-in)[0m
+    [32;1mON [0m RADIANCE_MXFP4_W4A8        [2mpacked MXFP4 weights x dynamic FP8 activations via RDNA4 WMMA[0m
+    [32;1mON [0m RADIANCE_MXFP4_WPERM       [2mfragment-order MXFP4 weights for the decode path[0m
+    [32;1mON [0m RADIANCE_MXFP4_DECODE_NT   [2mnontemporal decode weight loads (requires WPERM)[0m
+    [32;1mON [0m RADIANCE_MXFP4_A_TILED_MIN_M [2mfragment-tiled activation prefill threshold (requires FP8 stream)[0m
+    [33;1mOFF[0m RADIANCE_GDN_NORM_QUANT    [2mfused GDN norm, gate, and per-token FP8 quantization[0m
+    [32;1mON [0m RADIANCE_NORMQUANT_FUSION  [2mRX4 traced activation-quant profile (MXFP4 W4A8 only)[0m
+    [32;1mON [0m RADIANCE_FP8_STREAM        [2mRX4 TP2 AR + residual + RMSNorm + FP8 stream fusion[0m
+    [33;1mOFF[0m RADIANCE_QUARK_BF16_MTP    [2mload a verified BF16 MTP submodule outside the global Quark recipe[0m
+    [32;1mON [0m RADIANCE_PRESHUFFLE        [2mpreshuffled AITER FP8 blockscale GEMM[0m
+    [32;1mON [0m RADIANCE_FUSE_RMS_QUANT    [2mfold group-FP8 quant into the RMSNorm epilogue[0m
+    [32;1mON [0m RADIANCE_DYNAMIC_DRAFT     [2mper-request MTP draft-depth controller (needs speculative mtp)[0m
+    [32;1mON [0m RADIANCE_FAST_DRAFT        [2mINT2 exact-rerank head plus DFlash runtime W4 drafter (opt-in)[0m
+
+  [2mdynamic drafting (RADIANCE_DYNAMIC_DRAFT):[0m
+        [2mper-slot confidence gate: draft while cum. confidence >= TAU, take a free-win[0m
+        [2mn-gram, else verify; batch schedule caps serial MTP forwards at concurrency.[0m
+        [2m·[0m RADIANCE_DRAFT_SCHEDULE = [38;5;39m1:8,2:7,4:6,8:5,16:4[0m  [2mbatch-size MTP-forward ceiling (bs:max_depth, carry-forward)[0m
+        [2m·[0m RADIANCE_DRAFT_TAU = [38;5;39m0.28[0m  [2mconfidence-product stop threshold[0m
+
+  [2mRX4 sampling / DFlash controls:[0m
+        [2m·[0m RADIANCE_TOPK_COMPOSITE_KCAP = [38;5;39m64[0m  [2mlargest top-k routed to the composite sampler[0m
+        [2m·[0m RADIANCE_DFLASH_SELECTOR_TOPK = [38;5;39m[0m  [2m0/unset preserves the checkpoint selector width[0m
+
+  [2mNUMA binding (RADIANCE_NUMA_BIND / --numa-bind):[0m
+        [2moff (set =auto or pass --numa-bind to pin to the GPU-local node)[0m
+
+  [2mstartup:[0m
+        [2m·[0m RADIANCE_RUN_BWTEST = [38;5;39m1[0m  [2mGPU topology + bandwidth sweep at startup (on; backgrounded, ~1 s; set 0 to skip)[0m
+        [2m·[0m RADIANCE_BANNER_PLAIN = [38;5;39m0[0m  [2mdisable ANSI color (also NO_COLOR)[0m
+
+  [2mcalibration / persisted tuning (opt-in):[0m
+        [2m·[0m FP8-KV scales = [2mcheckpoint/default[0m
+        [2m·[0m TunableOp = [2moff[0m
+
+  [2mbaked-in (always on; correctness + GEMM path):[0m
+    [32;1m•[0m block-FP8 GEMM dispatcher; preshuffle / AITER split-K / generic + tuned fp8-configs
+    [32;1m•[0m tuned fused-MoE Triton configs for fine-grained MoE (Qwen3.6-35B-A3B E=256,N=256; ~-12% TTFT prefill)
+    [32;1m•[0m bf16 / auto KV cache attention fit + tune (fits the RDNA4 64 KiB LDS at head_size 256)
+    [32;1m•[0m amdsmi gfx1201 GPU enumeration fix (device_count / platform detect)
+    [32;1m•[0m upstream-native RDNA4 AITER routing (Triton paths only; CDNA CK/MFMA/ASM stay gated)
+    [32;1m•[0m upstream-native RDNA4 sampler routing (no legacy broad AITER gate)
+    [32;1m•[0m MTP drafter unpad fix (enables disable_padded_drafter_batch single-stream path)
+    [32;1m•[0m tool-parser streaming vs non-streaming consistency (vLLM #47137)
+    [32;1m•[0m from_json Jinja filter for tool-calling chat templates
+
+  [2mAITER routing (VLLM_ROCM_USE_AITER*):[0m
+    [32;1mAITER=1[0m  [32;1mAITER_UATTN=1[0m  [2mAITER_MHA=0[0m  [2mAITER_MLA=0[0m  [2mAITER_MOE=0[0m  [2mAITER_LINEAR=0[0m  [2mAITER_RMSNORM=0[0m  [2mAITER_FP8BMM=0[0m
+
+[38;5;39;1m───[ component versions ]────────────────────────────────────────[0m
+    radiance      [38;5;39m0.9.3-dev.vllm0.28.0-r4d0.5.0-mxfp4.rx4.dflash2.xgrammar.openobj.kvoffload.restore2[0m
+    vllm          [38;5;39m0.28.0[0m
+    torch         [38;5;39m2.12.0+rocm7.14[0m
+    torchvision   [38;5;39m0.27.1+df56172[0m
+    triton        [38;5;39m3.7.1[0m
+    aiter         [38;5;39m0.1.20[0m
+    transformers  [38;5;39m5.15.0[0m
+    amdsmi        [38;5;39m26.5.0+2b22ab01[0m
+    hip           [38;5;39m7.14.60850[0m
+    rocm          [38;5;39m7.14.0[0m
+    python        [38;5;39m3.12.3[0m
+
+  [2mGPU topology + bandwidth sweep runs in the background; report follows below.[0m
+[38;5;39;1m──────────────────────────────────────────────────────────────[0m
+
+[radiance.gemm] skinny GEMM kernel ENABLED for M in [6,64]: 256x2048
+[aiter] [pid=1 pname=MainProcess] start build [module_aiter_core] under /opt/vllm/lib/python3.12/site-packages/aiter/jit/build/module_aiter_core
+[aiter] Current hipcc not support: -mllvm -amdgpu-coerce-illegal-types=1, skip it.
+[aiter] [pid=1 pname=MainProcess] [32mfinish build [module_aiter_core], cost 12.5s [0m
+[aiter] import [module_aiter_core] under /opt/vllm/lib/python3.12/site-packages/aiter/jit/module_aiter_core.so
+[radiance.w4] 4-bit drafter hook installed
+[radiance.w4] bf16 drafter hook installed
+[radiance] preshuffle weight-shuffle-at-load hook installed
+[radiance] attn tuned-config override installed on 2 module aliases
+[radiance] fast-reduce hook armed (RADIANCE_USE_R4D_AR=1, all_reduce wrap)
+[radiance.draft] RADIANCE_DYNAMIC_DRAFT=ON  controller=policy  tau=0.28  schedule=1:8,2:7,4:6,8:5,16:4  (GPU-resident capture + n-gram matcher; per-slot confidence gate short-circuits the forward loop)
+[radiance.gdn] gdn_chunk_scan ENABLED (head_k 128, head_v 128, chunk 64; replaces wy + delta_h + chunk_o)
+[radiance] int2 draft head armed (RADIANCE_FAST_DRAFT)
+[radiance.vit] head_dim-72 attention installed
+[radiance.vit] Gemma4 vision attention installed (head_dim 72)
+[ERROR] `min_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+[ERROR] `max_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:333] 
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:333]        █     █     █▄   ▄█
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:333]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.28.0
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:333]   █▄█▀ █     █     █     █  model   /models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:333]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:333] 
+(APIServer pid=1) INFO 09-08 17:14:50 [api_utils.py:272] non-default args: {'model_tag': '/models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd', 'enable_auto_tool_choice': True, 'tool_call_parser': 'hermes', 'enable_tokenizer_info_endpoint': True, 'host': '0.0.0.0', 'model': '/models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd', 'max_model_len': 8192, 'served_model_name': ['Qwen3.8-27B-Quark-AWQ-MXFP4'], 'attention_backend': 'R4D', 'tensor_parallel_size': 2, 'gpu_memory_utilization': 0.85, 'kv_cache_dtype': 'fp8', 'enable_prefix_caching': False, 'language_model_only': True, 'max_num_batched_tokens': 4096, 'max_num_seqs': 8, 'async_scheduling': False, 'speculative_config': {'method': 'dflash', 'model': '/models/Qwen3.8-27B-DFlash2-FP8-tcclaviger', 'num_speculative_tokens': 7, 'draft_tensor_parallel_size': 2, 'attention_backend': 'TRITON_ATTN', 'max_model_len': 8192, 'disable_padded_drafter_batch': True}, 'compilation_config': {'mode': None, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': [], 'ir_enable_torch_wrap': None, 'splitting_ops': None, 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': None, 'compile_ranges_endpoints': None, 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.PIECEWISE: 1>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': None, 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': None, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': None, 'static_all_moe_layers': []}}
+(APIServer pid=1) INFO 09-08 17:15:05 [model.py:672] Resolved architecture: Qwen3_5ForConditionalGeneration
+(APIServer pid=1) INFO 09-08 17:15:05 [model.py:1965] Using max model len 8192
+(APIServer pid=1) INFO 09-08 17:15:05 [registry.py:141] All limits of multimodal modalities supported by the model are set to 0, running in text-only mode.
+(APIServer pid=1) INFO 09-08 17:15:05 [model.py:875] Disabled mm_prefix attention mode because multimodal inputs are configuration-disabled. Attention backends without mm_prefix support may now be selected.
+(APIServer pid=1) INFO 09-08 17:15:05 [cache.py:282] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+(APIServer pid=1) INFO 09-08 17:15:20 [model.py:672] Resolved architecture: DFlash2DraftModel
+(APIServer pid=1) INFO 09-08 17:15:20 [model.py:1965] Using max model len 8192
+(APIServer pid=1) INFO 09-08 17:15:20 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=4096.
+(APIServer pid=1) INFO 09-08 17:15:20 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=1) WARNING 09-08 17:15:20 [vllm.py:1862] max_num_scheduled_tokens is set to 4096 based on the speculative decoding settings. This may lead to suboptimal performance. Consider increasing max_num_batched_tokens to accommodate the additional draft token slots, or decrease num_speculative_tokens.
+(APIServer pid=1) INFO 09-08 17:15:20 [compilation.py:329] Enabled custom fusions: norm_quant, act_quant
+(APIServer pid=1) WARNING 09-08 17:15:22 [rocm.py:134] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+WARNING 09-08 17:15:24 [rocm.py:134] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+[radiance.gemm] skinny GEMM kernel ENABLED for M in [6,64]: 256x2048
+(EngineCore pid=580) [aiter] import [module_aiter_core] under /opt/vllm/lib/python3.12/site-packages/aiter/jit/module_aiter_core.so
+(EngineCore pid=580) [radiance.w4] 4-bit drafter hook installed
+(EngineCore pid=580) [radiance.w4] bf16 drafter hook installed
+(EngineCore pid=580) [radiance] preshuffle weight-shuffle-at-load hook installed
+(EngineCore pid=580) [radiance] attn tuned-config override installed on 2 module aliases
+(EngineCore pid=580) [radiance] fast-reduce hook armed (RADIANCE_USE_R4D_AR=1, all_reduce wrap)
+(EngineCore pid=580) [radiance.draft] RADIANCE_DYNAMIC_DRAFT=ON  controller=policy  tau=0.28  schedule=1:8,2:7,4:6,8:5,16:4  (GPU-resident capture + n-gram matcher; per-slot confidence gate short-circuits the forward loop)
+(EngineCore pid=580) [radiance.gdn] gdn_chunk_scan ENABLED (head_k 128, head_v 128, chunk 64; replaces wy + delta_h + chunk_o)
+(EngineCore pid=580) [radiance] int2 draft head armed (RADIANCE_FAST_DRAFT)
+(EngineCore pid=580) [radiance.vit] head_dim-72 attention installed
+(EngineCore pid=580) [radiance.vit] Gemma4 vision attention installed (head_dim 72)
+(EngineCore pid=580) [ERROR] `min_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+(EngineCore pid=580) [ERROR] `max_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+(EngineCore pid=580) INFO 09-08 17:15:36 [core.py:122] Initializing a V1 LLM engine (v0.28.0) with config: model='/models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd', speculative_config=SpeculativeConfig(method='dflash', model='/models/Qwen3.8-27B-DFlash2-FP8-tcclaviger', num_spec_tokens=7), tokenizer='/models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=auto, tensor_parallel_size=2, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=True, quantization=quark, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp8, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=Qwen3.8-27B-Quark-AWQ-MXFP4, enable_prefix_caching=False, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+sparse_attn_indexer', 'none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [4096], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.PIECEWISE: 1>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 128, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=580) INFO 09-08 17:15:36 [multiproc_executor.py:150] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=172.19.0.2 (local), world_size=2, local_world_size=2
+WARNING 09-08 17:15:37 [rocm.py:134] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+WARNING 09-08 17:15:37 [rocm.py:134] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+[radiance.gemm] skinny GEMM kernel ENABLED for M in [6,64]: 256x2048
+[radiance.gemm] skinny GEMM kernel ENABLED for M in [6,64]: 256x2048
+[aiter] import [module_aiter_core] under /opt/vllm/lib/python3.12/site-packages/aiter/jit/module_aiter_core.so
+[aiter] import [module_aiter_core] under /opt/vllm/lib/python3.12/site-packages/aiter/jit/module_aiter_core.so
+[radiance.w4] 4-bit drafter hook installed
+[radiance.w4] bf16 drafter hook installed
+[radiance] preshuffle weight-shuffle-at-load hook installed
+[radiance.w4] 4-bit drafter hook installed
+[radiance.w4] bf16 drafter hook installed
+[radiance] preshuffle weight-shuffle-at-load hook installed
+[radiance] attn tuned-config override installed on 2 module aliases
+[radiance] fast-reduce hook armed (RADIANCE_USE_R4D_AR=1, all_reduce wrap)
+[radiance] attn tuned-config override installed on 2 module aliases
+[radiance] fast-reduce hook armed (RADIANCE_USE_R4D_AR=1, all_reduce wrap)
+[radiance.draft] RADIANCE_DYNAMIC_DRAFT=ON  controller=policy  tau=0.28  schedule=1:8,2:7,4:6,8:5,16:4  (GPU-resident capture + n-gram matcher; per-slot confidence gate short-circuits the forward loop)
+[radiance.draft] RADIANCE_DYNAMIC_DRAFT=ON  controller=policy  tau=0.28  schedule=1:8,2:7,4:6,8:5,16:4  (GPU-resident capture + n-gram matcher; per-slot confidence gate short-circuits the forward loop)
+[radiance.gdn] gdn_chunk_scan ENABLED (head_k 128, head_v 128, chunk 64; replaces wy + delta_h + chunk_o)
+[radiance.gdn] gdn_chunk_scan ENABLED (head_k 128, head_v 128, chunk 64; replaces wy + delta_h + chunk_o)
+[radiance] int2 draft head armed (RADIANCE_FAST_DRAFT)
+[radiance.vit] head_dim-72 attention installed
+[radiance] int2 draft head armed (RADIANCE_FAST_DRAFT)
+[radiance.vit] head_dim-72 attention installed
+[radiance.vit] Gemma4 vision attention installed (head_dim 72)
+[radiance.vit] Gemma4 vision attention installed (head_dim 72)
+[ERROR] `min_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+[ERROR] `max_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+INFO 09-08 17:15:50 [registry.py:141] All limits of multimodal modalities supported by the model are set to 0, running in text-only mode.
+[ERROR] `min_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+[ERROR] `max_frames` is part of Qwen3VLVideoProcessorInitKwargs, but not documented. Make sure to add it to the docstring of the function in /opt/vllm/lib/python3.12/site-packages/transformers/models/qwen3_vl/video_processing_qwen3_vl.py.
+INFO 09-08 17:15:50 [registry.py:141] All limits of multimodal modalities supported by the model are set to 0, running in text-only mode.
+(Worker pid=666) INFO 09-08 17:15:50 [parallel_state.py:1638] world_size=2 rank=1 local_rank=1 distributed_init_method=file:///tmp/vllm_dist_3090d6a7747b44c0961cc487342d5422 backend=nccl
+(Worker pid=665) INFO 09-08 17:15:50 [parallel_state.py:1638] world_size=2 rank=0 local_rank=0 distributed_init_method=file:///tmp/vllm_dist_3090d6a7747b44c0961cc487342d5422 backend=nccl
+(Worker pid=665) INFO 09-08 17:15:50 [pynccl.py:113] vLLM is using nccl==2.30.4
+(Worker pid=665) INFO 09-08 17:15:51 [cuda_communicator.py:266] Using ['PYNCCL'] all-reduce backends (in dispatch order) for group 'tp:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'AITER_CUSTOM', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+(Worker pid=665) [radiance] custom all-reduce INSTALLED (rank=0 max=49152KB finegrained=True drain=3 acq=0 nt=1024 nb=4..24)
+(Worker pid=666) [radiance] custom all-reduce INSTALLED (rank=1 max=49152KB finegrained=True drain=3 acq=0 nt=1024 nb=4..24)
+(Worker pid=666) [radiance] AR_QUANT ON (rotated 6-bit packed payload; min=128KB group=64 nt=1024 max_nb=96 local=25MB)
+(Worker pid=665) [radiance] AR_QUANT ON (rotated 6-bit packed payload; min=128KB group=64 nt=1024 max_nb=96 local=25MB)
+(Worker pid=665) INFO 09-08 17:15:51 [parallel_state.py:1982] rank 0 in world size 2 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(Worker pid=665) INFO 09-08 17:15:51 [gpu_worker.py:396] Using V2 Model Runner
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [model_runner.py:358] Loading model from scratch...
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [rocm.py:453] Set FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE to enable Flash Attention Triton backend on RDNA.
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [rocm.py:775] Using Torch SDPA backend for ViT model.
+(Worker_TP0 pid=665) WARNING 09-08 17:15:52 [activation.py:808] [ROCm] PyTorch's native GELU with tanh approximation is unstable. Falling back to GELU(approximate='none').
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [mm_encoder_attention.py:375] Using AttentionBackendEnum.TORCH_SDPA for MMEncoderAttention.
+(Worker_TP1 pid=666) [radiance.mxfp4] weight layout: FRAGMENT ORDER (RADIANCE_MXFP4_WPERM=1)
+(Worker_TP1 pid=666) [radiance.mxfp4] W4A8 fp8-WMMA GEMM ENABLED for M>0 (NOTE: W4A8, not the checkpoint's W4A4 -- more precise activations, not bit-identical)
+(Worker_TP1 pid=666) [radiance.mxfp4] kernel: /opt/vllm/lib/python3.12/site-packages/radiance_mxfp4_fp8.so
+(Worker_TP0 pid=665) WARNING 09-08 17:15:52 [quark_ocp_mx.py:102] The current platform does not support native MXFP4/MXFP6 computation. Simulated weight dequantization and activation QDQ (quantize and dequantize) will be used, with the linear layers computed in high precision.
+(Worker_TP0 pid=665) [radiance.mxfp4] weight layout: FRAGMENT ORDER (RADIANCE_MXFP4_WPERM=1)
+(Worker_TP0 pid=665) [radiance.mxfp4] W4A8 fp8-WMMA GEMM ENABLED for M>0 (NOTE: W4A8, not the checkpoint's W4A4 -- more precise activations, not bit-identical)
+(Worker_TP0 pid=665) [radiance.mxfp4] kernel: /opt/vllm/lib/python3.12/site-packages/radiance_mxfp4_fp8.so
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [__init__.py:924] Using RadianceMxfp4W4A8LinearKernel for MXFP4 GEMM
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [qwen_gdn_linear_attn.py:183] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [qwen_gdn_linear_attn.py:570] Falling back to the Triton GDN decode path: torch.ops._C.fused_gdn_decode_post_conv_mtp is not built
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [qwen_gdn_linear_attn.py:575] GDN decode kernel: triton
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [rocm.py:642] Using R4D backend (selected via --attention-backend).
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [selector.py:217] Using HND KV cache layout for R4D backend.
+(Worker_TP0 pid=665) WARNING 09-08 17:15:52 [compilation.py:1348] Op 'sparse_attn_indexer' not present in model, enabling with '+sparse_attn_indexer' has no effect
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [weight_utils.py:858] Filesystem type for checkpoints: EXT4. Checkpoint size: 18.44 GiB. Available RAM: 47.88 GiB.
+(Worker_TP0 pid=665) INFO 09-08 17:15:52 [weight_utils.py:881] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+(Worker_TP0 pid=665) Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+(Worker_TP0 pid=665) Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:02<00:00,  2.74s/it]
+(Worker_TP0 pid=665) Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:02<00:00,  2.74s/it]
+(Worker_TP0 pid=665) 
+(Worker_TP1 pid=666) [radiance.mxfp4] decode kernel ON (M<=64), 32 MiB split-K scratch
+(Worker_TP0 pid=665) INFO 09-08 17:15:55 [default_loader.py:449] Loading weights took 2.94 seconds
+(Worker_TP0 pid=665) [radiance.mxfp4] decode kernel ON (M<=64), 32 MiB split-K scratch
+(Worker_TP0 pid=665) WARNING 09-08 17:15:55 [kv_cache.py:130] Checkpoint does not provide a q scaling factor. Setting it to k_scale. This only matters for FP8 Attention backends (flash-attn or flashinfer).
+(Worker_TP0 pid=665) WARNING 09-08 17:15:55 [kv_cache.py:147] Using KV cache scaling factor 1.0 for fp8_e4m3. If this is unintended, verify that k/v_scale scaling factors are properly set in the checkpoint.
+(Worker_TP0 pid=665) WARNING 09-08 17:15:55 [kv_cache.py:185] Using uncalibrated q_scale 1.0 and/or prob_scale 1.0 with fp8 attention. This may cause accuracy issues. Please make sure q/prob scaling factors are available in the fp8 checkpoint.
+(Worker_TP1 pid=666) [radiance.gdnmerge] merged 48 GDN layers (96 launches/forward removed), 0 left unmerged
+(Worker_TP1 pid=666) [radiance.fp8stream] fp8 stream installed: 64 mid epilogues, 63 down streams, 64 act epilogues, 0 gdn norm+quant epilogues over 64 layers
+(Worker_TP1 pid=666) INFO 09-08 17:15:55 [eagle3_utils.py:28] Using Eagle3 auxiliary layers from config: (6, 20, 34, 48, 62)
+(Worker_TP1 pid=666) INFO 09-08 17:15:55 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP0 pid=665) [radiance.gdnmerge] merged 48 GDN layers (96 launches/forward removed), 0 left unmerged
+(Worker_TP0 pid=665) [radiance.fp8stream] fp8 stream installed: 64 mid epilogues, 63 down streams, 64 act epilogues, 0 gdn norm+quant epilogues over 64 layers
+(Worker_TP0 pid=665) INFO 09-08 17:15:55 [eagle3_utils.py:28] Using Eagle3 auxiliary layers from config: (6, 20, 34, 48, 62)
+(Worker_TP0 pid=665) INFO 09-08 17:15:55 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP0 pid=665) WARNING 09-08 17:15:55 [vllm.py:1862] max_num_scheduled_tokens is set to 4096 based on the speculative decoding settings. This may lead to suboptimal performance. Consider increasing max_num_batched_tokens to accommodate the additional draft token slots, or decrease num_speculative_tokens.
+(Worker_TP0 pid=665) INFO 09-08 17:15:55 [compilation.py:329] Enabled custom fusions: norm_quant, act_quant
+(Worker_TP0 pid=665) INFO 09-08 17:15:55 [__init__.py:689] Selected TritonFp8BlockScaledMMKernel for Fp8LinearMethod
+(Worker_TP0 pid=665) INFO 09-08 17:15:56 [rocm.py:642] Using TRITON_ATTN backend (selected via --attention-backend).
+(Worker_TP0 pid=665) INFO 09-08 17:15:56 [weight_utils.py:858] Filesystem type for checkpoints: EXT4. Checkpoint size: 1.97 GiB. Available RAM: 47.46 GiB.
+(Worker_TP0 pid=665) Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+(Worker_TP0 pid=665) Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00, 827.28it/s]
+(Worker_TP0 pid=665) 
+(Worker_TP1 pid=666) [radiance] INT2_DRAFT_HEAD: lm_head empty at load_weights (shared in later); quantising on first use
+(Worker_TP0 pid=665) [radiance] INT2_DRAFT_HEAD: lm_head empty at load_weights (shared in later); quantising on first use
+(Worker_TP0 pid=665) INFO 09-08 17:15:56 [default_loader.py:449] Loading weights took 0.34 seconds
+(Worker_TP1 pid=666) [radiance.w4] converted N=3072 K=5120  15.0 MiB -> 8.0 MiB
+(Worker_TP1 pid=666) [radiance.w4] converted N=5120 K=2048  10.0 MiB -> 5.3 MiB
+(Worker_TP0 pid=665) [radiance.w4] converted N=3072 K=5120  15.0 MiB -> 8.0 MiB
+(Worker_TP0 pid=665) [radiance.w4] converted N=5120 K=2048  10.0 MiB -> 5.3 MiB
+(Worker_TP1 pid=666) [radiance.w4] converted N=17408 K=5120  85.0 MiB -> 45.2 MiB
+(Worker_TP0 pid=665) [radiance.w4] converted N=17408 K=5120  85.0 MiB -> 45.2 MiB
+(Worker_TP1 pid=666) [radiance.w4] converted N=5120 K=8704  42.5 MiB -> 22.6 MiB
+(Worker_TP1 pid=666) [radiance.w4] converted bf16 N=1280 K=5120  12.5 MiB -> 3.3 MiB
+(Worker_TP0 pid=665) [radiance.w4] converted N=5120 K=8704  42.5 MiB -> 22.6 MiB
+(Worker_TP0 pid=665) [radiance.w4] converted bf16 N=1280 K=5120  12.5 MiB -> 3.3 MiB
+(Worker_TP1 pid=666) [radiance.w4] declined N=5120 K=25600 (no measured config)
+(Worker_TP1 pid=666) [radiance.w4] converted bf16 N=256 K=5120  2.5 MiB -> 0.7 MiB
+(Worker_TP0 pid=665) [radiance.w4] declined N=5120 K=25600 (no measured config)
+(Worker_TP0 pid=665) [radiance.w4] converted bf16 N=256 K=5120  2.5 MiB -> 0.7 MiB
+(Worker_TP1 pid=666) INFO 09-08 17:15:59 [model_runner.py:383] Model loading took 9.5 GiB memory and 7.603014 seconds
+(Worker_TP1 pid=666) INFO 09-08 17:15:59 [interface.py:911] Setting attention block size to 1648 tokens to ensure that attention page size is >= mamba page size.
+(Worker_TP1 pid=666) INFO 09-08 17:15:59 [interface.py:935] Padding mamba page size by 0.73% to ensure that mamba page size and attention page size are exactly equal.
+(Worker_TP0 pid=665) INFO 09-08 17:15:59 [model_runner.py:383] Model loading took 9.5 GiB memory and 7.647051 seconds
+(Worker_TP0 pid=665) INFO 09-08 17:15:59 [interface.py:911] Setting attention block size to 1648 tokens to ensure that attention page size is >= mamba page size.
+(Worker_TP0 pid=665) INFO 09-08 17:15:59 [interface.py:935] Padding mamba page size by 0.73% to ensure that mamba page size and attention page size are exactly equal.
+(EngineCore pid=580) INFO 09-08 17:15:59 [torch_utils.py:262] Reducing Torch threads from 6 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+(Worker_TP0 pid=665) INFO 09-08 17:16:05 [backends.py:1094] Using cache directory: /cache/vllm/radiance-nqft-fp8s-fast-draft/torch_compile_cache/586e4ffde8/rank_0_0/backbone for vLLM's torch.compile
+(Worker_TP0 pid=665) INFO 09-08 17:16:05 [backends.py:1155] Dynamo bytecode transform time: 4.78 s
+(Worker_TP0 pid=665) INFO 09-08 17:16:24 [backends.py:393] Compiling a graph for compile range (1, 4096) takes 18.58 s
+(Worker_TP0 pid=665) INFO 09-08 17:16:29 [backends.py:920] collected artifacts: 65 entries, 23 artifacts, 63413300 bytes total
+(Worker_TP1 pid=666) INFO 09-08 17:16:29 [backends.py:920] collected artifacts: 65 entries, 23 artifacts, 63272507 bytes total
+(Worker_TP0 pid=665) INFO 09-08 17:16:29 [decorators.py:708] saved AOT compiled function to /cache/vllm/radiance-nqft-fp8s-fast-draft/torch_compile_cache/torch_aot_compile/43a6fec9a297ec9cdae057ff95f23da7d43b6934c44f3f4de5099478a76b1f72/rank_0_0/model
+(Worker_TP0 pid=665) INFO 09-08 17:16:29 [monitor.py:53] torch.compile took 29.58 s in total
+(Worker_TP0 pid=665) [radiance.mxfp4] linear layers: 304/304 on our kernel, 0 FORCED ONTO AITER (kernel cannot run them); aiter below M=0 (DISABLED)
+(Worker_TP1 pid=666) [radiance.mxfp4] linear layers: 304/304 on our kernel, 0 FORCED ONTO AITER (kernel cannot run them); aiter below M=0 (DISABLED)
+(Worker_TP0 pid=665) [radiance.mxfp4] A-tiled GEMM path: call #1 (M=4096 N=17408 K=5120)
+(Worker_TP1 pid=666) [radiance.mxfp4] A-tiled GEMM path: call #1 (M=4096 N=17408 K=5120)
+(Worker_TP1 pid=666) [radiance.mxfp4] A-tiled GEMM path: call #100 (M=4096 N=17408 K=5120)
+(Worker_TP0 pid=665) [radiance.mxfp4] A-tiled GEMM path: call #100 (M=4096 N=17408 K=5120)
+(Worker_TP0 pid=665) INFO 09-08 17:16:30 [monitor.py:81] Initial profiling/warmup run took 0.72 s
+(Worker_TP0 pid=665) INFO 09-08 17:16:33 [backends.py:1094] Using cache directory: /cache/vllm/radiance-nqft-fp8s-fast-draft/torch_compile_cache/586e4ffde8/rank_0_0/dflash_head for vLLM's torch.compile
+(Worker_TP0 pid=665) INFO 09-08 17:16:33 [backends.py:1155] Dynamo bytecode transform time: 1.09 s
+(Worker_TP0 pid=665) INFO 09-08 17:16:38 [backends.py:393] Compiling a graph for compile range (1, 4096) takes 3.85 s
+(Worker_TP1 pid=666) INFO 09-08 17:16:38 [backends.py:920] collected artifacts: 6 entries, 4 artifacts, 10070009 bytes total
+(Worker_TP0 pid=665) INFO 09-08 17:16:38 [backends.py:920] collected artifacts: 6 entries, 4 artifacts, 10031478 bytes total
+(Worker_TP0 pid=665) INFO 09-08 17:16:38 [decorators.py:708] saved AOT compiled function to /cache/vllm/radiance-nqft-fp8s-fast-draft/torch_compile_cache/torch_aot_compile/a60d6542a0412ce084de8c5f1500bc309809418424bb3879d3240d734d785623/rank_0_0/model
+(Worker_TP0 pid=665) INFO 09-08 17:16:38 [monitor.py:53] torch.compile took 6.74 s in total
+(Worker_TP0 pid=665) INFO 09-08 17:16:38 [monitor.py:81] Initial profiling/warmup run took 0.00 s
+(Worker_TP1 pid=666) [radiance] INT2_DRAFT_HEAD (lazy): draft head (124160, 5120) bf16 -> int2 g128 asym (0.17 GiB/rank), 8 cand/block, rerank top-64 exact
+(Worker_TP0 pid=665) [radiance] INT2_DRAFT_HEAD (lazy): draft head (124160, 5120) bf16 -> int2 g128 asym (0.17 GiB/rank), 8 cand/block, rerank top-64 exact
+(Worker_TP0 pid=665) INFO 09-08 17:16:39 [backends.py:1094] Using cache directory: /cache/vllm/radiance-nqft-fp8s-fast-draft/torch_compile_cache/586e4ffde8/rank_0_0/dflash2_candidate_selector for vLLM's torch.compile
+(Worker_TP0 pid=665) INFO 09-08 17:16:39 [backends.py:1155] Dynamo bytecode transform time: 0.12 s
+(Worker_TP0 pid=665) INFO 09-08 17:16:40 [backends.py:393] Compiling a graph for compile range (1, 4096) takes 0.44 s
+(Worker_TP1 pid=666) INFO 09-08 17:16:40 [backends.py:920] collected artifacts: 1 entries, 1 artifacts, 679164 bytes total
+(Worker_TP0 pid=665) INFO 09-08 17:16:40 [backends.py:920] collected artifacts: 1 entries, 1 artifacts, 650757 bytes total
+(Worker_TP0 pid=665) INFO 09-08 17:16:40 [decorators.py:708] saved AOT compiled function to /cache/vllm/radiance-nqft-fp8s-fast-draft/torch_compile_cache/torch_aot_compile/097172354636ad868a4f0d742743f3fd054ebe0c9e5444f8e5cfad560a3d83c5/rank_0_0/model
+(Worker_TP0 pid=665) INFO 09-08 17:16:40 [monitor.py:53] torch.compile took 1.11 s in total
+(Worker_TP0 pid=665) INFO 09-08 17:16:40 [monitor.py:81] Initial profiling/warmup run took 0.00 s
+(Worker_TP0 pid=665) INFO 09-08 17:16:41 [gpu_worker.py:578] Available KV cache memory: 12.97 GiB
+(EngineCore pid=580) INFO 09-08 17:16:41 [kv_cache_utils.py:1148] [radiance] kv cache groups: size 8, 9 groups, 63 blocks/request (upstream would pick size 5)
+(EngineCore pid=580) WARNING 09-08 17:16:41 [kv_cache_utils.py:1288] Add 3 padding layers, may waste at most 60.00% KV cache memory
+(EngineCore pid=580) INFO 09-08 17:16:41 [kv_cache_utils.py:1997] GPU KV cache size: 134,062 tokens, Maximum concurrency for 8,192 tokens per request: 16.37x
+(Worker_TP1 pid=666) [radiance] R4D attention: 12 q heads / 2 kv heads, head_dim 256, block 16, attn_prefill_h256_gqa6_fp8kv + attn_decode_h256_gqa6_fp8kv, 7.6 MiB split-KV scratch
+(Worker_TP1 pid=666) [radiance] R4D attention: 12 q heads / 2 kv heads, head_dim 256, block 16, attn_prefill_h256_gqa6_fp8kv + attn_decode_h256_gqa6_fp8kv, 7.6 MiB split-KV scratch
+(Worker_TP0 pid=665) [radiance] R4D attention: 12 q heads / 2 kv heads, head_dim 256, block 16, attn_prefill_h256_gqa6_fp8kv + attn_decode_h256_gqa6_fp8kv, 7.6 MiB split-KV scratch
+(Worker_TP0 pid=665) [radiance] R4D attention: 12 q heads / 2 kv heads, head_dim 256, block 16, attn_prefill_h256_gqa6_fp8kv + attn_decode_h256_gqa6_fp8kv, 7.6 MiB split-KV scratch
+(Worker_TP1 pid=666) INFO 09-08 17:16:41 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP0 pid=665) INFO 09-08 17:16:41 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP1 pid=666) INFO 09-08 17:16:41 [qwen_triton_warmup.py:270] Warming up Qwen Triton kernels for model_type=qwen3_5_text.
+(Worker_TP0 pid=665) INFO 09-08 17:16:41 [qwen_triton_warmup.py:270] Warming up Qwen Triton kernels for model_type=qwen3_5_text.
+(Worker_TP0 pid=665) INFO 09-08 17:16:41 [ll_bf16.py:30] cuteDSL (CUTLASS Python) not available, ll_bf16_gemm disabled
+(Worker_TP1 pid=666) INFO 09-08 17:16:41 [ll_bf16.py:30] cuteDSL (CUTLASS Python) not available, ll_bf16_gemm disabled
+(Worker_TP0 pid=665) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/19 [00:00<?, ?it/s][radiance.gdn] all-R4D prefill path live
+(Worker_TP1 pid=666) [radiance.gdn] all-R4D prefill path live
+(Worker_TP0 pid=665) Capturing CUDA graphs (PIECEWISE):   5%|▌         | 1/19 [00:00<00:09,  1.92it/s]Capturing CUDA graphs (PIECEWISE):  11%|█         | 2/19 [00:00<00:05,  2.87it/s]Capturing CUDA graphs (PIECEWISE):  16%|█▌        | 3/19 [00:00<00:03,  4.10it/s]Capturing CUDA graphs (PIECEWISE):  21%|██        | 4/19 [00:00<00:02,  5.14it/s]Capturing CUDA graphs (PIECEWISE):  26%|██▋       | 5/19 [00:01<00:02,  5.95it/s]Capturing CUDA graphs (PIECEWISE):  32%|███▏      | 6/19 [00:01<00:01,  6.60it/s]Capturing CUDA graphs (PIECEWISE):  37%|███▋      | 7/19 [00:01<00:01,  7.12it/s]Capturing CUDA graphs (PIECEWISE):  42%|████▏     | 8/19 [00:01<00:01,  7.50it/s]Capturing CUDA graphs (PIECEWISE):  47%|████▋     | 9/19 [00:01<00:01,  8.13it/s]Capturing CUDA graphs (PIECEWISE):  58%|█████▊    | 11/19 [00:01<00:00,  8.96it/s]Capturing CUDA graphs (PIECEWISE):  68%|██████▊   | 13/19 [00:01<00:00,  9.57it/s]Capturing CUDA graphs (PIECEWISE):  79%|███████▉  | 15/19 [00:02<00:00, 10.03it/s](Worker_TP1 pid=666) [radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 8 spec False
+[radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 8 spec False
+(Worker_TP1 pid=666) [radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 4 spec False
+(Worker_TP0 pid=665) [radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 4 spec False
+(Worker_TP0 pid=665) Capturing CUDA graphs (PIECEWISE):  89%|████████▉ | 17/19 [00:02<00:00, 11.33it/s](Worker_TP1 pid=666) [radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 2 spec False
+[radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 2 spec False
+(Worker_TP0 pid=665) [radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 1 spec False
+(Worker_TP1 pid=666) [radiance.gdn] step not handled by the fused path: mixed batch: prefills 0 decodes 1 spec False
+(Worker_TP1 pid=666) INFO 09-08 17:16:44 [speculator.py:140] Capturing model for DFlash2 speculator...
+(Worker_TP0 pid=665) Capturing CUDA graphs (PIECEWISE): 100%|██████████| 19/19 [00:02<00:00, 11.16it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 19/19 [00:02<00:00,  7.76it/s]
+(Worker_TP0 pid=665) INFO 09-08 17:16:44 [speculator.py:140] Capturing model for DFlash2 speculator...
+(Worker_TP1 pid=666) INFO 09-08 17:16:44 [model_runner.py:909] Graph capturing finished in 3 secs, took 2.52 GiB
+(Worker_TP1 pid=666) INFO 09-08 17:16:44 [gpu_worker.py:804] Free memory on device (31.32/31.86 GiB) on startup. Desired GPU memory utilization is (0.85, 27.08 GiB). Actual usage is 12.81 GiB for consumed memory (weights + non-torch), 1.3 GiB for peak activation, and 2.52 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=11062830183` (10.3 GiB) to fit into requested memory, or `--kv-cache-memory=15611133440` (14.54 GiB) to fully utilize gpu memory. Current kv cache memory in use is 12.97 GiB.
+(Worker_TP0 pid=665) INFO 09-08 17:16:44 [model_runner.py:909] Graph capturing finished in 3 secs, took 2.52 GiB
+(Worker_TP0 pid=665) INFO 09-08 17:16:44 [gpu_worker.py:804] Free memory on device (31.32/31.86 GiB) on startup. Desired GPU memory utilization is (0.85, 27.08 GiB). Actual usage is 12.81 GiB for consumed memory (weights + non-torch), 1.3 GiB for peak activation, and 2.52 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=11062830183` (10.3 GiB) to fit into requested memory, or `--kv-cache-memory=15611133440` (14.54 GiB) to fully utilize gpu memory. Current kv cache memory in use is 12.97 GiB.
+(Worker_TP1 pid=666) [radiance.verifyhead] VERIFY_HEAD: draft head (124160, 5120) reusing the int2 packing already built for this lm_head, 8 cand/block, rerank top-64 exact (max top_k 16, exact fallback otherwise)
+(Worker_TP0 pid=665) [radiance.verifyhead] VERIFY_HEAD: draft head (124160, 5120) reusing the int2 packing already built for this lm_head, 8 cand/block, rerank top-64 exact (max top_k 16, exact fallback otherwise)
+(Worker_TP0 pid=665) [radiance.gdn] all-R4D decode path live
+(Worker_TP1 pid=666) [radiance.gdn] all-R4D decode path live
+(Worker_TP0 pid=665) [radiance.gdn] all-R4D prefill+spec path live
+(Worker_TP1 pid=666) [radiance.gdn] all-R4D prefill+spec path live
+(Worker_TP1 pid=666) [radiance.gdn] all-R4D decode(fused) path live
+(Worker_TP0 pid=665) [radiance.gdn] all-R4D decode(fused) path live
+(Worker_TP1 pid=666) INFO 09-08 17:16:46 [jit_monitor.py:85] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP0 pid=665) INFO 09-08 17:16:46 [jit_monitor.py:85] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(Worker_TP0 pid=665) INFO 09-08 17:16:46 [torch_utils.py:262] Reducing Torch threads from 6 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+(Worker_TP0 pid=665) [radiance] R4D kernel selection: libr4d 0.5.0, 20 kernels built, 18 of 18 queries resolved
+(Worker_TP0 pid=665) [radiance]   gemm_nt               M=64 K=5120 dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> gemm_bf16_nt_m64
+(Worker_TP0 pid=665) [radiance]   gemm_nt               M=64 K=5120 N=5120 dtype=w4a16
+(Worker_TP0 pid=665) [radiance]                         -> gemm_w4a16_nt_m64
+(Worker_TP0 pid=665) [radiance]   gemm_nt               M=64 K=5120 N=5120 dtype=w4a8
+(Worker_TP0 pid=665) [radiance]                         -> gemm_w4a8_nt_m64
+(Worker_TP0 pid=665) [radiance]   quant_act             K=5120 dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> quant_act_i8
+(Worker_TP0 pid=665) [radiance]   gdn_chunk_scan        head_k=128 head_v=128 chunk=64
+(Worker_TP0 pid=665) [radiance]                         -> gdn_chunk_scan_k128_v128_c64_bf16
+(Worker_TP0 pid=665) [radiance]   gdn_conv_prep         conv_width=4 head_k=128 head_v=128 chunk=64
+(Worker_TP0 pid=665) [radiance]                         -> gdn_conv_prep_w4_h128_bf16
+(Worker_TP0 pid=665) [radiance]   gdn_conv_update       conv_width=4 head_k=128 head_v=128
+(Worker_TP0 pid=665) [radiance]                         -> gdn_conv_update_w4_h128_bf16
+(Worker_TP0 pid=665) [radiance]   gdn_kkt_solve         head_k=128 chunk=64
+(Worker_TP0 pid=665) [radiance]                         -> gdn_kkt_solve_k128_c64_bf16
+(Worker_TP0 pid=665) [radiance]   gdn_recurrent_update  head_k=128 head_v=128
+(Worker_TP0 pid=665) [radiance]                         -> gdn_recurrent_update_k128_v128_bf16_fp32state
+(Worker_TP0 pid=665) [radiance]   gdn_fused_update      conv_width=4 head_k=128 head_v=128
+(Worker_TP0 pid=665) [radiance]                         -> gdn_fused_update_w4k128v128_bf16
+(Worker_TP0 pid=665) [radiance]   gdn_gated_rmsnorm     channels=128
+(Worker_TP0 pid=665) [radiance]                         -> gdn_gated_rmsnorm_h128_bf16
+(Worker_TP0 pid=665) [radiance]   attn_vit              head_dim=72 gqa=1 causal=0 q_dtype=bf16 kv_dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> attn_vit_h72_bf16
+(Worker_TP0 pid=665) [radiance]   allreduce             world_size=2 exact=1 dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> ar_oneshot_2rank_exact
+(Worker_TP0 pid=665) [radiance]   allreduce             world_size=2 exact=0 dtype=bf16 numel=64
+(Worker_TP0 pid=665) [radiance]                         -> ar_oneshot_2rank_wht6
+(Worker_TP0 pid=665) [radiance]   attn_prefill_paged    kv_dtype=fp8_e4m3 head_dim=256 gqa=6 block_size=16 causal=1 q_dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> attn_prefill_h256_gqa6_fp8kv  (asked 17x)
+(Worker_TP0 pid=665) [radiance]   attn_prefill_paged    kv_dtype=bf16 head_dim=256 gqa=6 block_size=16 causal=1 q_dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> attn_prefill_h256_gqa6_bf16kv
+(Worker_TP0 pid=665) [radiance]   attn_decode_paged     kv_dtype=fp8_e4m3 q_len=1 head_dim=256 gqa=6 block_size=16 causal=1 q_dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> attn_decode_h256_gqa6_fp8kv
+(Worker_TP0 pid=665) [radiance]   attn_decode_paged     kv_dtype=bf16 q_len=1 head_dim=256 gqa=6 block_size=16 causal=1 q_dtype=bf16
+(Worker_TP0 pid=665) [radiance]                         -> attn_decode_h256_gqa6_bf16kv
+(EngineCore pid=580) INFO 09-08 17:16:46 [core.py:347] init engine (profile, create kv cache, warmup model) took 47.15 s (compilation: 37.47 s)
+(EngineCore pid=580) INFO 09-08 17:16:47 [registry.py:141] All limits of multimodal modalities supported by the model are set to 0, running in text-only mode.
+(EngineCore pid=580) INFO 09-08 17:16:47 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(EngineCore pid=580) WARNING 09-08 17:16:47 [vllm.py:1862] max_num_scheduled_tokens is set to 4096 based on the speculative decoding settings. This may lead to suboptimal performance. Consider increasing max_num_batched_tokens to accommodate the additional draft token slots, or decrease num_speculative_tokens.
+(EngineCore pid=580) INFO 09-08 17:16:47 [compilation.py:329] Enabled custom fusions: norm_quant, act_quant
+(APIServer pid=1) INFO 09-08 17:16:47 [api_server.py:653] Supported tasks: ['generate']
+(APIServer pid=1) INFO 09-08 17:16:47 [parser_manager.py:58] "auto" tool choice has been enabled.
+(APIServer pid=1) INFO 09-08 17:16:47 [hf.py:551] Detected the chat template content format to be 'openai'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=1) WARNING 09-08 17:16:47 [model.py:1713] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 1.0, 'top_k': 20, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=1) INFO 09-08 17:16:47 [api_server.py:657] Starting vLLM server on http://0.0.0.0:8000
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:51] Available routes are:
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /docs, Methods: GET, HEAD
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /load, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /version, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /health, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /metrics, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /tokenize, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /detokenize, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /tokenizer_info, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/models, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /ping, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /ping, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /invocations, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/responses, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/completions, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/messages, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /generative_scoring, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/completions/render, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/chat/completions/derender, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /v1/completions/derender, Methods: POST
+(APIServer pid=1) INFO 09-08 17:16:47 [launcher.py:60] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=1) INFO:     Started server process [1]
+(APIServer pid=1) INFO:     Waiting for application startup.
+(APIServer pid=1) INFO:     Application startup complete.
+(APIServer pid=1) INFO:     172.19.0.1:54958 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:44188 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:44202 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:44202 - "POST /v1/completions HTTP/1.1" 200 OK
+(Worker_TP0 pid=665) WARNING 09-08 17:16:53 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _gemm_a8w8_blockscale_preshuffle_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=665) WARNING 09-08 17:16:53 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _prepare_dflash_inputs_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=665) WARNING 09-08 17:16:53 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _compute_local_logits_stats_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=665) WARNING 09-08 17:16:53 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _rejection_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=665) WARNING 09-08 17:16:53 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _resample_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(APIServer pid=1) INFO:     172.19.0.1:44202 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:16:58 [loggers.py:310] Engine 000: Avg prompt throughput: 11.7 tokens/s, Avg generation throughput: 5.9 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:16:58 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 1.64, Accepted throughput: 2.29 tokens/s, Drafted throughput: 25.02 tokens/s, Accepted: 25 tokens, Drafted: 273 tokens, Per-position acceptance rate: 0.436, 0.179, 0.026, 0.000, 0.000, 0.000, 0.000, Avg Draft acceptance rate: 9.2%
+(APIServer pid=1) INFO:     172.19.0.1:44212 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:44212 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:44212 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:44212 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52004 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52008 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52022 - "POST /v1/completions HTTP/1.1" 200 OK
+(Worker_TP0 pid=665) [radiance.verifyhead] first 200 steps: 194 on the int2 head, 6 fell back to bf16
+(Worker_TP1 pid=666) [radiance.verifyhead] first 200 steps: 194 on the int2 head, 6 fell back to bf16
+(APIServer pid=1) INFO:     172.19.0.1:52028 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52038 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52048 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52056 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:52068 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:17:08 [loggers.py:310] Engine 000: Avg prompt throughput: 40.3 tokens/s, Avg generation throughput: 115.2 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:17:08 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.79, Accepted throughput: 85.30 tokens/s, Drafted throughput: 214.19 tokens/s, Accepted: 853 tokens, Drafted: 2142 tokens, Per-position acceptance rate: 0.761, 0.595, 0.435, 0.333, 0.284, 0.203, 0.176, Avg Draft acceptance rate: 39.8%
+(APIServer pid=1) INFO:     172.19.0.1:33974 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33974 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33974 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33988 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33988 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33988 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33988 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:17:18 [loggers.py:310] Engine 000: Avg prompt throughput: 102.4 tokens/s, Avg generation throughput: 92.9 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 5.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:17:18 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 4.91, Accepted throughput: 74.30 tokens/s, Drafted throughput: 133.00 tokens/s, Accepted: 743 tokens, Drafted: 1330 tokens, Per-position acceptance rate: 0.932, 0.505, 0.505, 0.495, 0.495, 0.489, 0.489, Avg Draft acceptance rate: 55.9%
+(APIServer pid=1) INFO:     172.19.0.1:33988 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33988 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:49104 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:49104 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:49104 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:49104 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:17:28 [loggers.py:310] Engine 000: Avg prompt throughput: 102.4 tokens/s, Avg generation throughput: 88.4 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 5.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:17:28 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.54, Accepted throughput: 64.20 tokens/s, Drafted throughput: 177.10 tokens/s, Accepted: 642 tokens, Drafted: 1771 tokens, Per-position acceptance rate: 0.747, 0.395, 0.336, 0.300, 0.277, 0.249, 0.233, Avg Draft acceptance rate: 36.3%
+(APIServer pid=1) INFO:     172.19.0.1:49104 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:49104 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:46250 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:46250 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:46264 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:46264 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:17:38 [loggers.py:310] Engine 000: Avg prompt throughput: 76.8 tokens/s, Avg generation throughput: 100.3 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:17:38 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 4.34, Accepted throughput: 77.90 tokens/s, Drafted throughput: 163.10 tokens/s, Accepted: 779 tokens, Drafted: 1631 tokens, Per-position acceptance rate: 0.923, 0.412, 0.412, 0.403, 0.403, 0.395, 0.395, Avg Draft acceptance rate: 47.8%
+(APIServer pid=1) INFO:     172.19.0.1:37796 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37796 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37812 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37796 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37812 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37812 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:17:48 [loggers.py:310] Engine 000: Avg prompt throughput: 102.4 tokens/s, Avg generation throughput: 102.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:17:48 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.30, Accepted throughput: 71.90 tokens/s, Drafted throughput: 218.39 tokens/s, Accepted: 719 tokens, Drafted: 2184 tokens, Per-position acceptance rate: 0.853, 0.337, 0.282, 0.244, 0.212, 0.199, 0.179, Avg Draft acceptance rate: 32.9%
+(APIServer pid=1) INFO:     172.19.0.1:37816 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37816 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37830 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37830 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37816 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:37830 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:17:58 [loggers.py:310] Engine 000: Avg prompt throughput: 102.4 tokens/s, Avg generation throughput: 102.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:17:58 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 2.93, Accepted throughput: 67.40 tokens/s, Drafted throughput: 245.01 tokens/s, Accepted: 674 tokens, Drafted: 2450 tokens, Per-position acceptance rate: 0.743, 0.437, 0.217, 0.174, 0.134, 0.111, 0.109, Avg Draft acceptance rate: 27.5%
+(APIServer pid=1) INFO:     172.19.0.1:33494 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33494 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33504 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33514 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:33530 - "POST /v1/completions HTTP/1.1" 200 OK
+(Worker_TP0 pid=665) WARNING 09-08 17:17:59 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _draft_head_int2. This causes a latency spike; consider extending warmup to cover this shape/config.
+(APIServer pid=1) INFO:     172.19.0.1:33494 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41798 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41798 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41814 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41828 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41834 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:18:08 [loggers.py:310] Engine 000: Avg prompt throughput: 204.8 tokens/s, Avg generation throughput: 134.4 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 19.8%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:18:08 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.27, Accepted throughput: 93.59 tokens/s, Drafted throughput: 288.38 tokens/s, Accepted: 936 tokens, Drafted: 2884 tokens, Per-position acceptance rate: 0.721, 0.478, 0.243, 0.216, 0.209, 0.204, 0.201, Avg Draft acceptance rate: 32.5%
+(APIServer pid=1) INFO:     172.19.0.1:41828 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41834 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41828 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41814 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:41834 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48226 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48226 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48240 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48246 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48252 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48226 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:18:18 [loggers.py:310] Engine 000: Avg prompt throughput: 230.4 tokens/s, Avg generation throughput: 252.1 tokens/s, Running: 4 reqs, Waiting: 0 reqs, GPU KV cache usage: 19.8%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:18:18 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.93, Accepted throughput: 188.70 tokens/s, Drafted throughput: 451.50 tokens/s, Accepted: 1887 tokens, Drafted: 4515 tokens, Per-position acceptance rate: 0.789, 0.664, 0.433, 0.309, 0.281, 0.229, 0.222, Avg Draft acceptance rate: 41.8%
+(APIServer pid=1) INFO:     172.19.0.1:48246 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48240 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48246 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:48240 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40760 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40760 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40774 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40786 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40792 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40794 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40802 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40816 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40818 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:18:28 [loggers.py:310] Engine 000: Avg prompt throughput: 281.6 tokens/s, Avg generation throughput: 319.7 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 5.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:18:28 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 4.87, Accepted throughput: 256.19 tokens/s, Drafted throughput: 409.89 tokens/s, Accepted: 2562 tokens, Drafted: 4099 tokens, Per-position acceptance rate: 0.844, 0.669, 0.592, 0.523, 0.480, 0.394, 0.367, Avg Draft acceptance rate: 62.5%
+(APIServer pid=1) INFO:     172.19.0.1:40816 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57370 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57370 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57380 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57396 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57410 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57418 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57420 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57422 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57434 - "POST /v1/completions HTTP/1.1" 200 OK
+(Worker_TP0 pid=665) [radiance.mxfp4] A-tiled GEMM path: call #1000 (M=1800 N=7168 K=5120)
+(Worker_TP1 pid=666) [radiance.mxfp4] A-tiled GEMM path: call #1000 (M=1800 N=7168 K=5120)
+(APIServer pid=1) INFO:     172.19.0.1:57420 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57410 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57422 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57380 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57434 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57418 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57370 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:57422 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:18:38 [loggers.py:310] Engine 000: Avg prompt throughput: 409.6 tokens/s, Avg generation throughput: 352.9 tokens/s, Running: 6 reqs, Waiting: 0 reqs, GPU KV cache usage: 29.7%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:18:38 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 4.74, Accepted throughput: 279.59 tokens/s, Drafted throughput: 413.39 tokens/s, Accepted: 2796 tokens, Drafted: 4134 tokens, Per-position acceptance rate: 0.877, 0.635, 0.568, 0.478, 0.427, 0.394, 0.365, Avg Draft acceptance rate: 67.6%
+(APIServer pid=1) INFO:     172.19.0.1:57380 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47534 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47534 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47546 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47562 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47564 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47568 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47584 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47586 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47602 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47602 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47562 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47584 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47546 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47568 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:18:48 [loggers.py:310] Engine 000: Avg prompt throughput: 332.8 tokens/s, Avg generation throughput: 299.9 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 39.6%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:18:48 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.63, Accepted throughput: 219.39 tokens/s, Drafted throughput: 417.77 tokens/s, Accepted: 2194 tokens, Drafted: 4178 tokens, Per-position acceptance rate: 0.802, 0.527, 0.403, 0.347, 0.226, 0.187, 0.142, Avg Draft acceptance rate: 52.5%
+(APIServer pid=1) INFO:     172.19.0.1:47586 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47546 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47602 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47568 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:39018 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:39018 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:39018 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:18:58 [loggers.py:310] Engine 000: Avg prompt throughput: 281.6 tokens/s, Avg generation throughput: 183.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:18:58 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 4.30, Accepted throughput: 141.30 tokens/s, Drafted throughput: 242.10 tokens/s, Accepted: 1413 tokens, Drafted: 2421 tokens, Per-position acceptance rate: 0.783, 0.523, 0.481, 0.444, 0.374, 0.355, 0.341, Avg Draft acceptance rate: 58.4%
+(APIServer pid=1) INFO:     172.19.0.1:47300 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47300 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47300 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47300 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47302 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47302 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47306 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47314 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47322 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47302 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:19:08 [loggers.py:310] Engine 000: Avg prompt throughput: 1228.7 tokens/s, Avg generation throughput: 38.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:19:08 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.76, Accepted throughput: 29.00 tokens/s, Drafted throughput: 73.50 tokens/s, Accepted: 290 tokens, Drafted: 735 tokens, Per-position acceptance rate: 0.657, 0.514, 0.476, 0.324, 0.276, 0.257, 0.257, Avg Draft acceptance rate: 39.5%
+(APIServer pid=1) INFO:     172.19.0.1:42740 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42740 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42752 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42768 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42772 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42772 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42740 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42772 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42752 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:42768 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:19:18 [loggers.py:310] Engine 000: Avg prompt throughput: 1638.2 tokens/s, Avg generation throughput: 51.2 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:19:18 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.09, Accepted throughput: 35.70 tokens/s, Drafted throughput: 119.69 tokens/s, Accepted: 357 tokens, Drafted: 1197 tokens, Per-position acceptance rate: 0.661, 0.398, 0.298, 0.222, 0.181, 0.170, 0.158, Avg Draft acceptance rate: 29.8%
+(APIServer pid=1) INFO:     172.19.0.1:50578 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50578 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50584 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50598 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50606 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50616 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50632 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50648 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50664 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50598 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:19:28 [loggers.py:310] Engine 000: Avg prompt throughput: 1638.2 tokens/s, Avg generation throughput: 51.2 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:19:28 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.15, Accepted throughput: 35.90 tokens/s, Drafted throughput: 86.09 tokens/s, Accepted: 359 tokens, Drafted: 861 tokens, Per-position acceptance rate: 0.533, 0.401, 0.335, 0.287, 0.246, 0.192, 0.156, Avg Draft acceptance rate: 41.7%
+(APIServer pid=1) INFO:     172.19.0.1:50666 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50666 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50678 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50682 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50698 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50700 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50710 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50718 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50728 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50678 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50666 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50700 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50710 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50698 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50728 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50698 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50718 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:50700 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:19:38 [loggers.py:310] Engine 000: Avg prompt throughput: 3276.5 tokens/s, Avg generation throughput: 102.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:19:38 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 2.94, Accepted throughput: 68.79 tokens/s, Drafted throughput: 158.59 tokens/s, Accepted: 688 tokens, Drafted: 1586 tokens, Per-position acceptance rate: 0.662, 0.369, 0.296, 0.225, 0.169, 0.118, 0.099, Avg Draft acceptance rate: 43.4%
+(APIServer pid=1) INFO:     172.19.0.1:35888 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:35888 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:35888 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:35900 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:35900 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:19:48 [loggers.py:310] Engine 000: Avg prompt throughput: 812.7 tokens/s, Avg generation throughput: 6.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:19:48 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 3.71, Accepted throughput: 4.60 tokens/s, Drafted throughput: 11.90 tokens/s, Accepted: 46 tokens, Drafted: 119 tokens, Per-position acceptance rate: 0.588, 0.471, 0.412, 0.353, 0.294, 0.294, 0.294, Avg Draft acceptance rate: 38.7%
+(APIServer pid=1) INFO:     172.19.0.1:35900 - "GET /metrics HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47178 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47190 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47204 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117] Error in extracting tool call from response.
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117] Traceback (most recent call last):
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]   File "/opt/vllm/lib/python3.12/site-packages/vllm/tool_parsers/hermes_tool_parser.py", line 92, in extract_tool_calls
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]     json.loads(match[0] if match[0] else match[1])
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]   File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]     return _default_decoder.decode(s)
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]   File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]     obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]   File "/usr/lib/python3.12/json/decoder.py", line 353, in raw_decode
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]     obj, end = self.scan_once(s, idx)
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117]                ^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1) ERROR 09-08 17:19:57 [hermes_tool_parser.py:117] json.decoder.JSONDecodeError: Unterminated string starting at: line 2 column 183 (char 183)
+(APIServer pid=1) INFO:     172.19.0.1:47220 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47226 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:19:58 [loggers.py:310] Engine 000: Avg prompt throughput: 1105.8 tokens/s, Avg generation throughput: 132.6 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:19:58 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 6.27, Accepted throughput: 109.60 tokens/s, Drafted throughput: 130.70 tokens/s, Accepted: 1096 tokens, Drafted: 1307 tokens, Per-position acceptance rate: 0.923, 0.856, 0.798, 0.760, 0.697, 0.630, 0.606, Avg Draft acceptance rate: 83.9%
+(APIServer pid=1) INFO:     172.19.0.1:47240 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47252 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:47268 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40752 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40760 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(Worker_TP1 pid=666) [radiance.mxfp4] A-tiled GEMM path: call #10000 (M=586 N=5120 K=8704)
+(Worker_TP0 pid=665) [radiance.mxfp4] A-tiled GEMM path: call #10000 (M=586 N=5120 K=8704)
+(APIServer pid=1) INFO:     172.19.0.1:40764 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40766 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40778 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40794 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40806 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40812 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40818 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40828 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40844 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 09-08 17:20:08 [loggers.py:310] Engine 000: Avg prompt throughput: 878.9 tokens/s, Avg generation throughput: 99.7 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 5.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=1) INFO 09-08 17:20:08 [metrics.py:120] SpecDecoding metrics: Mean acceptance length: 4.48, Accepted throughput: 72.39 tokens/s, Drafted throughput: 115.79 tokens/s, Accepted: 724 tokens, Drafted: 1158 tokens, Per-position acceptance rate: 0.870, 0.740, 0.606, 0.471, 0.380, 0.250, 0.163, Avg Draft acceptance rate: 62.5%
+(APIServer pid=1) INFO:     172.19.0.1:40852 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:40862 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56218 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56226 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56230 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56234 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56248 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56258 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56266 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56280 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+(APIServer pid=1) INFO:     172.19.0.1:56288 - "POST /v1/chat/completions HTTP/1.1" 200 OK
