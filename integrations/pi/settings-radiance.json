@@ -1,0 +1,16 @@
+{
+  "defaultTools": [
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+    "search",
+    "fetch",
+    "extract",
+    "qwen_rehydrate_tool_turn"
+  ],
+  "httpIdleTimeoutMs": 0
+}

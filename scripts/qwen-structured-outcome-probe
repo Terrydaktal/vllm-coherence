@@ -1,0 +1,524 @@
+#!/usr/bin/env python3
+"""Qualify the structured-outcome protocol against an authenticated cache head."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import stat
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+SCHEMA = "urn:qwen-r9700:structured-outcome-probe:v2"
+HEAD_SCHEMA = "urn:qwen-r9700:authenticated-snapshot-head:v1"
+MODEL = "qwen3.8-27b-frozenlock"
+FINAL_TOOL = "qwen_final_answer"
+TOKEN_DIGEST_DOMAIN = b"qwen-r9700-token-ids-u32be-v1\0"
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+FINAL_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["answer"],
+    "properties": {"answer": {"type": "string", "minLength": 1}},
+}
+
+
+class ProbeError(RuntimeError):
+    """Fail-closed protocol qualification error."""
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+
+
+def wire_json(value: object) -> bytes:
+    # Tool/schema object order is part of this model's prompt-token ABI. Keep the
+    # captured provider order on the wire; recursively sorting these keys changed
+    # the qualified 39,872-token prompt to 39,871 tokens.
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+
+
+def digest(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def redacted_text_shape(value: object) -> dict[str, object]:
+    if value is None:
+        return {"bytes": 0, "non_whitespace": False, "present": False, "sha256": None}
+    if not isinstance(value, str):
+        return {"present": True, "type": type(value).__name__}
+    encoded = value.encode()
+    return {
+        "bytes": len(encoded),
+        "non_whitespace": bool(value.strip()),
+        "present": True,
+        "sha256": digest(encoded),
+    }
+
+
+def redacted_response_shape(response: object, response_bytes: bytes) -> dict[str, object]:
+    result: dict[str, object] = {
+        "response_bytes": len(response_bytes),
+        "response_sha256": digest(response_bytes),
+    }
+    if not isinstance(response, dict):
+        result["response_type"] = type(response).__name__
+        return result
+    result["object"] = response.get("object")
+    choices = response.get("choices")
+    result["choice_count"] = len(choices) if isinstance(choices, list) else None
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+        return result
+    choice = choices[0]
+    result["finish_reason"] = choice.get("finish_reason")
+    message = choice.get("message")
+    if not isinstance(message, dict):
+        result["message_type"] = type(message).__name__
+        return result
+    result["content"] = redacted_text_shape(message.get("content"))
+    result["reasoning"] = redacted_text_shape(message.get("reasoning"))
+    calls = message.get("tool_calls")
+    if not isinstance(calls, list):
+        result["tool_calls_type"] = type(calls).__name__
+        return result
+    redacted_calls: list[dict[str, object]] = []
+    for call in calls:
+        function = call.get("function") if isinstance(call, dict) else None
+        call_id = call.get("id") if isinstance(call, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        raw_arguments = function.get("arguments") if isinstance(function, dict) else None
+        redacted_calls.append(
+            {
+                "arguments": redacted_text_shape(raw_arguments),
+                "call_id_sha256": digest(call_id.encode()) if isinstance(call_id, str) else None,
+                "name": name if isinstance(name, str) else None,
+                "type": call.get("type") if isinstance(call, dict) else None,
+            }
+        )
+    result["tool_calls"] = redacted_calls
+    return result
+
+
+def token_digest(tokens: list[int]) -> str:
+    result = hashlib.sha256()
+    result.update(TOKEN_DIGEST_DOMAIN)
+    result.update(len(tokens).to_bytes(8, "big"))
+    for token in tokens:
+        if not isinstance(token, int) or isinstance(token, bool) or not 0 <= token <= 0xFFFFFFFF:
+            raise ProbeError("tokenizer returned an invalid token ID")
+        result.update(token.to_bytes(4, "big"))
+    return result.hexdigest()
+
+
+def stable_file(path: Path, mode: int, maximum: int) -> bytes:
+    if not path.is_absolute():
+        raise ProbeError(f"path is not absolute: {path}")
+    before = path.lstat()
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or path.is_symlink()
+        or before.st_uid != os.getuid()
+        or stat.S_IMODE(before.st_mode) != mode
+        or before.st_nlink != 1
+        or not 1 <= before.st_size <= maximum
+        or path.resolve() != path
+    ):
+        raise ProbeError(f"file has an unsafe protected identity: {path}")
+    payload = path.read_bytes()
+    after = path.lstat()
+    if (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    ) != (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    ):
+        raise ProbeError(f"file changed while it was authenticated: {path}")
+    return payload
+
+
+def load_object(path: Path, mode: int, maximum: int) -> tuple[dict[str, Any], bytes]:
+    payload = stable_file(path, mode, maximum)
+    try:
+        value = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProbeError(f"file is not valid JSON: {path}") from error
+    if not isinstance(value, dict):
+        raise ProbeError(f"JSON document is not an object: {path}")
+    return value, payload
+
+
+def protected_directory(path: Path) -> None:
+    info = path.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or path.is_symlink()
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+        or path.resolve() != path
+    ):
+        raise ProbeError(f"directory has an unsafe protected identity: {path}")
+
+
+def publish_create_only(path: Path, payload: bytes, mode: int) -> None:
+    protected_directory(path.parent)
+    try:
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+            mode,
+        )
+    except FileExistsError:
+        if stable_file(path, mode, len(payload)) != payload:
+            raise ProbeError(f"existing result differs: {path}") from None
+        return
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise ProbeError(f"short write while publishing {path}")
+            view = view[written:]
+        os.fsync(descriptor)
+        info = os.fstat(descriptor)
+        if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != mode or info.st_nlink != 1:
+            raise ProbeError(f"published file identity changed: {path}")
+    finally:
+        os.close(descriptor)
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def tool_names(payload: dict[str, Any]) -> tuple[set[str], dict[str, Any]]:
+    tools = payload.get("tools")
+    if not isinstance(tools, list) or not tools:
+        raise ProbeError("provider payload has no tool definitions")
+    names: set[str] = set()
+    final: dict[str, Any] | None = None
+    for tool in tools:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        if tool.get("type") != "function" or not isinstance(name, str) or not name:
+            raise ProbeError("provider payload contains a malformed tool definition")
+        if name in names:
+            raise ProbeError(f"provider payload contains duplicate tool {name}")
+        names.add(name)
+        if name == FINAL_TOOL:
+            final = function
+    if final is None or final.get("parameters") != FINAL_SCHEMA:
+        raise ProbeError("reserved final-answer tool schema differs")
+    return names, final
+
+
+def tokenization_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    result = {"messages": payload["messages"], "model": payload["model"]}
+    for key in (
+        "add_generation_prompt",
+        "add_special_tokens",
+        "chat_template",
+        "chat_template_kwargs",
+        "continue_final_message",
+        "tools",
+    ):
+        if key in payload:
+            result[key] = payload[key]
+    return result
+
+
+def post_json(
+    url: str, value: object, request_id: str, timeout_seconds: int
+) -> tuple[object, bytes]:
+    request = urllib.request.Request(
+        url,
+        data=wire_json(value),
+        headers={"Content-Type": "application/json", "x-request-id": request_id},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as handle:
+            response_bytes = handle.read(32 * 1024 * 1024 + 1)
+    except urllib.error.HTTPError as error:
+        error_bytes = error.read(64 * 1024 + 1)
+        detail = f"HTTP {error.code}"
+        if len(error_bytes) <= 64 * 1024:
+            try:
+                document = json.loads(error_bytes)
+                message = document.get("message") if isinstance(document, dict) else None
+                nested = document.get("error") if isinstance(document, dict) else None
+                if not isinstance(message, str) and isinstance(nested, dict):
+                    message = nested.get("message")
+                if isinstance(message, str) and message and len(message) <= 1_000:
+                    detail = f"{detail}: {message}"
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                pass
+        raise ProbeError(f"structured-outcome endpoint request failed: {detail}") from error
+    except (urllib.error.URLError, TimeoutError) as error:
+        raise ProbeError(f"structured-outcome endpoint request failed: {error}") from error
+    if len(response_bytes) > 32 * 1024 * 1024:
+        raise ProbeError("structured-outcome endpoint response is too large")
+    try:
+        return json.loads(response_bytes), response_bytes
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProbeError("structured-outcome endpoint returned invalid JSON") from error
+
+
+def validate_inputs(payload: dict[str, Any], head: dict[str, Any]) -> set[str]:
+    deep_evidence = head.get("deep_evidence")
+    if (
+        payload.get("model") != MODEL
+        or payload.get("stream") is not True
+        or payload.get("tool_choice") != "required"
+        or not isinstance(payload.get("messages"), list)
+        or not payload["messages"]
+        or any(
+            key in payload
+            for key in (
+                "kv_transfer_params",
+                "response_format",
+                "structured_output",
+                "structured_outputs",
+            )
+        )
+    ):
+        raise ProbeError("captured provider payload is not the required structured-outcome request")
+    if (
+        head.get("schema") != HEAD_SCHEMA
+        or head.get("store_drained") is not True
+        or not isinstance(head.get("session_id"), str)
+        or IDENTIFIER_RE.fullmatch(head["session_id"]) is None
+        or not isinstance(head.get("branch"), str)
+        or IDENTIFIER_RE.fullmatch(head["branch"]) is None
+        or not isinstance(head.get("manifest_sha256"), str)
+        or DIGEST_RE.fullmatch(head["manifest_sha256"]) is None
+        or not isinstance(head.get("prompt_tokens"), int)
+        or head["prompt_tokens"] < 8_258
+        or not isinstance(head.get("prefix_token_ids_sha256"), str)
+        or DIGEST_RE.fullmatch(head["prefix_token_ids_sha256"]) is None
+        or not isinstance(deep_evidence, dict)
+        or deep_evidence.get("all_groups_verified") is not True
+        or deep_evidence.get("total_groups") != 69
+    ):
+        raise ProbeError("authenticated head does not prove a drained all-69 snapshot")
+    return tool_names(payload)[0]
+
+
+def validate_response(
+    response: object, *, names: set[str], expected_prompt_tokens: int
+) -> tuple[list[dict[str, str]], dict[str, object]]:
+    if not isinstance(response, dict) or response.get("object") != "chat.completion":
+        raise ProbeError("endpoint response is not a chat completion")
+    choices = response.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1:
+        raise ProbeError("endpoint response does not contain exactly one choice")
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        raise ProbeError("endpoint response choice is not an object")
+    message = choice.get("message")
+    calls = message.get("tool_calls") if isinstance(message, dict) else None
+    if choice.get("finish_reason") != "tool_calls" or not isinstance(calls, list) or not calls:
+        raise ProbeError("required-tool request ended without structured tool calls")
+    content = message.get("content")
+    if content is not None and not isinstance(content, str):
+        raise ProbeError("required-tool response returned malformed visible content")
+    reasoning = message.get("reasoning")
+    if reasoning is not None and not isinstance(reasoning, str):
+        raise ProbeError("required-tool response returned malformed reasoning content")
+    evidence: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    final_count = 0
+    for call in calls:
+        function = call.get("function") if isinstance(call, dict) else None
+        call_id = call.get("id") if isinstance(call, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        raw_arguments = function.get("arguments") if isinstance(function, dict) else None
+        if (
+            not isinstance(call, dict)
+            or call.get("type") != "function"
+            or not isinstance(call_id, str)
+            or not call_id
+            or call_id in seen_ids
+            or name not in names
+            or not isinstance(raw_arguments, str)
+        ):
+            raise ProbeError("endpoint returned a malformed, duplicate, or unadvertised tool call")
+        seen_ids.add(call_id)
+        try:
+            arguments = json.loads(raw_arguments)
+        except json.JSONDecodeError as error:
+            raise ProbeError("endpoint returned non-JSON tool arguments") from error
+        if not isinstance(arguments, dict):
+            raise ProbeError("endpoint returned non-object tool arguments")
+        if name == FINAL_TOOL:
+            final_count += 1
+            if (
+                set(arguments) != {"answer"}
+                or not isinstance(arguments["answer"], str)
+                or not arguments["answer"].strip()
+            ):
+                raise ProbeError("endpoint returned invalid reserved final-answer arguments")
+        evidence.append(
+            {
+                "arguments_sha256": digest(raw_arguments.encode()),
+                "call_id_sha256": digest(call_id.encode()),
+                "name": name,
+            }
+        )
+    if final_count and (final_count != 1 or len(calls) != 1):
+        raise ProbeError("endpoint mixed or duplicated the reserved final-answer call")
+    usage = response.get("usage")
+    if not isinstance(usage, dict) or usage.get("prompt_tokens") != expected_prompt_tokens:
+        raise ProbeError("endpoint did not consume the exact authenticated prompt")
+    return evidence, {
+        "discarded_visible_content": redacted_text_shape(content),
+        "reasoning": redacted_text_shape(reasoning),
+    }
+
+
+def execute(arguments: argparse.Namespace) -> dict[str, Any]:
+    payload, payload_bytes = load_object(arguments.payload, 0o600, 256 * 1024 * 1024)
+    head, head_bytes = load_object(arguments.head, 0o400, 4 * 1024 * 1024)
+    names = validate_inputs(payload, head)
+    if not re.fullmatch(r"http://127\.0\.0\.1:[0-9]{4,5}", arguments.base_url):
+        raise ProbeError("base URL is not a local loopback endpoint")
+    result_path = arguments.output / "qualification.json"
+    if result_path.exists() or result_path.is_symlink():
+        result, _result_bytes = load_object(result_path, 0o400, 4 * 1024 * 1024)
+        if (
+            result.get("schema") != SCHEMA
+            or result.get("status") != "passed"
+            or result.get("provider_payload_sha256") != digest(payload_bytes)
+            or result.get("authenticated_head_sha256") != digest(head_bytes)
+        ):
+            raise ProbeError("existing protocol qualification differs")
+        return result
+    protected_directory(arguments.output)
+    request_id = f"qwen-outcome-probe-v2-{digest(payload_bytes + head_bytes)[:24]}"
+    started = {
+        "authenticated_head_sha256": digest(head_bytes),
+        "provider_payload_sha256": digest(payload_bytes),
+        "request_id": request_id,
+        "schema": f"{SCHEMA}:started",
+    }
+    publish_create_only(
+        arguments.output / "qualification.started.json", canonical(started) + b"\n", 0o400
+    )
+    tokenized, tokenized_bytes = post_json(
+        f"{arguments.base_url}/tokenize",
+        tokenization_payload(payload),
+        f"{request_id}-tokenize",
+        arguments.timeout_seconds,
+    )
+    tokens = tokenized.get("tokens") if isinstance(tokenized, dict) else None
+    if not isinstance(tokens, list) or len(tokens) != head["prompt_tokens"]:
+        observed = len(tokens) if isinstance(tokens, list) else "invalid"
+        raise ProbeError(
+            "chat tokenization length differs from the authenticated snapshot head: "
+            f"observed={observed} expected={head['prompt_tokens']}"
+        )
+    observed_token_digest = token_digest(tokens)
+    if observed_token_digest != head["prefix_token_ids_sha256"]:
+        raise ProbeError("chat tokenization digest differs from the authenticated snapshot head")
+    request_payload = dict(payload)
+    request_payload["stream"] = False
+    request_payload.pop("stream_options", None)
+    maximum_tokens = payload.get("max_completion_tokens", payload.get("max_tokens", 4096))
+    if (
+        not isinstance(maximum_tokens, int)
+        or isinstance(maximum_tokens, bool)
+        or maximum_tokens < 1
+    ):
+        raise ProbeError("captured provider payload has an invalid max_tokens value")
+    request_payload.pop("max_tokens", None)
+    request_payload["max_completion_tokens"] = min(max(maximum_tokens, 4096), 8192)
+    # Cache transport and structured generation are qualified independently. The
+    # staged controller has already deep-authenticated the complete head; attaching
+    # it here would make admission depend on two independently parsed HTTP request
+    # shapes before their token-vector equality had been established.
+    request_payload.pop("kv_transfer_params", None)
+    response, response_bytes = post_json(
+        f"{arguments.base_url}/v1/chat/completions",
+        request_payload,
+        request_id,
+        arguments.timeout_seconds,
+    )
+    response_shape = redacted_response_shape(response, response_bytes)
+    try:
+        calls, output_shape = validate_response(
+            response, names=names, expected_prompt_tokens=head["prompt_tokens"]
+        )
+    except ProbeError as error:
+        rejection = {
+            "authenticated_head_sha256": digest(head_bytes),
+            "error": str(error),
+            "provider_payload_sha256": digest(payload_bytes),
+            "request_id": request_id,
+            "response": response_shape,
+            "schema": f"{SCHEMA}:rejected",
+            "status": "rejected",
+        }
+        publish_create_only(
+            arguments.output / f"qualification.rejected.{digest(response_bytes)}.json",
+            canonical(rejection) + b"\n",
+            0o400,
+        )
+        raise
+    result = {
+        "authenticated_head_sha256": digest(head_bytes),
+        "call_count": len(calls),
+        "calls": calls,
+        "finish_reason": "tool_calls",
+        "model": MODEL,
+        "output_shape": output_shape,
+        "prompt_tokens": head["prompt_tokens"],
+        "prompt_token_ids_sha256": observed_token_digest,
+        "provider_payload_sha256": digest(payload_bytes),
+        "request_id": request_id,
+        "response_sha256": digest(response_bytes),
+        "response_shape": response_shape,
+        "schema": SCHEMA,
+        "status": "passed",
+        "tool_choice": "required",
+        "tokenize_response_sha256": digest(tokenized_bytes),
+    }
+    publish_create_only(result_path, canonical(result) + b"\n", 0o400)
+    return result
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--payload", type=Path, required=True)
+    result.add_argument("--head", type=Path, required=True)
+    result.add_argument("--output", type=Path, required=True)
+    result.add_argument("--base-url", required=True)
+    result.add_argument("--timeout-seconds", type=int, default=300)
+    return result
+
+
+def main() -> int:
+    try:
+        result = execute(parser().parse_args())
+    except (ProbeError, OSError, TypeError, ValueError) as error:
+        print(f"qwen-structured-outcome-probe: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

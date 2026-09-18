@@ -1,0 +1,85 @@
+{
+  "schema": "qwen-radiance-durable-hybrid-snapshot-abi-v3",
+  "lane": "public-clean-snapshot-candidate-v1",
+  "target": {
+    "repository": "just1moremodel/Qwen3.8-27B-Uncensored-MXFP4-awq",
+    "revision": "d706d7c2694813248d3ee73b268435ab2bbc7d45",
+    "source_weights_sha256": "3305a30e8a12ac766c386c29e4f294d3459cb68308609eee5676f86fd1065eae",
+    "deployed_shards": {
+      "model-00001-of-00004.safetensors": "54d83c1d36631de231876217a8e0c2483eccee8746369a482b79442bdfc5d958",
+      "model-00002-of-00004.safetensors": "094b67e8e149392b6f9d3b81d97620824c365b0a1235bf9bdcbd7af3d199df5c",
+      "model-00003-of-00004.safetensors": "e957545e9f4a100ba8a20a8cf459da9cffaff112c6a49c64e101c7870b79a21c",
+      "model-00004-of-00004.safetensors": "952cf4337f984ddefc8abf474f47de5f06c56eba6eb37aa196ee916ececbf2bf",
+      "model.safetensors.index.json": "a3f4a5f8e00c860b2d133b6b84b02a07263b4b58422599c620ef270539e2a540"
+    },
+    "config_sha256": "a85ace9fc8676e2cf043406df6cc3fa06d2d1b7cd57308c72c9e3cb879ee1100",
+    "tokenizer_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "drafter": {
+    "repository": "tcclaviger/Qwen3.8-27B-DFlash2-FP8",
+    "revision": "ee0cb26a8279b7910cc28d82a8a3e15e4728d56f",
+    "weights_sha256": "7dbb99a8d0120f502e66b256aa7c0866d933ceeee4a02463d9db591811e8404e",
+    "config_sha256": "5b5668a00b26aaebd88c7e3d961f7d1cdef025867fee158dfccb84f29fd8caec"
+  },
+  "runtime": {
+    "image": "docker.io/stilldeadcode/vllm-radiance:0.9.3",
+    "image_id": "bebc00145d7d7c908fa2755c727952f9ecaca7e0e56e8bf772ca506f8eaed4a8",
+    "image_digest": "sha256:45694209177a55a1ab3ba6702fe6e978b1b66a6e66ae3fc066f8d579f7bc4c25",
+    "launcher_repository": "https://github.com/zzpanic/qwen3.6-vllm-gfx1201-launchers.git",
+    "launcher_commit": "c1a67facfd2032c6b3e912e81a1782705f3db63a",
+    "launcher_original_sha256": "a83493e73028421f38baa5340a2e971911bcdb184f551c4cbb373076911f9f75",
+    "launcher_snapshot_overlay_sha256": "231cc52336c5e3ef446df8a835a1ab8f76230034d761af28e6a706913050fea4",
+    "radiance_repository": "https://github.com/GGZ14/vllm-mxfp4.git",
+    "radiance_commit": "7ca5144a7975add74f653169de76bb538f8c4757",
+    "radiance_mxfp4_fp8_source_sha256": "130c58c6f2cb77c452161700f804e39ba620987e8ff5d078caf71730118d1b72",
+    "radiance_mxfp4_fp8_so_sha256": "24822a8ad68a5c31d9ecc013a81efee23b883f56efff99c5ba1af64f751160c6",
+    "libr4d_so_sha256": "616ffdcb84469c98901977747ac3ee663651c97a2048dd622d1a3735eb6add51",
+    "deterministic_hash_environment_patch_sha256": "4046e7427c98a3fba9ee40bee67d18553f66a5c4ca7fbc351398286c2f729eda",
+    "snapshot_bootstrap_patch_sha256": "503932ef4a7a989aff39671fe57cecb8ac849ab93851f72e19cc445db5e685c6",
+    "bounded_lookup_and_settled_tail_patch_sha256": "e684e0c6a26a40aa93d2c0ab6567c99bdff0b7949a01ccacb14b7447925af382",
+    "base_scheduler_sha256": "f5bc52aae3322cfc74f34bd272f9a250d384957428b0b468967eb11afa52bf69"
+  },
+  "serving": {
+    "language_model_only": true,
+    "max_model_len": 253792,
+    "max_num_seqs": 1,
+    "max_num_batched_tokens": 2048,
+    "kv_cache_memory_bytes": 10000000000,
+    "kv_cache_dtype": "fp8",
+    "attention_backend": "R4D",
+    "mamba_cache_mode": "align",
+    "speculative_method": "dflash",
+    "speculative_depth": 7,
+    "draft_attention_backend": "TRITON_ATTN",
+    "draft_sampling": "probabilistic",
+    "dynamic_width": false,
+    "verify_head": false,
+    "async_scheduling": false,
+    "python_hash_seed": 0,
+    "cudagraph_capture_sizes": [1, 2, 4, 8],
+    "generation_sampling": {
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20
+    },
+    "reasoning_effort": "xhigh",
+    "tool_call_parser": "qwen3_xml",
+    "reasoning_parser": "qwen3"
+  },
+  "storage": {
+    "connector": "OffloadingConnector",
+    "spec": "TieringOffloadingSpec",
+    "cpu_primary_bytes": 10737418240,
+    "blocks_per_chunk": 1,
+    "restore_transaction": "single-allocation-single-load-single-publication",
+    "sliding_lookup": "newest-unresolved-suffix-barrier",
+    "recurrent_publication": "finished-request-settled-tail-only",
+    "recurrent_publication_contract": "complete-window-plus-eagle-page-with-no-historical-mid-request-state",
+    "withheld_recurrent_index_policy": "pending-until-authoritative-finished-request",
+    "secondary_tier": "fs",
+    "load_failure_policy": "fail",
+    "content_hashes_cross_restart": true,
+    "writes": "temporary-file-plus-atomic-rename"
+  }
+}

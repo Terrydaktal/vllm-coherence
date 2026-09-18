@@ -1,0 +1,374 @@
+{
+  "schema": "qwen-radiance-durable-hybrid-snapshot-abi-v4",
+  "target": {
+    "repository": "just1moremodel/Qwen3.8-27B-Uncensored-MXFP4-awq",
+    "revision": "d706d7c2694813248d3ee73b268435ab2bbc7d45",
+    "source_weights_sha256": "3305a30e8a12ac766c386c29e4f294d3459cb68308609eee5676f86fd1065eae",
+    "deployed_shards": {
+      "model-00001-of-00004.safetensors": "54d83c1d36631de231876217a8e0c2483eccee8746369a482b79442bdfc5d958",
+      "model-00002-of-00004.safetensors": "094b67e8e149392b6f9d3b81d97620824c365b0a1235bf9bdcbd7af3d199df5c",
+      "model-00003-of-00004.safetensors": "e957545e9f4a100ba8a20a8cf459da9cffaff112c6a49c64e101c7870b79a21c",
+      "model-00004-of-00004.safetensors": "952cf4337f984ddefc8abf474f47de5f06c56eba6eb37aa196ee916ececbf2bf",
+      "model.safetensors.index.json": "a3f4a5f8e00c860b2d133b6b84b02a07263b4b58422599c620ef270539e2a540"
+    },
+    "config_sha256": "a85ace9fc8676e2cf043406df6cc3fa06d2d1b7cd57308c72c9e3cb879ee1100",
+    "tokenizer_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "drafter": {
+    "repository": "tcclaviger/Qwen3.8-27B-DFlash2-FP8",
+    "revision": "ee0cb26a8279b7910cc28d82a8a3e15e4728d56f",
+    "weights_sha256": "7dbb99a8d0120f502e66b256aa7c0866d933ceeee4a02463d9db591811e8404e",
+    "config_sha256": "5b5668a00b26aaebd88c7e3d961f7d1cdef025867fee158dfccb84f29fd8caec"
+  },
+  "runtime": {
+    "image": "docker.io/magiccodingman/vllm-radiance:1.0.16",
+    "image_digest": "sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
+    "image_id": "4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf",
+    "source_commit": "f295b9ef51ad413a68e4192371e0377741a354ce",
+    "package_versions": {
+      "vllm": "0.28.0",
+      "torch": "2.12.0+rocm7.14",
+      "triton": "3.7.1+gitf0b55c07",
+      "amd-aiter": "0.1.20",
+      "transformers": "5.15.0",
+      "xgrammar": "0.2.3"
+    },
+    "kernel_hashes": {
+      "radiance_mxfp4_fp8.so": "8c895e15556970efeb325b3930807dbb41d9149058e29c9d9cbe497ecd7dcd51",
+      "r4d.so": "daa7a3bf79d2a1e0a7909a6ed9ddac2f0f3ac74b878569f4eabc2ccae839aecc"
+    },
+    "kernel_environment": {
+      "RADIANCE_MXFP4": "1",
+      "RADIANCE_MXFP4_W4A8": "1",
+      "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+      "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+      "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+      "RADIANCE_MXFP4_WPERM": "1",
+      "RADIANCE_MXFP4_DECODE_NT": "1",
+      "RADIANCE_MXFP4_A_TILED_MIN_M": "0",
+      "RADIANCE_GDN_NORM_QUANT": "0",
+      "RADIANCE_NORMQUANT_FUSION": "0",
+      "RADIANCE_FP8_STREAM": "0",
+      "RADIANCE_FAST_DRAFT": "1",
+      "RADIANCE_DRAFT_RERANK": "80",
+      "RADIANCE_VERIFY_HEAD": "1",
+      "RADIANCE_VERIFY_HEAD_MAX_M": "32",
+      "RADIANCE_DYNAMIC_WIDTH": "0",
+      "VLLM_USE_V2_MODEL_RUNNER": "1",
+      "QWEN_STOCK_GDN_LAZY": "0",
+      "RADIANCE_MXFP4_HOIST_QUANT": "1",
+      "RADIANCE_MXFP4_TRACED_QUANT": "0",
+      "RADIANCE_MXFP4_PUREQUANT": "0",
+      "RADIANCE_GDN_LAZY": "0",
+      "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1",
+      "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"
+    },
+    "deterministic_offload_hashes": {
+      "PYTHONHASHSEED": "0"
+    },
+    "bounded_sliding_lookup_and_settled_tail_patch": {
+      "path": "patch_streaming_snapshot.py",
+      "sha256": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd"
+    },
+    "release_files": {
+      "bootstrap_radiance_release.py": "52de5de07f97ba70e3d880d3913ae491b9299934944bca2e2663cab4123ba63d",
+      "runtime-radiance-1.0.16.json": "29efe5d350dcac1aa3ca405184844766465156c9e9406b497e2281d9f002dc87",
+      "radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
+      "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
+      "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
+      "patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
+      "gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
+      "qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+      "optimized-release.json": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
+      "optimized_pi_release.py": "7f1211486bf24e3068551b282b2956c59dd4b470fc1cabee6bae95a397144694",
+      "radiance_verifyhead_global.py": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
+      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
+    },
+    "optimized_d7": {
+      "manifest_sha256": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
+      "state_layout": "existing-nine-slot",
+      "worker": "optimized_d7_worker.OptimizedWorker",
+      "arithmetic": {
+        "repair_sha256": "991ddb0bf613aef9e5dd10c4fc4eb07f158d52ef92d5b3e827f67c315c9babd3",
+        "performance_sha256": "17ecdb689820bd0dba678ca092aa7166cbd71859446122d0fe38875c16dadbaf",
+        "precision_casts": "preserve eager BF16 rounding during compilation",
+        "state_layout": "existing-nine-slot",
+        "target_head": "full BF16 with qualified M4-pair dispatch"
+      },
+      "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-256 output-head selection is approximate and is recorded separately.",
+      "admission_changes": [
+        {
+          "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
+          "old_sha256": "a4b2780ea07ac2996c48c014f5abc4e42454dd62cd706d6920899d2bbaccd66f",
+          "new_sha256": "47d7add2e465e50550172fe1b59ee297d9d995326c1c1e041adff5e509751e0b",
+          "scope": "Admit graph-padded buffers and slice their live query/output prefix; unchanged native attention arithmetic and existing state layout. Earlier numerical evidence covers the parent implementation."
+        }
+      ],
+      "target_head": {
+        "mode": "global256",
+        "candidate_count": 256,
+        "selection": "full-vocabulary INT2 top-256 then BF16-weight rerank",
+        "fallback": "installed corrected full BF16 head with qualified M4-pair dispatch",
+        "approximate": true,
+        "source_sha256": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
+        "cache_state": "unchanged for an identical processed token prefix"
+      },
+      "performance_qualification": {
+        "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",
+        "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
+        "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
+      }
+    },
+    "rocr_poll_backoff": {
+      "schema": "qwen-rocr-poll-backoff-v1",
+      "base_source_repository": "https://github.com/ROCm/rocm-systems",
+      "base_source_commit": "2b22ab0195cc1461cd9abf3b969e9dd7c10af350",
+      "base_source_tree": "28542580ed0e1104bfc1795cc7f1a6af03eeca52",
+      "upstream_fix_commit": "46558b7af4dc79b8b8014619c1afdb82db079a9f",
+      "backport_adaptation": "Preserve original init_age bookkeeping; insert only the upstream polling-backoff additions.",
+      "source_patch_sha256": "006d647e34ca098e1f72c61e1ec4174c22dad2fe4d2fdc4659443a7b42fc1e26",
+      "original_library_sha256": "15f8c717f4ebf0d00e64b95090466f35fcda78e0a4728fac010af55e91da3395",
+      "library_sha256": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda",
+      "library_path": "/opt/rocm/core-7.14/lib/libhsa-runtime64.so.1.21.0",
+      "compiler": "AMD clang 23.0.0git, 46fcb339fb61119b337f973c7ca9e710a319fdd0+PATCHED:440716f8b87be9d8e20ed910e10e5b6d14d57cf6",
+      "source_build_id": "1.21.0-qwen-poll-backoff-2b22ab01-46558b7a",
+      "build_image_id": "4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf",
+      "poll_floor_us": 20,
+      "mixed_poll_ceiling_us": 200,
+      "poll_only_ceiling_us": 2000,
+      "exported_symbols_unchanged": 276,
+      "snapshot_data_compatible": true,
+      "scope": "CPU asynchronous-event wait scheduling only. No model, kernel, quantizer, or snapshot-layout change."
+    },
+    "draft_sampling": {
+      "installer": "patch_dflash_sampling_rng.py",
+      "upstream_pr": "https://github.com/vllm-project/vllm/pull/54282",
+      "upstream_commit": "fe755c88995ad468882517b6c4bdd60138d46a3a",
+      "contract": "independent proposal and residual Gumbel streams using a 1<<30 proposal position salt; unchanged greedy sampling, KV computation and snapshot layout"
+    },
+    "gdn_prefill_correction": {
+      "implementation": "gdn_bounded_recurrence_extreme_decay_v1",
+      "decay_span_threshold": 128,
+      "source_sha256": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
+      "binary_sha256": "8b04f207868a4e800f5865e248a0f18396c1ec75dfb1fbd3ed696db97d28243a",
+      "installer": "patch_gdn_extreme_decay.py",
+      "source_preimage_sha256": "f6675ecfcc0bba7c8f2b77db91438e6f6888a251d7140b443d51f3c21aa2dbe6",
+      "host_gpu_synchronization": false
+    },
+    "chat_storage": {
+      "format": "qwen-chat-cache-v1",
+      "tier": "qwen_chat_fs",
+      "modules": {
+        "radiance_cache.py": "04adc11af696ab006570ee481b9e0b04d673e4bc6282469ea03061e6567abe03",
+        "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
+        "radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
+        "radiance_fair_scheduler.py": "31cc3b73c7f69d15da7062768522c94d59e7c45fc4a26e7b2046312826bcfe1c",
+        "patch_chat_snapshot.py": "445799dd68446740da4eb8d3487956b2b408d20dc765b52d006601774f2f5f54"
+      }
+    },
+    "memory_report": {
+      "schema": "urn:qwen-r9700:radiance-memory:v1",
+      "interval_seconds": 1,
+      "directory": "/dev/shm/qwen-radiance-memory-v1",
+      "worker_preimage_sha256": "5e8faf3e00649289c81c2917dd4557a80b0b351c33295d8e0c4b204a304e6552",
+      "contract": "one shared CPU counter sampler; bounded startup/on-request storage inventory; no GPU work, tensor values, synchronization, cache clearing, or peak resets",
+      "allocation_map": {
+        "schema": "urn:qwen-r9700:radiance-allocation-map:v1",
+        "request_interval_seconds": 10,
+        "contract": "on-request allocator snapshot with include_traces=False; numeric segment/block sizes; best-effort fixed-root storage owners; no addresses, trace history or tensor values; separate private/default/unknown pools; bounded analysis and overwritten tmpfs output"
+      },
+      "compatible_runtime_abis": [
+        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832"
+      ]
+    },
+    "buffered_tool_usage": {
+      "installer": "patch_chat_snapshot.py",
+      "serving_preimage_sha256": "a2440b6b76ad87de86bcf6fc7061ad5d02ab67c1c3c89ca7de3eeb29aa12aa2f",
+      "contract": "continuous per-choice usage during parser buffering; preserve raw-token privacy"
+    },
+    "fair_scheduler": {
+      "class": "qwen_radiance_fair_scheduler.FairScheduler",
+      "policy": "uninterrupted responses; least-recently-served waiting chat at completion; handover overlaps client-side tool execution; reserve selected response through cache admission until completion or cancellation; swaps alone do not count as service; 2-second grace for completed tool calls; 30-second queue-age override at next boundary; equal priorities preserve this policy; higher priority 1 reserves the whole answer; higher priority 2 parks a response at the next safe synchronous step",
+      "maximum_cached_chats": 2,
+      "runner_state_slots": 2,
+      "maximum_dispatched_sequences": 1,
+      "answer_priority": {
+        "levels": [
+          0,
+          1,
+          2
+        ],
+        "default": 0,
+        "lease_seconds": 60,
+        "heartbeat_seconds": 10,
+        "release": "Pi agent_settled, shutdown, session switch or lease expiry",
+        "control": "bounded HTTP request and engine utility IPC; no inference or prompt changes",
+        "state": "park without vLLM preemption; retain V2 request slot and bank allocator"
+      },
+      "tool_handover": {
+        "grace_seconds": 2,
+        "maximum_deferral_seconds": 30,
+        "outcome_acknowledgement_timeout_seconds": 0.25,
+        "contract": "parser outcome through local engine IPC; no text; no blocking of client stream",
+        "engine_core_preimage_sha256": "f4b1e07b6d91fac1549bc74a5c804e5a88793d663b5dc045c9e455db6550f5ad"
+      },
+      "handover": "flush pending stores; discard a superseded same-chat generation in place; otherwise swap packed GPU state; retain V2 request state",
+      "residency_telemetry": "content-free chat and generation hashes, useful and allocated pinned bytes, and separate allocation and transfer timings",
+      "request_phase_telemetry": {
+        "schema": "urn:qwen-r9700:request-phases:v1",
+        "counter_interval_seconds": 0.5,
+        "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
+        "retention": "last numeric response timings per generation; at most 16 generations",
+        "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests"
+      }
+    }
+  },
+  "serving": {
+    "language_model_only": true,
+    "max_model_len": 253792,
+    "max_num_seqs": 2,
+    "max_num_batched_tokens": 2048,
+    "kv_cache_memory_bytes": 10000000000,
+    "kv_cache_dtype": "fp8",
+    "attention_backend": "R4D",
+    "mamba_cache_mode": "align",
+    "speculative_method": "dflash",
+    "speculative_depth": 7,
+    "draft_sampling": "probabilistic",
+    "python_hash_seed": 0,
+    "cudagraph_capture_sizes": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "effective_chat_template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+    "cudagraph_mode": "PIECEWISE",
+    "target_verify_head": true,
+    "draft_rerank": 80,
+    "r4d_attention_fp8": 0
+  },
+  "storage": {
+    "connector": "OffloadingConnector",
+    "spec": "TieringOffloadingSpec",
+    "cpu_primary_bytes": 19327352832,
+    "restore_transaction": "single-allocation-single-load-single-publication",
+    "sliding_lookup": "newest-unresolved-suffix-barrier",
+    "recurrent_publication": "immutable-full-attention-write-once; 8192-token-interval settled-tail journal",
+    "recurrent_publication_contract": "complete-window-plus-eagle-page; retain-three-prior-aligned-mamba-states-until-offload; buffer-at-most-15-changing-blocks-in-RAM",
+    "successor_lookup_publication_barrier": "wait-for-prior-finished-request-removal",
+    "withheld_recurrent_index_policy": "pending-until-authoritative-finished-request",
+    "secondary_tier": "qwen_chat_fs",
+    "load_failure_policy": "fail",
+    "content_hashes_cross_restart": true,
+    "writes": "temporary-file-plus-atomic-rename",
+    "output_head_compatibility": "Retain the prior canonical KV contract: only output-head selection changed; the backbone, state layout and processed-prefix identity are unchanged. The effective output head is recorded in runtime.optimized_d7.target_head.",
+    "data_abi": "36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5",
+    "data_contract": {
+      "schema": "qwen-radiance-release-data-v1",
+      "image_digest": "sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
+      "kernel_environment": {
+        "RADIANCE_MXFP4": "1",
+        "RADIANCE_MXFP4_W4A8": "1",
+        "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+        "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+        "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+        "RADIANCE_MXFP4_WPERM": "1",
+        "RADIANCE_MXFP4_DECODE_NT": "1",
+        "RADIANCE_MXFP4_A_TILED_MIN_M": "0",
+        "RADIANCE_GDN_NORM_QUANT": "0",
+        "RADIANCE_NORMQUANT_FUSION": "0",
+        "RADIANCE_FP8_STREAM": "0",
+        "RADIANCE_FAST_DRAFT": "1",
+        "RADIANCE_DRAFT_RERANK": "80",
+        "RADIANCE_VERIFY_HEAD": "0",
+        "RADIANCE_VERIFY_HEAD_MAX_M": "32",
+        "RADIANCE_DYNAMIC_WIDTH": "0",
+        "VLLM_USE_V2_MODEL_RUNNER": "1",
+        "QWEN_STOCK_GDN_LAZY": "0",
+        "RADIANCE_MXFP4_HOIST_QUANT": "1",
+        "RADIANCE_MXFP4_TRACED_QUANT": "0",
+        "RADIANCE_MXFP4_PUREQUANT": "0",
+        "RADIANCE_GDN_LAZY": "0",
+        "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1"
+      },
+      "target": {
+        "repository": "just1moremodel/Qwen3.8-27B-Uncensored-MXFP4-awq",
+        "revision": "d706d7c2694813248d3ee73b268435ab2bbc7d45",
+        "source_weights_sha256": "3305a30e8a12ac766c386c29e4f294d3459cb68308609eee5676f86fd1065eae",
+        "deployed_shards": {
+          "model-00001-of-00004.safetensors": "54d83c1d36631de231876217a8e0c2483eccee8746369a482b79442bdfc5d958",
+          "model-00002-of-00004.safetensors": "094b67e8e149392b6f9d3b81d97620824c365b0a1235bf9bdcbd7af3d199df5c",
+          "model-00003-of-00004.safetensors": "e957545e9f4a100ba8a20a8cf459da9cffaff112c6a49c64e101c7870b79a21c",
+          "model-00004-of-00004.safetensors": "952cf4337f984ddefc8abf474f47de5f06c56eba6eb37aa196ee916ececbf2bf",
+          "model.safetensors.index.json": "a3f4a5f8e00c860b2d133b6b84b02a07263b4b58422599c620ef270539e2a540"
+        },
+        "config_sha256": "a85ace9fc8676e2cf043406df6cc3fa06d2d1b7cd57308c72c9e3cb879ee1100",
+        "tokenizer_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+        "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+      },
+      "drafter": {
+        "repository": "tcclaviger/Qwen3.8-27B-DFlash2-FP8",
+        "revision": "ee0cb26a8279b7910cc28d82a8a3e15e4728d56f",
+        "weights_sha256": "7dbb99a8d0120f502e66b256aa7c0866d933ceeee4a02463d9db591811e8404e",
+        "config_sha256": "5b5668a00b26aaebd88c7e3d961f7d1cdef025867fee158dfccb84f29fd8caec"
+      },
+      "serving": {
+        "language_model_only": true,
+        "max_model_len": 253792,
+        "max_num_seqs": 2,
+        "max_num_batched_tokens": 2048,
+        "kv_cache_memory_bytes": 10000000000,
+        "kv_cache_dtype": "fp8",
+        "attention_backend": "R4D",
+        "mamba_cache_mode": "align",
+        "speculative_method": "dflash",
+        "speculative_depth": 7,
+        "draft_sampling": "probabilistic",
+        "python_hash_seed": 0,
+        "cudagraph_capture_sizes": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "effective_chat_template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+        "cudagraph_mode": "PIECEWISE",
+        "target_verify_head": false,
+        "draft_rerank": 80,
+        "r4d_attention_fp8": 0
+      },
+      "layout": "qwen-chat-cache-v1; complete-window-plus-eagle-page; retained-mamba-pages=3",
+      "prefill_math": {
+        "implementation": "gdn_bounded_recurrence_extreme_decay_v1",
+        "decay_span_threshold": 128,
+        "source_sha256": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
+        "binary_sha256": "8b04f207868a4e800f5865e248a0f18396c1ec75dfb1fbd3ed696db97d28243a"
+      },
+      "optimized_arithmetic": {
+        "repair_sha256": "991ddb0bf613aef9e5dd10c4fc4eb07f158d52ef92d5b3e827f67c315c9babd3",
+        "performance_sha256": "17ecdb689820bd0dba678ca092aa7166cbd71859446122d0fe38875c16dadbaf",
+        "precision_casts": "preserve eager BF16 rounding during compilation",
+        "state_layout": "existing-nine-slot",
+        "target_head": "full BF16 with qualified M4-pair dispatch"
+      }
+    },
+    "previous_data_abi": "2ec52392be20945df93b37ee13dc2f605d29bb010b6e0e36d40f5b75d95ac560",
+    "migration": "retain previous ABI for rollback; rebuild each resumed chat once",
+    "chat_snapshots": {
+      "isolation": "session identity and compaction generation cache_salt",
+      "compression": "lossless Zstd level 1; raw fallback; SHA256 verification",
+      "retention": "latest complete head plus its prior verified fallback until a successor is published",
+      "failed_publication": "retain previous head; collect abandoned writes; persist failure metadata",
+      "garbage_collection": "durable intent; retry failed deletion; recover on engine startup",
+      "compaction": "force old-generation tail flush before commit; activate successor; retain prior complete generation until successor publication",
+      "tail_journal": "at most 15 changing blocks per chat in system RAM; 8192-token automatic flush; 6-GiB/5-chat bound",
+      "forced_tail_flush": "RAM eviction, clean backend shutdown, compaction, and explicit request",
+      "stale_generation": "retain isolated cache salt; bypass durable tier without reactivation or engine failure",
+      "publication_transaction": "previous disk head remains authoritative through tail write and full-head verification",
+      "write_accounting": "persistent per-chat lower-bound counters plus backing-drive SMART telemetry",
+      "legacy": "unlabelled requests bypass the durable snapshot tier"
+    }
+  }
+}
