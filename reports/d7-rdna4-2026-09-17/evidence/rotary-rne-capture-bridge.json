@@ -1,0 +1,142 @@
+{
+  "admission": {
+    "arm": "m8",
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      false,
+      true
+    ],
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "eager",
+      "eager"
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "observed_compiler_settings": {
+      "emulate_precision_casts": false
+    },
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "receipts": [
+      [
+        "363a76e10724024187aad40223211f1c8b07f6bdce023015a68216547dbf4f37",
+        "f00707d576963788f7ec4a9ea0d2c35d3afbf41900f8a2029778dcb841d407b8",
+        "3d717213ad7201d691a6bc8e7fbea8f87944d52e6df3d6d84c63d81e4a4cf274",
+        "94ec2ce8ea239304a3cf8b9fcc661664ece3885b184ae82cbda40a739a5b7c71"
+      ],
+      [
+        "b738f86bdd676b343c4bb53e5b201a8228efd6f4b356d5c94ba58c49ab1b99f4",
+        "477334e8395c00ddb900ef25f1c3b3ad2c81870465832344ed631123f6882685",
+        "9f1904eb03a1ee5c2f61acab46c5ef31db1522732da65140ab0e3e05be76c00b",
+        "6eb8804a8a2c51bae992e3336248d059c3ef6fc63210508822b48d3c07582cb0"
+      ]
+    ],
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.execution-mode-admission.v1",
+    "scope": "controlled replay admission; mode-selected operators may differ",
+    "sha256": "1f08e5a39671225714d8b281006524f99a8d053e2d59a7b6555e473d7b3a3cad",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_MODE_COMPARISON"
+  },
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 89,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 89,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 139,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 139,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 320,
+    "positions": 320
+  },
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 1,
+    "positions": 1
+  },
+  "row_sources": [
+    "a3848637414d834e87b38e45357340fb5dc39a5ae00827de599ee9acd7a00ea0",
+    "1ec84f714d328bf9f50cf166a9ef86ff27099729bbf58945063c2f8ace1ac3e3"
+  ],
+  "schema": "qwen.execution-mode-comparison.v1",
+  "scope": "320 forced decode predictions and one prefill prediction; no universal proof",
+  "sha256": "6f046a6f73743a15dd6834ae8d35a4a26918705eb9c2aae3fc292ffe427e56a0",
+  "stage_localization": "UNMEASURED; inspect aligned boundary captures separately",
+  "status": "COMPARED_SAVED_EVIDENCE"
+}

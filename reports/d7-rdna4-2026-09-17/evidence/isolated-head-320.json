@@ -1,0 +1,50 @@
+{
+  "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+  "build": "a4f01e340baede2f1c0f6e1f18ed015835bee8c52feda076f44d3d269cf4cdae",
+  "capture_manifest": "f7eeb63e3e8fc1bd01b0561fce87e14df492e342fa7b4cf24847a0c67d4bafe0",
+  "graph_replay_all_arms": true,
+  "head_weights_sha256": "d922b751f014ee1139488cb94c0e164a1eb3da5c14048070ed1b784e00f92723",
+  "negative_control_detected": true,
+  "reference_positions_checked": 320,
+  "reference_rows": "76b6f8c4d1906795b8dbb8552dda94de829a3e7db899365a81979c69474f0cb4",
+  "results": {
+    "fixed": {
+      "evaluations": 320,
+      "isolated_inputs_verified": true,
+      "layer_instances": [
+        null
+      ],
+      "positions": 320,
+      "reference_remainder": "identity: vocabulary head is the final numerical stage",
+      "reference_remainder_verified": true,
+      "stage_output_exact": 320,
+      "stage_state_exact": 320,
+      "state_scope": "head is stateless; captured input and checkpoint weights are read-only",
+      "top1_exact": 320,
+      "top20_order_exact": 320,
+      "top20_set_exact": 320
+    },
+    "old": {
+      "evaluations": 320,
+      "isolated_inputs_verified": true,
+      "layer_instances": [
+        null
+      ],
+      "positions": 320,
+      "reference_remainder": "identity: vocabulary head is the final numerical stage",
+      "reference_remainder_verified": true,
+      "stage_output_exact": 0,
+      "stage_state_exact": 320,
+      "state_scope": "head is stateless; captured input and checkpoint weights are read-only",
+      "top1_exact": 320,
+      "top20_order_exact": 320,
+      "top20_set_exact": 320
+    }
+  },
+  "schema": "qwen.isolated-d7-head.v1",
+  "scope": "320 actual Pi reference hidden rows; isolated head, not other decoder stages",
+  "sha256": "026ce5da56b77d7e86b045e88651de3f6c4a8970328f8c667b000d4d91dc5b37",
+  "source_sha256": "aefc737d393ce1f8109695f9fb57386e95edc7c574e816b98c2c0a6448455a73",
+  "stage": "Full BF16 target head",
+  "status": "SAMPLE_CHECKED"
+}

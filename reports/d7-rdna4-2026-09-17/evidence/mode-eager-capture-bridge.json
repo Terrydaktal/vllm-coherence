@@ -1,0 +1,138 @@
+{
+  "admission": {
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      false,
+      true
+    ],
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "eager",
+      "eager"
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "receipts": [
+      [
+        "7a8a2f45bdcec6fbee643296a697ec63043ea8f436feb3c95a55103b2c22d410",
+        "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+        "8141d9fbb486d46d64c94bb77e3695559bc28ac188ae240da8f3d93e0d571844",
+        "7c5e319557ef4ec06a02d73f181933c7f7d0b1b9947d70652199250d5157117e"
+      ],
+      [
+        "6383be218c69d75a7895ea69b1e1b78694e0ca525058fba78c1bedfb88c047fc",
+        "4b35beadfb37d13e376b9e51aaea3972889f043c02a550a4e10ee85a6abd70e4",
+        "efaf939488daefd986c5345752c0b024c3705851341304435f3247b4331ecdc6",
+        "ff6a96c1ba0ae32ffb731bd7fb70b0e3c2fa2c845ebac038c4a02d6507e9508f"
+      ]
+    ],
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.execution-mode-admission.v1",
+    "scope": "controlled replay admission; mode-selected operators may differ",
+    "sha256": "3f84fcf0d91ebd6bd4ac9c92602894c1ca040fcca4e09516aa7a53b4f185da1d",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_MODE_COMPARISON"
+  },
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 83,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 83,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 135,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 135,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 320,
+    "positions": 320
+  },
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 1,
+    "positions": 1
+  },
+  "row_sources": [
+    "bbd738f5cea105cd287e207336ac4683a762fc55e83225e374372c2c483a3234",
+    "d4dd8463a9d169beab9c033f182610d688d0c0f54f44996b6817bcba5c5c7400"
+  ],
+  "schema": "qwen.execution-mode-comparison.v1",
+  "scope": "320 forced decode predictions and one prefill prediction; no universal proof",
+  "sha256": "8c56f9bb321d5224fef79e2cd2003a0e8278396cd1807aa84739204d17fe0251",
+  "stage_localization": "UNMEASURED; inspect aligned boundary captures separately",
+  "status": "COMPARED_SAVED_EVIDENCE"
+}

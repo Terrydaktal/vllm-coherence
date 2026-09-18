@@ -1,0 +1,54 @@
+{
+  "source_file_sha256": "5d568336e585d01b82812a0f5e87dba053bfc8547b8428b2678094c7f8ce3062",
+  "workload": {
+    "source": "Intact private Pi coding request boundaries; no tools executed.",
+    "request_boundaries": 11,
+    "input_tokens_min": 57008,
+    "input_tokens_max": 65527,
+    "paired_comparisons": 115,
+    "minimum_measured_output_tokens_per_method": 60000,
+    "natural_eos": true,
+    "sampling": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": 20
+    },
+    "speculation": "Fixed D7, TP1",
+    "warmup": "Entire first four-method comparison excluded; extension warmed all methods."
+  },
+  "scope": "Earlier compiled verify-head study, before final D7 arithmetic/performance repairs. Not the final repaired M8 long-run speed.",
+  "variants": {
+    "full": {
+      "output_tokens": 60598,
+      "post_first_seconds": 946.2298901220347,
+      "measured_post_first_tps": 63.919984595075036,
+      "requests": 115,
+      "natural_stops": 115,
+      "length_stops": 0
+    },
+    "block80": {
+      "output_tokens": 60075,
+      "post_first_seconds": 892.5482682100119,
+      "measured_post_first_tps": 67.17843968287409,
+      "requests": 115,
+      "natural_stops": 115,
+      "length_stops": 0
+    },
+    "global128": {
+      "output_tokens": 60348,
+      "post_first_seconds": 892.2657342400562,
+      "measured_post_first_tps": 67.5056742499481,
+      "requests": 115,
+      "natural_stops": 115,
+      "length_stops": 0
+    },
+    "global256": {
+      "output_tokens": 60675,
+      "post_first_seconds": 906.8730497610013,
+      "measured_post_first_tps": 66.778916868199,
+      "requests": 115,
+      "natural_stops": 115,
+      "length_stops": 0
+    }
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "scope": "Actual runtime receipts, not requested configuration. Profiled target graph launches are separately verified in dispatch exports.",
+  "arms": {
+    "old_profile": {
+      "enforce_eager": false,
+      "compilation_mode": 3,
+      "backend": "inductor",
+      "graph_mode": "PIECEWISE",
+      "capture_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "async_scheduling": false,
+      "sha256": "332848da5602bee5f5fb77c03553b72b056ccd42b581ffd5fe3fff3557a5de24",
+      "runtime_file_sha256": "60a0c8ba0d15b47abd0262ab530816e54ce035e229b7f7923b3f4afa02e0b89d",
+      "flags": {
+        "GPU_MAX_HW_QUEUES": null,
+        "HSA_ENABLE_MWAITX": null,
+        "RADIANCE_DYNAMIC_SPEC_WIDTH": null,
+        "RADIANCE_FP8_STREAM": "0",
+        "RADIANCE_GDN_NORMQUANT_FUSION": null,
+        "RADIANCE_MXFP4": "1",
+        "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+        "RADIANCE_MXFP4_DECODE_NT": "1",
+        "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+        "RADIANCE_MXFP4_W4A8": "1",
+        "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+        "RADIANCE_MXFP4_WPERM": "1",
+        "RADIANCE_NORMQUANT_FUSION": "0",
+        "RADIANCE_PREFILL_FP8": null,
+        "RADIANCE_TILED_PREFILL": null,
+        "RADIANCE_VERIFY_HEAD": "0",
+        "RADIANCE_VERIFY_HEAD_TOPK": null,
+        "VLLM_ATTENTION_BACKEND": null,
+        "VLLM_ROCM_USE_AITER": "1",
+        "VLLM_USE_V2_MODEL_RUNNER": "1"
+      }
+    },
+    "fixed_profile": {
+      "enforce_eager": false,
+      "compilation_mode": 3,
+      "backend": "inductor",
+      "graph_mode": "PIECEWISE",
+      "capture_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "async_scheduling": false,
+      "sha256": "d3f32d90110ea1eeb42f83394b754f7d0aa6c1205b87834ce474aa312f16b340",
+      "runtime_file_sha256": "542c366083ab054b19d615ca65d8b0c7f63c90989abe7c52ac74ea2ba40f5554",
+      "flags": {
+        "GPU_MAX_HW_QUEUES": null,
+        "HSA_ENABLE_MWAITX": null,
+        "RADIANCE_DYNAMIC_SPEC_WIDTH": null,
+        "RADIANCE_FP8_STREAM": "0",
+        "RADIANCE_GDN_NORMQUANT_FUSION": null,
+        "RADIANCE_MXFP4": "1",
+        "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+        "RADIANCE_MXFP4_DECODE_NT": "1",
+        "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+        "RADIANCE_MXFP4_W4A8": "1",
+        "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+        "RADIANCE_MXFP4_WPERM": "1",
+        "RADIANCE_NORMQUANT_FUSION": "0",
+        "RADIANCE_PREFILL_FP8": null,
+        "RADIANCE_TILED_PREFILL": null,
+        "RADIANCE_VERIFY_HEAD": "0",
+        "RADIANCE_VERIFY_HEAD_TOPK": null,
+        "VLLM_ATTENTION_BACKEND": null,
+        "VLLM_ROCM_USE_AITER": "1",
+        "VLLM_USE_V2_MODEL_RUNNER": "1"
+      }
+    },
+    "old_three_responses": {
+      "enforce_eager": false,
+      "compilation_mode": 3,
+      "backend": "inductor",
+      "graph_mode": "PIECEWISE",
+      "capture_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "async_scheduling": false,
+      "sha256": "29c8e919af39c357fa142bd2f27747c60352356513d14957eb213d5a8d7c6ee2",
+      "runtime_file_sha256": "03bde5240971216fbc5f04aaa5e89d04b4e0f7ebf49b71ceeebdc1a9a0bde092",
+      "flags": {
+        "GPU_MAX_HW_QUEUES": null,
+        "HSA_ENABLE_MWAITX": null,
+        "RADIANCE_DYNAMIC_SPEC_WIDTH": null,
+        "RADIANCE_FP8_STREAM": "0",
+        "RADIANCE_GDN_NORMQUANT_FUSION": null,
+        "RADIANCE_MXFP4": "1",
+        "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+        "RADIANCE_MXFP4_DECODE_NT": "1",
+        "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+        "RADIANCE_MXFP4_W4A8": "1",
+        "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+        "RADIANCE_MXFP4_WPERM": "1",
+        "RADIANCE_NORMQUANT_FUSION": "0",
+        "RADIANCE_PREFILL_FP8": null,
+        "RADIANCE_TILED_PREFILL": null,
+        "RADIANCE_VERIFY_HEAD": "0",
+        "RADIANCE_VERIFY_HEAD_TOPK": null,
+        "VLLM_ATTENTION_BACKEND": null,
+        "VLLM_ROCM_USE_AITER": "1",
+        "VLLM_USE_V2_MODEL_RUNNER": "1"
+      }
+    },
+    "final_three_responses": {
+      "enforce_eager": false,
+      "compilation_mode": 3,
+      "backend": "inductor",
+      "graph_mode": "PIECEWISE",
+      "capture_sizes": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "async_scheduling": false,
+      "sha256": "6b22faa09fb323a35be6fae2cef033925c9b687f130341f34cb812dad8955186",
+      "flags": {
+        "GPU_MAX_HW_QUEUES": null,
+        "HSA_ENABLE_MWAITX": null,
+        "RADIANCE_DYNAMIC_SPEC_WIDTH": null,
+        "RADIANCE_FP8_STREAM": "0",
+        "RADIANCE_GDN_NORMQUANT_FUSION": null,
+        "RADIANCE_MXFP4": "1",
+        "RADIANCE_MXFP4_DECODE_MAX_M": "64",
+        "RADIANCE_MXFP4_DECODE_NT": "1",
+        "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+        "RADIANCE_MXFP4_W4A8": "1",
+        "RADIANCE_MXFP4_W4A8_MIN_M": "0",
+        "RADIANCE_MXFP4_WPERM": "1",
+        "RADIANCE_NORMQUANT_FUSION": "0",
+        "RADIANCE_PREFILL_FP8": null,
+        "RADIANCE_TILED_PREFILL": null,
+        "RADIANCE_VERIFY_HEAD": "0",
+        "RADIANCE_VERIFY_HEAD_TOPK": null,
+        "VLLM_ATTENTION_BACKEND": null,
+        "VLLM_ROCM_USE_AITER": "1",
+        "VLLM_USE_V2_MODEL_RUNNER": "1"
+      }
+    }
+  }
+}

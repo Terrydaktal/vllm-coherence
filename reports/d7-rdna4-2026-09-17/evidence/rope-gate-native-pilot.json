@@ -1,0 +1,75 @@
+{
+  "capture_sources": [
+    "164da4bef370851af978b592d02535330b2ca2876520682b6f88afe507f78b05",
+    "a444b648c1d699ef959d4079784ec0025257c2cc489f68eb6c57190406ad2b8d"
+  ],
+  "gate": {
+    "common_input_compiled_vs_eager": {
+      "different_elements": 13524,
+      "exact_positions": 0,
+      "max_abs": 0.00390625,
+      "positions": 8
+    },
+    "compiled_reproduces_own_output": {
+      "different_elements": 0,
+      "exact_positions": 8,
+      "max_abs": 0.0,
+      "positions": 8
+    },
+    "eager_reproduces_own_output": {
+      "different_elements": 0,
+      "exact_positions": 8,
+      "max_abs": 0.0,
+      "positions": 8
+    },
+    "gate_input_exact": true
+  },
+  "positions": 8,
+  "rope": {
+    "False": {
+      "compiled_q": {
+        "different_elements": 7106,
+        "exact_positions": 1,
+        "max_abs": 7.8125,
+        "positions": 8
+      },
+      "eager_k": {
+        "different_elements": 1180,
+        "exact_positions": 1,
+        "max_abs": 7.140625,
+        "positions": 8
+      },
+      "eager_q": {
+        "different_elements": 7109,
+        "exact_positions": 1,
+        "max_abs": 7.78125,
+        "positions": 8
+      }
+    },
+    "True": {
+      "compiled_q": {
+        "different_elements": 1496,
+        "exact_positions": 1,
+        "max_abs": 0.03125,
+        "positions": 8
+      },
+      "eager_k": {
+        "different_elements": 0,
+        "exact_positions": 8,
+        "max_abs": 0.0,
+        "positions": 8
+      },
+      "eager_q": {
+        "different_elements": 0,
+        "exact_positions": 8,
+        "max_abs": 0.0,
+        "positions": 8
+      }
+    }
+  },
+  "schema": "qwen.rope-gate-native-pilot.v1",
+  "scope": "Eight sampled prefix positions, first attention layer; selector equivalence and full-model equality are not asserted.",
+  "sha256": "e1918ffbebac8d416829304a62d0254c21b71d8f820785c32363b87fe5068ee9",
+  "source_sha256": "f6325f88818edfdd56367726d43ed39c89af28a2e79d5972deb9df9a7e5ab312",
+  "supersedes_gate_input_field": "d7-attention-gate-prefill-cut-20260917-001.json compared the wrong compiled argument for gate_input; all other fields retained"
+}

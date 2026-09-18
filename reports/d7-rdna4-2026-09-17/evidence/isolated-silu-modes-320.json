@@ -1,0 +1,3991 @@
+{
+  "inputs_unchanged": true,
+  "negative_control_detected": true,
+  "results": {
+    "decode": {
+      "0": {
+        "captured_input_agreement": {
+          "different_elements": 0,
+          "elements": 11141120,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1474186,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "1": {
+        "captured_input_agreement": {
+          "different_elements": 10160567,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.0390625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1470472,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "10": {
+        "captured_input_agreement": {
+          "different_elements": 10668873,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.078125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1460308,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "11": {
+        "captured_input_agreement": {
+          "different_elements": 10684433,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1458200,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "12": {
+        "captured_input_agreement": {
+          "different_elements": 10677186,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1454977,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "13": {
+        "captured_input_agreement": {
+          "different_elements": 10668269,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.10546875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1457119,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "14": {
+        "captured_input_agreement": {
+          "different_elements": 10670628,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.078125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1457585,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "15": {
+        "captured_input_agreement": {
+          "different_elements": 10694062,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.12890625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1455270,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "16": {
+        "captured_input_agreement": {
+          "different_elements": 10688302,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.130859375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1453680,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "17": {
+        "captured_input_agreement": {
+          "different_elements": 10686720,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.150390625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1453014,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "18": {
+        "captured_input_agreement": {
+          "different_elements": 10679805,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.1171875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1452988,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "19": {
+        "captured_input_agreement": {
+          "different_elements": 10709676,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1452778,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "2": {
+        "captured_input_agreement": {
+          "different_elements": 10483642,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1468917,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "20": {
+        "captured_input_agreement": {
+          "different_elements": 10726463,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.19140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1448491,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "21": {
+        "captured_input_agreement": {
+          "different_elements": 10735204,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1451323,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "22": {
+        "captured_input_agreement": {
+          "different_elements": 10705552,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1452778,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "23": {
+        "captured_input_agreement": {
+          "different_elements": 10756462,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.203125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1449981,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "24": {
+        "captured_input_agreement": {
+          "different_elements": 10751735,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.1640625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1446504,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "25": {
+        "captured_input_agreement": {
+          "different_elements": 10747409,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.2421875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1448377,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "26": {
+        "captured_input_agreement": {
+          "different_elements": 10713363,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.2890625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1453775,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "27": {
+        "captured_input_agreement": {
+          "different_elements": 10800675,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.91796875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1463556,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "28": {
+        "captured_input_agreement": {
+          "different_elements": 10807615,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.50244140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1464379,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "29": {
+        "captured_input_agreement": {
+          "different_elements": 10810239,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.859375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1465403,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "3": {
+        "captured_input_agreement": {
+          "different_elements": 10578665,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.046875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1468795,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "30": {
+        "captured_input_agreement": {
+          "different_elements": 10810761,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.4609375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1465469,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "31": {
+        "captured_input_agreement": {
+          "different_elements": 10847895,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 1.478515625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1477972,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "32": {
+        "captured_input_agreement": {
+          "different_elements": 10849214,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 1.451171875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1485643,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "33": {
+        "captured_input_agreement": {
+          "different_elements": 10832329,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 1.31201171875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1498121,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "34": {
+        "captured_input_agreement": {
+          "different_elements": 10798259,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 1.4375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1526150,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "35": {
+        "captured_input_agreement": {
+          "different_elements": 10795735,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 3.0859375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1579454,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "36": {
+        "captured_input_agreement": {
+          "different_elements": 10830210,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 2.810546875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1545834,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "37": {
+        "captured_input_agreement": {
+          "different_elements": 10845828,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 3.2568359375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1520561,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "38": {
+        "captured_input_agreement": {
+          "different_elements": 10816523,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 4.46875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1556208,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "39": {
+        "captured_input_agreement": {
+          "different_elements": 10848059,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 4.7421875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1551494,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "4": {
+        "captured_input_agreement": {
+          "different_elements": 10604599,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.046875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1465044,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "40": {
+        "captured_input_agreement": {
+          "different_elements": 10845907,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 5.255859375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1574600,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "41": {
+        "captured_input_agreement": {
+          "different_elements": 10872236,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 4.703125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1527219,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "42": {
+        "captured_input_agreement": {
+          "different_elements": 10869445,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 3.572265625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1519178,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "43": {
+        "captured_input_agreement": {
+          "different_elements": 10881100,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 5.421875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1543870,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "44": {
+        "captured_input_agreement": {
+          "different_elements": 10878291,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 5.1875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1546452,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "45": {
+        "captured_input_agreement": {
+          "different_elements": 10882492,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 6.734375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1545776,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "46": {
+        "captured_input_agreement": {
+          "different_elements": 10886745,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 5.609375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1536459,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "47": {
+        "captured_input_agreement": {
+          "different_elements": 10889991,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 6.005859375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1562295,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "48": {
+        "captured_input_agreement": {
+          "different_elements": 10885464,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 7.109375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1571252,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "49": {
+        "captured_input_agreement": {
+          "different_elements": 10882422,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 6.578125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1575485,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "5": {
+        "captured_input_agreement": {
+          "different_elements": 10622485,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.0546875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1464358,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "50": {
+        "captured_input_agreement": {
+          "different_elements": 10861286,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 8.140625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1570630,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "51": {
+        "captured_input_agreement": {
+          "different_elements": 10855188,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 7.65625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1601305,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "52": {
+        "captured_input_agreement": {
+          "different_elements": 10846927,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 7.00390625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1595038,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "53": {
+        "captured_input_agreement": {
+          "different_elements": 10852337,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 9.203125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1585552,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 2,
+          "elements": 5570560,
+          "exact_positions": 318,
+          "max_abs": 0.0001220703125,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "54": {
+        "captured_input_agreement": {
+          "different_elements": 10816353,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 10.15625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1569903,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.5,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "55": {
+        "captured_input_agreement": {
+          "different_elements": 10827512,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 10.734375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1581958,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "56": {
+        "captured_input_agreement": {
+          "different_elements": 10832541,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 8.265625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1585641,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "57": {
+        "captured_input_agreement": {
+          "different_elements": 10822116,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 9.703125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1570953,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "58": {
+        "captured_input_agreement": {
+          "different_elements": 10809166,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 14.84375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1553530,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.5,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "59": {
+        "captured_input_agreement": {
+          "different_elements": 10782766,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 9.953125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1542591,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.5,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 1,
+          "elements": 5570560,
+          "exact_positions": 319,
+          "max_abs": 6.103515625e-05,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "6": {
+        "captured_input_agreement": {
+          "different_elements": 10620952,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.0703125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1464077,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "60": {
+        "captured_input_agreement": {
+          "different_elements": 10772291,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 10.21875,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1544234,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.5,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 2,
+          "elements": 5570560,
+          "exact_positions": 318,
+          "max_abs": 6.103515625e-05,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "61": {
+        "captured_input_agreement": {
+          "different_elements": 10752386,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 13.2890625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1535656,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.5,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 1,
+          "elements": 5570560,
+          "exact_positions": 319,
+          "max_abs": 3.0517578125e-05,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "62": {
+        "captured_input_agreement": {
+          "different_elements": 10735933,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 10.109375,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1542592,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.5,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 6,
+          "elements": 5570560,
+          "exact_positions": 314,
+          "max_abs": 0.000244140625,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "63": {
+        "captured_input_agreement": {
+          "different_elements": 10673961,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 7.78125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1529515,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 1.0,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 5,
+          "elements": 5570560,
+          "exact_positions": 315,
+          "max_abs": 0.0001220703125,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "7": {
+        "captured_input_agreement": {
+          "different_elements": 10683747,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.1015625,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1464094,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "8": {
+        "captured_input_agreement": {
+          "different_elements": 10686610,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.078125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1462093,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      },
+      "9": {
+        "captured_input_agreement": {
+          "different_elements": 10684099,
+          "elements": 11141120,
+          "exact_positions": 0,
+          "max_abs": 0.0673828125,
+          "positions": 320
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 1459636,
+          "elements": 5570560,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 320
+        },
+        "own_capture_reproduced": 320,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 5570560,
+          "exact_positions": 320,
+          "max_abs": 0,
+          "positions": 320
+        }
+      }
+    },
+    "prefill": {
+      "0": {
+        "captured_input_agreement": {
+          "different_elements": 0,
+          "elements": 313344,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41167,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "1": {
+        "captured_input_agreement": {
+          "different_elements": 288746,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41068,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.001953125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "10": {
+        "captured_input_agreement": {
+          "different_elements": 298730,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.05859375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41024,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "11": {
+        "captured_input_agreement": {
+          "different_elements": 299942,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.09375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40907,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "12": {
+        "captured_input_agreement": {
+          "different_elements": 299400,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0859375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40979,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.00390625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "13": {
+        "captured_input_agreement": {
+          "different_elements": 299587,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.078125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40924,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.00390625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "14": {
+        "captured_input_agreement": {
+          "different_elements": 299464,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0703125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40604,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "15": {
+        "captured_input_agreement": {
+          "different_elements": 300355,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0751953125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40690,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "16": {
+        "captured_input_agreement": {
+          "different_elements": 300787,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.078125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40848,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.00390625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "17": {
+        "captured_input_agreement": {
+          "different_elements": 300792,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.08203125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40988,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "18": {
+        "captured_input_agreement": {
+          "different_elements": 300030,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0859375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41042,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "19": {
+        "captured_input_agreement": {
+          "different_elements": 300685,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.10546875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40627,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "2": {
+        "captured_input_agreement": {
+          "different_elements": 295485,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.078125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41156,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "20": {
+        "captured_input_agreement": {
+          "different_elements": 300829,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.115234375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40842,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "21": {
+        "captured_input_agreement": {
+          "different_elements": 299867,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41172,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "22": {
+        "captured_input_agreement": {
+          "different_elements": 298950,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.15625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41208,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "23": {
+        "captured_input_agreement": {
+          "different_elements": 300638,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.15625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41363,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "24": {
+        "captured_input_agreement": {
+          "different_elements": 300710,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.16552734375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41139,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "25": {
+        "captured_input_agreement": {
+          "different_elements": 300162,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.1585693359375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41176,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "26": {
+        "captured_input_agreement": {
+          "different_elements": 300319,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.18603515625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41663,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "27": {
+        "captured_input_agreement": {
+          "different_elements": 301514,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.304443359375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42161,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "28": {
+        "captured_input_agreement": {
+          "different_elements": 301204,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.2890625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41928,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "29": {
+        "captured_input_agreement": {
+          "different_elements": 301456,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.1953125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41764,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "3": {
+        "captured_input_agreement": {
+          "different_elements": 297802,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.04638671875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41481,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.00390625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "30": {
+        "captured_input_agreement": {
+          "different_elements": 301442,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.20703125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41696,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "31": {
+        "captured_input_agreement": {
+          "different_elements": 302597,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.222412109375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42007,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "32": {
+        "captured_input_agreement": {
+          "different_elements": 302008,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.21484375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42021,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "33": {
+        "captured_input_agreement": {
+          "different_elements": 302923,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.26953125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41947,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "34": {
+        "captured_input_agreement": {
+          "different_elements": 301692,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.26953125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42523,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "35": {
+        "captured_input_agreement": {
+          "different_elements": 302189,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.2333984375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43172,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "36": {
+        "captured_input_agreement": {
+          "different_elements": 303330,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.236328125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42735,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "37": {
+        "captured_input_agreement": {
+          "different_elements": 302879,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.234375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42294,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "38": {
+        "captured_input_agreement": {
+          "different_elements": 303103,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.328125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42735,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "39": {
+        "captured_input_agreement": {
+          "different_elements": 303575,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.271484375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42768,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "4": {
+        "captured_input_agreement": {
+          "different_elements": 298016,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0341796875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41077,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "40": {
+        "captured_input_agreement": {
+          "different_elements": 303802,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.3203125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42812,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "41": {
+        "captured_input_agreement": {
+          "different_elements": 304099,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.3837890625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43163,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "42": {
+        "captured_input_agreement": {
+          "different_elements": 304469,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43030,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "43": {
+        "captured_input_agreement": {
+          "different_elements": 304852,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.473388671875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43086,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "44": {
+        "captured_input_agreement": {
+          "different_elements": 304713,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.59619140625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43155,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "45": {
+        "captured_input_agreement": {
+          "different_elements": 304796,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.4296875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43327,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "46": {
+        "captured_input_agreement": {
+          "different_elements": 304910,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.5234375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43103,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "47": {
+        "captured_input_agreement": {
+          "different_elements": 305025,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.59765625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43143,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "48": {
+        "captured_input_agreement": {
+          "different_elements": 305599,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.6171875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43479,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.03125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "49": {
+        "captured_input_agreement": {
+          "different_elements": 305942,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.75439453125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43302,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "5": {
+        "captured_input_agreement": {
+          "different_elements": 298467,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.046875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41251,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "50": {
+        "captured_input_agreement": {
+          "different_elements": 305376,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.7412109375,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42773,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "51": {
+        "captured_input_agreement": {
+          "different_elements": 305944,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.76171875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43740,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "52": {
+        "captured_input_agreement": {
+          "different_elements": 306092,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.7421875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43899,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "53": {
+        "captured_input_agreement": {
+          "different_elements": 306243,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.6875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43712,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "54": {
+        "captured_input_agreement": {
+          "different_elements": 305934,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.90625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43567,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "55": {
+        "captured_input_agreement": {
+          "different_elements": 306521,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.7890625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43582,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "56": {
+        "captured_input_agreement": {
+          "different_elements": 306549,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.87890625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43537,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "57": {
+        "captured_input_agreement": {
+          "different_elements": 306771,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.916015625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43580,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "58": {
+        "captured_input_agreement": {
+          "different_elements": 306723,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 2.53125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43580,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "59": {
+        "captured_input_agreement": {
+          "different_elements": 306805,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 1.703125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43350,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "6": {
+        "captured_input_agreement": {
+          "different_elements": 298282,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41120,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.015625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "60": {
+        "captured_input_agreement": {
+          "different_elements": 306835,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 1.703125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43910,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "61": {
+        "captured_input_agreement": {
+          "different_elements": 306454,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 2.21875,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43876,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "62": {
+        "captured_input_agreement": {
+          "different_elements": 305431,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 2.578125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 43241,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.25,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "63": {
+        "captured_input_agreement": {
+          "different_elements": 304194,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 1.84765625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 42989,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "7": {
+        "captured_input_agreement": {
+          "different_elements": 299770,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40894,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.00390625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "8": {
+        "captured_input_agreement": {
+          "different_elements": 300032,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 41281,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0625,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      },
+      "9": {
+        "captured_input_agreement": {
+          "different_elements": 299357,
+          "elements": 313344,
+          "exact_positions": 0,
+          "max_abs": 0.064453125,
+          "positions": 9
+        },
+        "compiled_vs_eager_on_common_input": {
+          "different_elements": 40659,
+          "elements": 156672,
+          "exact_positions": 0,
+          "max_abs": 0.0078125,
+          "positions": 9
+        },
+        "own_capture_reproduced": 9,
+        "torch_fp32_vs_compiled": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        },
+        "torch_native_vs_eager": {
+          "different_elements": 0,
+          "elements": 156672,
+          "exact_positions": 9,
+          "max_abs": 0,
+          "positions": 9
+        }
+      }
+    }
+  },
+  "schema": "qwen.silu-mode-isolation.v1",
+  "scope": "SiLU only, every layer on 320 decode and 9 sampled prefill positions; actual kernels on common inputs. No vocabulary top-k or full-model equality claim.",
+  "sha256": "fe5d52cbd707ce5448d774c79464bdf1c61a27dd8548c71866e53a1a919b34de",
+  "sources": {
+    "admission": "81d34611197f4aba2adf792c6d667b5b690a1cf6f42aa776964a6ded8b21d285",
+    "bridges": [
+      "6cc2c8ebede9b5a73a77365c70377a166bd1f8fc55a5133605226e785ae9268e",
+      "8c56f9bb321d5224fef79e2cd2003a0e8278396cd1807aa84739204d17fe0251"
+    ],
+    "generated_sources": "7bc1a23fc2b0af4e752e0f7d956717f0acf44a5dfd6e56429e477c8d92baf000",
+    "probe": "49a37535fc8c8f26a026ab798d75ce33ade21b4b5c43e0314096c6cf484eb8be"
+  },
+  "status": "SAMPLE_CHECKED"
+}

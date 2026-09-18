@@ -1,0 +1,266 @@
+{
+  "binding": {
+    "base_driver": "45afe12e4bffadad2e39c94b2b0955bea547269646c45f0bb6a181ec7f6037b6",
+    "experiment_driver": "6e4616099257a233bd5aee3dd590fae375d3cd256f560abe78ca56278a07ddd5",
+    "isolated_native_evidence": "5cb6a3df3deed60f991e34523485e36b0ac19bfd37e933931f79b725b5e8c252",
+    "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+    "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+    "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+    "schema": "qwen.rotary-intervention-binding.v1",
+    "sha256": "7e93a4cbaa649b10b1eef36b460bb986b777ffbf197953a2595f070d6f1f9451",
+    "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+  },
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 315,
+      "mean_overlap_percent": 98.75,
+      "mean_overlap_tokens": 0.9875,
+      "ranked_exact": 316,
+      "ranked_exact_percent": 98.75,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 57,
+      "set_exact": 316,
+      "set_exact_percent": 98.75
+    },
+    "10": {
+      "candidate_boundary_tied": 89,
+      "inclusive_tie_set_exact": 132,
+      "mean_overlap_percent": 93.28125,
+      "mean_overlap_tokens": 9.328125,
+      "ranked_exact": 22,
+      "ranked_exact_percent": 6.875,
+      "reference_boundary_tied": 83,
+      "retained_scores_exact": 0,
+      "set_exact": 151,
+      "set_exact_percent": 47.1875
+    },
+    "20": {
+      "candidate_boundary_tied": 139,
+      "inclusive_tie_set_exact": 65,
+      "mean_overlap_percent": 93.609375,
+      "mean_overlap_tokens": 18.721875,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 135,
+      "retained_scores_exact": 0,
+      "set_exact": 76,
+      "set_exact_percent": 23.75
+    },
+    "full_logits_exact": 0,
+    "positions": 320
+  },
+  "normalized_comparison": {
+    "admission": {
+      "arm": "m8",
+      "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+      "capacity": {
+        "block_size": 1648,
+        "cache_dtype": "fp8",
+        "max_model_len": 253792,
+        "max_num_batched_tokens": 2048,
+        "max_num_seqs": 2,
+        "num_gpu_blocks": 370
+      },
+      "captures": [
+        false,
+        false
+      ],
+      "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+      "modes": [
+        "eager",
+        "eager"
+      ],
+      "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+      "observed_compiler_settings": {
+        "emulate_precision_casts": false
+      },
+      "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+      "receipts": [
+        [
+          "cc76e6d54537853128dd916e06ee3ea5f1c8efd59aa9048e5fd15a5f386dc0e0",
+          "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+          "6b8f243079094d4c7423b3c4dd9d427a2e04d4f726959ab449ab2cd35ad6e925",
+          "70294e81e9dbbdbd3a7239752ad7ae5bd848d6e90a38ee7a15cff2c08a201f23"
+        ],
+        [
+          "00737e81858b129d162509dc6a579866bfefda080f3e81f9abe4f2d9ba91323e",
+          "f00707d576963788f7ec4a9ea0d2c35d3afbf41900f8a2029778dcb841d407b8",
+          "3d717213ad7201d691a6bc8e7fbea8f87944d52e6df3d6d84c63d81e4a4cf274",
+          "94ec2ce8ea239304a3cf8b9fcc661664ece3885b184ae82cbda40a739a5b7c71"
+        ]
+      ],
+      "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+      "schema": "qwen.execution-mode-admission.v1",
+      "scope": "controlled replay admission; mode-selected operators may differ",
+      "sha256": "b62eb7efbfc66f1b3a3cfc9a89a0dfb19569f82c446a76835f2a29b3cd54f9b0",
+      "sources": {
+        "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+        "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+        "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+        "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+      },
+      "status": "ADMITTED_MODE_COMPARISON"
+    },
+    "decode": {
+      "1": {
+        "candidate_boundary_tied": 0,
+        "inclusive_tie_set_exact": 315,
+        "mean_overlap_percent": 98.75,
+        "mean_overlap_tokens": 0.9875,
+        "ranked_exact": 316,
+        "ranked_exact_percent": 98.75,
+        "reference_boundary_tied": 1,
+        "retained_scores_exact": 57,
+        "set_exact": 316,
+        "set_exact_percent": 98.75
+      },
+      "10": {
+        "candidate_boundary_tied": 89,
+        "inclusive_tie_set_exact": 132,
+        "mean_overlap_percent": 93.28125,
+        "mean_overlap_tokens": 9.328125,
+        "ranked_exact": 22,
+        "ranked_exact_percent": 6.875,
+        "reference_boundary_tied": 83,
+        "retained_scores_exact": 0,
+        "set_exact": 151,
+        "set_exact_percent": 47.1875
+      },
+      "20": {
+        "candidate_boundary_tied": 139,
+        "inclusive_tie_set_exact": 65,
+        "mean_overlap_percent": 93.609375,
+        "mean_overlap_tokens": 18.721875,
+        "ranked_exact": 0,
+        "ranked_exact_percent": 0.0,
+        "reference_boundary_tied": 135,
+        "retained_scores_exact": 0,
+        "set_exact": 76,
+        "set_exact_percent": 23.75
+      },
+      "full_logits_exact": 0,
+      "positions": 320
+    },
+    "prefill": {
+      "1": {
+        "candidate_boundary_tied": 0,
+        "inclusive_tie_set_exact": 1,
+        "mean_overlap_percent": 100.0,
+        "mean_overlap_tokens": 1.0,
+        "ranked_exact": 1,
+        "ranked_exact_percent": 100.0,
+        "reference_boundary_tied": 0,
+        "retained_scores_exact": 1,
+        "set_exact": 1,
+        "set_exact_percent": 100.0
+      },
+      "10": {
+        "candidate_boundary_tied": 0,
+        "inclusive_tie_set_exact": 1,
+        "mean_overlap_percent": 100.0,
+        "mean_overlap_tokens": 10.0,
+        "ranked_exact": 0,
+        "ranked_exact_percent": 0.0,
+        "reference_boundary_tied": 0,
+        "retained_scores_exact": 0,
+        "set_exact": 1,
+        "set_exact_percent": 100.0
+      },
+      "20": {
+        "candidate_boundary_tied": 1,
+        "inclusive_tie_set_exact": 0,
+        "mean_overlap_percent": 95.0,
+        "mean_overlap_tokens": 19.0,
+        "ranked_exact": 0,
+        "ranked_exact_percent": 0.0,
+        "reference_boundary_tied": 0,
+        "retained_scores_exact": 0,
+        "set_exact": 0,
+        "set_exact_percent": 0.0
+      },
+      "full_logits_exact": 0,
+      "positions": 1
+    },
+    "row_sources": [
+      "920aa2ee128ce50970f567ebbe563b2d3cf142b5f7219bdb53bf15013bab6fd8",
+      "a3848637414d834e87b38e45357340fb5dc39a5ae00827de599ee9acd7a00ea0"
+    ],
+    "schema": "qwen.execution-mode-comparison.v1",
+    "scope": "320 forced decode predictions and one prefill prediction; no universal proof",
+    "sha256": "3d1c4c71a46bfaa9e01d66dff645cac86eb9dbd167197d393fe54628e2871a3c",
+    "stage_localization": "UNMEASURED; inspect aligned boundary captures separately",
+    "status": "COMPARED_SAVED_EVIDENCE"
+  },
+  "observed_rotary": {
+    "calls": 1344,
+    "identity": {
+      "installed_before_load": true,
+      "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+      "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+      "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+      "schema": "qwen.rotary-rne-worker.v1",
+      "scope": "Eager native MRoPE product rounding only; no installed files changed.",
+      "sha256": "17aa5ab70f2e12df93221501012bdbfc46c18b02f790ca3f8f31b6122e0075b2",
+      "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+    }
+  },
+  "original_receipts": [
+    [
+      "cc76e6d54537853128dd916e06ee3ea5f1c8efd59aa9048e5fd15a5f386dc0e0",
+      "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+      "6b8f243079094d4c7423b3c4dd9d427a2e04d4f726959ab449ab2cd35ad6e925",
+      "70294e81e9dbbdbd3a7239752ad7ae5bd848d6e90a38ee7a15cff2c08a201f23"
+    ],
+    [
+      "363a76e10724024187aad40223211f1c8b07f6bdce023015a68216547dbf4f37",
+      "f00707d576963788f7ec4a9ea0d2c35d3afbf41900f8a2029778dcb841d407b8",
+      "3d717213ad7201d691a6bc8e7fbea8f87944d52e6df3d6d84c63d81e4a4cf274",
+      "94ec2ce8ea239304a3cf8b9fcc661664ece3885b184ae82cbda40a739a5b7c71"
+    ]
+  ],
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 0,
+      "mean_overlap_percent": 95.0,
+      "mean_overlap_tokens": 19.0,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 0,
+      "set_exact_percent": 0.0
+    },
+    "full_logits_exact": 0,
+    "positions": 1
+  },
+  "schema": "qwen.rotary-intervention-comparison.v1",
+  "scope": "Same eager replay, one native product-rounding intervention; sampled outputs only.",
+  "sha256": "7bdbf197d48f060cb2ba0828d84e97a5b519daa1fe9743eea42b2508349b2ca1",
+  "status": "COMPARED_DECLARED_INTERVENTION"
+}

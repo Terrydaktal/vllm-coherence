@@ -1,0 +1,165 @@
+{
+  "admission": {
+    "arm": "m8",
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      false,
+      false
+    ],
+    "declared_change": {
+      "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": [
+        "0",
+        "1"
+      ],
+      "emulate_precision_casts": [
+        false,
+        true
+      ]
+    },
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "eager",
+      "compiled"
+    ],
+    "normalized_receipts": [
+      [
+        "cc76e6d54537853128dd916e06ee3ea5f1c8efd59aa9048e5fd15a5f386dc0e0",
+        "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+        "6b8f243079094d4c7423b3c4dd9d427a2e04d4f726959ab449ab2cd35ad6e925",
+        "70294e81e9dbbdbd3a7239752ad7ae5bd848d6e90a38ee7a15cff2c08a201f23"
+      ],
+      [
+        "eaef5d4b97e5ab2439a92fa902e3900d6db5d1d046e1c42d8aa7764c2312df8b",
+        "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "c4cf8dfa997a43c91a71e85319835e1c36f426159f7e3956740616011da6c814",
+        "aa13ab4f18da6e2e3d41bfbf19cb5c470f4ab3cbc4849a059120145b90980e37"
+      ]
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "observed_compiler_settings": {
+      "emulate_precision_casts": false
+    },
+    "original_receipts": [
+      [
+        "cc76e6d54537853128dd916e06ee3ea5f1c8efd59aa9048e5fd15a5f386dc0e0",
+        "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+        "6b8f243079094d4c7423b3c4dd9d427a2e04d4f726959ab449ab2cd35ad6e925",
+        "70294e81e9dbbdbd3a7239752ad7ae5bd848d6e90a38ee7a15cff2c08a201f23"
+      ],
+      [
+        "eaef5d4b97e5ab2439a92fa902e3900d6db5d1d046e1c42d8aa7764c2312df8b",
+        "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "1f94b4027a970cffa9f8b731e414d3cbdec079d1766732a693e19ce740bc0810",
+        "aa13ab4f18da6e2e3d41bfbf19cb5c470f4ab3cbc4849a059120145b90980e37"
+      ]
+    ],
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.precision-casts-intervention-admission.v1",
+    "scope": "Metadata admission modulo one explicit, observed compiler rounding option. Generated kernels may change; this is not a mode-only comparison.",
+    "sha256": "936d61a3a02a74e31587827f16456eae1a09ecb2f2cc0eb98bd6cb7f7c77a82b",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_DECLARED_INTERVENTION"
+  },
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 315,
+      "mean_overlap_percent": 98.75,
+      "mean_overlap_tokens": 0.9875,
+      "ranked_exact": 316,
+      "ranked_exact_percent": 98.75,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 57,
+      "set_exact": 316,
+      "set_exact_percent": 98.75
+    },
+    "10": {
+      "candidate_boundary_tied": 89,
+      "inclusive_tie_set_exact": 132,
+      "mean_overlap_percent": 93.28125,
+      "mean_overlap_tokens": 9.328125,
+      "ranked_exact": 22,
+      "ranked_exact_percent": 6.875,
+      "reference_boundary_tied": 83,
+      "retained_scores_exact": 0,
+      "set_exact": 151,
+      "set_exact_percent": 47.1875
+    },
+    "20": {
+      "candidate_boundary_tied": 139,
+      "inclusive_tie_set_exact": 65,
+      "mean_overlap_percent": 93.609375,
+      "mean_overlap_tokens": 18.721875,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 135,
+      "retained_scores_exact": 0,
+      "set_exact": 76,
+      "set_exact_percent": 23.75
+    },
+    "full_logits_exact": 0,
+    "positions": 320
+  },
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 0,
+      "mean_overlap_percent": 95.0,
+      "mean_overlap_tokens": 19.0,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 0,
+      "set_exact_percent": 0.0
+    },
+    "full_logits_exact": 0,
+    "positions": 1
+  },
+  "row_sources": [
+    "920aa2ee128ce50970f567ebbe563b2d3cf142b5f7219bdb53bf15013bab6fd8",
+    "30abb66db6536fa79a809ad71d5b667dc41dfba76be12a463ca90bd14ffd9eca"
+  ],
+  "schema": "qwen.precision-casts-intervention-comparison.v1",
+  "scope": "320 forced decode predictions and one prefill prediction. An observed compiler option changes; no universal or state-equivalence proof.",
+  "sha256": "8b035dc0d9790d5620ef9c25aa40426f430cece7f2f0915e755f176c833a0bd1",
+  "status": "COMPARED_DECLARED_INTERVENTION"
+}

@@ -1,0 +1,37 @@
+{
+  "hidden_exact_positions": {
+    "fixed": 320,
+    "old": 0
+  },
+  "negative_control_detected": true,
+  "reference_remainder_checked": 320,
+  "results": {
+    "fixed": {
+      "full_logits_exact": 320,
+      "positions": 320,
+      "top1_exact": 320,
+      "top20_order_exact": 320,
+      "top20_set_exact": 320
+    },
+    "old": {
+      "full_logits_exact": 0,
+      "positions": 320,
+      "top1_exact": 320,
+      "top20_order_exact": 230,
+      "top20_set_exact": 306
+    }
+  },
+  "schema": "qwen.isolated-d7-final-norm.v1",
+  "scope": "Original compiled final normalization including retained residual sum; fixed compiled norm; 320 correct Pi positions, common serial reference head. Not other layers or universal equivalence.",
+  "sha256": "310e1a045a47d14563676c19022d504b91d244a0403f7fe2197284d62b77c913",
+  "sources": {
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capture": "f7eeb63e3e8fc1bd01b0561fce87e14df492e342fa7b4cf24847a0c67d4bafe0",
+    "norm_build": "c66157655dcf5f599f9f913a6384a41d535e1d29d28fb5884b02b59ff5aafa7b",
+    "old_source": "643e0d0306c2a7e710454ebd87ef03073060b797bc0629ae8888457152c7e933",
+    "probe": "b64db73b10fffbf87509ccdae82bd268fc1a24bf23ad047ed32b8d75e7c0bc6c",
+    "reference": "76b6f8c4d1906795b8dbb8552dda94de829a3e7db899365a81979c69474f0cb4"
+  },
+  "status": "SAMPLE_CHECKED",
+  "weights_unchanged": true
+}

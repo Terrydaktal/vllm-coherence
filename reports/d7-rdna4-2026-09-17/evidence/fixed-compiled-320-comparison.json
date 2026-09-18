@@ -1,0 +1,78 @@
+{
+  "candidate_sha256": "a1dc2c1f486ebe5073182f74cf799b1a10539d8500a5d821a008fad55e85cb78",
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 93,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 93,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 125,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 125,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 320,
+    "positions": 320
+  },
+  "first_different_position": null,
+  "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": false,
+      "inclusive_tie_set_exact": true,
+      "overlap": 1,
+      "ranked_exact": true,
+      "reference_boundary_tied": false,
+      "retained_scores_exact": true,
+      "set_exact": true
+    },
+    "10": {
+      "candidate_boundary_tied": false,
+      "inclusive_tie_set_exact": true,
+      "overlap": 10,
+      "ranked_exact": true,
+      "reference_boundary_tied": false,
+      "retained_scores_exact": true,
+      "set_exact": true
+    },
+    "20": {
+      "candidate_boundary_tied": true,
+      "inclusive_tie_set_exact": true,
+      "overlap": 20,
+      "ranked_exact": true,
+      "reference_boundary_tied": true,
+      "retained_scores_exact": true,
+      "set_exact": true
+    },
+    "full_logits_exact": true
+  },
+  "reference_sha256": "f37382b0e68ae3423afa8ab3b28bfaec79a00c6e9d8101f3a4ae12c9a304cb1c",
+  "scope": "fixed-token full-vocabulary digests and top-k, not latent-state proof",
+  "sha256": "7cfe9b2957f9c647cf5ad8e891edfc49c04b1e065872b78b815f2f9011092f0c"
+}

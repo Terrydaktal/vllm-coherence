@@ -1,0 +1,160 @@
+{
+  "declared_change": {
+    "base_driver": "45afe12e4bffadad2e39c94b2b0955bea547269646c45f0bb6a181ec7f6037b6",
+    "custom_ops": [
+      "none",
+      "+silu_and_mul"
+    ],
+    "experiment_driver": "8e4790f22c235abf218893ba141e6be0e173799e9087d288fd62f050ee110446"
+  },
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 2,
+      "inclusive_tie_set_exact": 316,
+      "mean_overlap_percent": 99.375,
+      "mean_overlap_tokens": 0.99375,
+      "ranked_exact": 318,
+      "ranked_exact_percent": 99.375,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 60,
+      "set_exact": 318,
+      "set_exact_percent": 99.375
+    },
+    "10": {
+      "candidate_boundary_tied": 91,
+      "inclusive_tie_set_exact": 137,
+      "mean_overlap_percent": 93.625,
+      "mean_overlap_tokens": 9.3625,
+      "ranked_exact": 21,
+      "ranked_exact_percent": 6.5625,
+      "reference_boundary_tied": 83,
+      "retained_scores_exact": 0,
+      "set_exact": 154,
+      "set_exact_percent": 48.125
+    },
+    "20": {
+      "candidate_boundary_tied": 148,
+      "inclusive_tie_set_exact": 60,
+      "mean_overlap_percent": 93.8125,
+      "mean_overlap_tokens": 18.7625,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 135,
+      "retained_scores_exact": 0,
+      "set_exact": 66,
+      "set_exact_percent": 20.625
+    },
+    "full_logits_exact": 0,
+    "positions": 320
+  },
+  "normalized_admission": {
+    "arm": "m8",
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      false,
+      false
+    ],
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "eager",
+      "compiled"
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "receipts": [
+      [
+        "7a8a2f45bdcec6fbee643296a697ec63043ea8f436feb3c95a55103b2c22d410",
+        "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+        "8141d9fbb486d46d64c94bb77e3695559bc28ac188ae240da8f3d93e0d571844",
+        "7c5e319557ef4ec06a02d73f181933c7f7d0b1b9947d70652199250d5157117e"
+      ],
+      [
+        "1476078e3181e7586cac333a941bc3c3bf7189d4077fe42288cb4ddd7b26e8d7",
+        "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "5ea8b277658c9ea5d30ab1d629e8951a6e5f62e395976f2c89c2953d2f8d2f14",
+        "55495d51557c05ce5d558ec3d44dd20a86dff8ff82d7bb06ddb369b7e7ab2e39"
+      ]
+    ],
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.execution-mode-admission.v1",
+    "scope": "controlled replay admission; mode-selected operators may differ",
+    "sha256": "82a918a28709a92ac345038ac132d624b62ca24b6da37b300fd3e0c13e5830b8",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_MODE_COMPARISON"
+  },
+  "original_receipts": [
+    [
+      "7a8a2f45bdcec6fbee643296a697ec63043ea8f436feb3c95a55103b2c22d410",
+      "71f6e29df6b0d5610c6f988a0d752d7f3286f2ffa19b8fc028f6f76e56d9779d",
+      "8141d9fbb486d46d64c94bb77e3695559bc28ac188ae240da8f3d93e0d571844",
+      "7c5e319557ef4ec06a02d73f181933c7f7d0b1b9947d70652199250d5157117e"
+    ],
+    [
+      "e6126f00fda9149d7e2fa317a904a0a64cdf7346e3e28bed6066b59b42314708",
+      "a4d9b9102f29e169a2abaeca38d2a9a275f68678d3298e786bc39b0b0dd34a92",
+      "5ea8b277658c9ea5d30ab1d629e8951a6e5f62e395976f2c89c2953d2f8d2f14",
+      "55495d51557c05ce5d558ec3d44dd20a86dff8ff82d7bb06ddb369b7e7ab2e39"
+    ]
+  ],
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 0,
+      "ranked_exact_percent": 0.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 0,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 0,
+    "positions": 1
+  },
+  "row_sources": [
+    "bbd738f5cea105cd287e207336ac4683a762fc55e83225e374372c2c483a3234",
+    "3b3fc692cceb451fbcb35d3a7eb0a09ba7aa0ca56916342227558ebade8b709d"
+  ],
+  "schema": "qwen.silu-intervention-comparison.v1",
+  "scope": "Controlled output comparison after one explicit SiLU implementation change. Normalized admission checks all other recorded settings; no universal or isolated-state claim.",
+  "sha256": "c4b50326e0b0b3a3f2efdedc5b0d0bc1ac280d4d480a56709bdc536dca6d8d6a",
+  "status": "COMPARED_DECLARED_INTERVENTION"
+}

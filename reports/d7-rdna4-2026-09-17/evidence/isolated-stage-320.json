@@ -1,0 +1,67 @@
+{
+  "receipts": {
+    "Final normalization/layout": "310e1a045a47d14563676c19022d504b91d244a0403f7fe2197284d62b77c913",
+    "Full BF16 target head": "026ce5da56b77d7e86b045e88651de3f6c4a8970328f8c667b000d4d91dc5b37"
+  },
+  "schema": "qwen.isolated-stage-table.v1",
+  "scope": "Only stages listed here have completed native isolated measurements; all other cells remain unmeasured.",
+  "sha256": "fab40088dc8b9d776fbf68f97dd05ec55ce57ea2b9c27f1c873fe867dd9d40db",
+  "stages": {
+    "Final normalization/layout": {
+      "fixed": {
+        "full_logits_exact": 320,
+        "isolated_inputs_verified": true,
+        "positions": 320,
+        "reference_remainder_verified": true,
+        "scope": "Original compiled final normalization including retained residual sum; fixed compiled norm; 320 correct Pi positions, common serial reference head. Not other layers or universal equivalence.",
+        "top1_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "old": {
+        "full_logits_exact": 0,
+        "isolated_inputs_verified": true,
+        "positions": 320,
+        "reference_remainder_verified": true,
+        "scope": "Original compiled final normalization including retained residual sum; fixed compiled norm; 320 correct Pi positions, common serial reference head. Not other layers or universal equivalence.",
+        "top1_exact": 320,
+        "top20_order_exact": 230,
+        "top20_set_exact": 306
+      }
+    },
+    "Full BF16 target head": {
+      "fixed": {
+        "evaluations": 320,
+        "isolated_inputs_verified": true,
+        "layer_instances": [
+          null
+        ],
+        "positions": 320,
+        "reference_remainder": "identity: vocabulary head is the final numerical stage",
+        "reference_remainder_verified": true,
+        "stage_output_exact": 320,
+        "stage_state_exact": 320,
+        "state_scope": "head is stateless; captured input and checkpoint weights are read-only",
+        "top1_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      },
+      "old": {
+        "evaluations": 320,
+        "isolated_inputs_verified": true,
+        "layer_instances": [
+          null
+        ],
+        "positions": 320,
+        "reference_remainder": "identity: vocabulary head is the final numerical stage",
+        "reference_remainder_verified": true,
+        "stage_output_exact": 0,
+        "stage_state_exact": 320,
+        "state_scope": "head is stateless; captured input and checkpoint weights are read-only",
+        "top1_exact": 320,
+        "top20_order_exact": 320,
+        "top20_set_exact": 320
+      }
+    }
+  }
+}

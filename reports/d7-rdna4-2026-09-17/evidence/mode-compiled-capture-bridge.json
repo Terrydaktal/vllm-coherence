@@ -1,0 +1,138 @@
+{
+  "admission": {
+    "binding": "6510ff2e1f794a1b4ef70edc7cc2cfb6239f354f23c774fdb6f18beb50108077",
+    "capacity": {
+      "block_size": 1648,
+      "cache_dtype": "fp8",
+      "max_model_len": 253792,
+      "max_num_batched_tokens": 2048,
+      "max_num_seqs": 2,
+      "num_gpu_blocks": 370
+    },
+    "captures": [
+      false,
+      true
+    ],
+    "fixture": "2d3024f1794d09339ae5faeadcb0fb1d9b5873152eacf601744aa11c614248a8",
+    "modes": [
+      "compiled",
+      "compiled-no-graphs"
+    ],
+    "numerical_config_sha256": "2de0d57a44066bae73252fc47f19673f9cd9395e1002c2a60ac251bda3016db7",
+    "performance": "4d6ed40b4d88c1e0f0a654847953a34f44d2902b7269b0bfaaa2fbfe728be41a",
+    "receipts": [
+      [
+        "1476078e3181e7586cac333a941bc3c3bf7189d4077fe42288cb4ddd7b26e8d7",
+        "6d2c69758f0445214840dbb9b5265cfa236258acc39d1f9f00c624021268887e",
+        "bd2badb89a7d9c21103ef4982bf3916d3f612f9cbf52426193c7bb1884dfabe1",
+        "2c0dbf4a683d6b6a76fbd14a365a33dcb8a2a0f0d91d6a27ebfdfbb335733402"
+      ],
+      [
+        "72e89c3a36595b5a7f8535cc1b148ba949084cb4f397a09ae785b7ead582a343",
+        "eeb12656f73ed475379593dae3a1bc8edbf3080b999d2f0a9f31ad7452226c1f",
+        "8bd2695bb05f635018da81240f406384f853652d0e70cf163779dac8328d281a",
+        "3d70d25f0a1499aad0dc2abae043175ddb8986fbb066dd31322bc523609fb368"
+      ]
+    ],
+    "repair": "8deef78cd58b355d85d142caac58a88ea68ad576a31fe7769cc3db49b18235e9",
+    "schema": "qwen.execution-mode-admission.v1",
+    "scope": "controlled replay admission; mode-selected operators may differ",
+    "sha256": "8ac7a10f843115b568a86960a4f3d7be6895e36ebb26683b4da68fe9ab8eff59",
+    "sources": {
+      "execution_mode_d7_worker.py": "06f478e2986a967f13199d586f6039f01926143b97fb2fcf8d7e2a78684fa90e",
+      "isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
+      "optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
+      "optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad"
+    },
+    "status": "ADMITTED_MODE_COMPARISON"
+  },
+  "decode": {
+    "1": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 93,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 93,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 125,
+      "inclusive_tie_set_exact": 320,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 320,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 125,
+      "retained_scores_exact": 320,
+      "set_exact": 320,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 320,
+    "positions": 320
+  },
+  "prefill": {
+    "1": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 1.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "10": {
+      "candidate_boundary_tied": 0,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 10.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 0,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "20": {
+      "candidate_boundary_tied": 1,
+      "inclusive_tie_set_exact": 1,
+      "mean_overlap_percent": 100.0,
+      "mean_overlap_tokens": 20.0,
+      "ranked_exact": 1,
+      "ranked_exact_percent": 100.0,
+      "reference_boundary_tied": 1,
+      "retained_scores_exact": 1,
+      "set_exact": 1,
+      "set_exact_percent": 100.0
+    },
+    "full_logits_exact": 1,
+    "positions": 1
+  },
+  "row_sources": [
+    "76b6f8c4d1906795b8dbb8552dda94de829a3e7db899365a81979c69474f0cb4",
+    "d807b7b722b89f96b5c8ccc1a067e114ab31ca02858789d639b878fa0954bddb"
+  ],
+  "schema": "qwen.execution-mode-comparison.v1",
+  "scope": "320 forced decode predictions and one prefill prediction; no universal proof",
+  "sha256": "6cc2c8ebede9b5a73a77365c70377a166bd1f8fc55a5133605226e785ae9268e",
+  "stage_localization": "UNMEASURED; inspect aligned boundary captures separately",
+  "status": "COMPARED_SAVED_EVIDENCE"
+}

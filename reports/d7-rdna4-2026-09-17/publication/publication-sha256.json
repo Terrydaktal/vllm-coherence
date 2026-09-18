@@ -1,0 +1,16 @@
+{
+  "head/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "head/README.md": "572d77cbf20950c6856ea94defb40aebc2bee914a75b8f2e85e46533c95bbb81",
+  "head/current_main_head.hip": "c5ffff8d8a22fbfb7217b6bbe756da0b3fb388fafee9adec36856db703a8cbbe",
+  "head/probe.py": "a1074ff9aa6e6eceb9d9ad31869fdffca805d58327ca81b684f335f5fc021e60",
+  "head/result.json": "af55c9a09f1ebb2ecff77154c08d84fb761e2037a170852a0c18a393d1d5d10a",
+  "head/sha256.json": "3a549680142331a8eeba48ab3ce856edf16919c0035bc64065e44dccf7bdd679",
+  "libr4d/README.md": "b8cfc29314393b8795cc725ce14cbea8535ce2eb938d6ee28f30995c34a3d216",
+  "libr4d/attention-pr.md": "8cc3ef1f5b01d5da331ac01ce26cb3de29e530a59357d5a5c8986af8ba8d32b7",
+  "libr4d/attention.patch": "ebd09fe2a6147500244fd1efe05ad66878b12a4c0933f4c0032b3dda94a1cbf5",
+  "libr4d/causal-prefill-pr.md": "1e89d91cbc59b4e103dd2af8eb3869cf0eb3cb9b46c661801e742398c4fa8bd1",
+  "libr4d/causal-prefill.patch": "b9a6cdfa3547f132279a18c220c01cfddabb423edca04629bff3d37e8d475d90",
+  "libr4d/manifest.json": "c8ec2d116cb180713fb7ec4edb1885d3f3ff91bf68e1d3afb82904b918b425a2",
+  "libr4d/serial-gdn-contract-pr.md": "7e3c0ab497cfc9f13ab0551020ee066ef7e15ea266a683c0ac34816e354aebef",
+  "libr4d/serial-gdn-contract.patch": "a01410b1f0070f82dc79863fd4f68650285f4736a1cd3f5409cff68f8052ba65"
+}
