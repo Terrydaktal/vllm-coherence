@@ -1,0 +1,12 @@
+diff --git a/startup-qwen3.8-27b-mxfp4.sh b/startup-qwen3.8-27b-mxfp4.sh
+index 7bab756..ca52cc0 100644
+--- a/startup-qwen3.8-27b-mxfp4.sh
++++ b/startup-qwen3.8-27b-mxfp4.sh
+@@ -1180,6 +1180,7 @@ exec ${DRY_RUN:+echo} "$RUNTIME" run "${RT_FLAGS[@]}" --rm --name "$NAME" --pr
+     python3 patch_rmsquant_fusion.py
+     python3 patch_verify_head.py
+     python3 patch_kv_group_size.py
++    python3 patch_streaming_snapshot.py
+     python3 patch_topk_composite.py
+     python3 patch_gdn_shared_build.py
+     python3 patch_dflash_selector_topk.py
