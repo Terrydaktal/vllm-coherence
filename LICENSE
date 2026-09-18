@@ -1,0 +1,14 @@
+Coherence-authored original additions are licensed under the Apache License,
+Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Copyright 2026 Terrydaktal.
+
+This statement does not relicense inherited Radiance, vLLM, libr4d, ROCm,
+Triton, Pi or other third-party material. Preserve and follow original headers
+and component terms. Component license texts are supplied in
+experiments/radiance-public/upstream-correctness/licenses.
+
+The pinned Radiance base did not supply a repository-wide LICENSE file.
+Its unchanged import and attribution do not imply an additional license grant
+from its authors. Dependencies retain their own licenses.
+
+Model weights are not included and retain their publishers' terms.

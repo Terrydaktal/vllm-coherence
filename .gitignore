@@ -17,3 +17,27 @@ rocm-bandwidth-test
 # editor / os
 *.swp
 .DS_Store
+
+# Coherence local state and private evidence
+.build/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+node_modules/
+.env
+!.env.example
+*.so
+*.hsaco
+*.pt
+*.pth
+*.npy
+*.npz
+*.safetensors
+*.gguf
+private/
+artifacts/
+sessions/
+.pi/
+test-results.xml
