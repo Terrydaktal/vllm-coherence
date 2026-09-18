@@ -261,15 +261,16 @@ This earlier compiled experiment used 115 natural responses per method across
 the final D7 repairs and **does not measure the final corrected M8's long-run
 speed**. The head methods also have different numerical guarantees.
 
-| Earlier head method | Natural responses | Generated tokens | Timed post-first seconds | Post-first tok/s |
-| --- | ---: | ---: | ---: | ---: |
-| Full BF16 reference head | 115 | 60,598 | 946.230 | 63.920 |
-| INT2 block-8 / rerank-80 | 115 | 60,075 | 892.548 | 67.178 |
-| INT2 global-128 / BF16 rerank | 115 | 60,348 | 892.266 | 67.506 |
-| INT2 global-256 / BF16 rerank | 115 | 60,675 | 906.873 | 66.779 |
+| Earlier head method | Natural responses | Generated tokens | Timed post-first seconds |
+| --- | ---: | ---: | ---: |
+| Full BF16 reference head | 115 | 60,598 | 946.230 |
+| INT2 block-8 / rerank-80 | 115 | 60,075 | 892.548 |
+| INT2 global-128 / BF16 rerank | 115 | 60,348 | 892.266 |
+| INT2 global-256 / BF16 rerank | 115 | 60,675 | 906.873 |
 
-The first output chunks are excluded from both the rate numerator and timed
-denominator. See [earlier-60k-output-speed.json](evidence/earlier-60k-output-speed.json).
+The first output chunks are identified in the retained raw timing evidence;
+throughput is intentionally not reported for this superseded experiment. See
+[earlier-60k-output-speed.json](evidence/earlier-60k-output-speed.json).
 
 ## 6. Repairs and upstream ownership
 

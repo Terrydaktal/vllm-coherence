@@ -1,0 +1,2255 @@
+{
+  "schema": "urn:coherence:compiled-stage-timings:v2",
+  "trace_sha256": "6fc2302dbec9dafd5d066a2d8d652dc851892387af6de399a78ecaea48276637",
+  "scope": "Saved compiled 60K-input Pi decode trace. GPU dispatch sums and elapsed GPU cycles from the same bounded rounds; profiled, not uninstrumented serving latency. No new GPU run.",
+  "profile_rounds": 8,
+  "included_rounds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    6
+  ],
+  "selection": "Complete modal kernel inventory and an observed next-target start; no duration-based exclusions. Work before the first target is excluded.",
+  "graph_launches_per_round": [
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65
+  ],
+  "target_head": "global256",
+  "stages_ms": {
+    "Embedding + first input normalization": 0.009611333333333333,
+    "GDN layout/copies and buffer initialization": 0.3065658333333333,
+    "GDN convolution": 0.20931333333333327,
+    "GDN recurrence and gates": 1.1816163333333334,
+    "GDN output gated normalization": 0.16019933333333305,
+    "Post-attention/GDN residual/normalization": 0.5307116666666658,
+    "MLP SiLU and gating": 0.17909066666666665,
+    "MLP down input FP8 quantization": 0.264137,
+    "GDN input projection": 3.945794333333333,
+    "GDN output projection": 1.8966996666666651,
+    "MLP gate/up projection": 11.37036116666667,
+    "MLP down projection": 5.367781166666666,
+    "Layer input residual/normalization": 0.5098586666666655,
+    "Attention Q/K normalization, RoPE and layout": 0.21682299999999935,
+    "Attention KV write": 0.04369066666666665,
+    "Attention decode": 5.256131500000001,
+    "Attention split-KV merge": 0.1282116666666667,
+    "Attention output gating": 0.031083999999999997,
+    "Attention output activation FP8 quantization": 0.04309749999999999,
+    "Attention input projection": 1.159962,
+    "Attention output projection": 0.5268326666666667,
+    "Final normalization/layout": 0.005099,
+    "Other GPU bookkeeping": 0.519764833333333,
+    "Drafter": 6.367166666666668,
+    "Target head (global256)": 1.0077189999999998
+  },
+  "layers_ms": {
+    "0": {
+      "Embedding + first input normalization": 0.009611333333333333,
+      "GDN layout/copies and buffer initialization": 0.006396999999999998,
+      "GDN convolution": 0.004465666666666666,
+      "GDN recurrence and gates": 0.026165833333333333,
+      "GDN output gated normalization": 0.003412333333333333,
+      "Post-attention/GDN residual/normalization": 0.008305833333333333,
+      "MLP SiLU and gating": 0.0021723333333333334,
+      "MLP down input FP8 quantization": 0.004359,
+      "GDN input projection": 0.07578583333333334,
+      "GDN output projection": 0.039032500000000005,
+      "MLP gate/up projection": 0.17482599999999998,
+      "MLP down projection": 0.079986
+    },
+    "1": {
+      "Layer input residual/normalization": 0.008059,
+      "GDN layout/copies and buffer initialization": 0.006003666666666667,
+      "GDN convolution": 0.004252333333333334,
+      "GDN recurrence and gates": 0.026165833333333333,
+      "GDN output gated normalization": 0.003379,
+      "Post-attention/GDN residual/normalization": 0.0081725,
+      "MLP SiLU and gating": 0.0018458333333333334,
+      "MLP down input FP8 quantization": 0.0038256666666666665,
+      "GDN input projection": 0.08053916666666666,
+      "GDN output projection": 0.039879333333333336,
+      "MLP gate/up projection": 0.18333266666666664,
+      "MLP down projection": 0.0871195
+    },
+    "2": {
+      "Layer input residual/normalization": 0.008032333333333334,
+      "GDN layout/copies and buffer initialization": 0.006110333333333333,
+      "GDN convolution": 0.004292333333333333,
+      "GDN recurrence and gates": 0.025719,
+      "GDN output gated normalization": 0.0034056666666666667,
+      "Post-attention/GDN residual/normalization": 0.008279000000000002,
+      "MLP SiLU and gating": 0.001859,
+      "MLP down input FP8 quantization": 0.004585666666666667,
+      "GDN input projection": 0.08352566666666666,
+      "GDN output projection": 0.039632499999999994,
+      "MLP gate/up projection": 0.1828931666666667,
+      "MLP down projection": 0.08801933333333334
+    },
+    "3": {
+      "Layer input residual/normalization": 0.008145833333333331,
+      "Attention Q/K normalization, RoPE and layout": 0.013639833333333334,
+      "Attention KV write": 0.0028123333333333334,
+      "Attention decode": 0.3344401666666667,
+      "Attention split-KV merge": 0.008058999999999998,
+      "Attention output gating": 0.0019123333333333334,
+      "Attention output activation FP8 quantization": 0.002699,
+      "Post-attention/GDN residual/normalization": 0.008605833333333333,
+      "MLP SiLU and gating": 0.0034056666666666667,
+      "MLP down input FP8 quantization": 0.0042525,
+      "Attention input projection": 0.07321233333333332,
+      "Attention output projection": 0.032912666666666666,
+      "MLP gate/up projection": 0.17053916666666669,
+      "MLP down projection": 0.08069283333333334
+    },
+    "4": {
+      "Layer input residual/normalization": 0.008139,
+      "GDN layout/copies and buffer initialization": 0.006476999999999999,
+      "GDN convolution": 0.0045725,
+      "GDN recurrence and gates": 0.02388566666666667,
+      "GDN output gated normalization": 0.0036125,
+      "Post-attention/GDN residual/normalization": 0.008292333333333334,
+      "MLP SiLU and gating": 0.002719,
+      "MLP down input FP8 quantization": 0.0043324999999999995,
+      "GDN input projection": 0.082039,
+      "GDN output projection": 0.038326,
+      "MLP gate/up projection": 0.174326,
+      "MLP down projection": 0.0809395
+    },
+    "5": {
+      "Layer input residual/normalization": 0.008112333333333333,
+      "GDN layout/copies and buffer initialization": 0.006283666666666666,
+      "GDN convolution": 0.0041856666666666665,
+      "GDN recurrence and gates": 0.022912333333333333,
+      "GDN output gated normalization": 0.0034123333333333336,
+      "Post-attention/GDN residual/normalization": 0.008259,
+      "MLP SiLU and gating": 0.0026058333333333337,
+      "MLP down input FP8 quantization": 0.004339,
+      "GDN input projection": 0.08120583333333332,
+      "GDN output projection": 0.040346,
+      "MLP gate/up projection": 0.182706,
+      "MLP down projection": 0.08534633333333333
+    },
+    "6": {
+      "Layer input residual/normalization": 0.008119,
+      "GDN layout/copies and buffer initialization": 0.0073093333333333335,
+      "GDN convolution": 0.004325666666666667,
+      "GDN recurrence and gates": 0.0245725,
+      "GDN output gated normalization": 0.003245833333333333,
+      "Post-attention/GDN residual/normalization": 0.008265833333333333,
+      "MLP SiLU and gating": 0.002592333333333333,
+      "MLP down input FP8 quantization": 0.0038856666666666666,
+      "GDN input projection": 0.08439233333333333,
+      "GDN output projection": 0.039646,
+      "MLP gate/up projection": 0.18159933333333333,
+      "MLP down projection": 0.08845933333333333
+    },
+    "7": {
+      "Layer input residual/normalization": 0.008119000000000001,
+      "Attention Q/K normalization, RoPE and layout": 0.013673,
+      "Attention KV write": 0.002745666666666667,
+      "Attention decode": 0.3311671666666667,
+      "Attention split-KV merge": 0.008125666666666666,
+      "Attention output gating": 0.0018656666666666665,
+      "Attention output activation FP8 quantization": 0.002699,
+      "Post-attention/GDN residual/normalization": 0.008525833333333333,
+      "MLP SiLU and gating": 0.0033789999999999996,
+      "MLP down input FP8 quantization": 0.004245666666666667,
+      "Attention input projection": 0.0719325,
+      "Attention output projection": 0.032965666666666664,
+      "MLP gate/up projection": 0.1722265,
+      "MLP down projection": 0.080106
+    },
+    "8": {
+      "Layer input residual/normalization": 0.008145666666666666,
+      "GDN layout/copies and buffer initialization": 0.006483833333333334,
+      "GDN convolution": 0.0045323333333333335,
+      "GDN recurrence and gates": 0.02469266666666667,
+      "GDN output gated normalization": 0.0032858333333333333,
+      "Post-attention/GDN residual/normalization": 0.008239,
+      "MLP SiLU and gating": 0.0027589999999999993,
+      "MLP down input FP8 quantization": 0.0042525,
+      "GDN input projection": 0.08207266666666667,
+      "GDN output projection": 0.03862583333333334,
+      "MLP gate/up projection": 0.173373,
+      "MLP down projection": 0.08062566666666668
+    },
+    "9": {
+      "Layer input residual/normalization": 0.008192333333333333,
+      "GDN layout/copies and buffer initialization": 0.006250499999999999,
+      "GDN convolution": 0.004379,
+      "GDN recurrence and gates": 0.024012500000000003,
+      "GDN output gated normalization": 0.0035590000000000005,
+      "Post-attention/GDN residual/normalization": 0.008292333333333332,
+      "MLP SiLU and gating": 0.0026590000000000003,
+      "MLP down input FP8 quantization": 0.003872333333333333,
+      "GDN input projection": 0.08072583333333333,
+      "GDN output projection": 0.03981283333333333,
+      "MLP gate/up projection": 0.1824461666666667,
+      "MLP down projection": 0.08845933333333335
+    },
+    "10": {
+      "Layer input residual/normalization": 0.008152333333333334,
+      "GDN layout/copies and buffer initialization": 0.006203666666666667,
+      "GDN convolution": 0.004379,
+      "GDN recurrence and gates": 0.025519166666666666,
+      "GDN output gated normalization": 0.0032456666666666667,
+      "Post-attention/GDN residual/normalization": 0.008292333333333334,
+      "MLP SiLU and gating": 0.0026256666666666668,
+      "MLP down input FP8 quantization": 0.004372333333333334,
+      "GDN input projection": 0.0841525,
+      "GDN output projection": 0.04015916666666667,
+      "MLP gate/up projection": 0.1854865,
+      "MLP down projection": 0.08865933333333334
+    },
+    "11": {
+      "Layer input residual/normalization": 0.008165666666666668,
+      "Attention Q/K normalization, RoPE and layout": 0.013566666666666666,
+      "Attention KV write": 0.0027923333333333333,
+      "Attention decode": 0.32842033333333337,
+      "Attention split-KV merge": 0.008085666666666666,
+      "Attention output gating": 0.001899,
+      "Attention output activation FP8 quantization": 0.0028123333333333334,
+      "Post-attention/GDN residual/normalization": 0.008505666666666667,
+      "MLP SiLU and gating": 0.003379,
+      "MLP down input FP8 quantization": 0.004225666666666667,
+      "Attention input projection": 0.072906,
+      "Attention output projection": 0.032919,
+      "MLP gate/up projection": 0.1702931666666667,
+      "MLP down projection": 0.0804325
+    },
+    "12": {
+      "Layer input residual/normalization": 0.008152333333333334,
+      "GDN layout/copies and buffer initialization": 0.006497166666666667,
+      "GDN convolution": 0.004585666666666667,
+      "GDN recurrence and gates": 0.0241925,
+      "GDN output gated normalization": 0.003279,
+      "Post-attention/GDN residual/normalization": 0.008232333333333333,
+      "MLP SiLU and gating": 0.0027056666666666665,
+      "MLP down input FP8 quantization": 0.0038523333333333335,
+      "GDN input projection": 0.081486,
+      "GDN output projection": 0.0392725,
+      "MLP gate/up projection": 0.17527316666666667,
+      "MLP down projection": 0.07997916666666666
+    },
+    "13": {
+      "Layer input residual/normalization": 0.008152333333333334,
+      "GDN layout/copies and buffer initialization": 0.006170333333333333,
+      "GDN convolution": 0.004139166666666666,
+      "GDN recurrence and gates": 0.023459333333333332,
+      "GDN output gated normalization": 0.0035589999999999997,
+      "Post-attention/GDN residual/normalization": 0.008265666666666666,
+      "MLP SiLU and gating": 0.002592333333333333,
+      "MLP down input FP8 quantization": 0.0038923333333333336,
+      "GDN input projection": 0.08045283333333333,
+      "GDN output projection": 0.0398325,
+      "MLP gate/up projection": 0.18289966666666668,
+      "MLP down projection": 0.0879525
+    },
+    "14": {
+      "Layer input residual/normalization": 0.008099,
+      "GDN layout/copies and buffer initialization": 0.006050333333333335,
+      "GDN convolution": 0.004425666666666667,
+      "GDN recurrence and gates": 0.025318999999999994,
+      "GDN output gated normalization": 0.0035656666666666666,
+      "Post-attention/GDN residual/normalization": 0.008239,
+      "MLP SiLU and gating": 0.002725666666666666,
+      "MLP down input FP8 quantization": 0.0038456666666666665,
+      "GDN input projection": 0.084426,
+      "GDN output projection": 0.039905833333333335,
+      "MLP gate/up projection": 0.18133316666666666,
+      "MLP down projection": 0.0881325
+    },
+    "15": {
+      "Layer input residual/normalization": 0.008125666666666666,
+      "Attention Q/K normalization, RoPE and layout": 0.0135,
+      "Attention KV write": 0.002732333333333333,
+      "Attention decode": 0.328507,
+      "Attention split-KV merge": 0.008179166666666666,
+      "Attention output gating": 0.0020523333333333335,
+      "Attention output activation FP8 quantization": 0.0027256666666666666,
+      "Post-attention/GDN residual/normalization": 0.008545666666666667,
+      "MLP SiLU and gating": 0.003359,
+      "MLP down input FP8 quantization": 0.004179,
+      "Attention input projection": 0.073186,
+      "Attention output projection": 0.03317233333333334,
+      "MLP gate/up projection": 0.17049316666666667,
+      "MLP down projection": 0.08064566666666667
+    },
+    "16": {
+      "Layer input residual/normalization": 0.008225666666666668,
+      "GDN layout/copies and buffer initialization": 0.006623666666666667,
+      "GDN convolution": 0.0045325,
+      "GDN recurrence and gates": 0.024239,
+      "GDN output gated normalization": 0.0034323333333333332,
+      "Post-attention/GDN residual/normalization": 0.008252333333333334,
+      "MLP SiLU and gating": 0.002712333333333333,
+      "MLP down input FP8 quantization": 0.003959,
+      "GDN input projection": 0.081706,
+      "GDN output projection": 0.038672500000000005,
+      "MLP gate/up projection": 0.1738665,
+      "MLP down projection": 0.08047916666666666
+    },
+    "17": {
+      "Layer input residual/normalization": 0.008106,
+      "GDN layout/copies and buffer initialization": 0.006290500000000001,
+      "GDN convolution": 0.004379333333333333,
+      "GDN recurrence and gates": 0.02393233333333333,
+      "GDN output gated normalization": 0.0034056666666666667,
+      "Post-attention/GDN residual/normalization": 0.008258999999999999,
+      "MLP SiLU and gating": 0.0026258333333333333,
+      "MLP down input FP8 quantization": 0.003999,
+      "GDN input projection": 0.0811925,
+      "GDN output projection": 0.03996566666666667,
+      "MLP gate/up projection": 0.1814665,
+      "MLP down projection": 0.08594583333333333
+    },
+    "18": {
+      "Layer input residual/normalization": 0.008152333333333333,
+      "GDN layout/copies and buffer initialization": 0.0062103333333333325,
+      "GDN convolution": 0.004372333333333334,
+      "GDN recurrence and gates": 0.026345833333333332,
+      "GDN output gated normalization": 0.003372333333333333,
+      "Post-attention/GDN residual/normalization": 0.008292333333333334,
+      "MLP SiLU and gating": 0.0027723333333333332,
+      "MLP down input FP8 quantization": 0.003879,
+      "GDN input projection": 0.0834325,
+      "GDN output projection": 0.039185666666666674,
+      "MLP gate/up projection": 0.18233333333333332,
+      "MLP down projection": 0.08834583333333335
+    },
+    "19": {
+      "Layer input residual/normalization": 0.008112333333333333,
+      "Attention Q/K normalization, RoPE and layout": 0.013639833333333337,
+      "Attention KV write": 0.002719,
+      "Attention decode": 0.328427,
+      "Attention split-KV merge": 0.008112666666666667,
+      "Attention output gating": 0.002019,
+      "Attention output activation FP8 quantization": 0.002692333333333333,
+      "Post-attention/GDN residual/normalization": 0.008585666666666667,
+      "MLP SiLU and gating": 0.0033590000000000004,
+      "MLP down input FP8 quantization": 0.004225666666666667,
+      "Attention input projection": 0.07277950000000001,
+      "Attention output projection": 0.032972499999999995,
+      "MLP gate/up projection": 0.17114633333333332,
+      "MLP down projection": 0.08047249999999999
+    },
+    "20": {
+      "Layer input residual/normalization": 0.008139,
+      "GDN layout/copies and buffer initialization": 0.007902666666666667,
+      "GDN convolution": 0.004459,
+      "GDN recurrence and gates": 0.023912333333333334,
+      "GDN output gated normalization": 0.0032256666666666666,
+      "Post-attention/GDN residual/normalization": 0.008272333333333333,
+      "MLP SiLU and gating": 0.002685666666666667,
+      "MLP down input FP8 quantization": 0.004325666666666667,
+      "GDN input projection": 0.081646,
+      "GDN output projection": 0.03900583333333334,
+      "MLP gate/up projection": 0.175393,
+      "MLP down projection": 0.08078583333333335
+    },
+    "21": {
+      "Layer input residual/normalization": 0.008152333333333334,
+      "GDN layout/copies and buffer initialization": 0.006323666666666667,
+      "GDN convolution": 0.004279,
+      "GDN recurrence and gates": 0.024325833333333335,
+      "GDN output gated normalization": 0.003139,
+      "Post-attention/GDN residual/normalization": 0.008285666666666667,
+      "MLP SiLU and gating": 0.002705666666666667,
+      "MLP down input FP8 quantization": 0.003859,
+      "GDN input projection": 0.08140616666666667,
+      "GDN output projection": 0.03987933333333333,
+      "MLP gate/up projection": 0.18182633333333334,
+      "MLP down projection": 0.0857525
+    },
+    "22": {
+      "Layer input residual/normalization": 0.008159,
+      "GDN layout/copies and buffer initialization": 0.0061505000000000015,
+      "GDN convolution": 0.004299,
+      "GDN recurrence and gates": 0.025065666666666663,
+      "GDN output gated normalization": 0.003392333333333333,
+      "Post-attention/GDN residual/normalization": 0.008298999999999999,
+      "MLP SiLU and gating": 0.0026923333333333335,
+      "MLP down input FP8 quantization": 0.004239,
+      "GDN input projection": 0.08366616666666667,
+      "GDN output projection": 0.0397325,
+      "MLP gate/up projection": 0.18192633333333336,
+      "MLP down projection": 0.08780583333333333
+    },
+    "23": {
+      "Layer input residual/normalization": 0.008145666666666667,
+      "Attention Q/K normalization, RoPE and layout": 0.013586500000000005,
+      "Attention KV write": 0.0028056666666666664,
+      "Attention decode": 0.33214716666666666,
+      "Attention split-KV merge": 0.008005666666666668,
+      "Attention output gating": 0.002045666666666667,
+      "Attention output activation FP8 quantization": 0.002719,
+      "Post-attention/GDN residual/normalization": 0.008532333333333333,
+      "MLP SiLU and gating": 0.0033523333333333335,
+      "MLP down input FP8 quantization": 0.0041856666666666665,
+      "Attention input projection": 0.0720195,
+      "Attention output projection": 0.03297233333333333,
+      "MLP gate/up projection": 0.17027316666666664,
+      "MLP down projection": 0.0804725
+    },
+    "24": {
+      "Layer input residual/normalization": 0.008152333333333334,
+      "GDN layout/copies and buffer initialization": 0.006417000000000001,
+      "GDN convolution": 0.004519,
+      "GDN recurrence and gates": 0.024392333333333335,
+      "GDN output gated normalization": 0.0034723333333333333,
+      "Post-attention/GDN residual/normalization": 0.008292333333333334,
+      "MLP SiLU and gating": 0.0027656666666666667,
+      "MLP down input FP8 quantization": 0.004279,
+      "GDN input projection": 0.08129283333333334,
+      "GDN output projection": 0.039192333333333336,
+      "MLP gate/up projection": 0.17410666666666666,
+      "MLP down projection": 0.08023250000000001
+    },
+    "25": {
+      "Layer input residual/normalization": 0.008179,
+      "GDN layout/copies and buffer initialization": 0.006190333333333333,
+      "GDN convolution": 0.004465666666666666,
+      "GDN recurrence and gates": 0.023499166666666668,
+      "GDN output gated normalization": 0.003399,
+      "Post-attention/GDN residual/normalization": 0.008305666666666668,
+      "MLP SiLU and gating": 0.0026323333333333333,
+      "MLP down input FP8 quantization": 0.004359,
+      "GDN input projection": 0.0810995,
+      "GDN output projection": 0.04036566666666666,
+      "MLP gate/up projection": 0.18376666666666666,
+      "MLP down projection": 0.08735916666666667
+    },
+    "26": {
+      "Layer input residual/normalization": 0.008239,
+      "GDN layout/copies and buffer initialization": 0.006157000000000002,
+      "GDN convolution": 0.004432333333333334,
+      "GDN recurrence and gates": 0.02616583333333333,
+      "GDN output gated normalization": 0.0034056666666666662,
+      "Post-attention/GDN residual/normalization": 0.008279,
+      "MLP SiLU and gating": 0.0026256666666666668,
+      "MLP down input FP8 quantization": 0.0038989999999999997,
+      "GDN input projection": 0.08409283333333334,
+      "GDN output projection": 0.03943233333333333,
+      "MLP gate/up projection": 0.18106650000000002,
+      "MLP down projection": 0.08723916666666667
+    },
+    "27": {
+      "Layer input residual/normalization": 0.008145666666666667,
+      "Attention Q/K normalization, RoPE and layout": 0.013619833333333333,
+      "Attention KV write": 0.002859,
+      "Attention decode": 0.32890699999999995,
+      "Attention split-KV merge": 0.007945666666666667,
+      "Attention output gating": 0.001799,
+      "Attention output activation FP8 quantization": 0.0026856666666666665,
+      "Post-attention/GDN residual/normalization": 0.008545666666666667,
+      "MLP SiLU and gating": 0.003365666666666667,
+      "MLP down input FP8 quantization": 0.004232333333333334,
+      "Attention input projection": 0.07306616666666667,
+      "Attention output projection": 0.0328325,
+      "MLP gate/up projection": 0.17029983333333334,
+      "MLP down projection": 0.0802925
+    },
+    "28": {
+      "Layer input residual/normalization": 0.008132333333333333,
+      "GDN layout/copies and buffer initialization": 0.0066103333333333335,
+      "GDN convolution": 0.0045323333333333335,
+      "GDN recurrence and gates": 0.02423233333333333,
+      "GDN output gated normalization": 0.0034523333333333333,
+      "Post-attention/GDN residual/normalization": 0.008258999999999999,
+      "MLP SiLU and gating": 0.0026923333333333335,
+      "MLP down input FP8 quantization": 0.0038323333333333334,
+      "GDN input projection": 0.08131933333333333,
+      "GDN output projection": 0.039199,
+      "MLP gate/up projection": 0.17472,
+      "MLP down projection": 0.08044566666666667
+    },
+    "29": {
+      "Layer input residual/normalization": 0.008119,
+      "GDN layout/copies and buffer initialization": 0.006116999999999999,
+      "GDN convolution": 0.004225666666666667,
+      "GDN recurrence and gates": 0.023645666666666666,
+      "GDN output gated normalization": 0.003365666666666667,
+      "Post-attention/GDN residual/normalization": 0.008252333333333334,
+      "MLP SiLU and gating": 0.0026390000000000003,
+      "MLP down input FP8 quantization": 0.004458999999999999,
+      "GDN input projection": 0.082473,
+      "GDN output projection": 0.039799,
+      "MLP gate/up projection": 0.1838733333333333,
+      "MLP down projection": 0.08587233333333333
+    },
+    "30": {
+      "Layer input residual/normalization": 0.008119166666666667,
+      "GDN layout/copies and buffer initialization": 0.006090333333333332,
+      "GDN convolution": 0.004365666666666667,
+      "GDN recurrence and gates": 0.025765666666666666,
+      "GDN output gated normalization": 0.003379,
+      "Post-attention/GDN residual/normalization": 0.008265666666666668,
+      "MLP SiLU and gating": 0.002672333333333334,
+      "MLP down input FP8 quantization": 0.0038990000000000006,
+      "GDN input projection": 0.08321966666666666,
+      "GDN output projection": 0.039945666666666664,
+      "MLP gate/up projection": 0.18492000000000003,
+      "MLP down projection": 0.08771949999999999
+    },
+    "31": {
+      "Layer input residual/normalization": 0.008132333333333333,
+      "Attention Q/K normalization, RoPE and layout": 0.013512999999999999,
+      "Attention KV write": 0.002752333333333333,
+      "Attention decode": 0.3298003333333333,
+      "Attention split-KV merge": 0.008112333333333333,
+      "Attention output gating": 0.0018056666666666666,
+      "Attention output activation FP8 quantization": 0.002712333333333333,
+      "Post-attention/GDN residual/normalization": 0.008585666666666667,
+      "MLP SiLU and gating": 0.0033656666666666665,
+      "MLP down input FP8 quantization": 0.004232333333333333,
+      "Attention input projection": 0.072146,
+      "Attention output projection": 0.032899,
+      "MLP gate/up projection": 0.16921333333333333,
+      "MLP down projection": 0.08038599999999999
+    },
+    "32": {
+      "Layer input residual/normalization": 0.008165666666666667,
+      "GDN layout/copies and buffer initialization": 0.006543666666666666,
+      "GDN convolution": 0.004545666666666667,
+      "GDN recurrence and gates": 0.02453233333333333,
+      "GDN output gated normalization": 0.0034656666666666664,
+      "Post-attention/GDN residual/normalization": 0.008285666666666667,
+      "MLP SiLU and gating": 0.002759,
+      "MLP down input FP8 quantization": 0.004292333333333334,
+      "GDN input projection": 0.081353,
+      "GDN output projection": 0.038905666666666665,
+      "MLP gate/up projection": 0.17391333333333334,
+      "MLP down projection": 0.08079933333333332
+    },
+    "33": {
+      "Layer input residual/normalization": 0.008139,
+      "GDN layout/copies and buffer initialization": 0.0062036666666666655,
+      "GDN convolution": 0.004379,
+      "GDN recurrence and gates": 0.023719,
+      "GDN output gated normalization": 0.0031723333333333334,
+      "Post-attention/GDN residual/normalization": 0.008272333333333333,
+      "MLP SiLU and gating": 0.0026190000000000002,
+      "MLP down input FP8 quantization": 0.004425666666666666,
+      "GDN input projection": 0.08145966666666667,
+      "GDN output projection": 0.04036566666666666,
+      "MLP gate/up projection": 0.18065333333333333,
+      "MLP down projection": 0.08701916666666666
+    },
+    "34": {
+      "Layer input residual/normalization": 0.008218999999999999,
+      "GDN layout/copies and buffer initialization": 0.007582666666666669,
+      "GDN convolution": 0.004285666666666667,
+      "GDN recurrence and gates": 0.026999000000000002,
+      "GDN output gated normalization": 0.0034656666666666672,
+      "Post-attention/GDN residual/normalization": 0.008279,
+      "MLP SiLU and gating": 0.002665666666666667,
+      "MLP down input FP8 quantization": 0.004552333333333334,
+      "GDN input projection": 0.083273,
+      "GDN output projection": 0.03932566666666666,
+      "MLP gate/up projection": 0.18306666666666666,
+      "MLP down projection": 0.08742616666666667
+    },
+    "35": {
+      "Layer input residual/normalization": 0.0081725,
+      "Attention Q/K normalization, RoPE and layout": 0.01367966666666667,
+      "Attention KV write": 0.0026590000000000003,
+      "Attention decode": 0.32856699999999994,
+      "Attention split-KV merge": 0.008005666666666668,
+      "Attention output gating": 0.0018656666666666665,
+      "Attention output activation FP8 quantization": 0.0026923333333333335,
+      "Post-attention/GDN residual/normalization": 0.008572333333333335,
+      "MLP SiLU and gating": 0.003359,
+      "MLP down input FP8 quantization": 0.0041723333333333334,
+      "Attention input projection": 0.07363266666666667,
+      "Attention output projection": 0.03318583333333334,
+      "MLP gate/up projection": 0.16992633333333335,
+      "MLP down projection": 0.08043283333333333
+    },
+    "36": {
+      "Layer input residual/normalization": 0.008139,
+      "GDN layout/copies and buffer initialization": 0.006383666666666668,
+      "GDN convolution": 0.004379,
+      "GDN recurrence and gates": 0.024979,
+      "GDN output gated normalization": 0.0032256666666666675,
+      "Post-attention/GDN residual/normalization": 0.008265666666666668,
+      "MLP SiLU and gating": 0.002732333333333333,
+      "MLP down input FP8 quantization": 0.004325666666666666,
+      "GDN input projection": 0.08220600000000002,
+      "GDN output projection": 0.03934583333333334,
+      "MLP gate/up projection": 0.17634650000000002,
+      "MLP down projection": 0.08130616666666667
+    },
+    "37": {
+      "Layer input residual/normalization": 0.008125666666666666,
+      "GDN layout/copies and buffer initialization": 0.006183666666666667,
+      "GDN convolution": 0.004325666666666667,
+      "GDN recurrence and gates": 0.023605666666666664,
+      "GDN output gated normalization": 0.0033856666666666666,
+      "Post-attention/GDN residual/normalization": 0.008265833333333333,
+      "MLP SiLU and gating": 0.0026256666666666668,
+      "MLP down input FP8 quantization": 0.0038523333333333335,
+      "GDN input projection": 0.081786,
+      "GDN output projection": 0.03963233333333333,
+      "MLP gate/up projection": 0.1814665,
+      "MLP down projection": 0.08603949999999999
+    },
+    "38": {
+      "Layer input residual/normalization": 0.008085833333333334,
+      "GDN layout/copies and buffer initialization": 0.006163666666666667,
+      "GDN convolution": 0.004332333333333333,
+      "GDN recurrence and gates": 0.025705666666666665,
+      "GDN output gated normalization": 0.0031323333333333333,
+      "Post-attention/GDN residual/normalization": 0.008218999999999999,
+      "MLP SiLU and gating": 0.0026123333333333333,
+      "MLP down input FP8 quantization": 0.0038590000000000005,
+      "GDN input projection": 0.08414583333333334,
+      "GDN output projection": 0.03980583333333334,
+      "MLP gate/up projection": 0.183973,
+      "MLP down projection": 0.0880195
+    },
+    "39": {
+      "Layer input residual/normalization": 0.008172333333333334,
+      "Attention Q/K normalization, RoPE and layout": 0.013619666666666669,
+      "Attention KV write": 0.002799,
+      "Attention decode": 0.32540016666666666,
+      "Attention split-KV merge": 0.008019166666666666,
+      "Attention output gating": 0.0018256666666666668,
+      "Attention output activation FP8 quantization": 0.002665666666666667,
+      "Post-attention/GDN residual/normalization": 0.008479,
+      "MLP SiLU and gating": 0.0033325000000000004,
+      "MLP down input FP8 quantization": 0.0041723333333333334,
+      "Attention input projection": 0.07267933333333333,
+      "Attention output projection": 0.032806,
+      "MLP gate/up projection": 0.16966599999999998,
+      "MLP down projection": 0.0805795
+    },
+    "40": {
+      "Layer input residual/normalization": 0.008005666666666668,
+      "GDN layout/copies and buffer initialization": 0.006496999999999999,
+      "GDN convolution": 0.0045056666666666665,
+      "GDN recurrence and gates": 0.024785666666666664,
+      "GDN output gated normalization": 0.0032456666666666667,
+      "Post-attention/GDN residual/normalization": 0.008138999999999999,
+      "MLP SiLU and gating": 0.002679,
+      "MLP down input FP8 quantization": 0.004232333333333334,
+      "GDN input projection": 0.08151933333333333,
+      "GDN output projection": 0.03884616666666666,
+      "MLP gate/up projection": 0.17610599999999998,
+      "MLP down projection": 0.08141266666666666
+    },
+    "41": {
+      "Layer input residual/normalization": 0.008019,
+      "GDN layout/copies and buffer initialization": 0.006063666666666668,
+      "GDN convolution": 0.004272333333333334,
+      "GDN recurrence and gates": 0.023185666666666667,
+      "GDN output gated normalization": 0.0031323333333333333,
+      "Post-attention/GDN residual/normalization": 0.008145666666666666,
+      "MLP SiLU and gating": 0.0026725,
+      "MLP down input FP8 quantization": 0.004465666666666666,
+      "GDN input projection": 0.08067266666666667,
+      "GDN output projection": 0.039626,
+      "MLP gate/up projection": 0.182626,
+      "MLP down projection": 0.08688599999999999
+    },
+    "42": {
+      "Layer input residual/normalization": 0.008032333333333334,
+      "GDN layout/copies and buffer initialization": 0.006037,
+      "GDN convolution": 0.004325666666666666,
+      "GDN recurrence and gates": 0.025979333333333337,
+      "GDN output gated normalization": 0.003332333333333334,
+      "Post-attention/GDN residual/normalization": 0.008152333333333333,
+      "MLP SiLU and gating": 0.0025656666666666666,
+      "MLP down input FP8 quantization": 0.0038056666666666664,
+      "GDN input projection": 0.08487933333333332,
+      "GDN output projection": 0.04041933333333333,
+      "MLP gate/up projection": 0.18462633333333334,
+      "MLP down projection": 0.08781266666666666
+    },
+    "43": {
+      "Layer input residual/normalization": 0.008012499999999999,
+      "Attention Q/K normalization, RoPE and layout": 0.013539666666666665,
+      "Attention KV write": 0.0026323333333333337,
+      "Attention decode": 0.32496683333333337,
+      "Attention split-KV merge": 0.007985666666666667,
+      "Attention output gating": 0.0019923333333333334,
+      "Attention output activation FP8 quantization": 0.002672333333333333,
+      "Post-attention/GDN residual/normalization": 0.008485666666666667,
+      "MLP SiLU and gating": 0.0033125000000000003,
+      "MLP down input FP8 quantization": 0.0041923333333333335,
+      "Attention input projection": 0.072079,
+      "Attention output projection": 0.032812499999999994,
+      "MLP gate/up projection": 0.170653,
+      "MLP down projection": 0.08051916666666667
+    },
+    "44": {
+      "Layer input residual/normalization": 0.0081725,
+      "GDN layout/copies and buffer initialization": 0.006437,
+      "GDN convolution": 0.004439,
+      "GDN recurrence and gates": 0.02373916666666667,
+      "GDN output gated normalization": 0.0033989999999999997,
+      "Post-attention/GDN residual/normalization": 0.008152333333333333,
+      "MLP SiLU and gating": 0.0026525,
+      "MLP down input FP8 quantization": 0.0037723333333333333,
+      "GDN input projection": 0.08159916666666667,
+      "GDN output projection": 0.038519333333333336,
+      "MLP gate/up projection": 0.17474616666666665,
+      "MLP down projection": 0.07975933333333333
+    },
+    "45": {
+      "Layer input residual/normalization": 0.007979,
+      "GDN layout/copies and buffer initialization": 0.0061505,
+      "GDN convolution": 0.0042123333333333336,
+      "GDN recurrence and gates": 0.023518999999999998,
+      "GDN output gated normalization": 0.003359,
+      "Post-attention/GDN residual/normalization": 0.008112333333333333,
+      "MLP SiLU and gating": 0.002599,
+      "MLP down input FP8 quantization": 0.004412333333333333,
+      "GDN input projection": 0.08127916666666667,
+      "GDN output projection": 0.039726000000000004,
+      "MLP gate/up projection": 0.18216616666666668,
+      "MLP down projection": 0.08749249999999999
+    },
+    "46": {
+      "Layer input residual/normalization": 0.007992333333333334,
+      "GDN layout/copies and buffer initialization": 0.006170333333333333,
+      "GDN convolution": 0.004352333333333333,
+      "GDN recurrence and gates": 0.02492583333333333,
+      "GDN output gated normalization": 0.0032925000000000003,
+      "Post-attention/GDN residual/normalization": 0.008165666666666668,
+      "MLP SiLU and gating": 0.0025858333333333336,
+      "MLP down input FP8 quantization": 0.003805666666666667,
+      "GDN input projection": 0.08441283333333333,
+      "GDN output projection": 0.03998583333333334,
+      "MLP gate/up projection": 0.18151966666666666,
+      "MLP down projection": 0.08729266666666666
+    },
+    "47": {
+      "Layer input residual/normalization": 0.007952333333333334,
+      "Attention Q/K normalization, RoPE and layout": 0.013406333333333333,
+      "Attention KV write": 0.0027589999999999997,
+      "Attention decode": 0.3309203333333333,
+      "Attention split-KV merge": 0.008052333333333333,
+      "Attention output gating": 0.002005666666666667,
+      "Attention output activation FP8 quantization": 0.002659,
+      "Post-attention/GDN residual/normalization": 0.008459166666666665,
+      "MLP SiLU and gating": 0.0033323333333333334,
+      "MLP down input FP8 quantization": 0.0041723333333333334,
+      "Attention input projection": 0.07192599999999999,
+      "Attention output projection": 0.03286566666666667,
+      "MLP gate/up projection": 0.17039316666666665,
+      "MLP down projection": 0.0805525
+    },
+    "48": {
+      "Layer input residual/normalization": 0.008025666666666667,
+      "GDN layout/copies and buffer initialization": 0.0076626666666666675,
+      "GDN convolution": 0.004379166666666667,
+      "GDN recurrence and gates": 0.024365833333333333,
+      "GDN output gated normalization": 0.0035390000000000005,
+      "Post-attention/GDN residual/normalization": 0.008152333333333334,
+      "MLP SiLU and gating": 0.002759,
+      "MLP down input FP8 quantization": 0.004285666666666667,
+      "GDN input projection": 0.08204583333333332,
+      "GDN output projection": 0.038599,
+      "MLP gate/up projection": 0.1754865,
+      "MLP down projection": 0.08064583333333333
+    },
+    "49": {
+      "Layer input residual/normalization": 0.007985666666666669,
+      "GDN layout/copies and buffer initialization": 0.006197,
+      "GDN convolution": 0.0043658333333333335,
+      "GDN recurrence and gates": 0.023186,
+      "GDN output gated normalization": 0.0033123333333333334,
+      "Post-attention/GDN residual/normalization": 0.008139,
+      "MLP SiLU and gating": 0.002592333333333333,
+      "MLP down input FP8 quantization": 0.004279,
+      "GDN input projection": 0.08181916666666667,
+      "GDN output projection": 0.039159,
+      "MLP gate/up projection": 0.1816,
+      "MLP down projection": 0.08725933333333333
+    },
+    "50": {
+      "Layer input residual/normalization": 0.007992333333333334,
+      "GDN layout/copies and buffer initialization": 0.006157166666666667,
+      "GDN convolution": 0.004239,
+      "GDN recurrence and gates": 0.025425833333333335,
+      "GDN output gated normalization": 0.003352333333333334,
+      "Post-attention/GDN residual/normalization": 0.0081325,
+      "MLP SiLU and gating": 0.0026323333333333333,
+      "MLP down input FP8 quantization": 0.0037989999999999994,
+      "GDN input projection": 0.0847525,
+      "GDN output projection": 0.04049233333333333,
+      "MLP gate/up projection": 0.18495316666666667,
+      "MLP down projection": 0.08737916666666667
+    },
+    "51": {
+      "Layer input residual/normalization": 0.008012333333333333,
+      "Attention Q/K normalization, RoPE and layout": 0.013413166666666669,
+      "Attention KV write": 0.002699,
+      "Attention decode": 0.32490016666666666,
+      "Attention split-KV merge": 0.007845833333333333,
+      "Attention output gating": 0.001999,
+      "Attention output activation FP8 quantization": 0.0026989999999999996,
+      "Post-attention/GDN residual/normalization": 0.008459166666666667,
+      "MLP SiLU and gating": 0.003319,
+      "MLP down input FP8 quantization": 0.004159166666666667,
+      "Attention input projection": 0.07252566666666667,
+      "Attention output projection": 0.032892333333333336,
+      "MLP gate/up projection": 0.17031966666666667,
+      "MLP down projection": 0.08007916666666667
+    },
+    "52": {
+      "Layer input residual/normalization": 0.007992333333333332,
+      "GDN layout/copies and buffer initialization": 0.006477166666666667,
+      "GDN convolution": 0.004472333333333333,
+      "GDN recurrence and gates": 0.024132333333333335,
+      "GDN output gated normalization": 0.003385666666666667,
+      "Post-attention/GDN residual/normalization": 0.008139,
+      "MLP SiLU and gating": 0.0027923333333333333,
+      "MLP down input FP8 quantization": 0.003985666666666667,
+      "GDN input projection": 0.081666,
+      "GDN output projection": 0.03880566666666667,
+      "MLP gate/up projection": 0.17462633333333333,
+      "MLP down projection": 0.07951916666666667
+    },
+    "53": {
+      "Layer input residual/normalization": 0.007999166666666667,
+      "GDN layout/copies and buffer initialization": 0.006130333333333335,
+      "GDN convolution": 0.0041525,
+      "GDN recurrence and gates": 0.023312333333333334,
+      "GDN output gated normalization": 0.0031390000000000003,
+      "Post-attention/GDN residual/normalization": 0.008112333333333333,
+      "MLP SiLU and gating": 0.0026056666666666667,
+      "MLP down input FP8 quantization": 0.0044525,
+      "GDN input projection": 0.0825525,
+      "GDN output projection": 0.03977916666666667,
+      "MLP gate/up projection": 0.18161983333333334,
+      "MLP down projection": 0.08739266666666666
+    },
+    "54": {
+      "Layer input residual/normalization": 0.008012333333333333,
+      "GDN layout/copies and buffer initialization": 0.0060438333333333325,
+      "GDN convolution": 0.004299,
+      "GDN recurrence and gates": 0.025605833333333335,
+      "GDN output gated normalization": 0.0031190000000000002,
+      "Post-attention/GDN residual/normalization": 0.008145666666666667,
+      "MLP SiLU and gating": 0.0025856666666666667,
+      "MLP down input FP8 quantization": 0.004272333333333333,
+      "GDN input projection": 0.08429933333333334,
+      "GDN output projection": 0.039692333333333336,
+      "MLP gate/up projection": 0.18216666666666667,
+      "MLP down projection": 0.08547266666666667
+    },
+    "55": {
+      "Layer input residual/normalization": 0.008005666666666666,
+      "Attention Q/K normalization, RoPE and layout": 0.013453,
+      "Attention KV write": 0.0026590000000000003,
+      "Attention decode": 0.3281603333333333,
+      "Attention split-KV merge": 0.007919,
+      "Attention output gating": 0.002159,
+      "Attention output activation FP8 quantization": 0.0026523333333333334,
+      "Post-attention/GDN residual/normalization": 0.008385666666666666,
+      "MLP SiLU and gating": 0.0033256666666666664,
+      "MLP down input FP8 quantization": 0.0041789999999999996,
+      "Attention input projection": 0.07069933333333334,
+      "Attention output projection": 0.032812666666666664,
+      "MLP gate/up projection": 0.17060616666666667,
+      "MLP down projection": 0.0799195
+    },
+    "56": {
+      "Layer input residual/normalization": 0.008019,
+      "GDN layout/copies and buffer initialization": 0.0063503333333333346,
+      "GDN convolution": 0.004339,
+      "GDN recurrence and gates": 0.024392333333333335,
+      "GDN output gated normalization": 0.0032256666666666666,
+      "Post-attention/GDN residual/normalization": 0.008119333333333333,
+      "MLP SiLU and gating": 0.0026656666666666664,
+      "MLP down input FP8 quantization": 0.004252333333333334,
+      "GDN input projection": 0.08175266666666667,
+      "GDN output projection": 0.038459,
+      "MLP gate/up projection": 0.17480616666666668,
+      "MLP down projection": 0.08071283333333334
+    },
+    "57": {
+      "Layer input residual/normalization": 0.007972333333333333,
+      "GDN layout/copies and buffer initialization": 0.006077,
+      "GDN convolution": 0.004245666666666667,
+      "GDN recurrence and gates": 0.023725666666666666,
+      "GDN output gated normalization": 0.003192333333333333,
+      "Post-attention/GDN residual/normalization": 0.008146166666666668,
+      "MLP SiLU and gating": 0.0025723333333333336,
+      "MLP down input FP8 quantization": 0.003812333333333333,
+      "GDN input projection": 0.080586,
+      "GDN output projection": 0.04020566666666667,
+      "MLP gate/up projection": 0.1832395,
+      "MLP down projection": 0.08703283333333332
+    },
+    "58": {
+      "Layer input residual/normalization": 0.008032333333333332,
+      "GDN layout/copies and buffer initialization": 0.006010333333333333,
+      "GDN convolution": 0.004205666666666667,
+      "GDN recurrence and gates": 0.026232333333333337,
+      "GDN output gated normalization": 0.003325666666666667,
+      "Post-attention/GDN residual/normalization": 0.008139,
+      "MLP SiLU and gating": 0.0025656666666666666,
+      "MLP down input FP8 quantization": 0.0037923333333333333,
+      "GDN input projection": 0.08317949999999999,
+      "GDN output projection": 0.039759499999999996,
+      "MLP gate/up projection": 0.18271949999999998,
+      "MLP down projection": 0.08756616666666667
+    },
+    "59": {
+      "Layer input residual/normalization": 0.008005666666666668,
+      "Attention Q/K normalization, RoPE and layout": 0.01337966666666667,
+      "Attention KV write": 0.0026856666666666665,
+      "Attention decode": 0.32494033333333333,
+      "Attention split-KV merge": 0.007999,
+      "Attention output gating": 0.0020123333333333334,
+      "Attention output activation FP8 quantization": 0.0026258333333333333,
+      "Post-attention/GDN residual/normalization": 0.008465666666666666,
+      "MLP SiLU and gating": 0.0033190000000000003,
+      "MLP down input FP8 quantization": 0.0041856666666666665,
+      "Attention input projection": 0.07241283333333333,
+      "Attention output projection": 0.03280583333333333,
+      "MLP gate/up projection": 0.17071966666666666,
+      "MLP down projection": 0.080426
+    },
+    "60": {
+      "Layer input residual/normalization": 0.008005666666666666,
+      "GDN layout/copies and buffer initialization": 0.006357,
+      "GDN convolution": 0.004365666666666667,
+      "GDN recurrence and gates": 0.02425916666666667,
+      "GDN output gated normalization": 0.003199,
+      "Post-attention/GDN residual/normalization": 0.008112333333333333,
+      "MLP SiLU and gating": 0.002659,
+      "MLP down input FP8 quantization": 0.004232333333333333,
+      "GDN input projection": 0.08175266666666667,
+      "GDN output projection": 0.03903266666666667,
+      "MLP gate/up projection": 0.17411949999999998,
+      "MLP down projection": 0.080526
+    },
+    "61": {
+      "Layer input residual/normalization": 0.008059166666666668,
+      "GDN layout/copies and buffer initialization": 0.005990333333333334,
+      "GDN convolution": 0.0041656666666666665,
+      "GDN recurrence and gates": 0.023579,
+      "GDN output gated normalization": 0.003292333333333333,
+      "Post-attention/GDN residual/normalization": 0.008145666666666667,
+      "MLP SiLU and gating": 0.002579,
+      "MLP down input FP8 quantization": 0.0038123333333333334,
+      "GDN input projection": 0.08087933333333333,
+      "GDN output projection": 0.03979933333333333,
+      "MLP gate/up projection": 0.18296616666666665,
+      "MLP down projection": 0.08831249999999999
+    },
+    "62": {
+      "Layer input residual/normalization": 0.008005666666666668,
+      "GDN layout/copies and buffer initialization": 0.007376,
+      "GDN convolution": 0.004332333333333333,
+      "GDN recurrence and gates": 0.025585999999999998,
+      "GDN output gated normalization": 0.0031056666666666667,
+      "Post-attention/GDN residual/normalization": 0.008159,
+      "MLP SiLU and gating": 0.002599,
+      "MLP down input FP8 quantization": 0.0037856666666666663,
+      "GDN input projection": 0.08457266666666666,
+      "GDN output projection": 0.039565833333333335,
+      "MLP gate/up projection": 0.18355316666666666,
+      "MLP down projection": 0.08703283333333334
+    },
+    "63": {
+      "Layer input residual/normalization": 0.008025666666666667,
+      "Attention Q/K normalization, RoPE and layout": 0.013593166666666665,
+      "Attention KV write": 0.0025789999999999997,
+      "Attention decode": 0.32646016666666666,
+      "Attention split-KV merge": 0.007759166666666667,
+      "Attention output gating": 0.0018256666666666666,
+      "Attention output activation FP8 quantization": 0.0026856666666666665,
+      "Post-attention/GDN residual/normalization": 0.008425666666666668,
+      "MLP SiLU and gating": 0.0033656666666666665,
+      "MLP down input FP8 quantization": 0.004159166666666667,
+      "Attention input projection": 0.07275916666666667,
+      "Attention output projection": 0.03300583333333334,
+      "MLP gate/up projection": 0.17076633333333335,
+      "MLP down projection": 0.0799925
+    }
+  },
+  "all_gpu_ms": 41.237323,
+  "per_round_gpu_ms": {
+    "0": 43.5766869999999,
+    "1": 40.178349000000004,
+    "2": 40.04123599999992,
+    "3": 42.88935299999994,
+    "4": 40.100835999999966,
+    "6": 40.63747699999998
+  },
+  "round_timing": {
+    "boundary": "First target GPU kernel to the first target GPU kernel of the next round.",
+    "scope": "Profiled GPU cycle; gaps include launch/host/wait and possible profiler overhead. Individual causes are not attributed. Excludes request admission, prefill and Pi/transport latency.",
+    "equation": "elapsed_ms = kernel_sum_ms - gpu_overlap_ms + overhead_ms",
+    "mean": {
+      "elapsed_ms": 47.45758968098958,
+      "kernel_sum_ms": 41.237322999999996,
+      "gpu_busy_ms": 41.23506142447919,
+      "gpu_overlap_ms": 0.002261575520806218,
+      "overhead_ms": 6.222528256510389
+    },
+    "rounds": [
+      {
+        "round": 0,
+        "start_offset_ms": 0.0,
+        "elapsed_ms": 53.5457412109375,
+        "kernel_sum_ms": 43.576687,
+        "gpu_busy_ms": 43.576248093750095,
+        "gpu_overlap_ms": 0.00043890624990308426,
+        "overhead_ms": 9.969493117187405,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 1,
+        "start_offset_ms": 53.5457412109375,
+        "elapsed_ms": 45.65191796875,
+        "kernel_sum_ms": 40.178349000000004,
+        "gpu_busy_ms": 40.17559064843753,
+        "gpu_overlap_ms": 0.002758351562471944,
+        "overhead_ms": 5.47632732031247,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 2,
+        "start_offset_ms": 99.1976591796875,
+        "elapsed_ms": 45.0803818359375,
+        "kernel_sum_ms": 40.041236,
+        "gpu_busy_ms": 40.038238000000014,
+        "gpu_overlap_ms": 0.002997999999985041,
+        "overhead_ms": 5.0421438359374875,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 3,
+        "start_offset_ms": 144.278041015625,
+        "elapsed_ms": 47.921234375,
+        "kernel_sum_ms": 42.889353,
+        "gpu_busy_ms": 42.886454531250024,
+        "gpu_overlap_ms": 0.0028984687499760183,
+        "overhead_ms": 5.034779843749973,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 4,
+        "start_offset_ms": 192.199275390625,
+        "elapsed_ms": 46.77623828125,
+        "kernel_sum_ms": 40.100836,
+        "gpu_busy_ms": 40.09795803906258,
+        "gpu_overlap_ms": 0.0028779609374178106,
+        "overhead_ms": 6.678280242187415,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 6,
+        "start_offset_ms": 398.31776953125,
+        "elapsed_ms": 45.7700244140625,
+        "kernel_sum_ms": 40.637477,
+        "gpu_busy_ms": 40.63587923437492,
+        "gpu_overlap_ms": 0.0015977656250834116,
+        "overhead_ms": 5.134145179687584,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "kernel_groups": [
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x16x32_MI16x16x1_SN_LDSB1_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR0_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS0_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA128_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB2_ONLL1_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_2_1.kd",
+      "calls": 6,
+      "ms_per_round": 0.007045666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x32x256_MI16x16x1_SN_LDSB0_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR1_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS1_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA512_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB16_ONLL0_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_4_1.kd",
+      "calls": 6,
+      "ms_per_round": 0.17662633333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "__amd_rocclr_copyBuffer.kd",
+      "calls": 6,
+      "ms_per_round": 0.0019323333333333334
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "__amd_rocclr_fillBufferAligned.kd",
+      "calls": 18,
+      "ms_per_round": 0.006883666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_cache_draft_logits_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0024256666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_draft_head_int2.kd",
+      "calls": 6,
+      "ms_per_round": 0.8302959999999999
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_17408_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd",
+      "calls": 30,
+      "ms_per_round": 0.7380511666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_25600_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd",
+      "calls": 6,
+      "ms_per_round": 0.23578000000000002
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_4096_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd",
+      "calls": 30,
+      "ms_per_round": 0.2023695
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_272_cache_modifier_NONE.kd",
+      "calls": 30,
+      "ms_per_round": 1.4472408333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_48_cache_modifier_NONE.kd",
+      "calls": 30,
+      "ms_per_round": 0.27291600000000005
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_prepare_dflash_inputs_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.007519
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_rerank_exact.kd",
+      "calls": 6,
+      "ms_per_round": 0.009085666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "_selector_walk_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.008005666666666668
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "kernel_unified_attention.kd",
+      "calls": 30,
+      "ms_per_round": 1.8370154999999995
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "reshape_and_cache_kernel_flash.kd",
+      "calls": 60,
+      "ms_per_round": 0.026323333333333327
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_per_fused_4.kd",
+      "calls": 6,
+      "ms_per_round": 0.0019456666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_per_fused_8.kd",
+      "calls": 24,
+      "ms_per_round": 0.007556
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_0.kd",
+      "calls": 30,
+      "ms_per_round": 0.009728333333333337
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_2.kd",
+      "calls": 6,
+      "ms_per_round": 0.0019923333333333334
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_4.kd",
+      "calls": 54,
+      "ms_per_round": 0.016071
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_view_0.kd",
+      "calls": 6,
+      "ms_per_round": 0.004959
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_0.kd",
+      "calls": 6,
+      "ms_per_round": 0.0027125
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_5.kd",
+      "calls": 6,
+      "ms_per_round": 0.002219
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_9.kd",
+      "calls": 24,
+      "ms_per_round": 0.010056
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_1.kd",
+      "calls": 30,
+      "ms_per_round": 0.012388333333333331
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_3.kd",
+      "calls": 6,
+      "ms_per_round": 0.0020123333333333334
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_5.kd",
+      "calls": 54,
+      "ms_per_round": 0.016664499999999992
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_3.kd",
+      "calls": 54,
+      "ms_per_round": 0.022557666666666656
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_ge_mul_rms_norm_select_slice_unsqueeze_view_1.kd",
+      "calls": 6,
+      "ms_per_round": 0.023039
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_add_permute_unsqueeze_view_2.kd",
+      "calls": 6,
+      "ms_per_round": 0.0017989999999999998
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_poi_fused_cat_expand_index_mul_slice_unsqueeze_view_1.kd",
+      "calls": 6,
+      "ms_per_round": 0.002519
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_red_fused__to_copy_abs_clamp_div_max_mul_preshuffle_gemm_silu_slice_squeeze_view_6.kd",
+      "calls": 30,
+      "ms_per_round": 0.017248333333333334
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_2.kd",
+      "calls": 30,
+      "ms_per_round": 0.031342
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_7.kd",
+      "calls": 24,
+      "ms_per_round": 0.025796166666666672
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_red_fused__to_copy_embedding_mul_rms_norm_w4_gemm_0.kd",
+      "calls": 6,
+      "ms_per_round": 0.004225666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "triton_red_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_7.kd",
+      "calls": 6,
+      "ms_per_round": 0.006579
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.009231333333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.003572333333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0032523333333333336
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::bitonicSortKVInPlace<2, -1, 16, 16, c10::BFloat16, long, at::native::GTOp<c10::BFloat16, true>, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<c10::BFloat16, true>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0031190000000000002
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.004959
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002525666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0034856666666666664
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0031123333333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.03825166666666666
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
+      "calls": 24,
+      "ms_per_round": 0.05741616666666668
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.022157999999999997
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 24,
+      "ms_per_round": 0.028702666666666668
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.0028979999999999995
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.024292499999999998
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.008919
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0038056666666666664
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0017123333333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0024456666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.003878
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.005204666666666666
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0020990000000000006
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.004932333333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void r4d_gemm_w4a16_nt_m64_kernel<1, 1, false>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.004525666666666667
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void r4d_gemm_w4a16_nt_m64_kernel<1, 1, true>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]",
+      "calls": 60,
+      "ms_per_round": 0.08161683333333333
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void vllm::rms_norm_kernel<c10::BFloat16, 8, 2, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002959
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void vllm::rms_norm_kernel<c10::BFloat16, 8, 4, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002759
+    },
+    {
+      "scope": "drafter",
+      "stage": "Drafter",
+      "kernel": "void vllm::rotary_embedding_kernel<c10::BFloat16, c10::BFloat16, true>(long const*, c10::BFloat16*, c10::BFloat16*, c10::BFloat16 const*, int, long, long, long, int, int, int, long, bool) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002405666666666666
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention KV write",
+      "kernel": "reshape_and_cache_kernel_flash.kd",
+      "calls": 96,
+      "ms_per_round": 0.04369066666666665
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "triton_poi_fused_1.kd",
+      "calls": 96,
+      "ms_per_round": 0.020890666666666672
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "triton_poi_fused_3.kd",
+      "calls": 96,
+      "ms_per_round": 0.028503999999999998
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "triton_poi_fused_4.kd",
+      "calls": 96,
+      "ms_per_round": 0.02530416666666669
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "triton_poi_fused_arange_bitwise_and_eq_index_lt_remainder_select_split_where_2.kd",
+      "calls": 96,
+      "ms_per_round": 0.02806466666666666
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.029690833333333305
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "void stock_m1_gemma_norm<false, 256, 32>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.04716433333333333
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention Q/K normalization, RoPE and layout",
+      "kernel": "void stock_m1_gemma_norm<false, 256, 64>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.037204333333333325
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention decode",
+      "kernel": "void qwen_stock_m1_shared_decode<4, 16, 256, 6, 16, 0, 3430971>(R4DArgs, int) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 5.256131500000001
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention input projection",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 1.159962
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention output activation FP8 quantization",
+      "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.04309749999999999
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention output gating",
+      "kernel": "triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_sigmoid_view_0.kd",
+      "calls": 96,
+      "ms_per_round": 0.031083999999999997
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention output projection",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.5268326666666667
+    },
+    {
+      "scope": "target_body",
+      "stage": "Attention split-KV merge",
+      "kernel": "void qwen_stock_m1_shared_merge<256, 4, 1>(R4DArgs, int, int) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.1282116666666667
+    },
+    {
+      "scope": "target_body",
+      "stage": "Embedding + first input normalization",
+      "kernel": "triton_poi_fused__to_copy_embedding_0.kd",
+      "calls": 6,
+      "ms_per_round": 0.0024189999999999997
+    },
+    {
+      "scope": "target_body",
+      "stage": "Embedding + first input normalization",
+      "kernel": "void norm_quant<false, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0071923333333333336
+    },
+    {
+      "scope": "target_body",
+      "stage": "Final normalization/layout",
+      "kernel": "void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.005099
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN convolution",
+      "kernel": "_causal_conv1d_update_kernel.kd",
+      "calls": 288,
+      "ms_per_round": 0.20931333333333327
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN input projection",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "calls": 288,
+      "ms_per_round": 3.945794333333333
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN layout/copies and buffer initialization",
+      "kernel": "triton_poi_fused_add_1.kd",
+      "calls": 18,
+      "ms_per_round": 0.003897
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN layout/copies and buffer initialization",
+      "kernel": "triton_poi_fused_add_2.kd",
+      "calls": 12,
+      "ms_per_round": 0.0025780000000000004
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN layout/copies and buffer initialization",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 288,
+      "ms_per_round": 0.1459798333333334
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN layout/copies and buffer initialization",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 288,
+      "ms_per_round": 0.08537883333333325
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN layout/copies and buffer initialization",
+      "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 288,
+      "ms_per_round": 0.06873216666666658
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN output gated normalization",
+      "kernel": "gdn_norm_quant_kernel.kd",
+      "calls": 288,
+      "ms_per_round": 0.16019933333333305
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN output projection",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "calls": 288,
+      "ms_per_round": 1.8966996666666651
+    },
+    {
+      "scope": "target_body",
+      "stage": "GDN recurrence and gates",
+      "kernel": "stock_gdn_scan_kernel.kd",
+      "calls": 288,
+      "ms_per_round": 1.1816163333333334
+    },
+    {
+      "scope": "target_body",
+      "stage": "Layer input residual/normalization",
+      "kernel": "void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
+      "calls": 378,
+      "ms_per_round": 0.5098586666666655
+    },
+    {
+      "scope": "target_body",
+      "stage": "MLP SiLU and gating",
+      "kernel": "triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_silu_slice_0.kd",
+      "calls": 288,
+      "ms_per_round": 0.12545966666666664
+    },
+    {
+      "scope": "target_body",
+      "stage": "MLP SiLU and gating",
+      "kernel": "triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_silu_slice_1.kd",
+      "calls": 96,
+      "ms_per_round": 0.05363099999999999
+    },
+    {
+      "scope": "target_body",
+      "stage": "MLP down input FP8 quantization",
+      "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
+      "calls": 384,
+      "ms_per_round": 0.264137
+    },
+    {
+      "scope": "target_body",
+      "stage": "MLP down projection",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "calls": 384,
+      "ms_per_round": 5.367781166666666
+    },
+    {
+      "scope": "target_body",
+      "stage": "MLP gate/up projection",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "calls": 384,
+      "ms_per_round": 11.37036116666667
+    },
+    {
+      "scope": "target_body",
+      "stage": "Post-attention/GDN residual/normalization",
+      "kernel": "void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
+      "calls": 384,
+      "ms_per_round": 0.5307116666666658
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "__amd_rocclr_fillBufferAligned.kd",
+      "calls": 6,
+      "ms_per_round": 0.0024323333333333337
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "_draft_head_int2.kd",
+      "calls": 6,
+      "ms_per_round": 0.771209
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "_rerank_exact.kd",
+      "calls": 6,
+      "ms_per_round": 0.029826
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0045056666666666665
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0034923333333333334
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002779
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.005179
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.09005166666666668
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.038398166666666664
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0015256666666666665
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.040066
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::radixSortKVInPlace<2, -1, 128, 8, c10::BFloat16, long, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, bool) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.005378999999999999
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.003819166666666666
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0016323333333333333
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002232333333333333
+    },
+    {
+      "scope": "target_vocabulary_head",
+      "stage": "Target head (global256)",
+      "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.005191333333333334
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "__amd_rocclr_copyBuffer.kd",
+      "calls": 150,
+      "ms_per_round": 0.06564850000000001
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "__amd_rocclr_fillBufferAligned.kd",
+      "calls": 6,
+      "ms_per_round": 0.0023056666666666664
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_combine_sampled_and_draft_tokens_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0029923333333333334
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_compute_local_logits_stats_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.02824566666666667
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_compute_slot_mappings_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.002905666666666667
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_expand_idx_mapping_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0018856666666666666
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_gather_block_tables_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.004639000000000001
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_get_num_sampled_and_rejected_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0025523333333333335
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_insert_resampled_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0034123333333333336
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_post_update_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0051589999999999995
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_prepare_pos_seq_lens_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.002039166666666667
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_prepare_rope_positions_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0027256666666666666
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_rejection_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.007452333333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_resample_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.013832333333333334
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_scatter_num_accepted_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0021191666666666668
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_temperature_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.013779
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "postprocess_mamba_fused_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.0025256666666666665
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "precopy_mamba_align_fused_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.002679
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "preprocess_mamba_align_fused_kernel.kd",
+      "calls": 6,
+      "ms_per_round": 0.002579166666666667
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*) [clone .kd]",
+      "calls": 36,
+      "ms_per_round": 0.011374166666666671
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void (anonymous namespace)::softmax_warp_forward<float, float, float, 6, false, false, 32>(float*, float const*, int, int, int, bool const*, int, bool) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002259
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
+      "calls": 42,
+      "ms_per_round": 0.013413000000000001
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.002412333333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 42,
+      "ms_per_round": 0.013859666666666666
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 36,
+      "ms_per_round": 0.014520666666666666
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 18,
+      "ms_per_round": 0.01862366666666667
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
+      "calls": 96,
+      "ms_per_round": 0.04647750000000002
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.005938
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.003072333333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
+      "calls": 24,
+      "ms_per_round": 0.060523166666666676
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 24,
+      "ms_per_round": 0.03363633333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0014523333333333335
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.026925833333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::tensor_kernel_scan_innermost_dim<float, std::plus<float> >(float*, float const*, unsigned int, unsigned int, unsigned int, float, std::plus<float>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0024590000000000002
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast) [clone .kd]",
+      "calls": 36,
+      "ms_per_round": 0.010180666666666664
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<16, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0024656666666666664
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<16, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0018123333333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<16, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul> >(int, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0023058333333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 36,
+      "ms_per_round": 0.012547333333333332
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0017590000000000001
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul> >(int, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.009699000000000001
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul> >(int, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul>) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.004251333333333333
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul> >(int, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 36,
+      "ms_per_round": 0.011427333333333334
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 42,
+      "ms_per_round": 0.011612999999999998
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0019923333333333334
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0018656666666666663
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 12,
+      "ms_per_round": 0.0034180000000000005
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0016656666666666669
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.009692333333333332
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.0019923333333333334
+    },
+    {
+      "scope": "unattributed",
+      "stage": "Other GPU bookkeeping",
+      "kernel": "void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]",
+      "calls": 6,
+      "ms_per_round": 0.004652333333333333
+    }
+  ],
+  "omitted_inventory_rounds": [
+    5
+  ],
+  "omitted_unbounded_rounds": [
+    7
+  ],
+  "trace_file_sha256": "595c1675b5aaeeb189fb632f88354df282b471f35950102e40951f59bdc6dc18",
+  "analyzer_sha256": "981b51ac69e45318520e994f26155662df7c69ced66782215ca741ac2307d0c8"
+}

@@ -1,878 +1,989 @@
 {
   "schema": "urn:coherence:current-readme-evidence:v1",
-  "revision": "aligned",
-  "correctness_scope": "Corrected eager M1 versus corrected compiled M8, using the **full BF16 target head**: 10,000 forced decode tokens across 23 Pi continuations, with 23 separately checked prefill predictions.",
+  "revision": "backported",
+  "measurement_commit": "3b4db76b3faeebd3a8557dbc63a2bd5bdca25021",
+  "serving_overhead": {
+    "status": "estimated_from_separate_runs",
+    "ms": 2.799677,
+    "unprofiled_round_ms": 44.037,
+    "performance_key": "Weighted mean generation round",
+    "method": "unprofiled_round_ms - gpu_ms",
+    "assumption": "Traced GPU kernel durations are representative of normal execution. The measurements come from separate runs; this is not an independently measured gap total."
+  },
+  "correctness_scope": "Current backported compiled M8 versus the aligned pre-backport compiled M8 control, using the **full BF16 target head**: 320 forced decode tokens on the same 60K Pi prefix, plus one prefill prediction. The 10K eager-M1/compiled-M8 study belongs to the preceding alignment revision; it was not rerun after these backports.",
   "predictions": [
     {
       "k": 1,
-      "rows": 10000,
-      "set": 10000,
-      "order": 10000,
+      "rows": 320,
+      "set": 320,
+      "order": 320,
       "overlap": 1.0
     },
     {
       "k": 10,
-      "rows": 10000,
-      "set": 10000,
-      "order": 10000,
+      "rows": 320,
+      "set": 320,
+      "order": 320,
       "overlap": 10.0
     },
     {
       "k": 20,
-      "rows": 10000,
-      "set": 10000,
-      "order": 10000,
+      "rows": 320,
+      "set": 320,
+      "order": 320,
       "overlap": 20.0
     }
   ],
-  "correctness_limits": "All 10,000 full-vocabulary hashes and 23 prefill predictions matched. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.",
-  "timing_scope": "Aligned **compiled, piecewise-graph M8**, full BF16 head, same 60K-input Pi fixture as the report. Values are the report's existing measurements, summed across all layer instances per round. Six matching complete-inventory rounds are retained. This is not eager timing, and these GPU durations must not be added to host/queue timers.",
-  "gpu_ms": 58.48059433333332,
+  "correctness_limits": "All 320 full-vocabulary hashes and the prefill prediction matched. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.",
+  "timing_scope": "Latest retained **compiled, piecewise-graph** decode profile from a saved **60,000-input-token Pi prefix**, with the global-256 head, both alignment repairs and the GGZ14-derived backports. The trace contains **8 observed profile rounds**; the displayed stage and layer values are arithmetic means over **6 complete retained rounds** (rounds 0–4 and 6), with one sample per stage per round. Each sample is one compiled decode/profile cycle containing drafting and target verification. This is a kernel profile, not six natural completions or a 60K-output run; the trace has no natural-completion output-token total. Round 5 lacks a complete kernel inventory; round 7 has no following target start to close its interval. Selection uses inventory and observed boundaries, never duration. Work preceding the first target is excluded. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Each fused kernel has one combined duration.",
+  "stage_provenance": {
+    "Drafter": {
+      "commit": "2a2175a2cfe64e666b32df0db3c39f562ca96082",
+      "change": "Separated DFlash proposal and target replacement RNG streams so drafting and target verification cannot share random state."
+    },
+    "Embedding + first input normalization + FP8 production": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled the qualified native-rounding norm/FP8 producer while preserving the BF16 residual interface."
+    },
+    "Layer input residual/normalization + FP8 production": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled qualified TP1 FP8 norm/quant fusion while retaining the required residual and rounding boundaries."
+    },
+    "GDN input projection": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Added guarded wide-N MXFP4 decode dispatch for the 34,816-column projection, with exact GEMM checks."
+    },
+    "GDN layout/copies and buffer initialization": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Recovered packed GDN transport and retained-prefix state handling without changing the nine-slot state layout."
+    },
+    "GDN convolution": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Aligned GDN convolution product and accumulation arithmetic across M1/M8 and eager/compiled execution."
+    },
+    "GDN recurrence and gates": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Aligned recurrence, gates, chronological prefill and retained-prefix state semantics across execution paths."
+    },
+    "GDN output gated normalization + FP8 production": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled all 48 qualified GDN norm/quant fusion sites with native rounding and exact operator checks."
+    },
+    "GDN output projection": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Applied guarded wide-N MXFP4 decode dispatch to the recurrent output projection."
+    },
+    "Attention input projection": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Routed the attention input projection through the qualified FP8 stream and guarded MXFP4 dispatch."
+    },
+    "Attention Q/K normalization, RoPE and layout": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Added live-row handling for compiled M8 graph padding while retaining the repaired RoPE arithmetic."
+    },
+    "Attention KV write": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Aligned causal attention and cache writes with the M1/M8 arithmetic contract."
+    },
+    "Attention decode": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Added live-row attention buffer handling for graph padding while preserving corrected decode arithmetic."
+    },
+    "Attention split-KV merge": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Recovered shared attention reads and arithmetic-preserving split-KV merging."
+    },
+    "Attention output gating": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Preserved attention output gating and intermediate BF16 rounding in aligned M1/M8 execution."
+    },
+    "Attention output activation FP8 quantization": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled qualified native-rounding FP8 output production and rejected approximate traced quantization."
+    },
+    "Attention output projection": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Routed the attention output through the qualified FP8 stream and guarded MXFP4 dispatch."
+    },
+    "Post-attention/GDN residual/normalization + FP8 production": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled qualified decoder residual norm/FP8 fusion while preserving BF16 residual and rounding boundaries."
+    },
+    "MLP gate/up projection": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled guarded wide-N MXFP4 decode dispatch for Qwen's 34,816-column gate/up projection."
+    },
+    "MLP SiLU and gating": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Preserved intermediate BF16 rounding in aligned M1/M8 and eager/compiled arithmetic; the slower fused SiLU remains disabled."
+    },
+    "MLP down input FP8 quantization": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled qualified native per-token FP8 production for the down projection input."
+    },
+    "MLP down projection": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Enabled guarded wide-N MXFP4 decode dispatch for the down projection."
+    },
+    "Final normalization/layout": {
+      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
+      "change": "Aligned final normalization and full BF16 head precision boundaries while preserving the rounding contract."
+    },
+    "Global-256 target head": {
+      "commit": "31add3d06080be6e4f5198c6e8afcc6276e1edaf",
+      "change": "Removed the eight-per-tile target capacity limit with global INT2 top-256 selection and BF16 reranking; selection remains approximate."
+    },
+    "Other GPU bookkeeping": {
+      "commit": "aa5347bf333046764a9c9d338104f27ced477465",
+      "change": "Integrated qualified sampling, cache/state bookkeeping and graph-capture admission; no isolated correctness claim is made for this aggregate row."
+    }
+  },
+  "gpu_ms": 41.237323,
   "stages": [
     {
-      "stage": "Embedding + first input normalization",
-      "ms": 0.007758000000000001,
+      "stage": "Drafter",
+      "ms": 6.367166666666668,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve the reference normalization rounding; the original embedding/norm fusion is indivisible."
+      "evidence": "N/A: no isolated target top-20 prediction",
+      "note": "Suggests up to seven tokens for the target model to check."
     },
     {
-      "stage": "Layer input residual/normalization",
-      "ms": 0.3459718333333331,
+      "stage": "Embedding + first input normalization + FP8 production",
+      "ms": 0.009611333333333333,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve reduction and rounding; retain FP32 residual sums in registers."
+      "evidence": "320 rows + adversarial values: exact FP8/scales/BF16 residual; prefill 1,000 rows per site",
+      "note": "Looks up token vectors, normalizes them and creates FP8 inputs in one kernel, preserving intermediate rounding."
+    },
+    {
+      "stage": "Layer input residual/normalization + FP8 production",
+      "ms": 0.5098586666666655,
+      "included_in": "",
+      "evidence": "320 rows + adversarial values: exact FP8/scales/BF16 residual; prefill 1,000 rows per site",
+      "note": "Adds the residual, normalizes the result and creates FP8 inputs in one kernel, preserving intermediate rounding."
     },
     {
       "stage": "GDN input activation FP8 quantization",
-      "ms": 0.12734583333333338,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same quantization kernel and call count; the small timing delta is unassigned."
-    },
-    {
-      "stage": "GDN input projection",
-      "ms": 3.872797000000002,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Unchanged MXFP4 projection arithmetic; timing differences are observations, not a projection optimization."
-    },
-    {
-      "stage": "GDN layout/copies and buffer initialization",
-      "ms": 0.3315058333333339,
-      "included_in": "",
-      "evidence": "State/layout checked with convolution and recurrence",
-      "note": "Preserve packed QKV views; remove split materializations and repacking. Remaining copies are included."
-    },
-    {
-      "stage": "GDN convolution",
-      "ms": 0.22636549999999994,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Match serial product/accumulation order and rolling history; packed transport removes surrounding copies."
-    },
-    {
-      "stage": "GDN recurrence and gates",
-      "ms": 1.2188051666666673,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Match gate precision, reduction order, recurrent-state transition and output rounding."
-    },
-    {
-      "stage": "GDN output gated normalization",
-      "ms": 0.0973065,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Keep the serial row tile while processing independent rows concurrently; original fused constituents remain grouped."
-    },
-    {
-      "stage": "GDN output activation FP8 quantization",
-      "ms": 0.13108566666666668,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same quantization kernel and call count; the small timing delta is unassigned."
-    },
-    {
-      "stage": "GDN output projection",
-      "ms": 1.8837934999999997,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Unchanged MXFP4 arithmetic; no causal speedup claimed."
+      "ms": null,
+      "included_in": "Layer input residual/normalization + FP8 production",
+      "evidence": "Exact fused FP8 bytes/scales; see norm row",
+      "note": "Uses the FP8 output produced by the same input-normalization kernel."
     },
     {
       "stage": "Attention input activation FP8 quantization",
-      "ms": 0.042157500000000014,
+      "ms": null,
+      "included_in": "Layer input residual/normalization + FP8 production",
+      "evidence": "Exact fused FP8 bytes/scales; see norm row",
+      "note": "Uses the FP8 output produced by the same input-normalization kernel."
+    },
+    {
+      "stage": "GDN input projection",
+      "ms": 3.945794333333333,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same quantization kernel and call count; timing cause is not isolated."
+      "evidence": "320/320; 320/320",
+      "note": "Projects hidden vectors into the inputs and gates for the recurrent layer."
+    },
+    {
+      "stage": "GDN layout/copies and buffer initialization",
+      "ms": 0.3065658333333333,
+      "included_in": "",
+      "evidence": "State/layout checked with convolution and recurrence",
+      "note": "Arranges inputs and clears temporary buffers throughout each GDN layer."
+    },
+    {
+      "stage": "GDN convolution",
+      "ms": 0.20931333333333327,
+      "included_in": "",
+      "evidence": "320/320; 320/320",
+      "note": "Updates recent-token history using the corrected multiply/add order."
+    },
+    {
+      "stage": "GDN recurrence and gates",
+      "ms": 1.1816163333333334,
+      "included_in": "",
+      "evidence": "Decode unchanged; tiled prefill output/state exact at 1/8/64/320/1,000/1,648/2,048 rows",
+      "note": "Updates recurrent memory in token order. Faster prefill retains the existing nine-slot state layout."
+    },
+    {
+      "stage": "GDN output gated normalization + FP8 production",
+      "ms": 0.16019933333333305,
+      "included_in": "",
+      "evidence": "1,000 rows × 48 sites × M1/M8: exact bytes and scales",
+      "note": "Normalizes and gates GDN output, then produces FP8 inputs in one kernel; intermediate BF16 rounding is preserved."
+    },
+    {
+      "stage": "GDN output activation FP8 quantization",
+      "ms": null,
+      "included_in": "GDN output gated normalization + FP8 production",
+      "evidence": "1,000 rows × 48 sites × M1/M8: exact bytes and scales",
+      "note": "Uses the FP8 output produced by the same gated-normalization kernel."
+    },
+    {
+      "stage": "GDN output projection",
+      "ms": 1.8966996666666651,
+      "included_in": "",
+      "evidence": "320/320; 320/320",
+      "note": "Maps the recurrent-layer result back to the model's hidden-vector width."
     },
     {
       "stage": "Attention input projection",
-      "ms": 1.0989231666666663,
+      "ms": 1.159962,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Unchanged QKV MXFP4 projection; no causal speedup claimed."
+      "evidence": "320/320; 320/320",
+      "note": "Projects hidden vectors into the inputs for attention."
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
-      "ms": 0.2355755,
+      "ms": 0.21682299999999935,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve serial normalization and BF16 RoPE product rounding. Fused original constituents share one timing."
+      "evidence": "320/320; 320/320",
+      "note": "Normalizes queries and keys and applies positional rotation (RoPE), retaining the corrected rounding."
     },
     {
       "stage": "Attention KV write",
-      "ms": 0.04687750000000003,
+      "ms": 0.04369066666666665,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same cache-write kernel and KV format; timing cause is not isolated."
+      "evidence": "320/320; 320/320",
+      "note": "Stores new keys and values in the cache for reuse by later tokens."
     },
     {
       "stage": "Attention decode",
-      "ms": 5.285289666666666,
+      "ms": 5.256131500000001,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve each query's causal tile/softmax decisions. Share KV reads within one or two tile-aligned query groups; two groups repeat context work."
+      "evidence": "320/320; 320/320",
+      "note": "Attends to the current and earlier tokens using corrected arithmetic and shared cache loads."
     },
     {
       "stage": "Attention split-KV merge",
-      "ms": 0.11963099999999999,
+      "ms": 0.1282116666666667,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Use each query's serial split/merge arithmetic; the observed reduction has not been isolated from the decode change."
+      "evidence": "320/320; 320/320",
+      "note": "Combines attention results from cache partitions in the corrected arithmetic order."
     },
     {
       "stage": "Attention output gating",
-      "ms": 0.032364,
+      "ms": 0.031083999999999997,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve the BF16 sigmoid result before multiplying the output gate."
+      "evidence": "320/320; 320/320",
+      "note": "Applies learned gates to the attention output."
     },
     {
       "stage": "Attention output activation FP8 quantization",
-      "ms": 0.045791,
+      "ms": 0.04309749999999999,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same quantization kernel and call count; timing cause is not isolated."
+      "evidence": "320/320; 320/320",
+      "note": "Converts the attention output to FP8 for its output projection."
     },
     {
       "stage": "Attention output projection",
-      "ms": 0.5214328333333336,
+      "ms": 0.5268326666666667,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Unchanged output MXFP4 projection; no causal speedup claimed."
+      "evidence": "320/320; 320/320",
+      "note": "Maps the attention result back to the model's hidden-vector width."
     },
     {
-      "stage": "Post-attention/GDN residual/normalization",
-      "ms": 0.35259900000000005,
+      "stage": "Post-attention/GDN residual/normalization + FP8 production",
+      "ms": 0.5307116666666658,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve serial reduction/rounding and keep residual values in registers."
+      "evidence": "320 rows + adversarial values: exact FP8/scales/BF16 residual; prefill 1,000 rows per site",
+      "note": "Adds the layer result to the residual, normalizes it and creates FP8 inputs for the MLP in one kernel."
     },
     {
       "stage": "MLP gate/up input FP8 quantization",
-      "ms": 0.1665428333333336,
-      "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same quantization kernel and call count; timing cause is not isolated."
+      "ms": null,
+      "included_in": "Post-attention/GDN residual/normalization + FP8 production",
+      "evidence": "Exact fused FP8 bytes/scales; see norm row",
+      "note": "Uses the FP8 output produced by the same post-normalization kernel."
     },
     {
       "stage": "MLP gate/up projection",
-      "ms": 25.437278833333327,
+      "ms": 11.37036116666667,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "One joint gate/up GEMM per layer, 64 per round. The per-layer table subdivides this total; gate and up have no separate measured durations."
+      "evidence": "115,841,664 elements: 0 differences; 320 rows on 3 checkpoint matrices plus boundary cases",
+      "note": "Computes both MLP input projections. Wider decode dispatch avoids the slower prefill kernel for qualified shapes."
     },
     {
       "stage": "MLP SiLU and gating",
-      "ms": 0.1894763333333335,
+      "ms": 0.17909066666666665,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve the BF16 SiLU result before multiplication; retain one fused pointwise launch."
+      "evidence": "320/320; 320/320",
+      "note": "Applies SiLU and combines the two MLP branches, retaining intermediate BF16 rounding."
     },
     {
       "stage": "MLP down input FP8 quantization",
-      "ms": 0.2973443333333335,
+      "ms": 0.264137,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Same quantization kernel and call count; timing cause is not isolated."
+      "evidence": "320/320; 320/320",
+      "note": "Converts MLP activations to FP8 for the down projection."
     },
     {
       "stage": "MLP down projection",
-      "ms": 5.14293316666666,
+      "ms": 5.367781166666666,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Unchanged MXFP4 down projection; no causal speedup claimed."
+      "evidence": "320/320; 320/320",
+      "note": "Projects the MLP result back to the model's hidden-vector width."
     },
     {
       "stage": "Final normalization/layout",
-      "ms": 0.005612333333333333,
+      "ms": 0.005099,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Preserve final-normalization reduction and the BF16 rounding of its retained residual sum; isolated check includes that fused addition."
+      "evidence": "320/320; 320/320",
+      "note": "Normalizes the final hidden vector before vocabulary scoring."
     },
     {
-      "stage": "Full BF16 target head",
-      "ms": 4.139845666666667,
+      "stage": "Global-256 target head",
+      "ms": 1.0077189999999998,
       "included_in": "",
-      "evidence": "320/320; 320/320; eager/compiled 320/320; 320/320",
-      "note": "Interleave two arithmetic-preserving M4 groups in one HIP launch, removing duplicated launch and concatenation overhead."
-    },
-    {
-      "stage": "Drafter",
-      "ms": 6.518480166666663,
-      "included_in": "",
-      "evidence": "N/A: no isolated target top-20 prediction",
-      "note": "Unchanged proposal model; its timings and predictions are not target-M1 equivalence measurements."
+      "evidence": "Approximate: head-study top-20 retained 119,786/119,988; ranking/probabilities not certified",
+      "note": "Scores the vocabulary with INT2, selects 256 candidates and rescores them with BF16 weights. Selection remains approximate."
     },
     {
       "stage": "Other GPU bookkeeping",
-      "ms": 0.5597046666666669,
+      "ms": 0.519764833333333,
       "included_in": "",
       "evidence": "N/A: no isolated target top-20 prediction",
-      "note": "Sampling/state bookkeeping outside the model scopes. Exact semantic attribution is unavailable; each kernel remains listed below."
+      "note": "Runs sampling and cache/state update kernels outside the named model stages."
     }
   ],
   "layers": [
     {
       "layer": 0,
       "type": "GDN",
-      "total": 0.6298116666666667,
-      "input": 0.07598616666666666,
-      "output": 0.03877916666666667,
-      "gate_up": 0.37037416666666667,
-      "down": 0.07975933333333335,
-      "other": 0.06491283333333325
+      "total": 0.43451966666666664,
+      "input": 0.07578583333333334,
+      "output": 0.039032500000000005,
+      "gate_up": 0.17482599999999998,
+      "down": 0.079986,
+      "other": 0.0648893333333333
     },
     {
       "layer": 1,
       "type": "GDN",
-      "total": 0.6245858333333333,
-      "input": 0.080066,
-      "output": 0.03832583333333333,
-      "gate_up": 0.36639399999999994,
-      "down": 0.07987933333333333,
-      "other": 0.05992066666666676
+      "total": 0.4525745,
+      "input": 0.08053916666666666,
+      "output": 0.039879333333333336,
+      "gate_up": 0.18333266666666664,
+      "down": 0.0871195,
+      "other": 0.06170383333333335
     },
     {
       "layer": 2,
       "type": "GDN",
-      "total": 0.6297995,
-      "input": 0.07993933333333333,
-      "output": 0.03888583333333333,
-      "gate_up": 0.36920733333333333,
-      "down": 0.07977266666666667,
-      "other": 0.061994333333333304
+      "total": 0.45635400000000004,
+      "input": 0.08352566666666666,
+      "output": 0.039632499999999994,
+      "gate_up": 0.1828931666666667,
+      "down": 0.08801933333333334,
+      "other": 0.06228333333333336
     },
     {
       "layer": 3,
       "type": "Attention",
-      "total": 0.9203224999999999,
-      "input": 0.06794616666666665,
-      "output": 0.0325125,
-      "gate_up": 0.37430749999999996,
-      "down": 0.07961266666666666,
-      "other": 0.3659436666666666
+      "total": 0.7453295000000001,
+      "input": 0.07321233333333332,
+      "output": 0.032912666666666666,
+      "gate_up": 0.17053916666666669,
+      "down": 0.08069283333333334,
+      "other": 0.38797250000000005
     },
     {
       "layer": 4,
       "type": "GDN",
-      "total": 0.6386728333333334,
-      "input": 0.07950600000000001,
-      "output": 0.038899166666666665,
-      "gate_up": 0.378434,
-      "down": 0.08015283333333334,
-      "other": 0.06168083333333335
+      "total": 0.437661,
+      "input": 0.082039,
+      "output": 0.038326,
+      "gate_up": 0.174326,
+      "down": 0.0809395,
+      "other": 0.062030500000000044
     },
     {
       "layer": 5,
       "type": "GDN",
-      "total": 0.6459988333333333,
-      "input": 0.08033916666666667,
-      "output": 0.03872566666666666,
-      "gate_up": 0.3844476666666667,
-      "down": 0.07981916666666666,
-      "other": 0.06266716666666666
+      "total": 0.4497143333333333,
+      "input": 0.08120583333333332,
+      "output": 0.040346,
+      "gate_up": 0.182706,
+      "down": 0.08534633333333333,
+      "other": 0.06011016666666669
     },
     {
       "layer": 6,
       "type": "GDN",
-      "total": 0.6500854999999999,
-      "input": 0.07989283333333333,
-      "output": 0.03920583333333333,
-      "gate_up": 0.38580083333333326,
-      "down": 0.08043966666666666,
-      "other": 0.06474633333333327
+      "total": 0.45641316666666665,
+      "input": 0.08439233333333333,
+      "output": 0.039646,
+      "gate_up": 0.18159933333333333,
+      "down": 0.08845933333333333,
+      "other": 0.06231616666666662
     },
     {
       "layer": 7,
       "type": "Attention",
-      "total": 0.9506353333333333,
-      "input": 0.06869916666666667,
-      "output": 0.03251233333333333,
-      "gate_up": 0.39094766666666664,
-      "down": 0.07943916666666667,
-      "other": 0.37903699999999996
+      "total": 0.7417763333333334,
+      "input": 0.0719325,
+      "output": 0.032965666666666664,
+      "gate_up": 0.1722265,
+      "down": 0.080106,
+      "other": 0.38454566666666673
     },
     {
       "layer": 8,
       "type": "GDN",
-      "total": 0.6531998333333333,
-      "input": 0.07996633333333335,
-      "output": 0.038745666666666664,
-      "gate_up": 0.3904608333333333,
-      "down": 0.07994616666666665,
-      "other": 0.06408083333333331
+      "total": 0.43708800000000003,
+      "input": 0.08207266666666667,
+      "output": 0.03862583333333334,
+      "gate_up": 0.173373,
+      "down": 0.08062566666666668,
+      "other": 0.06239083333333334
     },
     {
       "layer": 9,
       "type": "GDN",
-      "total": 0.6571925000000001,
-      "input": 0.08055916666666667,
-      "output": 0.03935916666666667,
-      "gate_up": 0.39236750000000004,
-      "down": 0.08047916666666666,
-      "other": 0.06442750000000003
+      "total": 0.45266116666666667,
+      "input": 0.08072583333333333,
+      "output": 0.03981283333333333,
+      "gate_up": 0.1824461666666667,
+      "down": 0.08845933333333335,
+      "other": 0.061216999999999966
     },
     {
       "layer": 10,
       "type": "GDN",
-      "total": 0.6574523333333333,
-      "input": 0.0810795,
-      "output": 0.039719333333333336,
-      "gate_up": 0.3913405,
-      "down": 0.08001233333333334,
-      "other": 0.06530066666666669
+      "total": 0.46124766666666667,
+      "input": 0.0841525,
+      "output": 0.04015916666666667,
+      "gate_up": 0.1854865,
+      "down": 0.08865933333333334,
+      "other": 0.06279016666666665
     },
     {
       "layer": 11,
       "type": "Attention",
-      "total": 0.9489693333333333,
-      "input": 0.06787933333333333,
-      "output": 0.03234566666666666,
-      "gate_up": 0.38988750000000005,
-      "down": 0.08001266666666666,
-      "other": 0.3788441666666666
+      "total": 0.738403,
+      "input": 0.072906,
+      "output": 0.032919,
+      "gate_up": 0.1702931666666667,
+      "down": 0.0804325,
+      "other": 0.38185233333333335
     },
     {
       "layer": 12,
       "type": "GDN",
-      "total": 0.654093,
-      "input": 0.080546,
-      "output": 0.039699333333333336,
-      "gate_up": 0.390481,
-      "down": 0.07992583333333335,
-      "other": 0.06344083333333335
+      "total": 0.4375078333333333,
+      "input": 0.081486,
+      "output": 0.0392725,
+      "gate_up": 0.17527316666666667,
+      "down": 0.07997916666666666,
+      "other": 0.06149699999999997
     },
     {
       "layer": 13,
       "type": "GDN",
-      "total": 0.6551391666666667,
-      "input": 0.081606,
-      "output": 0.03911916666666667,
-      "gate_up": 0.389741,
-      "down": 0.08019916666666667,
-      "other": 0.06447383333333338
+      "total": 0.451368,
+      "input": 0.08045283333333333,
+      "output": 0.0398325,
+      "gate_up": 0.18289966666666668,
+      "down": 0.0879525,
+      "other": 0.060230499999999965
     },
     {
       "layer": 14,
       "type": "GDN",
-      "total": 0.6587196666666666,
-      "input": 0.08081283333333332,
-      "output": 0.03860583333333333,
-      "gate_up": 0.3938608333333333,
-      "down": 0.08009266666666666,
-      "other": 0.06534749999999993
+      "total": 0.4560675,
+      "input": 0.084426,
+      "output": 0.039905833333333335,
+      "gate_up": 0.18133316666666666,
+      "down": 0.0881325,
+      "other": 0.06226999999999999
     },
     {
       "layer": 15,
       "type": "Attention",
-      "total": 0.9550826666666667,
-      "input": 0.06808600000000001,
-      "output": 0.032492499999999994,
-      "gate_up": 0.39397433333333337,
-      "down": 0.08024616666666666,
-      "other": 0.3802836666666667
+      "total": 0.739403,
+      "input": 0.073186,
+      "output": 0.03317233333333334,
+      "gate_up": 0.17049316666666667,
+      "down": 0.08064566666666667,
+      "other": 0.38190583333333333
     },
     {
       "layer": 16,
       "type": "GDN",
-      "total": 0.6576393333333334,
-      "input": 0.08085266666666666,
-      "output": 0.03879916666666667,
-      "gate_up": 0.3931475,
-      "down": 0.08027933333333333,
-      "other": 0.06456066666666664
+      "total": 0.436701,
+      "input": 0.081706,
+      "output": 0.038672500000000005,
+      "gate_up": 0.1738665,
+      "down": 0.08047916666666666,
+      "other": 0.061976833333333314
     },
     {
       "layer": 17,
       "type": "GDN",
-      "total": 0.6606795,
-      "input": 0.08099283333333333,
-      "output": 0.0391725,
-      "gate_up": 0.39522766666666664,
-      "down": 0.08020616666666666,
-      "other": 0.06508033333333332
+      "total": 0.44956816666666666,
+      "input": 0.0811925,
+      "output": 0.03996566666666667,
+      "gate_up": 0.1814665,
+      "down": 0.08594583333333333,
+      "other": 0.06099766666666667
     },
     {
       "layer": 18,
       "type": "GDN",
-      "total": 0.6637455,
-      "input": 0.08047916666666666,
-      "output": 0.03961933333333333,
-      "gate_up": 0.3972275,
-      "down": 0.08027916666666667,
-      "other": 0.06614033333333331
+      "total": 0.4566941666666667,
+      "input": 0.0834325,
+      "output": 0.039185666666666674,
+      "gate_up": 0.18233333333333332,
+      "down": 0.08834583333333335,
+      "other": 0.06339683333333335
     },
     {
       "layer": 19,
       "type": "Attention",
-      "total": 0.9606293333333333,
-      "input": 0.06892616666666668,
-      "output": 0.032699,
-      "gate_up": 0.39606083333333336,
-      "down": 0.079833,
-      "other": 0.3831103333333332
+      "total": 0.7392633333333334,
+      "input": 0.07277950000000001,
+      "output": 0.032972499999999995,
+      "gate_up": 0.17114633333333332,
+      "down": 0.08047249999999999,
+      "other": 0.3818925000000001
     },
     {
       "layer": 20,
       "type": "GDN",
-      "total": 0.6628115,
-      "input": 0.0803925,
-      "output": 0.03984583333333333,
-      "gate_up": 0.39488100000000004,
-      "down": 0.08040583333333333,
-      "other": 0.0672863333333333
+      "total": 0.439753,
+      "input": 0.081646,
+      "output": 0.03900583333333334,
+      "gate_up": 0.175393,
+      "down": 0.08078583333333335,
+      "other": 0.06292233333333336
     },
     {
       "layer": 21,
       "type": "GDN",
-      "total": 0.6636535,
-      "input": 0.081473,
-      "output": 0.040099,
-      "gate_up": 0.39551433333333336,
-      "down": 0.08055316666666666,
-      "other": 0.06601399999999998
+      "total": 0.4499345,
+      "input": 0.08140616666666667,
+      "output": 0.03987933333333333,
+      "gate_up": 0.18182633333333334,
+      "down": 0.0857525,
+      "other": 0.0610701666666667
     },
     {
       "layer": 22,
       "type": "GDN",
-      "total": 0.6629928333333334,
-      "input": 0.08096583333333335,
-      "output": 0.03914583333333334,
-      "gate_up": 0.3966343333333333,
-      "down": 0.08082583333333333,
-      "other": 0.0654210000000001
+      "total": 0.4554276666666667,
+      "input": 0.08366616666666667,
+      "output": 0.0397325,
+      "gate_up": 0.18192633333333336,
+      "down": 0.08780583333333333,
+      "other": 0.0622968333333333
     },
     {
       "layer": 23,
       "type": "Attention",
-      "total": 0.9618098333333333,
-      "input": 0.06865966666666666,
-      "output": 0.032866000000000006,
-      "gate_up": 0.39664099999999997,
-      "down": 0.07969949999999999,
-      "other": 0.38394366666666657
+      "total": 0.7412631666666667,
+      "input": 0.0720195,
+      "output": 0.03297233333333333,
+      "gate_up": 0.17027316666666664,
+      "down": 0.0804725,
+      "other": 0.3855256666666667
     },
     {
       "layer": 24,
       "type": "GDN",
-      "total": 0.6632653333333334,
-      "input": 0.0809325,
-      "output": 0.039245666666666665,
-      "gate_up": 0.39702766666666667,
-      "down": 0.08073249999999998,
-      "other": 0.06532700000000013
+      "total": 0.4371143333333333,
+      "input": 0.08129283333333334,
+      "output": 0.039192333333333336,
+      "gate_up": 0.17410666666666666,
+      "down": 0.08023250000000001,
+      "other": 0.062289999999999957
     },
     {
       "layer": 25,
       "type": "GDN",
-      "total": 0.6629398333333333,
-      "input": 0.0807995,
-      "output": 0.039486,
-      "gate_up": 0.39587433333333333,
-      "down": 0.08099266666666667,
-      "other": 0.06578733333333324
+      "total": 0.4536211666666667,
+      "input": 0.0810995,
+      "output": 0.04036566666666666,
+      "gate_up": 0.18376666666666666,
+      "down": 0.08735916666666667,
+      "other": 0.06103016666666666
     },
     {
       "layer": 26,
       "type": "GDN",
-      "total": 0.6633396666666668,
-      "input": 0.0812195,
-      "output": 0.039245666666666665,
-      "gate_up": 0.3968343333333334,
-      "down": 0.080733,
-      "other": 0.06530716666666675
+      "total": 0.4550343333333334,
+      "input": 0.08409283333333334,
+      "output": 0.03943233333333333,
+      "gate_up": 0.18106650000000002,
+      "down": 0.08723916666666667,
+      "other": 0.06320350000000002
     },
     {
       "layer": 27,
       "type": "Attention",
-      "total": 0.9642223333333333,
-      "input": 0.06897933333333334,
-      "output": 0.03249916666666667,
-      "gate_up": 0.3978275,
-      "down": 0.07990566666666667,
-      "other": 0.3850106666666667
+      "total": 0.7385965,
+      "input": 0.07306616666666667,
+      "output": 0.0328325,
+      "gate_up": 0.17029983333333334,
+      "down": 0.0802925,
+      "other": 0.3821055
     },
     {
       "layer": 28,
       "type": "GDN",
-      "total": 0.6658336666666667,
-      "input": 0.08057966666666666,
-      "output": 0.039159,
-      "gate_up": 0.39888766666666664,
-      "down": 0.08018666666666667,
-      "other": 0.06702066666666669
+      "total": 0.43742733333333333,
+      "input": 0.08131933333333333,
+      "output": 0.039199,
+      "gate_up": 0.17472,
+      "down": 0.08044566666666667,
+      "other": 0.06174333333333337
     },
     {
       "layer": 29,
       "type": "GDN",
-      "total": 0.6681926666666667,
-      "input": 0.08141233333333334,
-      "output": 0.03917283333333334,
-      "gate_up": 0.40087433333333333,
-      "down": 0.080679,
-      "other": 0.06605416666666669
+      "total": 0.452841,
+      "input": 0.082473,
+      "output": 0.039799,
+      "gate_up": 0.1838733333333333,
+      "down": 0.08587233333333333,
+      "other": 0.06082333333333334
     },
     {
       "layer": 30,
       "type": "GDN",
-      "total": 0.668247,
-      "input": 0.08070666666666666,
-      "output": 0.039045666666666666,
-      "gate_up": 0.40190766666666666,
-      "down": 0.08073316666666666,
-      "other": 0.06585383333333336
+      "total": 0.45836166666666667,
+      "input": 0.08321966666666666,
+      "output": 0.039945666666666664,
+      "gate_up": 0.18492000000000003,
+      "down": 0.08771949999999999,
+      "other": 0.06255683333333334
     },
     {
       "layer": 31,
       "type": "Attention",
-      "total": 0.9707290000000001,
-      "input": 0.06878566666666666,
-      "output": 0.032479,
-      "gate_up": 0.4007143333333334,
-      "down": 0.07980583333333333,
-      "other": 0.38894416666666665
+      "total": 0.7376563333333332,
+      "input": 0.072146,
+      "output": 0.032899,
+      "gate_up": 0.16921333333333333,
+      "down": 0.08038599999999999,
+      "other": 0.3830119999999999
     },
     {
       "layer": 32,
       "type": "GDN",
-      "total": 0.6671201666666666,
-      "input": 0.08051950000000001,
-      "output": 0.03903283333333333,
-      "gate_up": 0.3998676666666667,
-      "down": 0.080866,
-      "other": 0.0668341666666667
+      "total": 0.4375613333333333,
+      "input": 0.081353,
+      "output": 0.038905666666666665,
+      "gate_up": 0.17391333333333334,
+      "down": 0.08079933333333332,
+      "other": 0.06258999999999998
     },
     {
       "layer": 33,
       "type": "GDN",
-      "total": 0.6674531666666667,
-      "input": 0.08058616666666667,
-      "output": 0.03904566666666666,
-      "gate_up": 0.4013476666666667,
-      "down": 0.080913,
-      "other": 0.06556066666666667
+      "total": 0.4504278333333333,
+      "input": 0.08145966666666667,
+      "output": 0.04036566666666666,
+      "gate_up": 0.18065333333333333,
+      "down": 0.08701916666666666,
+      "other": 0.060929999999999984
     },
     {
       "layer": 34,
       "type": "GDN",
-      "total": 0.6703585000000001,
-      "input": 0.08071266666666667,
-      "output": 0.03931933333333334,
-      "gate_up": 0.4021676666666667,
-      "down": 0.08079933333333333,
-      "other": 0.06735950000000002
+      "total": 0.4591405,
+      "input": 0.083273,
+      "output": 0.03932566666666666,
+      "gate_up": 0.18306666666666666,
+      "down": 0.08742616666666667,
+      "other": 0.06604900000000002
     },
     {
       "layer": 35,
       "type": "Attention",
-      "total": 0.9715495000000001,
-      "input": 0.06885966666666668,
-      "output": 0.03247900000000001,
-      "gate_up": 0.4020741666666667,
-      "down": 0.08016616666666666,
-      "other": 0.38797050000000005
+      "total": 0.7389231666666666,
+      "input": 0.07363266666666667,
+      "output": 0.03318583333333334,
+      "gate_up": 0.16992633333333335,
+      "down": 0.08043283333333333,
+      "other": 0.3817454999999999
     },
     {
       "layer": 36,
       "type": "GDN",
-      "total": 0.6680461666666666,
-      "input": 0.0801925,
-      "output": 0.0391525,
-      "gate_up": 0.4023676666666666,
-      "down": 0.080306,
-      "other": 0.06602749999999995
+      "total": 0.44163450000000004,
+      "input": 0.08220600000000002,
+      "output": 0.03934583333333334,
+      "gate_up": 0.17634650000000002,
+      "down": 0.08130616666666667,
+      "other": 0.062429999999999986
     },
     {
       "layer": 37,
       "type": "GDN",
-      "total": 0.6701326666666666,
-      "input": 0.08113283333333333,
-      "output": 0.03952583333333333,
-      "gate_up": 0.40330099999999997,
-      "down": 0.08065933333333333,
-      "other": 0.06551366666666661
+      "total": 0.4492945,
+      "input": 0.081786,
+      "output": 0.03963233333333333,
+      "gate_up": 0.1814665,
+      "down": 0.08603949999999999,
+      "other": 0.06037016666666667
     },
     {
       "layer": 38,
       "type": "GDN",
-      "total": 0.6717126666666667,
-      "input": 0.08025916666666667,
-      "output": 0.039605666666666664,
-      "gate_up": 0.4043276666666667,
-      "down": 0.08099933333333333,
-      "other": 0.0665208333333334
+      "total": 0.45805433333333334,
+      "input": 0.08414583333333334,
+      "output": 0.03980583333333334,
+      "gate_up": 0.183973,
+      "down": 0.0880195,
+      "other": 0.06211016666666669
     },
     {
       "layer": 39,
       "type": "Attention",
-      "total": 0.978423,
-      "input": 0.06869266666666667,
-      "output": 0.032566333333333336,
-      "gate_up": 0.4057676666666667,
-      "down": 0.0802725,
-      "other": 0.39112383333333334
+      "total": 0.7342163333333334,
+      "input": 0.07267933333333333,
+      "output": 0.032806,
+      "gate_up": 0.16966599999999998,
+      "down": 0.0805795,
+      "other": 0.37848550000000003
     },
     {
       "layer": 40,
       "type": "GDN",
-      "total": 0.6722868333333334,
-      "input": 0.08083316666666668,
-      "output": 0.03912583333333333,
-      "gate_up": 0.40643433333333334,
-      "down": 0.08067983333333334,
-      "other": 0.06521366666666678
+      "total": 0.4399741666666666,
+      "input": 0.08151933333333333,
+      "output": 0.03884616666666666,
+      "gate_up": 0.17610599999999998,
+      "down": 0.08141266666666666,
+      "other": 0.06208999999999998
     },
     {
       "layer": 41,
       "type": "GDN",
-      "total": 0.6729926666666667,
-      "input": 0.08069916666666667,
-      "output": 0.03935283333333334,
-      "gate_up": 0.4057476666666667,
-      "down": 0.0805525,
-      "other": 0.06664050000000007
+      "total": 0.4497675,
+      "input": 0.08067266666666667,
+      "output": 0.039626,
+      "gate_up": 0.182626,
+      "down": 0.08688599999999999,
+      "other": 0.05995683333333329
     },
     {
       "layer": 42,
       "type": "GDN",
-      "total": 0.6751400000000001,
-      "input": 0.08162649999999999,
-      "output": 0.039905666666666666,
-      "gate_up": 0.4061676666666667,
-      "down": 0.081313,
-      "other": 0.06612716666666671
+      "total": 0.459968,
+      "input": 0.08487933333333332,
+      "output": 0.04041933333333333,
+      "gate_up": 0.18462633333333334,
+      "down": 0.08781266666666666,
+      "other": 0.06223033333333333
     },
     {
       "layer": 43,
       "type": "Attention",
-      "total": 0.974329,
-      "input": 0.06851916666666667,
-      "output": 0.032679,
-      "gate_up": 0.40376100000000004,
-      "down": 0.08015950000000001,
-      "other": 0.38921033333333327
+      "total": 0.7338558333333334,
+      "input": 0.072079,
+      "output": 0.032812499999999994,
+      "gate_up": 0.170653,
+      "down": 0.08051916666666667,
+      "other": 0.3777921666666667
     },
     {
       "layer": 44,
       "type": "GDN",
-      "total": 0.6685525,
-      "input": 0.08052583333333334,
-      "output": 0.03881933333333334,
-      "gate_up": 0.4021806666666667,
-      "down": 0.08054583333333332,
-      "other": 0.06648083333333338
+      "total": 0.4353878333333333,
+      "input": 0.08159916666666667,
+      "output": 0.038519333333333336,
+      "gate_up": 0.17474616666666665,
+      "down": 0.07975933333333333,
+      "other": 0.06076383333333335
     },
     {
       "layer": 45,
       "type": "GDN",
-      "total": 0.6672465,
-      "input": 0.08069266666666668,
-      "output": 0.03936566666666667,
-      "gate_up": 0.4014143333333333,
-      "down": 0.08046616666666666,
-      "other": 0.06530766666666672
+      "total": 0.4510073333333333,
+      "input": 0.08127916666666667,
+      "output": 0.039726000000000004,
+      "gate_up": 0.18216616666666668,
+      "down": 0.08749249999999999,
+      "other": 0.060343499999999994
     },
     {
       "layer": 46,
       "type": "GDN",
-      "total": 0.6699056666666666,
-      "input": 0.0814925,
-      "output": 0.03881266666666666,
-      "gate_up": 0.40262766666666666,
-      "down": 0.08085233333333333,
-      "other": 0.06612049999999994
+      "total": 0.4545015,
+      "input": 0.08441283333333333,
+      "output": 0.03998583333333334,
+      "gate_up": 0.18151966666666666,
+      "down": 0.08729266666666666,
+      "other": 0.061290500000000026
     },
     {
       "layer": 47,
       "type": "Attention",
-      "total": 0.9735963333333334,
-      "input": 0.06913966666666667,
-      "output": 0.03276583333333333,
-      "gate_up": 0.4040541666666667,
-      "down": 0.07995283333333333,
-      "other": 0.3876838333333332
+      "total": 0.7394561666666666,
+      "input": 0.07192599999999999,
+      "output": 0.03286566666666667,
+      "gate_up": 0.17039316666666665,
+      "down": 0.0805525,
+      "other": 0.3837188333333333
     },
     {
       "layer": 48,
       "type": "GDN",
-      "total": 0.6745448333333333,
-      "input": 0.08103916666666668,
-      "output": 0.039186,
-      "gate_up": 0.40574099999999996,
-      "down": 0.08069266666666666,
-      "other": 0.06788599999999992
+      "total": 0.43994649999999996,
+      "input": 0.08204583333333332,
+      "output": 0.038599,
+      "gate_up": 0.1754865,
+      "down": 0.08064583333333333,
+      "other": 0.0631693333333333
     },
     {
       "layer": 49,
       "type": "GDN",
-      "total": 0.6745865,
-      "input": 0.08069283333333332,
-      "output": 0.03895916666666666,
-      "gate_up": 0.4075341666666667,
-      "down": 0.08070616666666666,
-      "other": 0.06669416666666664
+      "total": 0.44989466666666666,
+      "input": 0.08181916666666667,
+      "output": 0.039159,
+      "gate_up": 0.1816,
+      "down": 0.08725933333333333,
+      "other": 0.06005716666666666
     },
     {
       "layer": 50,
       "type": "GDN",
-      "total": 0.6721195,
-      "input": 0.08101266666666666,
-      "output": 0.03970566666666667,
-      "gate_up": 0.4042943333333333,
-      "down": 0.08038616666666666,
-      "other": 0.06672066666666675
+      "total": 0.45930766666666667,
+      "input": 0.0847525,
+      "output": 0.04049233333333333,
+      "gate_up": 0.18495316666666667,
+      "down": 0.08737916666666667,
+      "other": 0.06173050000000002
     },
     {
       "layer": 51,
       "type": "Attention",
-      "total": 0.9743761666666666,
-      "input": 0.06855283333333333,
-      "output": 0.03232583333333333,
-      "gate_up": 0.40366766666666665,
-      "down": 0.08007249999999999,
-      "other": 0.3897573333333334
+      "total": 0.7333226666666667,
+      "input": 0.07252566666666667,
+      "output": 0.032892333333333336,
+      "gate_up": 0.17031966666666667,
+      "down": 0.08007916666666667,
+      "other": 0.3775058333333333
     },
     {
       "layer": 52,
       "type": "GDN",
-      "total": 0.6703728333333334,
-      "input": 0.08061933333333333,
-      "output": 0.03909916666666667,
-      "gate_up": 0.40400100000000005,
-      "down": 0.08037933333333334,
-      "other": 0.06627399999999996
+      "total": 0.435994,
+      "input": 0.081666,
+      "output": 0.03880566666666667,
+      "gate_up": 0.17462633333333333,
+      "down": 0.07951916666666667,
+      "other": 0.061376833333333325
     },
     {
       "layer": 53,
       "type": "GDN",
-      "total": 0.6710991666666667,
-      "input": 0.08132600000000001,
-      "output": 0.03898583333333333,
-      "gate_up": 0.4047341666666667,
-      "down": 0.08047266666666665,
-      "other": 0.06558049999999997
+      "total": 0.451248,
+      "input": 0.0825525,
+      "output": 0.03977916666666667,
+      "gate_up": 0.18161983333333334,
+      "down": 0.08739266666666666,
+      "other": 0.05990383333333332
     },
     {
       "layer": 54,
       "type": "GDN",
-      "total": 0.674086,
-      "input": 0.08140599999999999,
-      "output": 0.039306,
-      "gate_up": 0.40578099999999995,
-      "down": 0.08108599999999999,
-      "other": 0.0665070000000001
+      "total": 0.45371466666666666,
+      "input": 0.08429933333333334,
+      "output": 0.039692333333333336,
+      "gate_up": 0.18216666666666667,
+      "down": 0.08547266666666667,
+      "other": 0.06208366666666665
     },
     {
       "layer": 55,
       "type": "Attention",
-      "total": 0.9741960000000001,
-      "input": 0.06853266666666666,
-      "output": 0.03252566666666667,
-      "gate_up": 0.4032408333333334,
-      "down": 0.07999950000000002,
-      "other": 0.3898973333333333
+      "total": 0.7349363333333333,
+      "input": 0.07069933333333334,
+      "output": 0.032812666666666664,
+      "gate_up": 0.17060616666666667,
+      "down": 0.0799195,
+      "other": 0.3808986666666666
     },
     {
       "layer": 56,
       "type": "GDN",
-      "total": 0.6691988333333333,
-      "input": 0.08053916666666666,
-      "output": 0.03931233333333334,
-      "gate_up": 0.40277416666666666,
-      "down": 0.08056583333333332,
-      "other": 0.06600733333333321
+      "total": 0.43709433333333336,
+      "input": 0.08175266666666667,
+      "output": 0.038459,
+      "gate_up": 0.17480616666666668,
+      "down": 0.08071283333333334,
+      "other": 0.06136366666666665
     },
     {
       "layer": 57,
       "type": "GDN",
-      "total": 0.6692198333333333,
-      "input": 0.0818195,
-      "output": 0.03967916666666667,
-      "gate_up": 0.4013676666666667,
-      "down": 0.08043283333333333,
-      "other": 0.06592066666666659
+      "total": 0.45080783333333335,
+      "input": 0.080586,
+      "output": 0.04020566666666667,
+      "gate_up": 0.1832395,
+      "down": 0.08703283333333332,
+      "other": 0.059743833333333385
     },
     {
       "layer": 58,
       "type": "GDN",
-      "total": 0.6694728333333334,
-      "input": 0.08042583333333334,
-      "output": 0.039919166666666665,
-      "gate_up": 0.40208766666666673,
-      "down": 0.08085283333333333,
-      "other": 0.06618733333333342
+      "total": 0.455528,
+      "input": 0.08317949999999999,
+      "output": 0.039759499999999996,
+      "gate_up": 0.18271949999999998,
+      "down": 0.08756616666666667,
+      "other": 0.06230333333333338
     },
     {
       "layer": 59,
       "type": "Attention",
-      "total": 0.9619825000000001,
-      "input": 0.0693125,
-      "output": 0.03273266666666667,
-      "gate_up": 0.4018810000000001,
-      "down": 0.07995266666666666,
-      "other": 0.37810366666666667
+      "total": 0.7339831666666666,
+      "input": 0.07241283333333333,
+      "output": 0.03280583333333333,
+      "gate_up": 0.17071966666666666,
+      "down": 0.080426,
+      "other": 0.3776188333333333
     },
     {
       "layer": 60,
       "type": "GDN",
-      "total": 0.6723323333333333,
-      "input": 0.080526,
-      "output": 0.039352333333333336,
-      "gate_up": 0.405274,
-      "down": 0.08051266666666665,
-      "other": 0.06666733333333333
+      "total": 0.436621,
+      "input": 0.08175266666666667,
+      "output": 0.03903266666666667,
+      "gate_up": 0.17411949999999998,
+      "down": 0.080526,
+      "other": 0.06119016666666666
     },
     {
       "layer": 61,
       "type": "GDN",
-      "total": 0.680186,
-      "input": 0.0815395,
-      "output": 0.0398125,
-      "gate_up": 0.40994749999999996,
-      "down": 0.08072583333333333,
-      "other": 0.06816066666666665
+      "total": 0.4515808333333333,
+      "input": 0.08087933333333333,
+      "output": 0.03979933333333333,
+      "gate_up": 0.18296616666666665,
+      "down": 0.08831249999999999,
+      "other": 0.059623499999999996
     },
     {
       "layer": 62,
       "type": "GDN",
-      "total": 0.6779056666666667,
-      "input": 0.08147283333333333,
-      "output": 0.03930583333333334,
-      "gate_up": 0.40767433333333336,
-      "down": 0.0808595,
-      "other": 0.06859316666666668
+      "total": 0.45767383333333334,
+      "input": 0.08457266666666666,
+      "output": 0.039565833333333335,
+      "gate_up": 0.18355316666666666,
+      "down": 0.08703283333333334,
+      "other": 0.06294933333333336
     },
     {
       "layer": 63,
       "type": "Attention",
-      "total": 0.9819358333333332,
-      "input": 0.06935249999999998,
-      "output": 0.032952333333333333,
-      "gate_up": 0.40636099999999997,
-      "down": 0.08009283333333334,
-      "other": 0.39317716666666663
+      "total": 0.7354028333333333,
+      "input": 0.07275916666666667,
+      "output": 0.03300583333333334,
+      "gate_up": 0.17076633333333335,
+      "down": 0.0799925,
+      "other": 0.37887899999999997
     }
   ],
   "kernels": [
@@ -880,935 +991,1103 @@
       "stage": "Drafter",
       "kernel": "Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x16x32_MI16x16x1_SN_LDSB1_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR0_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS0_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA128_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB2_ONLL1_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_2_1.kd",
       "calls": 6,
-      "ms": 0.007185666666666667
+      "ms": 0.007045666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x32x256_MI16x16x1_SN_LDSB0_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR1_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS1_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA512_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB16_ONLL0_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_4_1.kd",
       "calls": 6,
-      "ms": 0.1771665
+      "ms": 0.17662633333333333
     },
     {
       "stage": "Drafter",
       "kernel": "__amd_rocclr_copyBuffer.kd",
       "calls": 6,
-      "ms": 0.0020123333333333334
+      "ms": 0.0019323333333333334
     },
     {
       "stage": "Drafter",
       "kernel": "__amd_rocclr_fillBufferAligned.kd",
       "calls": 18,
-      "ms": 0.006977
+      "ms": 0.006883666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "_cache_draft_logits_kernel.kd",
       "calls": 6,
-      "ms": 0.0022923333333333333
+      "ms": 0.0024256666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "_draft_head_int2.kd",
       "calls": 6,
-      "ms": 0.840683
+      "ms": 0.8302959999999999
     },
     {
       "stage": "Drafter",
       "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_17408_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd",
       "calls": 30,
-      "ms": 0.7398054999999999
+      "ms": 0.7380511666666667
     },
     {
       "stage": "Drafter",
       "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_25600_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd",
       "calls": 6,
-      "ms": 0.22856666666666667
+      "ms": 0.23578000000000002
     },
     {
       "stage": "Drafter",
       "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_4096_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd",
       "calls": 30,
-      "ms": 0.2037885
+      "ms": 0.2023695
     },
     {
       "stage": "Drafter",
       "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_272_cache_modifier_NONE.kd",
       "calls": 30,
-      "ms": 1.4479359999999997
+      "ms": 1.4472408333333333
     },
     {
       "stage": "Drafter",
       "kernel": "_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_48_cache_modifier_NONE.kd",
       "calls": 30,
-      "ms": 0.27456933333333333
+      "ms": 0.27291600000000005
     },
     {
       "stage": "Drafter",
       "kernel": "_prepare_dflash_inputs_kernel.kd",
       "calls": 6,
-      "ms": 0.008032333333333334
+      "ms": 0.007519
     },
     {
       "stage": "Drafter",
       "kernel": "_rerank_exact.kd",
       "calls": 6,
-      "ms": 0.008919
+      "ms": 0.009085666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "_selector_walk_kernel.kd",
       "calls": 6,
-      "ms": 0.008092333333333333
+      "ms": 0.008005666666666668
     },
     {
       "stage": "Drafter",
       "kernel": "kernel_unified_attention.kd",
       "calls": 30,
-      "ms": 1.9577850000000008
+      "ms": 1.8370154999999995
     },
     {
       "stage": "Drafter",
       "kernel": "reshape_and_cache_kernel_flash.kd",
       "calls": 60,
-      "ms": 0.027483333333333332
+      "ms": 0.026323333333333327
     },
     {
       "stage": "Drafter",
       "kernel": "triton_per_fused_4.kd",
       "calls": 6,
-      "ms": 0.001985666666666667
+      "ms": 0.0019456666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "triton_per_fused_8.kd",
       "calls": 24,
-      "ms": 0.007602666666666668
+      "ms": 0.007556
     },
     {
       "stage": "Drafter",
       "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_0.kd",
       "calls": 30,
-      "ms": 0.010141666666666665
+      "ms": 0.009728333333333337
     },
     {
       "stage": "Drafter",
       "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_2.kd",
       "calls": 6,
-      "ms": 0.002085666666666667
+      "ms": 0.0019923333333333334
     },
     {
       "stage": "Drafter",
       "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_4.kd",
       "calls": 54,
-      "ms": 0.0162245
+      "ms": 0.016071
     },
     {
       "stage": "Drafter",
       "kernel": "triton_per_fused__to_copy_abs_clamp_div_max_view_0.kd",
       "calls": 6,
-      "ms": 0.005499
+      "ms": 0.004959
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_0.kd",
       "calls": 6,
-      "ms": 0.0026056666666666667
+      "ms": 0.0027125
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_5.kd",
       "calls": 6,
-      "ms": 0.0023190000000000003
+      "ms": 0.002219
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_9.kd",
       "calls": 24,
-      "ms": 0.009156
+      "ms": 0.010056
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_1.kd",
       "calls": 30,
-      "ms": 0.011861833333333335
+      "ms": 0.012388333333333331
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_3.kd",
       "calls": 6,
-      "ms": 0.002145666666666667
+      "ms": 0.0020123333333333334
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_5.kd",
       "calls": 54,
-      "ms": 0.01621133333333333
+      "ms": 0.016664499999999992
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_3.kd",
       "calls": 54,
-      "ms": 0.031304500000000006
+      "ms": 0.022557666666666656
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_ge_mul_rms_norm_select_slice_unsqueeze_view_1.kd",
       "calls": 6,
-      "ms": 0.023692666666666667
+      "ms": 0.023039
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_add_permute_unsqueeze_view_2.kd",
       "calls": 6,
-      "ms": 0.0018456666666666665
+      "ms": 0.0017989999999999998
     },
     {
       "stage": "Drafter",
       "kernel": "triton_poi_fused_cat_expand_index_mul_slice_unsqueeze_view_1.kd",
       "calls": 6,
-      "ms": 0.002539
+      "ms": 0.002519
     },
     {
       "stage": "Drafter",
       "kernel": "triton_red_fused__to_copy_abs_clamp_div_max_mul_preshuffle_gemm_silu_slice_squeeze_view_6.kd",
       "calls": 30,
-      "ms": 0.018855166666666666
+      "ms": 0.017248333333333334
     },
     {
       "stage": "Drafter",
       "kernel": "triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_2.kd",
       "calls": 30,
-      "ms": 0.03254866666666667
+      "ms": 0.031342
     },
     {
       "stage": "Drafter",
       "kernel": "triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_7.kd",
       "calls": 24,
-      "ms": 0.027043000000000005
+      "ms": 0.025796166666666672
     },
     {
       "stage": "Drafter",
       "kernel": "triton_red_fused__to_copy_embedding_mul_rms_norm_w4_gemm_0.kd",
       "calls": 6,
-      "ms": 0.0045190000000000004
+      "ms": 0.004225666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "triton_red_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_7.kd",
       "calls": 6,
-      "ms": 0.006599
+      "ms": 0.006579
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]",
       "calls": 12,
-      "ms": 0.009498000000000001
+      "ms": 0.009231333333333333
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.0035323333333333335
+      "ms": 0.003572333333333333
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.0030656666666666666
+      "ms": 0.0032523333333333336
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::bitonicSortKVInPlace<2, -1, 16, 16, c10::BFloat16, long, at::native::GTOp<c10::BFloat16, true>, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<c10::BFloat16, true>) [clone .kd]",
       "calls": 6,
-      "ms": 0.003305666666666666
+      "ms": 0.0031190000000000002
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.005038999999999999
+      "ms": 0.004959
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.002545833333333333
+      "ms": 0.002525666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.003692333333333333
+      "ms": 0.0034856666666666664
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.003145833333333333
+      "ms": 0.0031123333333333333
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
       "calls": 12,
-      "ms": 0.041231500000000004
+      "ms": 0.03825166666666666
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
       "calls": 24,
-      "ms": 0.05746983333333332
+      "ms": 0.05741616666666668
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
       "calls": 12,
-      "ms": 0.022578
+      "ms": 0.022157999999999997
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
       "calls": 24,
-      "ms": 0.029062666666666664
+      "ms": 0.028702666666666668
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]",
       "calls": 12,
-      "ms": 0.003004666666666666
+      "ms": 0.0028979999999999995
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
       "calls": 6,
-      "ms": 0.021259
+      "ms": 0.024292499999999998
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
       "calls": 6,
-      "ms": 0.013025666666666666
+      "ms": 0.008919
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]",
       "calls": 6,
-      "ms": 0.0037990000000000003
+      "ms": 0.0038056666666666664
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.0018656666666666665
+      "ms": 0.0017123333333333333
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.0024856666666666664
+      "ms": 0.0024456666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]",
       "calls": 12,
-      "ms": 0.0038579999999999995
+      "ms": 0.003878
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
       "calls": 12,
-      "ms": 0.005217999999999999
+      "ms": 0.005204666666666666
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]",
       "calls": 6,
-      "ms": 0.0021390000000000003
+      "ms": 0.0020990000000000006
     },
     {
       "stage": "Drafter",
       "kernel": "void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]",
       "calls": 6,
-      "ms": 0.0050191666666666674
+      "ms": 0.004932333333333333
     },
     {
       "stage": "Drafter",
       "kernel": "void r4d_gemm_w4a16_nt_m64_kernel<1, 1, false>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]",
       "calls": 6,
-      "ms": 0.004599000000000001
+      "ms": 0.004525666666666667
     },
     {
       "stage": "Drafter",
       "kernel": "void r4d_gemm_w4a16_nt_m64_kernel<1, 1, true>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]",
       "calls": 60,
-      "ms": 0.08141016666666667
+      "ms": 0.08161683333333333
     },
     {
       "stage": "Drafter",
       "kernel": "void vllm::rms_norm_kernel<c10::BFloat16, 8, 2, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]",
       "calls": 6,
-      "ms": 0.003192333333333333
+      "ms": 0.002959
     },
     {
       "stage": "Drafter",
       "kernel": "void vllm::rms_norm_kernel<c10::BFloat16, 8, 4, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]",
       "calls": 6,
-      "ms": 0.0027790000000000002
+      "ms": 0.002759
     },
     {
       "stage": "Drafter",
       "kernel": "void vllm::rotary_embedding_kernel<c10::BFloat16, c10::BFloat16, true>(long const*, c10::BFloat16*, c10::BFloat16*, c10::BFloat16 const*, int, long, long, long, int, int, int, long, bool) [clone .kd]",
       "calls": 6,
-      "ms": 0.002579
+      "ms": 0.002405666666666666
     },
     {
       "stage": "Attention KV write",
       "kernel": "reshape_and_cache_kernel_flash.kd",
       "calls": 96,
-      "ms": 0.04687750000000003
+      "ms": 0.04369066666666665
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "triton_poi_fused_1.kd",
       "calls": 96,
-      "ms": 0.024404000000000026
+      "ms": 0.020890666666666672
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "triton_poi_fused_3.kd",
       "calls": 96,
-      "ms": 0.027983999999999985
+      "ms": 0.028503999999999998
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "triton_poi_fused_4.kd",
       "calls": 96,
-      "ms": 0.028470833333333327
+      "ms": 0.02530416666666669
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "triton_poi_fused_arange_bitwise_and_eq_index_lt_remainder_select_split_where_2.kd",
       "calls": 96,
-      "ms": 0.029937500000000002
+      "ms": 0.02806466666666666
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
       "calls": 96,
-      "ms": 0.033671000000000006
+      "ms": 0.029690833333333305
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "void stock_m1_gemma_norm<false, 256, 32>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
       "calls": 96,
-      "ms": 0.050797333333333354
+      "ms": 0.04716433333333333
     },
     {
       "stage": "Attention Q/K normalization, RoPE and layout",
       "kernel": "void stock_m1_gemma_norm<false, 256, 64>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
       "calls": 96,
-      "ms": 0.040310833333333324
+      "ms": 0.037204333333333325
     },
     {
       "stage": "Attention decode",
       "kernel": "void qwen_stock_m1_shared_decode<4, 16, 256, 6, 16, 0, 3430971>(R4DArgs, int) [clone .kd]",
       "calls": 96,
-      "ms": 5.285289666666666
-    },
-    {
-      "stage": "Attention input activation FP8 quantization",
-      "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
-      "calls": 96,
-      "ms": 0.042157500000000014
+      "ms": 5.256131500000001
     },
     {
       "stage": "Attention input projection",
       "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
       "calls": 96,
-      "ms": 1.0989231666666663
+      "ms": 1.159962
     },
     {
       "stage": "Attention output activation FP8 quantization",
       "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
       "calls": 96,
-      "ms": 0.045791
+      "ms": 0.04309749999999999
     },
     {
       "stage": "Attention output gating",
-      "kernel": "triton_poi_fused_mul_mxfp4_linear_sigmoid_view_0.kd",
+      "kernel": "triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_sigmoid_view_0.kd",
       "calls": 96,
-      "ms": 0.032364
+      "ms": 0.031083999999999997
     },
     {
       "stage": "Attention output projection",
       "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
       "calls": 96,
-      "ms": 0.5214328333333336
+      "ms": 0.5268326666666667
     },
     {
       "stage": "Attention split-KV merge",
       "kernel": "void qwen_stock_m1_shared_merge<256, 4, 1>(R4DArgs, int, int) [clone .kd]",
       "calls": 96,
-      "ms": 0.11963099999999999
+      "ms": 0.1282116666666667
     },
     {
-      "stage": "Embedding + first input normalization",
+      "stage": "Embedding + first input normalization + FP8 production",
       "kernel": "triton_poi_fused__to_copy_embedding_0.kd",
       "calls": 6,
-      "ms": 0.002599
+      "ms": 0.0024189999999999997
     },
     {
-      "stage": "Embedding + first input normalization",
-      "kernel": "void stock_m1_gemma_norm<false, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
+      "stage": "Embedding + first input normalization + FP8 production",
+      "kernel": "void norm_quant<false, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
       "calls": 6,
-      "ms": 0.0051589999999999995
+      "ms": 0.0071923333333333336
     },
     {
       "stage": "Final normalization/layout",
       "kernel": "void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
       "calls": 6,
-      "ms": 0.005612333333333333
+      "ms": 0.005099
     },
     {
       "stage": "GDN convolution",
       "kernel": "_causal_conv1d_update_kernel.kd",
       "calls": 288,
-      "ms": 0.22636549999999994
-    },
-    {
-      "stage": "GDN input activation FP8 quantization",
-      "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
-      "calls": 288,
-      "ms": 0.12734583333333338
+      "ms": 0.20931333333333327
     },
     {
       "stage": "GDN input projection",
       "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
       "calls": 288,
-      "ms": 3.872797000000002
+      "ms": 3.945794333333333
     },
     {
       "stage": "GDN layout/copies and buffer initialization",
       "kernel": "triton_poi_fused_add_1.kd",
       "calls": 18,
-      "ms": 0.004003666666666667
+      "ms": 0.003897
     },
     {
       "stage": "GDN layout/copies and buffer initialization",
       "kernel": "triton_poi_fused_add_2.kd",
       "calls": 12,
-      "ms": 0.002738
+      "ms": 0.0025780000000000004
     },
     {
       "stage": "GDN layout/copies and buffer initialization",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
       "calls": 288,
-      "ms": 0.157119
+      "ms": 0.1459798333333334
     },
     {
       "stage": "GDN layout/copies and buffer initialization",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]",
       "calls": 288,
-      "ms": 0.09275900000000008
+      "ms": 0.08537883333333325
     },
     {
       "stage": "GDN layout/copies and buffer initialization",
       "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
       "calls": 288,
-      "ms": 0.07488616666666673
+      "ms": 0.06873216666666658
     },
     {
-      "stage": "GDN output activation FP8 quantization",
-      "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
+      "stage": "GDN output gated normalization + FP8 production",
+      "kernel": "gdn_norm_quant_kernel.kd",
       "calls": 288,
-      "ms": 0.13108566666666668
-    },
-    {
-      "stage": "GDN output gated normalization",
-      "kernel": "layer_norm_fwd_kernel.kd",
-      "calls": 288,
-      "ms": 0.0973065
+      "ms": 0.16019933333333305
     },
     {
       "stage": "GDN output projection",
       "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
       "calls": 288,
-      "ms": 1.8837934999999997
+      "ms": 1.8966996666666651
     },
     {
       "stage": "GDN recurrence and gates",
       "kernel": "stock_gdn_scan_kernel.kd",
       "calls": 288,
-      "ms": 1.2188051666666673
+      "ms": 1.1816163333333334
     },
     {
-      "stage": "Layer input residual/normalization",
-      "kernel": "void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
+      "stage": "Layer input residual/normalization + FP8 production",
+      "kernel": "void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
       "calls": 378,
-      "ms": 0.3459718333333331
+      "ms": 0.5098586666666655
     },
     {
       "stage": "MLP SiLU and gating",
-      "kernel": "triton_poi_fused_mul_mxfp4_linear_silu_slice_0.kd",
+      "kernel": "triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_silu_slice_0.kd",
       "calls": 288,
-      "ms": 0.14127216666666667
+      "ms": 0.12545966666666664
     },
     {
       "stage": "MLP SiLU and gating",
-      "kernel": "triton_poi_fused_mul_mxfp4_linear_silu_slice_1.kd",
+      "kernel": "triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_silu_slice_1.kd",
       "calls": 96,
-      "ms": 0.04820416666666668
+      "ms": 0.05363099999999999
     },
     {
       "stage": "MLP down input FP8 quantization",
       "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
       "calls": 384,
-      "ms": 0.2973443333333335
+      "ms": 0.264137
     },
     {
       "stage": "MLP down projection",
       "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
       "calls": 384,
-      "ms": 5.14293316666666
-    },
-    {
-      "stage": "MLP gate/up input FP8 quantization",
-      "kernel": "void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]",
-      "calls": 384,
-      "ms": 0.1665428333333336
+      "ms": 5.367781166666666
     },
     {
       "stage": "MLP gate/up projection",
-      "kernel": "void radiance_mxfp4_fp8_gemm_folded<2, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
       "calls": 384,
-      "ms": 25.437278833333327
+      "ms": 11.37036116666667
     },
     {
-      "stage": "Post-attention/GDN residual/normalization",
-      "kernel": "void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]",
+      "stage": "Post-attention/GDN residual/normalization + FP8 production",
+      "kernel": "void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
       "calls": 384,
-      "ms": 0.35259900000000005
+      "ms": 0.5307116666666658
     },
     {
-      "stage": "Full BF16 target head",
-      "kernel": "(anonymous namespace)::stock_m1_head_pair(__hip_bfloat16 const*, __hip_bfloat16 const*, __hip_bfloat16*) [clone .kd]",
+      "stage": "Global-256 target head",
+      "kernel": "__amd_rocclr_fillBufferAligned.kd",
       "calls": 6,
-      "ms": 4.139845666666667
+      "ms": 0.0024323333333333337
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "_draft_head_int2.kd",
+      "calls": 6,
+      "ms": 0.771209
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "_rerank_exact.kd",
+      "calls": 6,
+      "ms": 0.029826
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms": 0.0045056666666666665
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
+      "calls": 6,
+      "ms": 0.0034923333333333334
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms": 0.002779
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
+      "calls": 6,
+      "ms": 0.005179
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
+      "calls": 12,
+      "ms": 0.09005166666666668
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 12,
+      "ms": 0.038398166666666664
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms": 0.0015256666666666665
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
+      "calls": 6,
+      "ms": 0.040066
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::radixSortKVInPlace<2, -1, 128, 8, c10::BFloat16, long, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, bool) [clone .kd]",
+      "calls": 6,
+      "ms": 0.005378999999999999
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]",
+      "calls": 6,
+      "ms": 0.003819166666666666
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms": 0.0016323333333333333
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]",
+      "calls": 6,
+      "ms": 0.002232333333333333
+    },
+    {
+      "stage": "Global-256 target head",
+      "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
+      "calls": 12,
+      "ms": 0.005191333333333334
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "__amd_rocclr_copyBuffer.kd",
-      "calls": 172,
-      "ms": 0.07616516666666664
+      "calls": 150,
+      "ms": 0.06564850000000001
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "__amd_rocclr_fillBufferAligned.kd",
       "calls": 6,
-      "ms": 0.002519
+      "ms": 0.0023056666666666664
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_combine_sampled_and_draft_tokens_kernel.kd",
-      "calls": 7,
-      "ms": 0.0034855
+      "calls": 6,
+      "ms": 0.0029923333333333334
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_compute_local_logits_stats_kernel.kd",
       "calls": 6,
-      "ms": 0.02881916666666667
+      "ms": 0.02824566666666667
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_compute_slot_mappings_kernel.kd",
-      "calls": 7,
-      "ms": 0.0034855
+      "calls": 6,
+      "ms": 0.002905666666666667
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_expand_idx_mapping_kernel.kd",
-      "calls": 7,
-      "ms": 0.002339
+      "calls": 6,
+      "ms": 0.0018856666666666666
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_gather_block_tables_kernel.kd",
-      "calls": 7,
-      "ms": 0.005852166666666666
+      "calls": 6,
+      "ms": 0.004639000000000001
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_get_num_sampled_and_rejected_kernel.kd",
       "calls": 6,
-      "ms": 0.0027923333333333333
+      "ms": 0.0025523333333333335
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_insert_resampled_kernel.kd",
       "calls": 6,
-      "ms": 0.003499
+      "ms": 0.0034123333333333336
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_post_update_kernel.kd",
       "calls": 6,
-      "ms": 0.005205666666666667
+      "ms": 0.0051589999999999995
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_prepare_pos_seq_lens_kernel.kd",
-      "calls": 7,
-      "ms": 0.0023921666666666666
+      "calls": 6,
+      "ms": 0.002039166666666667
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_prepare_rope_positions_kernel.kd",
-      "calls": 7,
-      "ms": 0.003232166666666667
+      "calls": 6,
+      "ms": 0.0027256666666666666
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_rejection_kernel.kd",
       "calls": 6,
-      "ms": 0.007219
+      "ms": 0.007452333333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_resample_kernel.kd",
       "calls": 6,
-      "ms": 0.015365833333333336
+      "ms": 0.013832333333333334
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "_scatter_num_accepted_kernel.kd",
       "calls": 6,
-      "ms": 0.0019856666666666664
+      "ms": 0.0021191666666666668
+    },
+    {
+      "stage": "Other GPU bookkeeping",
+      "kernel": "_temperature_kernel.kd",
+      "calls": 6,
+      "ms": 0.013779
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "postprocess_mamba_fused_kernel.kd",
       "calls": 6,
-      "ms": 0.002699
+      "ms": 0.0025256666666666665
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "precopy_mamba_align_fused_kernel.kd",
-      "calls": 7,
-      "ms": 0.0030988333333333336
+      "calls": 6,
+      "ms": 0.002679
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "preprocess_mamba_align_fused_kernel.kd",
-      "calls": 7,
-      "ms": 0.003012166666666667
+      "calls": 6,
+      "ms": 0.002579166666666667
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*) [clone .kd]",
-      "calls": 42,
-      "ms": 0.014853000000000007
+      "calls": 36,
+      "ms": 0.011374166666666671
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void (anonymous namespace)::softmax_warp_forward<float, float, float, 6, false, false, 32>(float*, float const*, int, int, int, bool const*, int, bool) [clone .kd]",
       "calls": 6,
-      "ms": 0.002352333333333333
+      "ms": 0.002259
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
-      "calls": 48,
-      "ms": 0.015558833333333333
+      "calls": 42,
+      "ms": 0.013413000000000001
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.003045666666666667
+      "ms": 0.002412333333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]",
-      "calls": 48,
-      "ms": 0.0208855
+      "calls": 42,
+      "ms": 0.013859666666666666
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}) [clone .kd]",
-      "calls": 42,
-      "ms": 0.018933
+      "calls": 36,
+      "ms": 0.014520666666666666
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}) [clone .kd]",
       "calls": 18,
-      "ms": 0.01957733333333333
+      "ms": 0.01862366666666667
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
-      "calls": 109,
-      "ms": 0.05358899999999998
+      "calls": 96,
+      "ms": 0.04647750000000002
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
       "calls": 12,
-      "ms": 0.005984666666666667
+      "ms": 0.005938
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]",
       "calls": 6,
-      "ms": 0.0029790000000000003
+      "ms": 0.003072333333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]",
       "calls": 24,
-      "ms": 0.05210950000000001
+      "ms": 0.060523166666666676
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
       "calls": 24,
-      "ms": 0.038715999999999993
+      "ms": 0.03363633333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]",
       "calls": 6,
-      "ms": 0.0017056666666666667
+      "ms": 0.0014523333333333335
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]",
       "calls": 6,
-      "ms": 0.026025833333333335
+      "ms": 0.026925833333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::tensor_kernel_scan_innermost_dim<float, std::plus<float> >(float*, float const*, unsigned int, unsigned int, unsigned int, float, std::plus<float>) [clone .kd]",
       "calls": 6,
-      "ms": 0.002725666666666667
+      "ms": 0.0024590000000000002
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast) [clone .kd]",
-      "calls": 42,
-      "ms": 0.012019666666666666
+      "calls": 36,
+      "ms": 0.010180666666666664
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<16, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.0026590000000000003
+      "ms": 0.0024656666666666664
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<16, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>) [clone .kd]",
-      "calls": 7,
-      "ms": 0.0021855
+      "calls": 6,
+      "ms": 0.0018123333333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<16, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul> >(int, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.0023323333333333334
+      "ms": 0.0023058333333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>) [clone .kd]",
-      "calls": 42,
-      "ms": 0.014173166666666667
+      "calls": 36,
+      "ms": 0.012547333333333332
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.001859
+      "ms": 0.0017590000000000001
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul> >(int, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.010065666666666667
+      "ms": 0.009699000000000001
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul> >(int, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul>) [clone .kd]",
       "calls": 12,
-      "ms": 0.0048779999999999995
+      "ms": 0.004251333333333333
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul> >(int, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul>) [clone .kd]",
-      "calls": 42,
-      "ms": 0.01515966666666666
+      "calls": 36,
+      "ms": 0.011427333333333334
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>) [clone .kd]",
-      "calls": 48,
-      "ms": 0.0160855
+      "calls": 42,
+      "ms": 0.011612999999999998
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.001899
+      "ms": 0.0019923333333333334
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.0019923333333333334
+      "ms": 0.0018656666666666663
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>) [clone .kd]",
       "calls": 12,
-      "ms": 0.0031113333333333336
+      "ms": 0.0034180000000000005
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>) [clone .kd]",
-      "calls": 7,
-      "ms": 0.0018856666666666666
+      "calls": 6,
+      "ms": 0.0016656666666666669
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]",
       "calls": 6,
-      "ms": 0.009939166666666666
+      "ms": 0.009692333333333332
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]",
       "calls": 6,
-      "ms": 0.0022523333333333328
+      "ms": 0.0019923333333333334
     },
     {
       "stage": "Other GPU bookkeeping",
       "kernel": "void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]",
       "calls": 6,
-      "ms": 0.004998999999999999
+      "ms": 0.004652333333333333
     }
   ],
-  "performance_scope": "Separate uninstrumented compiled direct-engine controls with the full BF16 target head. Three natural responses on the same 60,000-input-token Pi prefix; excludes HTTP/Pi, tool execution, snapshot publication, cold prefill and warm-up.",
+  "performance_scope": "Normal compiled serving with snapshots enabled, no diagnostic worker or timing hooks. Three natural completions on a 60,000-input-token private Pi fixture; 2,375 generated tokens, temperature 0.6, top-p 0.95, top-k 20. Current global-256 head and all selected backports.",
   "performance": {
-    "Median round": "60.052 ms",
-    "Pooled rate after first output": "84.342 tok/s",
-    "Output tokens / natural responses": "2,525 / 3",
-    "Timed post-first output": "29.902 s",
-    "Separate rounding-control median round": "60.900 ms",
-    "Rounding-control natural responses / output tokens": "6 / 5,050",
-    "Rounding-control mean committed tokens per round": "5.211",
-    "Rounding-control pooled rate": "83.070 tok/s"
+    "Weighted mean generation round": "44.037 ms",
+    "Pooled rate after first output": "124.24 tok/s",
+    "Output tokens / natural responses": "2,375 / 3",
+    "Cold 60K time to first token": "31.98 s (single observation)",
+    "Pi-temperature-1.0 pooled backend rate": "120.65 tok/s; 2,363 tokens across 3 natural completions"
   },
-  "performance_limits": "These approximately 80\u201386 tok/s results are brief **60K-input** controls, not the separate 60K-generated-token head benchmark. No eager execution or instrumented timing is substituted for these complete-round measurements.",
+  "performance_limits": "These are brief 60K-input controls, **not** 60K-output throughput and not an end-to-end Pi UI/VM benchmark. Cold first-token time includes CPU/request overhead and initial generation. Throughput varies with draft acceptance, context and GPU clocks. [Measurements and limits](docs/pi-prefill-generation-20260918.md).",
   "sources": {
-    "profile": "reports/d7-rdna4-2026-09-17/stage-times.json",
-    "correctness": "reports/d7-rdna4-2026-09-17/evidence/crossmode-before-final-10k.json"
+    "profile": "benchmarks/results/20260918-ggz14-stage-profile.json",
+    "trace_sha256": "6fc2302dbec9dafd5d066a2d8d652dc851892387af6de399a78ecaea48276637",
+    "correctness": "docs/pi-prefill-generation-20260918.json"
+  },
+  "round_timing": {
+    "boundary": "First target GPU kernel to the first target GPU kernel of the next round.",
+    "scope": "Profiled GPU cycle; gaps include launch/host/wait and possible profiler overhead. Individual causes are not attributed. Excludes request admission, prefill and Pi/transport latency.",
+    "equation": "elapsed_ms = kernel_sum_ms - gpu_overlap_ms + overhead_ms",
+    "mean": {
+      "elapsed_ms": 47.45758968098958,
+      "kernel_sum_ms": 41.237322999999996,
+      "gpu_busy_ms": 41.23506142447919,
+      "gpu_overlap_ms": 0.002261575520806218,
+      "overhead_ms": 6.222528256510389
+    },
+    "rounds": [
+      {
+        "round": 0,
+        "start_offset_ms": 0.0,
+        "elapsed_ms": 53.5457412109375,
+        "kernel_sum_ms": 43.576687,
+        "gpu_busy_ms": 43.576248093750095,
+        "gpu_overlap_ms": 0.00043890624990308426,
+        "overhead_ms": 9.969493117187405,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 1,
+        "start_offset_ms": 53.5457412109375,
+        "elapsed_ms": 45.65191796875,
+        "kernel_sum_ms": 40.178349000000004,
+        "gpu_busy_ms": 40.17559064843753,
+        "gpu_overlap_ms": 0.002758351562471944,
+        "overhead_ms": 5.47632732031247,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 2,
+        "start_offset_ms": 99.1976591796875,
+        "elapsed_ms": 45.0803818359375,
+        "kernel_sum_ms": 40.041236,
+        "gpu_busy_ms": 40.038238000000014,
+        "gpu_overlap_ms": 0.002997999999985041,
+        "overhead_ms": 5.0421438359374875,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 3,
+        "start_offset_ms": 144.278041015625,
+        "elapsed_ms": 47.921234375,
+        "kernel_sum_ms": 42.889353,
+        "gpu_busy_ms": 42.886454531250024,
+        "gpu_overlap_ms": 0.0028984687499760183,
+        "overhead_ms": 5.034779843749973,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 4,
+        "start_offset_ms": 192.199275390625,
+        "elapsed_ms": 46.77623828125,
+        "kernel_sum_ms": 40.100836,
+        "gpu_busy_ms": 40.09795803906258,
+        "gpu_overlap_ms": 0.0028779609374178106,
+        "overhead_ms": 6.678280242187415,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      },
+      {
+        "round": 6,
+        "start_offset_ms": 398.31776953125,
+        "elapsed_ms": 45.7700244140625,
+        "kernel_sum_ms": 40.637477,
+        "gpu_busy_ms": 40.63587923437492,
+        "gpu_overlap_ms": 0.0015977656250834116,
+        "overhead_ms": 5.134145179687584,
+        "kernel_count": 1327,
+        "streams": [
+          1,
+          2
+        ]
+      }
+    ]
   }
 }
