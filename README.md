@@ -22,8 +22,9 @@ commits describe Coherence's additions. See [attribution](ATTRIBUTION.md).
   original arithmetic; alignment is introduced in the following commit.
 - **Measured baseline:** full compiled stage timings and isolated correctness
   checks identify the numerical repairs introduced by the following commit.
-- **Target-head diagnostics:** capture candidate recall and numerical differences.
-  The global-256 replacement is introduced in the next feature commit.
+- **Global-256 target head:** search the complete INT2 score row, then rescore
+  256 candidates using BF16 weights. Removes the eight-candidates-per-tile capacity
+  defect; unsupported sampling modes retain a full-head fallback.
 - **Persistent conversations:** compressed incremental snapshots, buffered tails,
   explicit flushes, verified publication before retiring old heads, generation-
   aware garbage collection and cumulative disk-write accounting.
@@ -342,6 +343,33 @@ These approximately 80–86 tok/s results are brief **60K-input** controls, not 
 Aggregate data: [current measurements](benchmarks/results/coherence-current.json). Historical methodology and detailed numerical evidence: [technical report](reports/d7-rdna4-2026-09-17/REPORT.md).
 
 <!-- /COHERENCE_CURRENT_RESULTS -->
+
+## Global-256 target-head benchmark
+
+This is the table from [the top-256 PR](https://github.com/magiccodingman/vllm-radiance/pull/9).
+It is a **separate, earlier 60K-generated-token benchmark per method**, predating the
+M1/M8 and eager/compiled repairs and subsequent performance backports. Its tok/s
+figures do not describe the current complete backend.
+
+| Target path | Median M8 head time | Top-1 match | Complete reference top-20 retained | Measured tok/s | Estimated tok/s |
+|---|---:|---:|---:|---:|---:|
+| Full BF16 fallback | 4.122 ms | 119,988/119,988 (100.0000%) | 119,988/119,988 (100.0000%) | 63.9 | 63.9 |
+| Original block-8/64 + rerank-80 | 1.085 ms | 119,956/119,988 (99.9733%) | 98,452/119,988 (82.0515%) | 67.2 | 67.2 |
+| Global INT2 top-128 + BF16 rerank | 1.114 ms | 119,986/119,988 (99.9983%) | 118,254/119,988 (98.5549%) | 67.5 | 67.2 |
+| Global INT2 top-256 + BF16 rerank (default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) | 66.8 | 67.1 |
+
+There were 115 natural completions per method on 11 private Pi request boundaries
+with 57,008–65,527 input tokens. Output totals were 60,598 / 60,075 / 60,348 /
+60,675 tokens for full / block / global-128 / global-256 respectively. Tools were
+not executed. Head timings are median eight-row GPU-event measurements on the
+same captured hidden vectors; 119,988 prediction rows were compared.
+
+Global-256 removes the eight-per-tile capacity limit, but remains approximate.
+The two changed final argmax IDs and 202 incomplete top-20 sets are observed
+misses. Complete top-20 retention does not certify score equality, ordering or
+sampling probabilities. The full BF16 path is the reference in this head study,
+not an independent proof of the model. [Methodology](docs/VERIFY_HEAD_GLOBAL_TOPK.md)
+· [Aggregate evidence](benchmarks/results/20260916-verify-head-global-topk-long/summary.json).
 
 ## Quick start
 

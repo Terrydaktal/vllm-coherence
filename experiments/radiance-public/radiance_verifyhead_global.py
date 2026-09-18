@@ -27,6 +27,7 @@ RADIANCE_VERIFY_HEAD=1 requires RADIANCE_FAST_DRAFT=1 to build the shared INT2
 packing. Setting GLOBAL_TOPK alone does not enable target-head optimization.
 See docs/VERIFY_HEAD_GLOBAL_TOPK.md for measurements, scope and configuration.
 """
+
 import os
 import sys
 import types
@@ -35,7 +36,7 @@ import torch
 
 try:
     import radiance_drafthead as _dh
-except Exception as e:                  # pragma: no cover
+except Exception as e:  # pragma: no cover
     _dh = None
     sys.stderr.write(f"[radiance.verifyhead] radiance_drafthead unavailable: {e!r}\n")
 
@@ -62,7 +63,16 @@ MAX_ROWS = int(os.environ.get("RADIANCE_VERIFY_HEAD_MAX_M", "4096"))
 # NO_LOGPROBS sentinel in vllm/v1/worker/gpu/sample/states.py.
 _NO_LOGPROBS = -1
 
-_state = {"lp": None, "armed": False, "failed": False, "fast": 0, "slow": 0, "reported": False}
+_state = {
+    "lp": None,
+    "armed": False,
+    "failed": False,
+    "fast": 0,
+    "slow": 0,
+    "reported": False,
+    "global_calls": 0,
+    "full_calls": 0,
+}
 
 
 def _find_target_lp(model):
@@ -99,19 +109,25 @@ def _arm(model):
         sys.stderr.write("[radiance.verifyhead] target lm_head not a live 2-D weight; off\n")
         return
 
-    # The exact path we fall back to. Bind it BEFORE _quantize_head_now replaces _apply_head, and
-    # take it off the class rather than the instance so it is the untouched implementation.
-    exact = types.MethodType(type(lp)._apply_head, lp)
+    # Preserve the installed, corrected head, including the qualified M4-pair
+    # performance path. Rebinding from the class would bypass those repairs.
+    exact = lp._apply_head
 
     lp._radiance_topk_only = True
-    status = _dh._quantize_head_now(lp, lm_head)
+    try:
+        status = _dh._quantize_head_now(lp, lm_head)
+    except BaseException:
+        lp._apply_head = exact
+        raise
     if not hasattr(lp, "_radiance_wq"):
+        lp._apply_head = exact
         _state["failed"] = True
         sys.stderr.write(f"[radiance.verifyhead] quantisation declined: {status}; off\n")
         return
 
-    fast = (types.MethodType(_apply_head_global, lp) if GLOBAL_TOPK
-            else lp._apply_head)             # target-only; drafter binding is untouched
+    fast = (
+        types.MethodType(_apply_head_global, lp) if GLOBAL_TOPK else lp._apply_head
+    )  # target-only; drafter binding is untouched
     lp._radiance_exact_head = exact
     lp._radiance_fast_head = fast
     lp._radiance_fast_ok = False
@@ -119,14 +135,17 @@ def _arm(model):
     _state["lp"] = lp
     _state["armed"] = True
     selection = f"global-{GLOBAL_TOPK} approximate TP1" if GLOBAL_TOPK else "block shortlist"
-    sys.stderr.write(f"[radiance.verifyhead] VERIFY_HEAD: {status}; target {selection} "
-                     f"(max top_k {_sampled_top_k_limit()}, full-head fallback otherwise)\n")
+    sys.stderr.write(
+        f"[radiance.verifyhead] VERIFY_HEAD: {status}; target {selection} "
+        f"(max top_k {_sampled_top_k_limit()}, full-head fallback otherwise)\n"
+    )
     sys.stderr.flush()
 
 
 def _apply_head_gated(self, lm_head, hidden_states, embedding_bias=None):
     if getattr(self, "_radiance_fast_ok", False):
         return self._radiance_fast_head(lm_head, hidden_states, embedding_bias)
+    _state["full_calls"] += 1
     return self._radiance_exact_head(lm_head, hidden_states, embedding_bias)
 
 
@@ -138,15 +157,23 @@ def _sampled_top_k_limit():
 def _apply_head_global(self, lm_head, hidden_states, embedding_bias=None):
     """Full-row INT2 top-N and BF16 rerank, with no per-vocabulary-tile quota."""
     weight = lm_head.weight
-    if (embedding_bias is not None or getattr(lm_head, "tp_size", None) != 1
-            or hidden_states.dim() != 2 or weight.dim() != 2
-            or hidden_states.dtype != torch.bfloat16 or weight.dtype != torch.bfloat16
-            or not hidden_states.is_cuda or weight.device != hidden_states.device
-            or weight.stride(1) != 1 or hidden_states.shape[-1] != weight.shape[-1]
-            or hidden_states.shape[-1] % 512 != 0
-            or not 0 < hidden_states.shape[0] <= min(MAX_ROWS, _GLOBAL_MAX_ROWS)
-            or weight.shape[0] <= GLOBAL_TOPK
-            or getattr(self, "head_dtype", None) not in (None, torch.bfloat16)):
+    if (
+        embedding_bias is not None
+        or getattr(lm_head, "tp_size", None) != 1
+        or hidden_states.dim() != 2
+        or weight.dim() != 2
+        or hidden_states.dtype != torch.bfloat16
+        or weight.dtype != torch.bfloat16
+        or not hidden_states.is_cuda
+        or weight.device != hidden_states.device
+        or weight.stride(1) != 1
+        or hidden_states.shape[-1] != weight.shape[-1]
+        or hidden_states.shape[-1] % 512 != 0
+        or not 0 < hidden_states.shape[0] <= min(MAX_ROWS, _GLOBAL_MAX_ROWS)
+        or weight.shape[0] <= GLOBAL_TOPK
+        or getattr(self, "head_dtype", None) not in (None, torch.bfloat16)
+    ):
+        _state["full_calls"] += 1
         return self._radiance_exact_head(lm_head, hidden_states, embedding_bias)
 
     rows, width = hidden_states.shape
@@ -163,30 +190,61 @@ def _apply_head_global(self, lm_head, hidden_states, embedding_bias=None):
     # KC=0 removes the tile's max/mask emission loop. The complete BF16 coarse
     # row remains available for global selection. No draft setting is changed.
     _dh._draft_head_int2[(blocks,)](
-        x, sums, self._radiance_wq, self._radiance_scale, self._radiance_zs,
-        logits, unused_scores, unused_ids, width, vocab,
-        self._radiance_wq.stride(0), self._radiance_scale.stride(0), sums.stride(0),
-        blocks, 0, G=_dh.GROUP, BLOCK_M=padded, BLOCK_N=_dh.BLOCK_N,
+        x,
+        sums,
+        self._radiance_wq,
+        self._radiance_scale,
+        self._radiance_zs,
+        logits,
+        unused_scores,
+        unused_ids,
+        width,
+        vocab,
+        self._radiance_wq.stride(0),
+        self._radiance_scale.stride(0),
+        sums.stride(0),
+        blocks,
+        0,
+        G=_dh.GROUP,
+        BLOCK_M=padded,
+        BLOCK_N=_dh.BLOCK_N,
         **_dh._cfg_for(padded),
     )
     ids = logits.topk(GLOBAL_TOPK, dim=-1).indices.to(torch.int32).contiguous()
     rescored = torch.empty(padded, GLOBAL_TOPK, dtype=torch.float32, device=x.device)
     _dh._rerank_exact[(padded, GLOBAL_TOPK)](
-        x, weight, ids, rescored, width, weight.stride(0),
-        R=GLOBAL_TOPK, BLOCK_K=512, num_warps=4,
+        x,
+        weight,
+        ids,
+        rescored,
+        width,
+        weight.stride(0),
+        R=GLOBAL_TOPK,
+        BLOCK_K=512,
+        num_warps=4,
     )
     logits.fill_(-float("inf"))
     logits.scatter_(1, ids.long(), rescored.to(torch.bfloat16))
+    _state["global_calls"] += 1
+    if _state["global_calls"] in (1, 200):
+        sys.stderr.write(
+            f"[radiance.verifyhead] global-{GLOBAL_TOPK} executed: "
+            f"{_state['global_calls']} calls; {rows} target rows; "
+            f"{_state['full_calls']} corrected full-head fallbacks\n"
+        )
+        sys.stderr.flush()
     return logits[:rows]
 
 
 def _global_processors_supported(sampler, idx):
     """Reject transformations that can promote tokens outside the shortlist."""
     try:
-        if (sampler.penalties_state.use_penalty[idx].any()
-                or sampler.logit_bias_state.use_logit_bias[idx].any()
-                or (sampler.bad_words_state.num_bad_words.np[idx] != 0).any()
-                or (sampler.logprob_token_ids_state.num_token_ids.np[idx] != 0).any()):
+        if (
+            sampler.penalties_state.use_penalty[idx].any()
+            or sampler.logit_bias_state.use_logit_bias[idx].any()
+            or (sampler.bad_words_state.num_bad_words.np[idx] != 0).any()
+            or (sampler.logprob_token_ids_state.num_token_ids.np[idx] != 0).any()
+        ):
             return False
         thinking = sampler.thinking_budget_state
         if thinking.enabled and thinking.use_thinking_budget[idx].any():
@@ -257,6 +315,23 @@ def before_compute_logits(runner, input_batch, grammar_output) -> None:
     _state["fast" if ok else "slow"] += 1
     if not _state["reported"] and _state["fast"] + _state["slow"] == 200:
         _state["reported"] = True
-        sys.stderr.write(f"[radiance.verifyhead] first 200 steps: {_state['fast']} on the int2 "
-                         f"head, {_state['slow']} fell back to bf16\n")
+        sys.stderr.write(
+            f"[radiance.verifyhead] first 200 steps: {_state['fast']} on the int2 "
+            f"head, {_state['slow']} fell back to bf16\n"
+        )
         sys.stderr.flush()
+
+
+def dispatch_status():
+    """Counter-only receipt: no logits, tokens, synchronization or GPU work."""
+    return {
+        "enabled": ENABLED,
+        "global_topk": GLOBAL_TOPK,
+        "armed": _state["armed"],
+        "failed": _state["failed"],
+        "fast_steps": _state["fast"],
+        "full_head_steps": _state["slow"],
+        "global_calls": _state["global_calls"],
+        "full_head_calls": _state["full_calls"],
+        "fallback": "installed corrected full head",
+    }
