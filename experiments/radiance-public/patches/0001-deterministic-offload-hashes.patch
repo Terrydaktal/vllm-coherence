@@ -1,0 +1,12 @@
+diff --git a/startup-qwen3.8-27b-mxfp4.sh b/startup-qwen3.8-27b-mxfp4.sh
+index 7bab756..ad5be4d 100644
+--- a/startup-qwen3.8-27b-mxfp4.sh
++++ b/startup-qwen3.8-27b-mxfp4.sh
+@@ -1090,6 +1090,7 @@ exec ${DRY_RUN:+echo} "$RUNTIME" run "${RT_FLAGS[@]}" --rm --name "$NAME" --pr
+   --device /dev/kfd --device /dev/dri "${GROUP_FLAGS[@]}" \
+   --security-opt seccomp=unconfined --cap-add SYS_PTRACE \
+   ${ROCM_ENV[@]+"${ROCM_ENV[@]}"} \
++  -e PYTHONHASHSEED="${PYTHONHASHSEED:-0}" \
+   -e ROCR_VISIBLE_DEVICES="$GPU_IDS" -e HIP_VISIBLE_DEVICES="$GPU_IDS" -e HF_HUB_OFFLINE=1 \
+   -e VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-INFO}" \
+   -e VLLM_ROCM_USE_AITER=1 -e VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=1 \

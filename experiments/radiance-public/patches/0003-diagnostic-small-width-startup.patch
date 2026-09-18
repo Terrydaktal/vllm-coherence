@@ -1,0 +1,19 @@
+--- a/startup-qwen3.8-27b-mxfp4.sh
++++ b/startup-qwen3.8-27b-mxfp4.sh
+@@ -1165,5 +1165,6 @@ podman run --replace --rm \
+   -e RADIANCE_GDN_STATE_TRACE_STATE="${RADIANCE_GDN_STATE_TRACE_STATE:-0}" \
+   -e RADIANCE_GDN_SHARED_BUILD="${RADIANCE_GDN_SHARED_BUILD:-1}" \
++  -e RADIANCE_DFLASH_SMALL_WIDTH_COMPILE="${RADIANCE_DFLASH_SMALL_WIDTH_COMPILE:-0}" \
+   -e RADIANCE_DFLASH_SUPPRESS_PROPOSALS="${RADIANCE_DFLASH_SUPPRESS_PROPOSALS:-0}" \
+   -e RADIANCE_DFLASH_SUPPRESS_TARGET_AUX="${RADIANCE_DFLASH_SUPPRESS_TARGET_AUX:-0}" \
+   -e RADIANCE_RUN_BWTEST="${RADIANCE_RUN_BWTEST:-0}" \
+@@ -1193,6 +1194,9 @@ podman run --replace --rm \
+     python3 patch_streaming_snapshot.py
+     python3 patch_topk_composite.py
+     python3 patch_gdn_shared_build.py
++    if [ "${RADIANCE_DFLASH_SMALL_WIDTH_COMPILE:-0}" = 1 ]; then
++      python3 patch_dflash_small_width_compile.py
++    fi
+     if [ "${RADIANCE_DFLASH_SUPPRESS_PROPOSALS:-0}" = 1 ]; then
+       python3 patch_dflash_proposal_suppression.py
+     fi
