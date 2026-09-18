@@ -1,0 +1,376 @@
+#!/usr/bin/env python3
+"""Apply and authenticate Pi's full, wrapping Radiance footer."""
+# ruff: noqa: E501 -- pinned JavaScript bytes must retain their exact line breaks.
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import stat
+import tempfile
+from contextlib import suppress
+from pathlib import Path
+
+
+class PatchError(RuntimeError):
+    """The runtime is absent, unsafe, or does not match the pinned footer ABI."""
+
+
+RELATIVE_PATH = (
+    "node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/footer.js"
+)
+BASE_SHA256 = "05cc0ab96cbdacf15a34f4e2a9a3ee0395abaeaac638c1c153632cb0befbc9d1"
+LEGACY_SHA256 = "28658292670c745f2de62b0233c34679b2a21dad354c993a06cf9fc29ed152e4"
+WRAPPED_SHA256 = "24408575e076a7e8b6a1bd8f2d38c49fd99edfa76f367f45ac246bc7131ef4e4"
+PATCHED_SHA256 = "2ce3d2fe5964648a117f75fb36a7e8fbf6c689bafd07cd7ab30cdfe0597f2534"
+PREVIOUS_PATCHED_SHA256 = "35ae96eed317a4245cccb6d33c14896c3b39cbca73bdf31c6f756b516264caf0"
+
+CONTEXT_OLD = b"""        const contextPercentDisplay = contextPercent === "?"
+            ? `?/${formatTokens(contextWindow)}${autoIndicator}`
+            : `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
+"""
+CONTEXT_NEW = b"""        // Show the full counter and limit with thousands separators.
+        // Preserve unknown usage after compaction until Pi has fresh usage.
+        const contextCount = Number.isSafeInteger(contextUsage?.tokens) && contextUsage.tokens >= 0
+            ? contextUsage.tokens.toLocaleString("en-GB") : "?";
+        const contextLimit = Number.isSafeInteger(contextWindow) && contextWindow > 0
+            ? contextWindow.toLocaleString("en-GB") : "?";
+        const percentDisplay = contextCount === "?" || contextLimit === "?" ? "?" : contextPercent;
+        const contextPercentDisplay =
+            `${contextCount} / ${contextLimit} (${percentDisplay}%)${autoIndicator}`;
+"""
+
+REPLACEMENTS = (
+    (
+        b'import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";',
+        b'import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";',
+    ),
+    (
+        b"""        // Build stats line
+        const statsParts = [];
+""",
+        b"""        // Build stats line. The GPU monitor is an inline status: extensions
+        // publish it through the ordinary status API while the footer keeps it
+        // alongside the counters instead of allocating a permanent extra row.
+        const extensionStatuses = this.footerData.getExtensionStatuses();
+        const gpuTemperatureStatus = extensionStatuses.get("qwen-gpu-temperature");
+        const statsParts = [];
+""",
+    ),
+    (
+        b"""        statsParts.push(contextPercentStr);
+        if (areExperimentalFeaturesEnabled()) {
+""",
+        b"""        statsParts.push(contextPercentStr);
+        if (typeof gpuTemperatureStatus === "string" && gpuTemperatureStatus.trim().length > 0) {
+            statsParts.push(sanitizeStatusText(gpuTemperatureStatus));
+        }
+        if (areExperimentalFeaturesEnabled()) {
+""",
+    ),
+    (
+        b"""        let statsLeft = statsParts.join(" ");
+        // Add model name on the right side, plus thinking level if model supports it
+        const modelName = state.model?.id || "no-model";
+        let statsLeftWidth = visibleWidth(statsLeft);
+        // If statsLeft is too wide, truncate it
+        if (statsLeftWidth > width) {
+            statsLeft = truncateToWidth(statsLeft, width, "...");
+            statsLeftWidth = visibleWidth(statsLeft);
+        }
+        // Calculate available space for padding (minimum 2 spaces between stats and model)
+        const minPadding = 2;
+        // Add thinking level indicator if model supports reasoning
+        let rightSideWithoutProvider = modelName;
+        if (state.model?.reasoning) {
+            const thinkingLevel = state.thinkingLevel || "off";
+            rightSideWithoutProvider =
+                thinkingLevel === "off" ? `${modelName} \xe2\x80\xa2 thinking off` : `${modelName} \xe2\x80\xa2 ${thinkingLevel}`;
+        }
+        // Prepend the provider in parentheses if there are multiple providers and there's enough room
+        let rightSide = rightSideWithoutProvider;
+        if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
+            rightSide = `(${state.model.provider}) ${rightSideWithoutProvider}`;
+            if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
+                // Too wide, fall back
+                rightSide = rightSideWithoutProvider;
+            }
+        }
+        const rightSideWidth = visibleWidth(rightSide);
+        const totalNeeded = statsLeftWidth + minPadding + rightSideWidth;
+        let statsLine;
+        if (totalNeeded <= width) {
+            // Both fit - add padding to right-align model
+            const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
+            statsLine = statsLeft + padding + rightSide;
+        }
+        else {
+            // Need to truncate right side
+            const availableForRight = width - statsLeftWidth - minPadding;
+            if (availableForRight > 0) {
+                const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
+                const truncatedRightWidth = visibleWidth(truncatedRight);
+                const padding = " ".repeat(Math.max(0, width - statsLeftWidth - truncatedRightWidth));
+                statsLine = statsLeft + padding + truncatedRight;
+            }
+            else {
+                // Not enough space for right side at all
+                statsLine = statsLeft;
+            }
+        }
+        // Apply dim to each part separately. statsLeft may contain color codes (for context %)
+        // that end with a reset, which would clear an outer dim wrapper. So we dim the parts
+        // before and after the colored section independently.
+        const dimStatsLeft = theme.fg("dim", statsLeft);
+        const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
+        const dimRemainder = theme.fg("dim", remainder);
+        const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
+        const lines = [pwdLine, dimStatsLeft + dimRemainder];
+        // Add extension statuses on a single line, sorted by key alphabetically
+        const extensionStatuses = this.footerData.getExtensionStatuses();
+        if (extensionStatuses.size > 0) {
+            const sortedStatuses = Array.from(extensionStatuses.entries())
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([, text]) => sanitizeStatusText(text));
+            const statusLine = sortedStatuses.join(" ");
+            // Truncate to terminal width with dim ellipsis for consistency with footer style
+            lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
+        }
+        return lines;
+""",
+        b"""        const statsLeft = statsParts.join(" ");
+        const styledStatsLeft = statsParts.map((part) => theme.fg("dim", part)).join(" ");
+        // Add model name on the right side, plus thinking level if model supports it
+        const modelName = state.model?.id || "no-model";
+        const statsLeftWidth = visibleWidth(statsLeft);
+        const minPadding = 2;
+        // Add thinking level indicator if model supports reasoning
+        let rightSideWithoutProvider = modelName;
+        if (state.model?.reasoning) {
+            const thinkingLevel = state.thinkingLevel || "off";
+            rightSideWithoutProvider =
+                thinkingLevel === "off" ? `${modelName} \xe2\x80\xa2 thinking off` : `${modelName} \xe2\x80\xa2 ${thinkingLevel}`;
+        }
+        // Prepend the provider in parentheses if there are multiple providers and there's enough room
+        let rightSide = rightSideWithoutProvider;
+        if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
+            rightSide = `(${state.model.provider}) ${rightSideWithoutProvider}`;
+            if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
+                rightSide = rightSideWithoutProvider;
+            }
+        }
+        const rightSideWidth = visibleWidth(rightSide);
+        const totalNeeded = statsLeftWidth + minPadding + rightSideWidth;
+        let statsLines;
+        if (totalNeeded <= width) {
+            // Keep the familiar right alignment while everything fits on one row.
+            const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
+            statsLines = [styledStatsLeft + theme.fg("dim", padding + rightSide)];
+        }
+        else {
+            // Preserve every counter, temperature and model character. Long statistics
+            // wrap naturally; the model moves intact to a following right-aligned row.
+            const wrappedStats = wrapTextWithAnsi(styledStatsLeft, width);
+            const wrappedRight = wrapTextWithAnsi(theme.fg("dim", rightSide), width)
+                .map((line) => " ".repeat(Math.max(0, width - visibleWidth(line))) + line);
+            statsLines = [...wrappedStats, ...wrappedRight];
+        }
+        const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
+        const lines = [pwdLine, ...statsLines];
+        // Add ordinary extension statuses on a single line, sorted by key alphabetically.
+        // qwen-gpu-temperature was consumed inline above.
+        const sortedStatuses = Array.from(extensionStatuses.entries())
+            .filter(([key]) => key !== "qwen-gpu-temperature")
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([, text]) => sanitizeStatusText(text));
+        if (sortedStatuses.length > 0) {
+            const statusLine = sortedStatuses.join(" ");
+            // Truncate to terminal width with dim ellipsis for consistency with footer style
+            lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
+        }
+        return lines;
+""",
+    ),
+)
+
+
+USAGE_ORDER_REPLACEMENTS = (
+    (
+        b"        // Colorize context percentage based on usage\n",
+        b"        const usageParts = statsParts.splice(0);\n"
+        b"        // Colorize context percentage based on usage\n",
+    ),
+    (
+        b"""        if (typeof gpuTemperatureStatus === "string" && gpuTemperatureStatus.trim().length > 0) {
+            statsParts.push(sanitizeStatusText(gpuTemperatureStatus));
+        }
+""",
+        b"""        if (typeof gpuTemperatureStatus === "string" && gpuTemperatureStatus.trim().length > 0) {
+            statsParts.push(sanitizeStatusText(gpuTemperatureStatus));
+        }
+        statsParts.push(...usageParts);
+""",
+    ),
+)
+
+
+UNIFIED_REPLACEMENTS = (
+    *USAGE_ORDER_REPLACEMENTS,
+    (
+        b'        const gpuTemperatureStatus = extensionStatuses.get("qwen-gpu-temperature");\n',
+        b'        const gpuTemperatureStatus = extensionStatuses.get("qwen-gpu-temperature");\n'
+        b'        const cacheResidencyStatus = extensionStatuses.get("qwen-cache-residency");\n',
+    ),
+    (
+        b"        statsParts.push(contextPercentStr);\n",
+        b"""        statsParts.push(contextPercentStr);
+        if (typeof cacheResidencyStatus === "string" && cacheResidencyStatus.trim().length > 0) {
+            statsParts.push(sanitizeStatusText(cacheResidencyStatus));
+        }
+""",
+    ),
+    (
+        REPLACEMENTS[-1][1],
+        b"""        const styledStats = statsParts.map((part) => theme.fg("dim", part)).join(" ");
+        const modelName = state.model?.id || "no-model";
+        let model = modelName;
+        if (state.model?.reasoning) {
+            const thinkingLevel = state.thinkingLevel || "off";
+            model += thinkingLevel === "off" ? " \xe2\x80\xa2 thinking off" : ` \xe2\x80\xa2 ${thinkingLevel}`;
+        }
+        if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
+            model = `(${state.model.provider}) ${model}`;
+        }
+        const statuses = Array.from(extensionStatuses.entries())
+            .filter(([key]) => key !== "qwen-gpu-temperature" && key !== "qwen-cache-residency")
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([, text]) => theme.fg("dim", sanitizeStatusText(text)));
+        // One continuous footer. Only terminal width creates a new physical row.
+        const footer = [theme.fg("dim", sanitizeStatusText(pwd)), styledStats,
+            theme.fg("dim", sanitizeStatusText(model)), ...statuses]
+            .filter((part) => part.length > 0).join(" \xc2\xb7 ");
+        return wrapTextWithAnsi(footer, Math.max(1, width));
+""",
+    ),
+)
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def replace_once(data: bytes, old: bytes, new: bytes) -> bytes:
+    if data.count(old) != 1 or new in data:
+        raise PatchError("footer transform is absent or ambiguous")
+    return data.replace(old, new)
+
+
+def patched_bytes(data: bytes) -> bytes:
+    digest = sha256(data)
+    if digest == PATCHED_SHA256:
+        return data
+    if digest == PREVIOUS_PATCHED_SHA256:
+        for old, new in USAGE_ORDER_REPLACEMENTS:
+            data = replace_once(data, old, new)
+        if sha256(data) != PATCHED_SHA256:
+            raise PatchError("previous footer migration hash differs from the pinned ABI")
+        return data
+    if digest != WRAPPED_SHA256:
+        if digest == BASE_SHA256:
+            data = replace_once(data, CONTEXT_OLD, CONTEXT_NEW)
+        elif digest != LEGACY_SHA256:
+            raise PatchError("footer differs from every pinned patch state")
+        for old, new in REPLACEMENTS:
+            data = replace_once(data, old, new)
+        if sha256(data) != WRAPPED_SHA256:
+            raise PatchError("legacy wrapping footer hash differs from the pinned ABI")
+    for old, new in UNIFIED_REPLACEMENTS:
+        data = replace_once(data, old, new)
+    if sha256(data) != PATCHED_SHA256:
+        raise PatchError("footer postimage hash differs from the pinned ABI")
+    return data
+
+
+def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect {path}: {exc}") from exc
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise PatchError(f"not a single-link regular file: {path}")
+    if before.st_uid != os.getuid() or before.st_mode & 0o022:
+        raise PatchError(f"unsafe ownership or mode: {path}")
+    try:
+        data = path.read_bytes()
+        after = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot read {path}: {exc}") from exc
+    identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        raise PatchError(f"file changed while it was read: {path}")
+    return data, before
+
+
+def atomic_write(path: Path, data: bytes, source: os.stat_result) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, stat.S_IMODE(source.st_mode))
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def validate_root(root: Path) -> None:
+    if not root.is_absolute():
+        raise PatchError("runtime root must be absolute")
+    try:
+        details = root.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect runtime root {root}: {exc}") from exc
+    if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid():
+        raise PatchError(f"runtime root is not an owned real directory: {root}")
+
+
+def run(root: Path, *, apply: bool) -> None:
+    validate_root(root)
+    path = root / RELATIVE_PATH
+    data, details = stable_read(path)
+    if sha256(data) == PATCHED_SHA256:
+        return
+    if not apply:
+        raise PatchError(f"wrapping footer patch is absent: {path}")
+    updated = patched_bytes(data)
+    atomic_write(path, updated, details)
+    verified, _ = stable_read(path)
+    if sha256(verified) != PATCHED_SHA256:
+        raise PatchError(f"failed to authenticate patched footer: {path}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--check", action="store_true")
+    parser.add_argument("runtime", type=Path)
+    arguments = parser.parse_args()
+    try:
+        run(arguments.runtime, apply=arguments.apply)
+    except PatchError as exc:
+        parser.exit(2, f"patch-pi-footer: {exc}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

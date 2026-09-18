@@ -1,0 +1,9 @@
+{
+  "name": "qwen-r9700-pi-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lock manifest for the Qwen R9700 Pi client runtime",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2"
+  }
+}

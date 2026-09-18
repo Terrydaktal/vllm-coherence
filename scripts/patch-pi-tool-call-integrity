@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""Authenticate Pi's tool parsing, stream errors and uncapped Radiance output."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import stat
+import tempfile
+from collections import defaultdict
+from contextlib import suppress
+from dataclasses import dataclass
+from pathlib import Path
+
+
+class PatchError(RuntimeError):
+    """The runtime is absent, unsafe, or does not match the pinned patch ABI."""
+
+
+@dataclass(frozen=True)
+class FilePatch:
+    relative_path: str
+    preimage_sha256: str
+    old: bytes
+    new: bytes
+
+
+PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        # This is the authenticated Pi 0.84.2 file after patch-pi-streaming-usage.
+        preimage_sha256="00de85392e4739502aa697f05e2a79149e685eeeaee78bf47cf3852d44afd372",
+        old=b"""                    else {
+                        block.arguments = parseStreamingJson(block.partialArgs);
+                    }
+""",
+        new=b"""                    else {
+                        let completeArguments;
+                        try {
+                            completeArguments = JSON.parse(block.partialArgs);
+                        }
+                        catch {
+                            throw new Error(
+                                "Provider tool-call integrity server error: the stream ended " +
+                                    "before a complete JSON argument object was emitted",
+                            );
+                        }
+                        if (
+                            completeArguments === null ||
+                            typeof completeArguments !== "object" ||
+                            Array.isArray(completeArguments)
+                        ) {
+                            throw new Error(
+                                "Provider tool-call integrity server error: final tool arguments " +
+                                    "were not a JSON object",
+                            );
+                        }
+                        block.arguments = completeArguments;
+                    }
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        # This is the authenticated Pi 0.84.2 file after the strict final
+        # argument patch above.  Raw token IDs stay on a Symbol property: Pi's
+        # extensions can inspect them, while session JSON cannot serialize them.
+        preimage_sha256="5018a2afe129146c01b28b000a8af9d50b2e89108f23336410605be9ac6d067b",
+        old=b"""                    continue;
+                }
+                // Fallback: some providers (e.g., Moonshot) return usage
+""",
+        new=(
+            b"""                    continue;
+                }
+                if (choice.token_ids != null) {
+                    if (
+                        !Array.isArray(choice.token_ids) ||
+"""
+            b"                        !choice.token_ids.every((token) => "
+            b"Number.isSafeInteger(token) && token >= 0)\n"
+            b"""                    ) {
+                        throw new Error("Provider returned malformed raw completion token IDs");
+                    }
+                    const rawTokenIdsKey = Symbol.for("qwen-r9700:raw-completion-token-ids:v1");
+                    output[rawTokenIdsKey] ??= [];
+                    output[rawTokenIdsKey].push(...choice.token_ids);
+                }
+                // Fallback: some providers (e.g., Moonshot) return usage
+"""
+        ),
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        # This is the authenticated Pi 0.84.2 file after the strict final
+        # argument and raw-token transport patches above. vLLM may report an
+        # admission/runtime failure as a top-level SSE error object after the
+        # HTTP 200 headers have already been sent. Pi must surface that cause
+        # instead of discarding the chunk and reporting a missing finish_reason.
+        preimage_sha256="15f2337ffbc3bbeab02ccfcd5282538c77f49eaa1ffc28dda651b466870a8608",
+        old=(
+            b"                const choice = Array.isArray(chunk.choices) ? "
+            b"chunk.choices[0] : undefined;\n"
+        ),
+        new=(
+            b"                if (chunk.error !== undefined) {\n"
+            b"                    const providerMessage =\n"
+            b'                        typeof chunk.error?.message === "string" && '
+            b"chunk.error.message.length > 0\n"
+            b"                            ? chunk.error.message.slice(0, 1024)\n"
+            b'                            : "provider returned an unspecified streaming error";\n'
+            b"                    throw new Error(`Provider streaming error: "
+            b"${providerMessage}`);\n"
+            b"                }\n"
+            b"                const choice = Array.isArray(chunk.choices) ? "
+            b"chunk.choices[0] : undefined;\n"
+        ),
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="b551e9b55e51916cbc0598b2c4420cd2b41ea456bc603644f0db29ba737bd340",
+        old=b"""            if (nextParams !== undefined) {
+                params = nextParams;
+            }
+            const requestOptions = {
+""",
+        new=b"""            if (nextParams !== undefined) {
+                params = nextParams;
+            }
+            if (model.provider === "qwen-r9700" && [
+                "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate",
+                "qwen3.8-27b-uncensored-mxfp4-experimental",
+            ].includes(model.id)) {
+                // Radiance derives output space from the exact tokenized prompt.
+                // Apply after payload hooks so ordinary/tool continuations and
+                // native summaries cannot reintroduce fixed or estimated caps.
+                params = { ...params };
+                delete params.max_tokens;
+                delete params.max_completion_tokens;
+                delete params.thinking_token_budget;
+            }
+            const requestOptions = {
+""",
+    ),
+)
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect {path}: {exc}") from exc
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise PatchError(f"not a single-link regular file: {path}")
+    if before.st_uid != os.getuid() or before.st_mode & 0o022:
+        raise PatchError(f"unsafe ownership or mode: {path}")
+    try:
+        data = path.read_bytes()
+        after = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot read {path}: {exc}") from exc
+    identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        raise PatchError(f"file changed while it was read: {path}")
+    return data, before
+
+
+def classify(data: bytes, patch: FilePatch) -> str:
+    old_count = data.count(patch.old)
+    new_count = data.count(patch.new)
+    if old_count == 1 and new_count == 0 and sha256(data) == patch.preimage_sha256:
+        return "unpatched"
+    if new_count == 1:
+        candidate = data.replace(patch.new, patch.old)
+        if sha256(candidate) == patch.preimage_sha256:
+            return "patched"
+    raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
+
+
+def canonical_adapter_bytes(data: bytes, relative_path: str) -> bytes:
+    # npm publishes this generated adapter without a terminal newline.  A
+    # source-preserving editor may add exactly one LF without changing the
+    # JavaScript program; authenticate that one canonical text normalization
+    # while retaining byte-exact checks for every other part of the file.
+    is_generated_openai_adapter = (
+        relative_path == "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js"
+    )
+    return data[:-1] if is_generated_openai_adapter and data.endswith(b"\n") else data
+
+
+def classify_chain(data: bytes, patches: tuple[FilePatch, ...]) -> int:
+    """Return how many ordered patches are present, authenticating the whole file."""
+
+    if not patches:
+        raise PatchError("empty patch chain")
+    authenticated_data = canonical_adapter_bytes(data, patches[0].relative_path)
+    for applied in range(len(patches) + 1):
+        base = authenticated_data
+        reversible = True
+        for patch in reversed(patches[:applied]):
+            if base.count(patch.new) != 1:
+                reversible = False
+                break
+            base = base.replace(patch.new, patch.old)
+        if not reversible or sha256(base) != patches[0].preimage_sha256:
+            continue
+        candidate = base
+        states = [candidate]
+        valid = True
+        for patch in patches:
+            if (
+                sha256(candidate) != patch.preimage_sha256
+                or candidate.count(patch.old) != 1
+                or candidate.count(patch.new) != 0
+            ):
+                valid = False
+                break
+            candidate = candidate.replace(patch.old, patch.new)
+            states.append(candidate)
+        if valid and states[applied] == authenticated_data:
+            return applied
+    raise PatchError(f"file differs from both pinned patch states: {patches[0].relative_path}")
+
+
+def atomic_write(path: Path, data: bytes, source: os.stat_result) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, stat.S_IMODE(source.st_mode))
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def validate_root(root: Path) -> None:
+    if not root.is_absolute():
+        raise PatchError("runtime root must be absolute")
+    try:
+        details = root.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect runtime root {root}: {exc}") from exc
+    if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid():
+        raise PatchError(f"runtime root is not an owned real directory: {root}")
+
+
+def run(root: Path, *, apply: bool) -> None:
+    validate_root(root)
+    chains: dict[str, list[FilePatch]] = defaultdict(list)
+    for patch in PATCHES:
+        chains[patch.relative_path].append(patch)
+    for relative_path, chain_list in chains.items():
+        chain = tuple(chain_list)
+        path = root / relative_path
+        data, details = stable_read(path)
+        applied = classify_chain(data, chain)
+        if applied != len(chain):
+            if not apply:
+                raise PatchError(f"provider integrity/output patch is absent: {path}")
+            updated = canonical_adapter_bytes(data, relative_path)
+            suffix = data[len(updated) :]
+            for patch in chain[applied:]:
+                if sha256(updated) != patch.preimage_sha256 or updated.count(patch.old) != 1:
+                    raise PatchError(f"patch chain preimage changed unexpectedly: {relative_path}")
+                updated = updated.replace(patch.old, patch.new)
+            atomic_write(path, updated + suffix, details)
+            data, _ = stable_read(path)
+            if classify_chain(data, chain) != len(chain):
+                raise PatchError(f"failed to authenticate patched file: {path}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--check", action="store_true")
+    parser.add_argument("runtime", type=Path)
+    arguments = parser.parse_args()
+    try:
+        run(arguments.runtime, apply=arguments.apply)
+    except PatchError as exc:
+        parser.exit(2, f"patch-pi-tool-call-integrity: {exc}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

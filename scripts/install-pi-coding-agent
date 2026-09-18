@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly PACKAGE='@earendil-works/pi-coding-agent'
+readonly VERSION='0.84.2'
+readonly TAG='v0.84.2'
+readonly COMMIT='914cf1472e715297caa30db4b9535d534a9eb718'
+readonly INTEGRITY='sha512-l4E+B7hgXKWddRo8bC/eSue2aWZjEgJ9xIpf5p0Og+lq8a2TArCwJ0HCoCPCgaBP/tN4zbYH/wOwvx9pJpeLCA=='
+readonly REPOSITORY='https://github.com/earendil-works/pi.git'
+
+usage() {
+	cat <<'EOF'
+NAME
+    install-pi-coding-agent - install the provenance-pinned Pi client user-locally
+
+SYNOPSIS
+    install-pi-coding-agent [--manifest-dir PATH] [--install-root PATH] [--bin-dir PATH]
+    install-pi-coding-agent --help
+
+DESCRIPTION
+    Verifies the v0.84.2 Git tag, npm gitHead, registry integrity, and tracked npm
+    lock, then installs @earendil-works/pi-coding-agent 0.84.2 without root or
+    lifecycle scripts. Pinned local patches propagate usage-only streaming
+    updates, preserve and wrap the full footer with inline GPU temperatures,
+    require complete final JSON before any tool arguments are accepted,
+    keep authenticated internal guard retries out of the transcript and TUI,
+    compact long tool loops before their next provider continuation, and keep
+    session history in each project's .pi/sessions directory for every model.
+    The pi command is exposed only through a symbolic link.
+
+OPTIONS
+    --manifest-dir PATH
+        Directory containing package.json, package-lock.json, and provenance.json.
+        Default: integrations/pi in this project.
+
+    --install-root PATH
+        Version-parent directory. Default: $HOME/.local/share/qwen-r9700/pi.
+
+    --bin-dir PATH
+        Directory for the pi symbolic link. Default: $HOME/.local/bin.
+
+    -h, --help
+        Show this help text and exit.
+
+OPERATION
+    Origin metadata is checked online before npm ci uses the exact tracked lock.
+    The patchers accept only exact pinned preimages or their authenticated
+    postimages. Installation occurs in a fresh staging
+    directory and is atomically renamed to INSTALL_ROOT/0.84.2 only after every Pi
+    workspace package and the patch are verified. A failed staging directory is
+    retained for inspection and is never promoted.
+
+EXAMPLES
+    scripts/install-pi-coding-agent
+
+    scripts/install-pi-coding-agent --install-root /tmp/pi-runtime --bin-dir /tmp/bin
+
+FILES
+    integrations/pi/package.json
+    integrations/pi/package-lock.json
+    integrations/pi/provenance.json
+    scripts/patch-pi-streaming-usage
+    scripts/patch-pi-footer
+    scripts/patch-pi-tool-call-integrity
+    scripts/patch-pi-internal-guard-retry
+    scripts/patch-pi-precontinuation-compaction
+    scripts/patch-pi-project-history
+    $HOME/.local/share/qwen-r9700/pi/0.84.2
+    $HOME/.local/bin/pi
+
+PATHS
+    The versioned runtime is immutable by convention. The command link points
+    directly to the versioned package's dist/cli.js entry point.
+
+SECURITY NOTES
+    The script never uses root. npm lifecycle scripts are disabled. The patchers
+    replace only exact, single-link, owner-controlled runtime files using
+    same-directory atomic publication and refuses unknown bytes. Existing command
+    paths are validated or refused.
+
+EXIT STATUS
+    0 on a verified install or already-identical installation; 2 on provenance,
+    dependency, filesystem, or command-link failure.
+
+AUTHORS
+    Qwen R9700 inference lab maintainers.
+EOF
+}
+
+die() {
+	printf 'install-pi-coding-agent: %s\n' "$*" >&2
+	exit 2
+}
+
+package_version() {
+	local package_json=$1
+	[[ -f $package_json && ! -L $package_json ]] || return 1
+	node -e '
+const fs = require("node:fs");
+const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).version;
+if (typeof value !== "string") process.exit(1);
+process.stdout.write(value);
+' "$package_json"
+}
+
+verify_runtime() {
+	local runtime=$1
+	local workspace_package
+	local actual
+	local package_path
+
+	[[ -d $runtime && ! -L $runtime ]] || die "runtime is not a regular directory: $runtime"
+	cmp -s -- "$manifest_dir/package.json" "$runtime/package.json" ||
+		die "runtime package.json differs from tracked manifest: $runtime"
+	cmp -s -- "$manifest_dir/package-lock.json" "$runtime/package-lock.json" ||
+		die "runtime package-lock.json differs from tracked lock: $runtime"
+
+	for workspace_package in pi-coding-agent pi-ai pi-tui pi-client pi-protocol pi-agent-core; do
+		package_path="$runtime/node_modules/@earendil-works/$workspace_package/package.json"
+		actual=$(package_version "$package_path") || die "cannot verify package: $package_path"
+		[[ $actual == "$VERSION" ]] ||
+			die "@earendil-works/$workspace_package is $actual, expected $VERSION"
+	done
+	"$usage_patch_script" --check "$runtime" ||
+		die "Pi continuous-usage streaming patch is not authenticated: $runtime"
+	"$footer_patch_script" --check "$runtime" ||
+		die "Pi wrapping footer patch is not authenticated: $runtime"
+	"$tool_integrity_patch_script" --check "$runtime" ||
+		die "Pi strict tool-call parsing patch is not authenticated: $runtime"
+	"$internal_guard_retry_patch_script" --check "$runtime" ||
+		die "Pi internal guard-retry patch is not authenticated: $runtime"
+	"$precontinuation_compaction_patch_script" --check "$runtime" ||
+		die "Pi pre-continuation compaction patch is not authenticated: $runtime"
+	"$project_history_patch_script" --check "$runtime" ||
+		die "Pi project-local history patch is not authenticated: $runtime"
+}
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+project_root=$(cd -- "$script_dir/.." && pwd -P)
+usage_patch_script="$project_root/scripts/patch-pi-streaming-usage"
+footer_patch_script="$project_root/scripts/patch-pi-footer"
+tool_integrity_patch_script="$project_root/scripts/patch-pi-tool-call-integrity"
+internal_guard_retry_patch_script="$project_root/scripts/patch-pi-internal-guard-retry"
+precontinuation_compaction_patch_script="$project_root/scripts/patch-pi-precontinuation-compaction"
+project_history_patch_script="$project_root/scripts/patch-pi-project-history"
+manifest_dir="$project_root/integrations/pi"
+: "${HOME:?HOME must be set}"
+install_root="$HOME/.local/share/qwen-r9700/pi"
+bin_dir="$HOME/.local/bin"
+
+while (($# > 0)); do
+	case $1 in
+	--manifest-dir)
+		(($# >= 2)) || die '--manifest-dir requires a value'
+		manifest_dir=$2
+		shift 2
+		;;
+	--install-root)
+		(($# >= 2)) || die '--install-root requires a value'
+		install_root=$2
+		shift 2
+		;;
+	--bin-dir)
+		(($# >= 2)) || die '--bin-dir requires a value'
+		bin_dir=$2
+		shift 2
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	*)
+		die "unknown option: $1"
+		;;
+	esac
+done
+
+for command_name in git jq node npm; do
+	command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
+done
+for patch_script in \
+	"$usage_patch_script" \
+	"$footer_patch_script" \
+	"$tool_integrity_patch_script" \
+	"$internal_guard_retry_patch_script" \
+	"$precontinuation_compaction_patch_script" \
+	"$project_history_patch_script"; do
+	[[ -f $patch_script && ! -L $patch_script && -x $patch_script ]] ||
+		die "missing executable Pi runtime patcher: $patch_script"
+done
+
+node -e '
+const [major, minor] = process.versions.node.split(".").map(Number);
+if (major < 22 || (major === 22 && minor < 19)) process.exit(1);
+' || die 'Node.js 22.19.0 or newer is required'
+
+for manifest_name in package.json package-lock.json provenance.json; do
+	manifest_path="$manifest_dir/$manifest_name"
+	[[ -f $manifest_path && ! -L $manifest_path ]] || die "missing regular manifest: $manifest_path"
+done
+
+jq -e --arg package "$PACKAGE" --arg version "$VERSION" \
+	'.dependencies[$package] == $version' "$manifest_dir/package.json" >/dev/null ||
+	die 'package.json does not contain the exact Pi dependency'
+jq -e --arg package "$PACKAGE" --arg version "$VERSION" --arg integrity "$INTEGRITY" '
+    .packages[("node_modules/" + $package)].version == $version
+    and .packages[("node_modules/" + $package)].integrity == $integrity
+' "$manifest_dir/package-lock.json" >/dev/null || die 'package-lock.json Pi pin or integrity differs'
+jq -e --arg package "$PACKAGE" --arg version "$VERSION" --arg tag "$TAG" \
+	--arg commit "$COMMIT" --arg integrity "$INTEGRITY" '
+    .package == $package
+    and .version == $version
+    and .tag == $tag
+    and .tagCommit == $commit
+    and .npmGitHead == $commit
+    and .tarballIntegrity == $integrity
+' "$manifest_dir/provenance.json" >/dev/null || die 'tracked provenance differs from installer pin'
+
+tag_line=$(git ls-remote --tags "$REPOSITORY" "refs/tags/$TAG" "refs/tags/$TAG^{}") ||
+	die 'cannot query the pinned Git tag'
+tag_commit=$(awk '$2 ~ /\^\{\}$/ {print $1; found=1} END {if (!found && NR == 1) print $1}' <<<"$tag_line")
+[[ $tag_commit == "$COMMIT" ]] || die "Git tag $TAG resolves to $tag_commit, expected $COMMIT"
+
+npm_version=$(npm view "$PACKAGE@$VERSION" version) || die 'cannot query npm package version'
+npm_git_head=$(npm view "$PACKAGE@$VERSION" gitHead) || die 'cannot query npm gitHead'
+npm_integrity=$(npm view "$PACKAGE@$VERSION" dist.integrity) || die 'cannot query npm integrity'
+[[ $npm_version == "$VERSION" ]] || die "npm returned version $npm_version, expected $VERSION"
+[[ $npm_git_head == "$COMMIT" ]] || die "npm gitHead is $npm_git_head, expected $COMMIT"
+[[ $npm_integrity == "$INTEGRITY" ]] || die 'npm tarball integrity differs from the tracked pin'
+
+[[ $install_root == /* && $bin_dir == /* ]] || die 'install and bin directories must be absolute'
+if [[ ! -d $install_root ]]; then
+	mkdir -p -- "$install_root" || die "cannot create install root: $install_root"
+fi
+if [[ ! -d $bin_dir ]]; then
+	mkdir -p -- "$bin_dir" || die "cannot create bin directory: $bin_dir"
+fi
+[[ -d $install_root && ! -L $install_root ]] || die "install root is not a regular directory: $install_root"
+[[ -d $bin_dir && ! -L $bin_dir ]] || die "bin directory is not a regular directory: $bin_dir"
+
+runtime="$install_root/$VERSION"
+if [[ -e $runtime || -L $runtime ]]; then
+	"$usage_patch_script" --apply "$runtime" || die "cannot patch existing Pi runtime: $runtime"
+	"$footer_patch_script" --apply "$runtime" || die "cannot patch existing Pi footer: $runtime"
+	"$tool_integrity_patch_script" --apply "$runtime" ||
+		die "cannot patch strict tool-call parsing in existing Pi runtime: $runtime"
+	"$internal_guard_retry_patch_script" --apply "$runtime" ||
+		die "cannot patch internal guard retries in existing Pi runtime: $runtime"
+	"$precontinuation_compaction_patch_script" --apply "$runtime" ||
+		die "cannot patch pre-continuation compaction in existing Pi runtime: $runtime"
+	"$project_history_patch_script" --apply "$runtime" ||
+		die "cannot patch project-local history in existing Pi runtime: $runtime"
+	verify_runtime "$runtime"
+	printf 'verified existing Pi runtime %s\n' "$runtime"
+else
+	stage_path=$(mktemp -d "$install_root/.pi-$VERSION.stage.XXXXXX") ||
+		die "cannot create staging directory in $install_root"
+	cp -- "$manifest_dir/package.json" "$manifest_dir/package-lock.json" "$stage_path/" ||
+		die "cannot seed staged npm manifest: $stage_path"
+	if ! npm ci --prefix "$stage_path" --ignore-scripts --no-audit --no-fund; then
+		die "npm ci failed; retained staged directory for inspection: $stage_path"
+	fi
+	"$usage_patch_script" --apply "$stage_path" ||
+		die "cannot patch staged Pi runtime: $stage_path"
+	"$footer_patch_script" --apply "$stage_path" ||
+		die "cannot patch staged Pi footer: $stage_path"
+	"$tool_integrity_patch_script" --apply "$stage_path" ||
+		die "cannot patch strict tool-call parsing in staged Pi runtime: $stage_path"
+	"$internal_guard_retry_patch_script" --apply "$stage_path" ||
+		die "cannot patch internal guard retries in staged Pi runtime: $stage_path"
+	"$precontinuation_compaction_patch_script" --apply "$stage_path" ||
+		die "cannot patch pre-continuation compaction in staged Pi runtime: $stage_path"
+	"$project_history_patch_script" --apply "$stage_path" ||
+		die "cannot patch project-local history in staged Pi runtime: $stage_path"
+	verify_runtime "$stage_path"
+	mv -T -n -- "$stage_path" "$runtime" || die "cannot publish runtime: $runtime"
+	[[ ! -e $stage_path ]] || die "runtime appeared during publication; staged directory retained: $stage_path"
+	printf 'installed verified Pi runtime %s\n' "$runtime"
+fi
+
+binary_target="$runtime/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+[[ -f $binary_target && ! -L $binary_target && -x $binary_target ]] ||
+	die "Pi CLI entry point is not an executable regular file: $binary_target"
+command_link="$bin_dir/pi"
+if [[ -L $command_link ]]; then
+	existing_target=$(readlink -- "$command_link") || die "cannot read command link: $command_link"
+	[[ $existing_target == "$binary_target" ]] ||
+		die "existing pi link points to $existing_target, not $binary_target"
+elif [[ -e $command_link ]]; then
+	die "existing pi command is not a symbolic link: $command_link"
+else
+	ln -s -- "$binary_target" "$command_link" || die "cannot create command link: $command_link"
+fi
+
+reported_version=$("$command_link" --version) || die 'installed Pi CLI did not report its version'
+[[ $reported_version == "$VERSION" ]] ||
+	die "installed Pi CLI reported $reported_version, expected $VERSION"
+printf 'pi %s is available through %s -> %s\n' "$reported_version" "$command_link" "$binary_target"

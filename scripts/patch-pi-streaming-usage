@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+"""Apply and authenticate Pi's continuous streaming-usage propagation."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import stat
+import tempfile
+from contextlib import suppress
+from dataclasses import dataclass
+from pathlib import Path
+
+
+class PatchError(RuntimeError):
+    """The runtime is absent, unsafe, or does not match the pinned patch ABI."""
+
+
+@dataclass(frozen=True)
+class FilePatch:
+    relative_path: str
+    preimage_sha256: str
+    old: bytes
+    new: bytes
+    previous: bytes | None = None
+
+
+PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="45fc45d3b761fc97701982f5326e54199f8d8b7e85d6a162ee33a781311c5526",
+        old=(
+            b"                const choice = Array.isArray(chunk.choices) ? "
+            b"chunk.choices[0] : undefined;\n"
+            b"                if (!choice)\n"
+            b"                    continue;\n"
+        ),
+        new=(
+            b"                const choice = Array.isArray(chunk.choices) ? "
+            b"chunk.choices[0] : undefined;\n"
+            b"                // Buffered structured arguments can carry usage "
+            b"with an empty delta.\n"
+            b"                // Forward that progress without inventing text "
+            b"or executing the tool.\n"
+            b"                if (chunk.usage && choice &&\n"
+            b"                    !choice.delta?.content && !choice.delta?.reasoning_content &&\n"
+            b"                    !choice.delta?.reasoning && !choice.delta?.reasoning_text &&\n"
+            b"                    !choice.delta?.tool_calls?.length) {\n"
+            b'                    stream.push({ type: "usage_update", partial: output });\n'
+            b"                }\n"
+            b"                if (!choice) {\n"
+            b"                    // Continuous-usage chunks deliberately have no choice. Forward\n"
+            b"                    // their updated partial so progress consumers do not freeze\n"
+            b"                    // while a provider buffers an incomplete structured tool call.\n"
+            b"                    if (chunk.usage) {\n"
+            b'                        stream.push({ type: "usage_update", partial: output });\n'
+            b"                    }\n"
+            b"                    continue;\n"
+            b"                }\n"
+        ),
+        previous=(
+            b"                const choice = Array.isArray(chunk.choices) ? "
+            b"chunk.choices[0] : undefined;\n"
+            b"                if (!choice) {\n"
+            b"                    // Continuous-usage chunks deliberately have no choice. Forward\n"
+            b"                    // their updated partial so progress consumers do not freeze\n"
+            b"                    // while a provider buffers an incomplete structured tool call.\n"
+            b"                    if (chunk.usage) {\n"
+            b'                        stream.push({ type: "usage_update", partial: output });\n'
+            b"                    }\n"
+            b"                    continue;\n"
+            b"                }\n"
+        ),
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+        preimage_sha256="43cc779ddaf90df41768d3d2d0f7d7ba8b8bce7bedc9dc6062ca8b4de84ae880",
+        old=b"""            case "text_start":
+            case "text_delta":
+""",
+        new=b"""            case "usage_update":
+            case "text_start":
+            case "text_delta":
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/types.d.ts",
+        preimage_sha256="9f954629e7cca259965ffe8937a3491abe66e1ad7594832055028e07bf33a1b9",
+        old=b"""export type AssistantMessageEvent = {
+    type: "start";
+    partial: AssistantMessage;
+} | {
+    type: "text_start";
+""",
+        new=b"""export type AssistantMessageEvent = {
+    type: "start";
+    partial: AssistantMessage;
+} | {
+    /** Usage changed without a corresponding visible content delta. */
+    type: "usage_update";
+    partial: AssistantMessage;
+} | {
+    type: "text_start";
+""",
+    ),
+)
+
+# The strict tool-call patch intentionally changes the same OpenAI adapter after
+# this usage patch. Normalize that independently authenticated transform while
+# classifying our own bytes so repeated installer verification remains idempotent.
+TOOL_CALL_INTEGRITY_RELATIVE = "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js"
+TOOL_CALL_INTEGRITY_OLD = b"""                    else {
+                        block.arguments = parseStreamingJson(block.partialArgs);
+                    }
+"""
+TOOL_CALL_INTEGRITY_NEW = b"""                    else {
+                        let completeArguments;
+                        try {
+                            completeArguments = JSON.parse(block.partialArgs);
+                        }
+                        catch {
+                            throw new Error(
+                                "Provider tool-call integrity server error: the stream ended " +
+                                    "before a complete JSON argument object was emitted",
+                            );
+                        }
+                        if (
+                            completeArguments === null ||
+                            typeof completeArguments !== "object" ||
+                            Array.isArray(completeArguments)
+                        ) {
+                            throw new Error(
+                                "Provider tool-call integrity server error: final tool arguments " +
+                                    "were not a JSON object",
+                            );
+                        }
+                        block.arguments = completeArguments;
+                    }
+"""
+TOOL_CALL_RAW_IDS_OLD = b"""                    continue;
+                }
+                // Fallback: some providers (e.g., Moonshot) return usage
+"""
+TOOL_CALL_RAW_IDS_NEW = (
+    b"""                    continue;
+                }
+                if (choice.token_ids != null) {
+                    if (
+                        !Array.isArray(choice.token_ids) ||
+"""
+    b"                        !choice.token_ids.every((token) => "
+    b"Number.isSafeInteger(token) && token >= 0)\n"
+    b"""                    ) {
+                        throw new Error("Provider returned malformed raw completion token IDs");
+                    }
+                    const rawTokenIdsKey = Symbol.for("qwen-r9700:raw-completion-token-ids:v1");
+                    output[rawTokenIdsKey] ??= [];
+                    output[rawTokenIdsKey].push(...choice.token_ids);
+                }
+                // Fallback: some providers (e.g., Moonshot) return usage
+"""
+)
+TOOL_CALL_STREAM_ERROR_OLD = (
+    b"                const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;\n"
+)
+TOOL_CALL_STREAM_ERROR_NEW = (
+    b"                if (chunk.error !== undefined) {\n"
+    b"                    const providerMessage =\n"
+    b'                        typeof chunk.error?.message === "string" && '
+    b"chunk.error.message.length > 0\n"
+    b"                            ? chunk.error.message.slice(0, 1024)\n"
+    b'                            : "provider returned an unspecified streaming error";\n'
+    b"                    throw new Error(`Provider streaming error: ${providerMessage}`);\n"
+    b"                }\n"
+    b"                const choice = Array.isArray(chunk.choices) ? "
+    b"chunk.choices[0] : undefined;\n"
+)
+
+
+RADIANCE_OUTPUT_OLD = b"""            if (nextParams !== undefined) {
+                params = nextParams;
+            }
+            const requestOptions = {
+"""
+RADIANCE_OUTPUT_NEW = b"""            if (nextParams !== undefined) {
+                params = nextParams;
+            }
+            if (model.provider === "qwen-r9700" && [
+                "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate",
+                "qwen3.8-27b-uncensored-mxfp4-experimental",
+            ].includes(model.id)) {
+                // Radiance derives output space from the exact tokenized prompt.
+                // Apply after payload hooks so ordinary/tool continuations and
+                // native summaries cannot reintroduce fixed or estimated caps.
+                params = { ...params };
+                delete params.max_tokens;
+                delete params.max_completion_tokens;
+                delete params.thinking_token_budget;
+            }
+            const requestOptions = {
+"""
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect {path}: {exc}") from exc
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        raise PatchError(f"not a single-link regular file: {path}")
+    if before.st_uid != os.getuid() or before.st_mode & 0o022:
+        raise PatchError(f"unsafe ownership or mode: {path}")
+    try:
+        data = path.read_bytes()
+        after = path.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot read {path}: {exc}") from exc
+    identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    if identity != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        raise PatchError(f"file changed while it was read: {path}")
+    return data, before
+
+
+def classify(data: bytes, patch: FilePatch) -> str:
+    normalized = data
+    if patch.relative_path == TOOL_CALL_INTEGRITY_RELATIVE:
+        # npm publishes this generated adapter without a terminal newline.
+        # Accept a source editor's single trailing LF as the sole permitted
+        # textual normalization; all semantic bytes remain hash-pinned.
+        if normalized.endswith(b"\n"):
+            normalized = normalized[:-1]
+        output_new_count = normalized.count(RADIANCE_OUTPUT_NEW)
+        output_old_count = normalized.count(RADIANCE_OUTPUT_OLD)
+        if output_new_count == 1 and output_old_count == 0:
+            normalized = normalized.replace(RADIANCE_OUTPUT_NEW, RADIANCE_OUTPUT_OLD)
+        elif output_new_count > 0 or output_old_count != 1:
+            raise PatchError(
+                f"Radiance output compatibility bytes are ambiguous: {patch.relative_path}"
+            )
+        stream_error_old_count = normalized.count(TOOL_CALL_STREAM_ERROR_OLD)
+        stream_error_new_count = normalized.count(TOOL_CALL_STREAM_ERROR_NEW)
+        if stream_error_new_count == 1:
+            normalized = normalized.replace(TOOL_CALL_STREAM_ERROR_NEW, TOOL_CALL_STREAM_ERROR_OLD)
+        elif stream_error_new_count > 1 or stream_error_old_count != 1:
+            raise PatchError(
+                f"stream-error compatibility bytes are ambiguous: {patch.relative_path}"
+            )
+        raw_old_count = normalized.count(TOOL_CALL_RAW_IDS_OLD)
+        raw_new_count = normalized.count(TOOL_CALL_RAW_IDS_NEW)
+        if raw_new_count == 1 and raw_old_count == 0:
+            normalized = normalized.replace(TOOL_CALL_RAW_IDS_NEW, TOOL_CALL_RAW_IDS_OLD)
+        elif raw_new_count > 0 or raw_old_count > 1:
+            raise PatchError(f"raw-token compatibility bytes are ambiguous: {patch.relative_path}")
+        tool_old_count = normalized.count(TOOL_CALL_INTEGRITY_OLD)
+        tool_new_count = normalized.count(TOOL_CALL_INTEGRITY_NEW)
+        if tool_new_count == 1 and tool_old_count == 0:
+            normalized = normalized.replace(TOOL_CALL_INTEGRITY_NEW, TOOL_CALL_INTEGRITY_OLD)
+        elif tool_new_count > 0 or tool_old_count != 1:
+            raise PatchError(f"tool-call compatibility bytes are ambiguous: {patch.relative_path}")
+    old_count = normalized.count(patch.old)
+    new_count = normalized.count(patch.new)
+    if old_count == 1 and new_count == 0 and sha256(normalized) == patch.preimage_sha256:
+        return "unpatched"
+    if new_count == 1:
+        candidate = normalized.replace(patch.new, patch.old)
+        if sha256(candidate) == patch.preimage_sha256:
+            return "patched"
+    if patch.previous is not None and normalized.count(patch.previous) == 1:
+        candidate = normalized.replace(patch.previous, patch.old)
+        if sha256(candidate) == patch.preimage_sha256:
+            return "outdated"
+    raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
+
+
+def atomic_write(path: Path, data: bytes, source: os.stat_result) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, stat.S_IMODE(source.st_mode))
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def validate_root(root: Path) -> None:
+    if not root.is_absolute():
+        raise PatchError("runtime root must be absolute")
+    try:
+        details = root.lstat()
+    except OSError as exc:
+        raise PatchError(f"cannot inspect runtime root {root}: {exc}") from exc
+    if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid():
+        raise PatchError(f"runtime root is not an owned real directory: {root}")
+
+
+def run(root: Path, *, apply: bool) -> None:
+    validate_root(root)
+    for patch in PATCHES:
+        path = root / patch.relative_path
+        data, details = stable_read(path)
+        state = classify(data, patch)
+        if state != "patched":
+            if not apply:
+                raise PatchError(f"usage streaming patch is absent: {path}")
+            old = patch.previous if state == "outdated" else patch.old
+            updated = data.replace(old, patch.new)
+            atomic_write(path, updated, details)
+            data, _ = stable_read(path)
+            if classify(data, patch) != "patched":
+                raise PatchError(f"failed to authenticate patched file: {path}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--check", action="store_true")
+    parser.add_argument("runtime", type=Path)
+    arguments = parser.parse_args()
+    try:
+        run(arguments.runtime, apply=arguments.apply)
+    except PatchError as exc:
+        parser.exit(2, f"patch-pi-streaming-usage: {exc}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
