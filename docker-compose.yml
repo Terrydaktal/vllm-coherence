@@ -1,0 +1,246 @@
+# Portable Qwen3.8-27B FP8 serve profile for dual R9700 (gfx1201).
+# Launch from this directory:
+#     docker compose up -d          # start (detached); poll `docker compose logs -f`
+#     docker compose down           # stop + remove
+#     docker compose restart        # restart in place
+#
+# Host-specific paths and GPU IDs belong in .env or an ignored
+# docker-compose.dev.yml overlay. See .env.example and
+# docker-compose.dev.example.yml. Never add local paths to this file.
+#
+# The image ENTRYPOINT is radiance_entrypoint.sh (RADIANCE banner + env prechecks, then
+# `exec vllm serve "$@"`); `command:` below supplies the args.
+# Tunable knobs are ${VAR:-default}: override via the shell or a .env file WITHOUT editing
+# this file, e.g.: MAX_NUM_SEQS=2 MAX_MODEL_LEN=32768 docker compose up -d
+services:
+  vllm:
+    image: ${IMAGE:-magiccodingman/vllm-radiance:latest}
+    container_name: vllm-radiance
+    restart: unless-stopped
+    command:
+      - ${MODEL_PATH:-/models/model}
+      - --served-model-name=${SERVED_MODEL_NAME:-radiance-model}
+      - --tensor-parallel-size=${TP:-2}
+      # Admission ceiling, not a promise that every sequence can simultaneously
+      # reach MAX_MODEL_LEN. Select both values from the capacity guide in README.
+      # Measured conservative TP2 Qwen3.8 FP8+DFlash pairs at GPU_UTIL=0.85:
+      #   8K:8, 16K:7, 32K:5, 64K:3, 128K:2, 256K:1
+      # Measured MXFP4+DFlash high-capacity pairs at GPU_UTIL=0.90, APC off:
+      #   32K:8, 64K:6, 128K:4, 256K:2
+      # Measured production MXFP4+DFlash pair with APC+align on: 128K:4.
+      # These are model/profile-specific; other checkpoints must be requalified.
+      - --max-num-seqs=${MAX_NUM_SEQS:-8}
+      - --max-model-len=${MAX_MODEL_LEN:-16384}
+      - --gpu-memory-utilization=${GPU_UTIL:-0.85}
+      # R4D's measured chunked-prefill/MTP operating point. For Qwen hidden-size
+      # 5120 this remains inside the exact TP2 all-reduce payload ceiling.
+      - --max-num-batched-tokens=${MAX_NUM_BATCHED_TOKENS:-4096}
+      - --kv-cache-dtype=fp8
+      # R4D is the fastest qualified head-256/GQA6 backend on gfx1201. Set
+      # ATTENTION_BACKEND=ROCM_AITER_UNIFIED_ATTN for the measured fallback.
+      - --attention-backend=${ATTENTION_BACKEND:-R4D}
+      # Automatic prefix caching (APC) for shared prefixes (system prompts, RAG / agentic context).
+      # Both flags are required and ON here: this is a GDN hybrid, and hybrid models default their APC
+      # support flag off ("experimental"), so vLLM SILENTLY disables prefix caching unless
+      # --enable-prefix-caching is passed explicitly. --mamba-cache-mode=align makes the linear-attention
+      # (GDN) layers prefix-cacheable too, snapshotting + restoring their conv + recurrent state at block
+      # boundaries; this is verified bit-identical to full recompute (including under MTP). Effect:
+      # large TTFT drop on shared prefixes (~3.6x earlier and 12.8x at 32K in the measured
+      # MXFP4+DFlash production profile). Note: align reconciles the mamba/attention
+      # page sizes, which raises the attention block size to 1664 tokens and uses one extra state block
+      # per linear-attn layer (slightly lower max concurrency at full context). Remove both flags to
+      # disable. Do NOT use --mamba-cache-mode=all (unsupported by this model) and do NOT set
+      # VLLM_SSM_CONV_STATE_LAYOUT=DS (asserts under MTP + align).
+      - ${PREFIX_CACHING_FLAG:---enable-prefix-caching}
+      - --mamba-cache-mode=${MAMBA_CACHE_MODE:-align}
+      # Baseline serving is deliberately non-speculative. For Qwen's in-checkpoint
+      # MTP head, opt in from .env without editing this file; see
+      # RADIANCE_SPECULATIVE_CONFIG and RADIANCE_FAST_DRAFT below.
+      # The recommended MTP config sets disable_padded_drafter_batch, which is incompatible
+      # with async scheduling; keep async off so vLLM does not auto-enable then disable it.
+      - --no-async-scheduling
+      # Agentic serving uses the checkpoint-native chat template by default.
+      # Add --chat-template in a private override only for a checkpoint that
+      # explicitly needs a deployment-specific template.
+      - --enable-auto-tool-choice
+      - --tool-call-parser=qwen3_coder
+      - --reasoning-parser=qwen3
+      # Load the checkpoint's recommended sampling defaults. Explicit request
+      # parameters still take precedence; this is not a generation override.
+      - --generation-config=${GENERATION_CONFIG:-auto}
+      # Qwen3.8 defaults to xhigh reasoning. Request-level
+      # chat_template_kwargs.reasoning_effort continues to take precedence.
+      - "--default-chat-template-kwargs={\"reasoning_effort\":\"${DEFAULT_REASONING_EFFORT:-xhigh}\"}"
+      - --trust-remote-code
+      - --host=0.0.0.0
+      - --port=8000
+    environment:
+      # GPU visibility: select your two R9700s by HIP index (exclude any iGPU). Never CUDA_VISIBLE_DEVICES.
+      HIP_VISIBLE_DEVICES: "${HIP_VISIBLE_DEVICES:-0,1}"
+      HIP_FORCE_DEV_KERNARG: ${HIP_FORCE_DEV_KERNARG:-0}
+      TORCH_BLAS_PREFER_HIPBLASLT: ${TORCH_BLAS_PREFER_HIPBLASLT:-0}
+      # AITER: unified attention ON, every other AITER path OFF (LINEAR=1 crashes on gfx1201).
+      VLLM_ROCM_USE_AITER: "1"
+      VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION: "1"
+      VLLM_ROCM_USE_AITER_MHA: "0"
+      VLLM_ROCM_USE_AITER_MLA: "0"
+      VLLM_ROCM_USE_AITER_MOE: "0"
+      VLLM_ROCM_USE_AITER_LINEAR: "0"
+      VLLM_ROCM_USE_AITER_FP8BMM: "0"
+      VLLM_ROCM_USE_AITER_FP4BMM: "0"
+      VLLM_ROCM_USE_AITER_RMSNORM: "0"
+      # libr4d master switch: R4D attention, GDN, ViT, TP2 all-reduce, and
+      # the v0.5 BF16/DFlash GEMMs. Unsupported geometries fall back per operator.
+      RADIANCE_USE_R4D: "${RADIANCE_USE_R4D:-1}"
+      RADIANCE_USE_R4D_GDN: "${RADIANCE_USE_R4D_GDN:-1}"
+      # Experimental FP8 QK/PV prefill legs. They improve long-context
+      # prefill but change attention numerics, so public Compose keeps the
+      # qualified BF16 legs unless explicitly enabled with value 3.
+      R4D_ATTN_FP8: "${R4D_ATTN_FP8:-0}"
+      RADIANCE_R4D_REPORT: "${RADIANCE_R4D_REPORT:-1}"
+      RADIANCE_USE_R4D_AR: "${RADIANCE_USE_R4D_AR:-1}"
+      # WHT6 payload for large TP2 reductions. Quantized, so set 0 for the
+      # exact bf16 R4D all-reduce control.
+      RADIANCE_USE_R4D_AR_QUANT: "${RADIANCE_USE_R4D_AR_QUANT:-1}"
+      # Numerically exact defaults: measured BF16 shapes, byte-identical GDN
+      # metadata construction, and Triton top-k/top-p for small row counts.
+      # `all` enables additional BF16 GEMM shapes whose ULP-level differences
+      # can alter speculative acceptance, so it is never the generic default.
+      RADIANCE_SKINNY_GEMM: "${RADIANCE_SKINNY_GEMM:-1}"
+      RADIANCE_GDN_META: "${RADIANCE_GDN_META:-1}"
+      RADIANCE_GDN_MERGE_INPROJ: "${RADIANCE_GDN_MERGE_INPROJ:-1}"
+      RADIANCE_GDN_FUSED_UPDATE: "${RADIANCE_GDN_FUSED_UPDATE:-1}"
+      RADIANCE_GDN_FUSED_MAX_ITEMS: "${RADIANCE_GDN_FUSED_MAX_ITEMS:-32}"
+      # Build identical speculative GDN metadata once per step, then copy only
+      # each KV group's block-table-derived state indices.
+      RADIANCE_GDN_SHARED_BUILD: "${RADIANCE_GDN_SHARED_BUILD:-1}"
+      RADIANCE_TOPK_TRITON_MIN_ROWS: "${RADIANCE_TOPK_TRITON_MIN_ROWS:-1}"
+      # Multi-block torch.topk plus a small exact mask replaces the serial
+      # whole-vocabulary Triton scan when every active top-k is <= KCAP.
+      RADIANCE_TOPK_COMPOSITE: "${RADIANCE_TOPK_COMPOSITE:-1}"
+      RADIANCE_TOPK_COMPOSITE_KCAP: "${RADIANCE_TOPK_COMPOSITE_KCAP:-64}"
+      # Weight format is appended by the entrypoint. `auto` omits the CLI flag
+      # and lets Quark/MXFP4 checkpoints select their config.json method.
+      RADIANCE_WEIGHT_QUANTIZATION: "${WEIGHT_QUANTIZATION:-fp8}"
+      # Native MXFP4/W4A8 is opt-in and inert for non-Quark checkpoints. Once
+      # enabled, cover every M and use the decode-shaped kernel through M=64.
+      RADIANCE_MXFP4: "${RADIANCE_MXFP4:-0}"
+      RADIANCE_MXFP4_W4A8: "${RADIANCE_MXFP4_W4A8:-0}"
+      RADIANCE_MXFP4_W4A8_MIN_M: "${RADIANCE_MXFP4_W4A8_MIN_M:-0}"
+      RADIANCE_MXFP4_DECODE_MAX_M: "${RADIANCE_MXFP4_DECODE_MAX_M:-64}"
+      RADIANCE_MXFP4_TN4_MIN_M: "${RADIANCE_MXFP4_TN4_MIN_M:-2048}"
+      RADIANCE_MXFP4_EPIFAST: "${RADIANCE_MXFP4_EPIFAST:-1}"
+      RADIANCE_MXFP4_WPERM: "${RADIANCE_MXFP4_WPERM:-0}"
+      # RX5 candidates. WPERM+DECODE_NT accelerates decode; A_TILED removes
+      # its former prefill penalty but requires the complete FP8-stream tier.
+      # GDN_NORM_QUANT is independently selectable and graph-cache isolated.
+      RADIANCE_MXFP4_DECODE_NT: "${RADIANCE_MXFP4_DECODE_NT:-0}"
+      RADIANCE_MXFP4_A_TILED_MIN_M: "${RADIANCE_MXFP4_A_TILED_MIN_M:-0}"
+      RADIANCE_GDN_NORM_QUANT: "${RADIANCE_GDN_NORM_QUANT:-0}"
+      # Experimental RX4 traced-quant / FP8 residual-stream tier. These remain
+      # off because they failed strict output/tool qualification on the Quark
+      # MXFP4 W4A8 TP2 path.
+      # NORMQUANT_FUSION derives HOIST_QUANT and TRACED_QUANT and merges the
+      # required vLLM compiler passes. FP8_STREAM additionally fuses TP2 AR,
+      # residual add, RMSNorm, and FP8 quantization.
+      RADIANCE_NORMQUANT_FUSION: "${RADIANCE_NORMQUANT_FUSION:-0}"
+      RADIANCE_FP8_STREAM: "${RADIANCE_FP8_STREAM:-0}"
+      # AMD's current Qwen3.8 Quark checkpoint stores its embedded MTP head in
+      # BF16 despite the global FP4 recipe. Enable only for that verified layout.
+      RADIANCE_QUARK_BF16_MTP: "${RADIANCE_QUARK_BF16_MTP:-0}"
+      # Must cover max_num_batched_tokens x hidden_size x 2 bytes or large
+      # prefill messages silently fall back to RCCL. 48 MiB covers 4096x5120.
+      RADIANCE_AR_MAX_KB: "${RADIANCE_AR_MAX_KB:-49152}"
+      RADIANCE_AR_QUANT_MIN_KB: "${RADIANCE_AR_QUANT_MIN_KB:-128}"
+      RADIANCE_AR_QNT: "${RADIANCE_AR_QNT:-1024}"
+      RADIANCE_AR_QNB: "${RADIANCE_AR_QNB:-96}"
+      RADIANCE_KV_GROUP_OPT: "${RADIANCE_KV_GROUP_OPT:-1}"
+      # radiance rms+group-fp8-quant fusion coverage (also baked default 1).
+      RADIANCE_FUSE_RMS_QUANT: "1"
+      # optional NUMA pinning of the vLLM fleet to the GPU-local node(s). Off by default (no-op on
+      # single-node hosts). Set "auto" to detect, or explicit nodes (e.g. "0" / "0,1"). Requires the
+      # SYS_NICE cap above. Equivalent to passing --numa-bind in command:.
+      RADIANCE_NUMA_BIND: "${RADIANCE_NUMA_BIND:-}"
+      # RADIANCE dynamic drafting (baked ON in the image; MTP only and inert for DFlash).
+      # Per-request MTP draft-depth control: a per-slot confidence gate picks the draft depth and takes
+      # free-win n-grams; the schedule caps serial MTP forwards by batch size. Set DYNAMIC_DRAFT="0" to
+      # disable (byte-identical stock MTP). The two knobs below are the only tunables.
+      RADIANCE_DYNAMIC_DRAFT: "1"
+      RADIANCE_DRAFT_SCHEDULE: "1:8,2:7,4:6,8:5,16:4"
+      RADIANCE_DRAFT_TAU: "${RADIANCE_DRAFT_TAU:-0.28}"
+      # Tuned drafter stack. Under MTP this is the exact-rerank INT2 head;
+      # under DFlash it also enables the runtime W4 drafter. Keep opt-in until
+      # the target/drafter pair passes its acceptance and correctness gates.
+      RADIANCE_FAST_DRAFT: "${RADIANCE_FAST_DRAFT:-0}"
+      RADIANCE_DRAFT_RERANK: "${RADIANCE_DRAFT_RERANK:-64}"
+      # Experimental: raise DFlash's trained selector truncation. Unset/0
+      # preserves the checkpoint value and is the qualified default.
+      RADIANCE_DFLASH_SELECTOR_TOPK: "${RADIANCE_DFLASH_SELECTOR_TOPK:-}"
+      RADIANCE_VERIFY_HEAD: "${RADIANCE_VERIFY_HEAD:-1}"
+      RADIANCE_DYNAMIC_WIDTH: "${RADIANCE_DYNAMIC_WIDTH:-1}"
+      RADIANCE_DYNW_MIN_BATCH: "${RADIANCE_DYNW_MIN_BATCH:-5}"
+      # Optional raw vLLM speculative-config JSON. The entrypoint appends it as
+      # one CLI argument unless an explicit --speculative-config is already present.
+      # Qwen fast-MTP example is provided (commented) in .env.example.
+      RADIANCE_SPECULATIVE_CONFIG: "${RADIANCE_SPECULATIVE_CONFIG:-}"
+      # Optional raw vLLM compilation-config JSON, handled like the speculative
+      # config above. The measured DFlash2 profile uses PIECEWISE graphs.
+      RADIANCE_COMPILATION_CONFIG: "${RADIANCE_COMPILATION_CONFIG:-}"
+      # Optional mmap-backed CPU KV tier, in GiB. Empty keeps offload disabled.
+      # `auto` prevents a failed hipHostRegister from poisoning the next torch
+      # operation and coherently falls every TP worker back to pageable DMA.
+      RADIANCE_KV_OFFLOADING_SIZE: "${RADIANCE_KV_OFFLOADING_SIZE:-}"
+      RADIANCE_KV_OFFLOAD_PIN_POLICY: "${RADIANCE_KV_OFFLOAD_PIN_POLICY:-auto}"
+      # Experimental until qualified per host; 0 preserves one whole-region
+      # registration. A positive GiB value requests row-aligned chunks.
+      RADIANCE_KV_OFFLOAD_REGISTER_CHUNK_GIB: "${RADIANCE_KV_OFFLOAD_REGISTER_CHUNK_GIB:-0}"
+      # DFlash2 requires the V2-compatible model runner. Normal Radiance retains
+      # the pinned stack's default unless this is explicitly enabled.
+      VLLM_USE_V2_MODEL_RUNNER: "${VLLM_USE_V2_MODEL_RUNNER:-0}"
+      NCCL_PROTO: Simple
+      # throttle inductor compile workers to limit peak compile-time RAM (defensive).
+      TORCHINDUCTOR_COMPILE_THREADS: "4"
+      # persistent compile caches -> fast warm restarts (a cold cache spends a few extra minutes
+      # compiling Triton/inductor kernels before the engine comes up). Mounted below.
+      VLLM_CACHE_ROOT: /cache/vllm
+      TORCHINDUCTOR_CACHE_DIR: /cache/inductor
+      TRITON_CACHE_DIR: /cache/triton
+      AITER_ROOT_DIR: /cache/aiter
+      TRITON_CACHE_AUTOTUNING: "1"
+      # Optional persisted PyTorch TunableOp workflow. Keep off for generic
+      # serving. `collect` records encountered GEMMs without live tuning;
+      # after offline tuning, `serve` consumes only a verified result set.
+      RADIANCE_TUNABLEOP_MODE: "${RADIANCE_TUNABLEOP_MODE:-off}"
+      RADIANCE_TUNABLEOP_CACHE_DIR: "${RADIANCE_TUNABLEOP_CACHE_DIR:-/cache/tunableop}"
+      RADIANCE_TUNABLEOP_NAMESPACE: "${RADIANCE_TUNABLEOP_NAMESPACE:-}"
+      # Optional calibrated q/k/v/prob scale sidecar. The checkpoint and the
+      # sidecar are both read-only; model/checksum verification is mandatory.
+      RADIANCE_FP8_KV_SCALES: "${RADIANCE_FP8_KV_SCALES:-}"
+      RADIANCE_FP8_KV_SCALES_VERIFY: "${RADIANCE_FP8_KV_SCALES_VERIFY:-1}"
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    # The image runs as root, so mapped devices do not require host-specific
+    # supplemental GIDs. A non-root local deployment can add group_add in its
+    # ignored developer overlay using the host's render/video numeric GIDs.
+    cap_add:
+      - SYS_PTRACE            # py-spy
+      - SYS_NICE              # numactl mempolicy syscalls (only needed if you enable RADIANCE_NUMA_BIND)
+    security_opt:
+      - seccomp=unconfined
+    ipc: host
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      # Portable fallbacks stay beneath the checkout. Production and developer
+      # deployments should override these in .env or docker-compose.dev.yml.
+      - ${MODELS:-./models}:/models:ro
+      - ${VLLM_CACHE:-./vllm-cache}:/cache
+      - ${WORK:-.}:/work:ro                        # supplies /work/qwen3.8-enhanced.jinja (this repo directory)
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 60
+      start_period: 1800s     # generous: a cold cache compiles kernels before the engine comes up,
+                              # and a long --max-model-len adds graph-capture time

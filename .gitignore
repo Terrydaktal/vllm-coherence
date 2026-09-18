@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.pyc
+# local deploy state (mounted into the container; not source)
+.env
+docker-compose.dev.yml
+docker-compose.override.yml
+models/
+vllm-cache/
+benchmarks/runs/
+# local R4D checkout/build output; the image fetches its own immutable pin
+libr4d/
+# build outputs; rocm-bandwidth-test is built in the Dockerfile
+*.so
+rocm-bandwidth-test
+
+# editor / os
+*.swp
+.DS_Store

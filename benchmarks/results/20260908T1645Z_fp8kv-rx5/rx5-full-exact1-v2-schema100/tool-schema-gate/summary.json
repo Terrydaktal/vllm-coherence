@@ -1,0 +1,8 @@
+{
+  "run_id": "rx5-full-exact1-v2-schema100-tool-schema",
+  "completed_utc": "2026-09-08T18:18:40Z",
+  "attempts": 100,
+  "passes": 98,
+  "failures": 2,
+  "pass": false
+}

@@ -1,0 +1,112 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "release"'
+    - when: never
+
+stages:
+  - publish
+
+variables:
+  IMAGE_NAME: "magiccodingman/vllm-radiance"
+  VERSION_SERIES: "1.0"
+  # Docker Hub rejects repository overviews larger than 25,000 bytes.
+  DOCKERHUB_README_MAX_BYTES: "25000"
+  # This image compiles PyTorch, Triton, torchvision, AITER, and vLLM from source.
+  # Keep compiler parallelism deliberately low for the 8 GiB RAM runner.
+  RADIANCE_BUILD_JOBS: "2"
+  # The runner and GitLab are containers on the same Docker host. Use the
+  # host daemon socket instead of expecting a nonexistent `docker` DinD service.
+  DOCKER_HOST: "unix:///var/run/docker.sock"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_BUILDKIT: "1"
+  BUILDKIT_PROGRESS: "plain"
+  GIT_DEPTH: "1"
+
+publish_docker:
+  stage: publish
+  image: docker:27-cli
+  timeout: 12h
+  interruptible: false
+  resource_group: dockerhub-release-publish
+  before_script:
+    - apk add --no-cache curl jq
+    - test -n "$DOCKERHUB_USERNAME"
+    - test -n "$DOCKERHUB_TOKEN"
+    - test -s Dockerfile
+    - test -s README.md
+    - test -s VERSION
+    # Developer Compose overlays may contain private paths or local image tags.
+    # They are gitignored and excluded from the Docker build context; fail closed
+    # if somebody ever force-adds one to a release branch.
+    - test ! -e docker-compose.dev.yml
+    - test ! -e docker-compose.override.yml
+    - '! grep -Eq ''/nvme/|/home/[^[:space:]]+'' docker-compose.yml .env.example docker-compose.dev.example.yml'
+    - test -S /var/run/docker.sock || { echo "Runner must mount /var/run/docker.sock into build containers"; exit 1; }
+    - docker version
+    - docker buildx version
+    - printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - |
+      set -eu
+
+      README_BYTES="$(wc -c < README.md | tr -d '[:space:]')"
+      if [ "$README_BYTES" -gt "$DOCKERHUB_README_MAX_BYTES" ]; then
+        echo "README.md is ${README_BYTES} bytes; Docker Hub allows at most ${DOCKERHUB_README_MAX_BYTES}." >&2
+        echo "Move detailed material into docs/ and link it from the repository overview." >&2
+        exit 1
+      fi
+
+      VERSION="${VERSION_SERIES}.${CI_PIPELINE_IID}"
+      SHORT_SHA="$(printf '%.12s' "$CI_COMMIT_SHA")"
+
+      echo "Publishing ${IMAGE_NAME}:${VERSION} with ${RADIANCE_BUILD_JOBS} compiler jobs"
+
+      docker buildx build \
+        --builder default \
+        --platform linux/amd64 \
+        --pull \
+        --push \
+        --progress=plain \
+        --provenance=false \
+        --build-arg "RADIANCE_VERSION=${VERSION}" \
+        --build-arg "BUILD_JOBS=${RADIANCE_BUILD_JOBS}" \
+        --label "org.opencontainers.image.title=vllm-radiance" \
+        --label "org.opencontainers.image.description=vLLM inference server for AMD Radeon AI PRO R9700" \
+        --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
+        --label "org.opencontainers.image.revision=${CI_COMMIT_SHA}" \
+        --label "org.opencontainers.image.version=${VERSION}" \
+        --tag "${IMAGE_NAME}:${VERSION}" \
+        --tag "${IMAGE_NAME}:${VERSION_SERIES}" \
+        --tag "${IMAGE_NAME}:sha-${SHORT_SHA}" \
+        --tag "${IMAGE_NAME}:latest" \
+        .
+
+      LOGIN_PAYLOAD="$(jq -n \
+        --arg username "$DOCKERHUB_USERNAME" \
+        --arg password "$DOCKERHUB_TOKEN" \
+        '{username: $username, password: $password}')"
+      HUB_TOKEN="$(curl --fail --silent --show-error \
+        --header 'Content-Type: application/json' \
+        --request POST \
+        --data "$LOGIN_PAYLOAD" \
+        'https://hub.docker.com/v2/users/login/' | jq -er '.token')"
+
+      jq -Rs '{full_description: .}' README.md > dockerhub-readme.json
+      if ! UPDATE_RESPONSE="$(curl --fail-with-body --silent --show-error \
+          --header "Authorization: JWT ${HUB_TOKEN}" \
+          --header 'Content-Type: application/json' \
+          --request PATCH \
+          --data-binary @dockerhub-readme.json \
+          "https://hub.docker.com/v2/repositories/${IMAGE_NAME}/")"; then
+        printf 'Docker Hub overview update failed:\n%s\n' "$UPDATE_RESPONSE" >&2
+        exit 1
+      fi
+
+      printf 'Published %s:%s, %s:%s, %s:sha-%s, and %s:latest\n' \
+        "$IMAGE_NAME" "$VERSION" \
+        "$IMAGE_NAME" "$VERSION_SERIES" \
+        "$IMAGE_NAME" "$SHORT_SHA" \
+        "$IMAGE_NAME"
+      echo "Docker Hub overview updated from README.md."
+  after_script:
+    - docker logout || true

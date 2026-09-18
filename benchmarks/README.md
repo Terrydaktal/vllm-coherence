@@ -1,0 +1,625 @@
+# Radiance benchmark lab
+
+This directory holds the reusable online-serving benchmark harness and immutable
+run history for Radiance builds.  The suite measures stable, bounded concurrency
+rather than searching for maximum throughput.
+
+## Safety and storage
+
+- Models are read-only from `/nvme/lexar-2/ai/models`.
+- Docker engine data remains under `/nvme/lexar-1/docker/data`.
+- Compilation caches live in `/nvme/ediloca-1/scratch/vllm-radiance-cache`.
+- Every script verifies the required mounts before starting a container or run.
+- A run directory is never reused or overwritten.
+
+### FP8-KV calibration and TunableOp preflight
+
+The calibration/tuning continuation adds two CPU-only integrity checks which
+must pass before the corresponding GPU maintenance run:
+
+```bash
+python benchmarks/bin/check_fp8_kv_calibration.py
+python benchmarks/bin/check_tunableop.py
+```
+
+The benchmark manifest captures the FP8-KV sidecar path/verification mode and
+all Radiance/PyTorch TunableOp mode, namespace, and filename variables. The lab
+requires `FP8_KV_SCALES_HOST` and/or `TUNABLEOP_ROOT_HOST` whenever the
+corresponding feature is active, so it hashes artifacts instead of recording
+only container paths. The complete immutable artifact contract, collect →
+offline tune → verified serve sequence, expected impact, and qualification matrix are in
+[`docs/FP8_KV_TUNABLEOP.md`](../docs/FP8_KV_TUNABLEOP.md).
+
+### ROCm host-registration probe
+
+`bin/probe_rocm_host_registration.py` isolates mmap registration from model
+loading. Run it only during a declared maintenance window and from inside the
+same root ROCm image used for serving. `--prefault distributed` makes both
+workers populate disjoint portions of the shared backing before registration,
+matching the vLLM worker layout. The probe uses bounded barriers, reports the
+stage of any failed worker, drains the HIP error on the same runtime handle,
+performs a post-failure HIP allocation, and rolls back every successful chunk.
+
+```bash
+python benchmarks/bin/probe_rocm_host_registration.py \
+  --confirm-maintenance \
+  --sizes-gib 24 28 30 32 36 \
+  --chunk-gib 0 8 \
+  --modes sequential simultaneous \
+  --prefault distributed \
+  --gpus 0 1 \
+  --output /path/to/new-immutable-run/probe.json
+```
+
+The dual-R9700 qualification and deployment decision are recorded in
+`docs/ROCM_KV_OFFLOAD_REGISTRATION.md`; do not infer a pin ceiling from a
+non-prefaulted host-shell probe.
+
+## Profiles and matrix
+
+The default `quick` profile is the everyday A/B gate. It uses one server warmup,
+two bounded decode repetitions at concurrency 1/2/4/8 for TP2 and 1/2/4 for
+the constrained TP1 reference, a 2K prefill sweep,
+and a single 8K context check. `standard` adds a third decode sample and a
+second prefill sample. `qualification` adds sustained decode and concurrent
+long-context capacity checks and is reserved for milestone builds.
+Each exact workload/concurrency shape gets one unmeasured request wave before
+its first sample. Warmups and every measured repetition use distinct,
+deterministic prompt seeds, so prefix caching cannot leak across samples. This
+prevents lazy Triton compilation or autotuning from being misreported as model
+latency while adding only a bounded amount of runtime.
+Every request also sets `temperature=0` explicitly. This makes outputs and
+speculative acceptance reproducible instead of inheriting a model/server
+sampling default. Set `BENCH_TEMPERATURE` only for a separately labeled sampling
+experiment; temperature is part of the comparison key.
+
+`bin/run_matrix.sh` defaults to the model-neutral, non-speculative gate:
+
+1. TP=2, speculative decoding off.
+
+Add the current-model TP1 reference with
+`BENCH_CONFIGS=tp2_spec-off,tp1-eager8k_spec-off`, and add `tp2_spec-on`
+explicitly at speculative milestones. The current 27B model's TP=1 MTP head
+requires another 2.37 GiB when only about 1.06 GiB remains, so
+`tp1-eager8k_spec-on` is retained as an explicit diagnostic profile but is not
+part of the routine matrix. CPU offload is not used to force it to fit.
+
+The default model is
+`/nvme/lexar-2/ai/models/Qwen3.8-27B-heretic-ara-fp8-magiccodingman`. Override
+`MODEL_HOST` for another checkpoint; `MODEL_NAME` defaults to that directory's
+basename and can be overridden separately. The model configuration and resolved
+container command are checked before every run. Every
+configuration explicitly forces `--kv-cache-dtype=fp8`.
+
+### Tool-schema regression gate
+
+`run_tool_schema_gate.sh` reproduces the sampled multi-tool request that
+exposed intermittent omission of required function arguments on the former
+post-v0.27 development pin. It keeps the fixture, sampling parameters, raw
+responses, fixture checksum, and summary in a new immutable run directory.
+The gate passes only when every response selects `click` and includes all
+required values, including the exact `ref` from the prompt:
+
+```bash
+BASE_URL=http://127.0.0.1:8000/v1 \
+MODEL_NAME=Qwen3.8-27B-heretic-ara-fp8 \
+ATTEMPTS=30 \
+benchmarks/bin/run_tool_schema_gate.sh
+```
+
+This is deliberately a sampled `temperature=1`, three-tool,
+`tool_choice=required` test. Do not replace it with a deterministic one-tool
+smoke test: that would remove the conditions under which the regression was
+observed. The fixture schema itself permits optional `stepFailed`, while
+`reasoning`, `confidence`, `stepComplete`, and the action-specific argument are
+required.
+
+For speculative structured-output changes, first run the GPU-free state-machine
+and source-overlay check inside the candidate image:
+
+```bash
+python benchmarks/bin/check_xgrammar_spec_termination.py
+```
+
+The mmap KV-offload host-registration failure paths are GPU-free and should be
+checked on every source-overlay change:
+
+```bash
+python benchmarks/bin/check_kv_offload_registration.py
+```
+
+The live ROCm registration matrix is a maintenance-only probe. It refuses to
+run without `--confirm-maintenance` or while local API port 8000 is open. See
+[`docs/ROCM_KV_OFFLOAD_REGISTRATION.md`](../docs/ROCM_KV_OFFLOAD_REGISTRATION.md)
+for its exact command, result schema, and follow-up server qualification.
+
+Then run the sampled gate and inspect the server log over the exact same time
+window. A qualified result requires both 100% valid calls and zero occurrences
+of `Failed to advance FSM`, `matcher has terminated`, or
+`Unexpected: grammar rejected`; valid response JSON alone is insufficient.
+
+TP=2 uses a model-neutral 16K server envelope at 85% GPU utilization. This
+reserves about 4.8 GiB outside vLLM's allocation on each 32 GiB card, leaves
+room for a DFlash2 drafter and runtime variation, and does not try to turn the
+performance gate into a capacity test. The 28.75 GiB checkpoint does not leave
+KV space on one 31.9 GiB R9700 with compiled execution, so TP=1 uses an 8K
+maximum and eager execution at 95% utilization. TP1 is a fit-specific reference,
+not a requirement for larger checkpoints such as 35B. Its decode concurrency
+sweep remains useful, while long-context/capacity is reported separately. CPU
+offload and near-100% settings are not part of the routine TP2 matrix.
+The default scheduler budget is 4,096 batched tokens. This is the measured R4D
+chunked-prefill/MTP operating point and, for Qwen hidden size 5,120, keeps the
+40 MiB TP2 collective payload within libr4d's exact-message ceiling. Override it
+for a separately labeled model/shape experiment; do not silently compare a
+2,048-token run with a 4,096-token run.
+
+Set a note for the run with:
+
+```bash
+BENCH_NOTES="reason for this baseline" BENCH_SUITE=quick benchmarks/bin/run_matrix.sh
+```
+
+Limit an iterative run to relevant configurations with, for example:
+
+```bash
+BENCH_CONFIGS=tp2_spec-off BENCH_SUITE=quick benchmarks/bin/run_matrix.sh
+```
+
+Include the supported speculative lane at a milestone with:
+
+```bash
+BENCH_CONFIGS=tp2_spec-off,tp1-eager8k_spec-off,tp2_spec-on \
+  BENCH_SUITE=quick benchmarks/bin/run_matrix.sh
+```
+
+Set `RADIANCE_IMAGE` to compare an exact image reference. For a startup-only
+validation, call `bin/run_configuration.sh` with `--suite smoke`.
+
+For an operator-specific iteration, select only the affected families while
+retaining the same shapes and warmup rules. For example, a GDN prefill change
+can use `BENCH_WORKLOADS=prefill,context`; an all-reduce/decode change can use
+`BENCH_WORKLOADS=decode`. The selected filter is stored in the manifest. Full
+`quick` and `qualification` gates remain milestone requirements.
+
+`BENCH_WORKLOADS=correctness` runs eight fixed, meaningful greedy prompts and
+stores their exact text, prompt/completion token lengths, seeds, and fixture
+checksum. Use it with `bin/verify_outputs.py` when synthetic random-token
+prompts expose near-tie numerical drift or when qualifying speculative decode.
+Set `BENCH_CORRECTNESS_REPETITIONS` to audit within-server repeatability and
+`BENCH_CORRECTNESS_LOGPROBS` to retain top-logprob evidence around a first
+divergence. `BENCH_CORRECTNESS_PROMPTS` selects an alternate immutable fixture;
+the DFlash hybrid-GDN graph diagnostic uses
+`fixtures/gdn-shape-alias-prompts.json` to exercise short prompt lengths around
+the speculative batch-shape boundary.
+
+For deeper output triage, compare two retained correctness payloads with:
+
+```bash
+benchmarks/bin/analyze_correctness.py \
+  BASE/raw/correctness_fixed.json CANDIDATE/raw/correctness_fixed.json \
+  --output CANDIDATE/correctness-analysis.json
+```
+
+The report keeps strict token equality intact while adding repeatability,
+first-divergence position, nearby token/text context, and top-two logprob
+margins when available. A deterministic near-tie is evidence for numerical
+drift, not permission to weaken the strict qualification gate.
+
+Compare two completed run directories with direction-normalized deltas (positive
+always means better). Speculative comparisons also show candidate acceptance
+rate, acceptance-length, and the rate change in percentage points:
+
+```bash
+benchmarks/bin/compare.py benchmarks/runs/BASELINE benchmarks/runs/CANDIDATE
+```
+
+The RX3 MXFP4/DFlash continuation adds several independently reversible controls.
+Record every non-default value explicitly; `capture_manifest.py` includes all of
+these in the immutable manifest:
+
+| Control | Image default | Purpose |
+|---|---:|---|
+| `RADIANCE_MXFP4_EPIFAST` | `1` | Branch-free full-tile output epilogue |
+| `RADIANCE_MXFP4_WPERM` | `0` | Fragment-order weights; qualified with `DECODE_NT=1` for Quark MXFP4 |
+| `RADIANCE_MXFP4_DECODE_NT` | `0` | Non-temporal decode loads; enable only with WPERM |
+| `RADIANCE_MXFP4_A_TILED_MIN_M` | `0` | Experimental tiled-activation prefill threshold; zero disables it |
+| `RADIANCE_GDN_NORM_QUANT` | `0` | Experimental independent GDN norm/gate/FP8-quant fusion |
+| `RADIANCE_MXFP4_DECODE_MAX_M` | `64` | Extend to `128` only for a qualified 16-sequence profile |
+| `RADIANCE_GDN_MERGE_INPROJ` | `1` | Merge each GDN layer's two input projections at load time |
+| `RADIANCE_GDN_FUSED_UPDATE` | `1` | Select libr4d's fused speculative GDN update |
+| `RADIANCE_GDN_SHARED_BUILD` | `1` | Share speculative GDN metadata construction across equivalent KV groups |
+| `RADIANCE_TOPK_COMPOSITE` | `1` | Use multi-block top-k plus a small exact mask for bounded top-k sampling |
+| `RADIANCE_TOPK_COMPOSITE_KCAP` | `64` | Largest top-k eligible for the composite route |
+| `RADIANCE_KV_GROUP_OPT` | `1` | Capacity-aware hybrid KV group selection |
+| `RADIANCE_AR_QNB` | `96` | Tuned compressed TP2 all-reduce block cap; `48` is the control |
+| `RADIANCE_DYNAMIC_WIDTH` | `1` | Per-request DFlash verify-width cap from observed acceptance |
+| `RADIANCE_DYNW_MIN_BATCH` | `5` | Do not narrow noise-limited c1-c4; local c8 gained 9.0–9.6% |
+| `RADIANCE_DRAFT_RERANK` | `64` | Exact rerank width for the INT2 fast-draft head |
+| `RADIANCE_VERIFY_HEAD` | `1` | Sampling-aware target verification head with exact fallback |
+| `RADIANCE_DFLASH_SELECTOR_TOPK` | unset | Experimental selector truncation override; `0` preserves the checkpoint |
+| `RADIANCE_NORMQUANT_FUSION` | `0` | Atomically enable RX4 hoisted/traced MXFP4 activation quantization and compiler passes |
+| `RADIANCE_FP8_STREAM` | `0` | Experimental TP2 AR, residual add, RMSNorm, and FP8 quantization on the compatible W4A8 path |
+| `RADIANCE_GRAPH_CACHE_NAMESPACE` | `1` | Isolate graph-changing profiles while preserving the qualified RX3 default cache lineage |
+| `R4D_ATTN_FP8` | `0` | Experimental FP8 prefill QK/PV legs; keep off outside a labeled diagnostic |
+
+Dynamic verification deliberately changes the number of proposed tokens after
+the scheduler has observed a request. A higher raw draft-acceptance percentage
+can therefore be a denominator effect rather than a quality improvement. Treat
+end-to-end TPS, TTFT/TPOT, and accepted tokens per target update as the outcome;
+retain the full per-position metrics so the mechanism remains auditable.
+
+Before a live RX4 sampling run, execute the CPU mask-equivalence gate inside
+the exact candidate image:
+
+```bash
+docker run --rm --entrypoint python \
+  -v "$PWD/benchmarks/bin/check_topk_composite.py:/tmp/check.py:ro" \
+  IMAGE /tmp/check.py
+```
+
+The traced-quant and FP8-stream switches are one profile, not unrelated knobs.
+When `RADIANCE_NORMQUANT_FUSION=1`, the entrypoint derives both quantization
+legs and merges `fuse_norm_quant`/`fuse_act_quant` into the single compiler JSON.
+`RADIANCE_FP8_STREAM=1` fails closed unless MXFP4 W4A8, `MIN_M=0`, TP2 GDN
+merge prerequisites, and that aggregate profile are present. Graph-changing
+profiles receive separate persistent vLLM/Inductor cache namespaces.
+
+Live RX4 qualification did not justify enabling that profile: versus its
+matched control it measured +2.1% weighted single-stream, but -21.0% ITL
+1%-low, -0.2/-2.0/+2.8/-0.6% at c1/c2/c4/c8, and lower prefill at all three
+depths. It also diverged on all eight strict greedy prompts and passed only
+27/30 sampled multi-tool requests. Keep both switches off outside a labeled
+experiment; the complete report and immutable run IDs are in
+`docs/MXFP4_RX4_CONTINUATION.md`.
+
+The subsequent RX5 isolation qualified only WPERM plus decode-NT: it passed
+the sampled tool gate 100/100 and improved matched quick decode by
+3.6–6.7% at c1/c2/c4/c8. Full RX5 plus DFlash passed only 93/100, so A-tiled,
+GDN norm-quant, traced quant, and FP8 stream remain experimental. Use the
+exact configurations, failures, and publication results in
+`docs/MXFP4_RX5_FP8KV_CONTINUATION.md` rather than treating the aggregate RX5
+label as a deployable profile.
+
+For an explicit cache-lineage diagnostic, the benchmark Compose accepts
+`CONTAINER_VLLM_CACHE_ROOT` and `CONTAINER_TORCHINDUCTOR_CACHE_DIR`. These names
+are intentionally container-scoped so the host benchmark client does not try
+to create `/cache` paths. Do not use them to make an otherwise failing
+candidate appear qualified.
+
+When both lanes share one matrix run (for example non-spec versus DFlash2),
+filter and normalize their configuration keys explicitly:
+
+```bash
+benchmarks/bin/compare.py benchmarks/runs/RUN benchmarks/runs/RUN \
+  --baseline-config tp2_spec-off --candidate-config tp2_spec-on
+```
+
+Pass `--fail-below -5` to make any common decode-throughput regression worse
+than 5% fail a milestone gate. Inspect the recorded CV before treating a small
+delta as meaningful.
+
+For a greedy speculative-decoding correctness gate, compare the matching
+configuration directories. The verifier requires identical seeds, input
+lengths, generated text, and output token lengths for every common raw case:
+
+```bash
+benchmarks/bin/verify_outputs.py RUN/tp2_spec-off RUN/tp2_spec-on \
+  --output RUN/spec-output-equivalence.json
+```
+
+The workload does not try to fill VRAM. The canonical TP2 gate is c1/c2/c4/c8
+inside a 16K, 85%-allocation envelope; it never searches for the largest batch
+that fits. `MODEL_HOST`, `MODEL_NAME`,
+`WEIGHT_QUANTIZATION`, `MAX_NUM_BATCHED_TOKENS`, `MAX_NUM_SEQS`, `TP1_GPU_UTIL`,
+`TP2_GPU_UTIL`, `TP1_MAX_MODEL_LEN`, and `TP2_MAX_MODEL_LEN` are profile
+inputs, so the same core workloads can be reused for larger models. Select only
+the configurations a model can safely host; for example a 35B model may use
+`BENCH_CONFIGS=tp2_spec-off` while retaining directly comparable TP2 cases.
+Maximum-context requests are qualification checks, not routine performance
+samples. `ATTENTION_BACKEND`, `ADDITIONAL_CONFIG_JSON`,
+`SPECULATIVE_CONFIG_JSON`, and `COMPILATION_CONFIG_JSON` provide recorded,
+command-line-visible experiment
+switches without editing the harness. The latter defaults to the normal MTP
+configuration only when a speculative lane is requested and no explicit JSON
+is supplied.
+
+For an explicit no-offload capacity qualification, select the `capacity`
+workload and provide `context_tokens:concurrency` pairs. Every pair submits one
+full simultaneous wave and retains normal telemetry/manifests:
+
+```bash
+BENCH_WORKLOADS=capacity \
+BENCH_CAPACITY_CASES='8192:8 16384:7 32768:5 65536:3' \
+MAX_NUM_SEQS=8 \
+benchmarks/bin/run_configuration.sh \
+  --run-root benchmarks/runs/RUN_ID \
+  --label capacity --tp 2 --spec on \
+  --max-model-len 65536 --gpu-memory-utilization 0.85 --suite quick
+```
+
+The server's `MAX_MODEL_LEN` must cover the largest pair. Capacity success means
+all requests completed without CPU/KV offload; inspect the server log for the
+engine's fully resident KV ceiling and any scheduler queueing before promoting a
+submitted burst size to a default.
+
+Set `TP2_ENFORCE_EAGER=1` for a recorded eager TP2 lane. This is intended for
+first qualification of a new speculative runtime, where graph correctness is
+not yet established, and does not alter the portable default.
+`VLLM_USE_V2_MODEL_RUNNER=0|1` is passed through only when explicitly set, so
+V1/V2 correctness controls can be compared without changing vLLM's default
+runner selection.
+Focused diagnostics may set a whitespace-separated
+`BENCH_DECODE_CONCURRENCIES` (for example `"1 4"`); the canonical gate leaves
+it unset and therefore remains c1/c2/c4/c8.
+
+Kernel control cases can likewise override the compose defaults from the host,
+including `RADIANCE_PRESHUFFLE`, `RADIANCE_USE_R4D`,
+`RADIANCE_USE_R4D_GDN`, `RADIANCE_USE_R4D_AR`,
+`RADIANCE_USE_R4D_AR_QUANT`, `RADIANCE_FAST_DRAFT`,
+`RADIANCE_SPECULATIVE_CONFIG`, `RADIANCE_COMPILATION_CONFIG`, and
+`VLLM_ROCM_USE_AITER_LINEAR`. Their resolved values are retained by the
+container inspection in each manifest; explicitly supplied values are also
+listed in the manifest environment section.
+
+### Quark MXFP4/W4A8 lane
+
+The model-neutral harness also supports Quark OCP MXFP4 targets. It fails closed
+unless the checkpoint declares `quant_method: quark`, weight quantization is
+`auto`, both native/W4A8 switches are enabled, and `MIN_M=0` prevents the known
+unsafe AITER `o_proj` fallback:
+
+```bash
+MODEL_HOST=/path/to/Qwen3.8-27B-Quark-AWQ-MXFP4 \
+MODEL_NAME=Qwen3.8-27B-Quark-AWQ-MXFP4 \
+WEIGHT_QUANTIZATION=auto \
+RADIANCE_MXFP4=1 \
+RADIANCE_MXFP4_W4A8=1 \
+RADIANCE_MXFP4_W4A8_MIN_M=0 \
+RADIANCE_MXFP4_DECODE_MAX_M=64 \
+RADIANCE_MXFP4_TN4_MIN_M=2048 \
+RADIANCE_QUARK_BF16_MTP=1 \
+PREFIX_CACHING=off MAMBA_CACHE_MODE=none \
+benchmarks/bin/run_configuration.sh \
+  --run-root benchmarks/runs/RUN_ID --label mxfp4-w4a8-tp2 \
+  --tp 2 --spec off --image IMAGE --max-model-len 8192 --suite quick
+```
+
+`RADIANCE_QUARK_BF16_MTP=1` is necessary only for the verified AMD checkpoint's
+embedded BF16 MTP head. Leave it off for non-spec/DFlash and for any Quark
+checkpoint whose MTP tensors are genuinely packed. Manifests retain the Quark
+selection, every production MXFP4 threshold, diagnostic switches when set, the
+model metadata checksum, image digest, and normal host/GPU telemetry. Keep FP8
+KV unless performing an explicitly labeled diagnostic control.
+
+### BetterBench publication lane
+
+The synthetic harness remains the fast smoke/quick engineering gate. Published
+cross-mode results use BetterBench v0.2.2 at exact commit
+`575cc3925bac922d6ad4a39e62502673799979d9`, installed in the registered
+`/nvme/ediloca-1/venv/vllm-bench-env` environment. The wrapper refuses to run
+against another checkout. It records the profile, commit, version, raw JSON,
+standalone HTML, Markdown report, server manifest, and one-second telemetry.
+After the timed BetterBench workload finishes, the same live server also runs
+the fixed eight-prompt correctness fixture with top-five log probabilities and
+writes `raw/correctness_fixed.json`. Keeping that gate after the timed corpus
+prevents it from warming the benchmark while binding performance and output
+evidence to one immutable configuration.
+
+`standard` is the 10-pass/category comparison profile; `qualification` doubles
+that to 20 passes/category. Both use corpus v1, greedy temperature-zero decoding,
+seed `20260823`, unique nonce prefixes, c1/c2/c4/c8, and cold 2K/4K/7K prefill:
+
+```bash
+PREFIX_CACHING=off MAX_NUM_BATCHED_TOKENS=4096 \
+BETTERBENCH_PROFILE=standard \
+benchmarks/bin/run_configuration.sh \
+  --run-root benchmarks/runs/RUN_ID --label CONFIG \
+  --tp 2 --spec off --image IMAGE --max-model-len 8192 \
+  --suite betterbench --notes 'exact experiment description'
+```
+
+Prefix caching is explicitly off across vLLM versions for the cross-image lane;
+BetterBench also prefixes every prompt with a unique nonce. `run_betterbench.sh`
+enforces the shared 8K envelope so non-spec, MTP, and DFlash results cannot
+quietly drift into unlike capacity profiles.
+
+Do not publish only BetterBench's weighted aggregate. Preserve and report its
+single-stream rows for `chat`, `code`, `file_edit`, `json`, `math`, `prose`,
+`reasoning`, and `summarization`, plus the concurrency and prefill sweeps. Use
+`betterbench compare BASE.json CANDIDATE.json` for offline per-category deltas;
+the command defines delta as candidate B relative to baseline A.
+
+### Experimental DFlash2 lane
+
+DFlash2 remains explicit-only. The best bounded headroom profile found on the
+dual R9700 host uses the selective-FP8 drafter at
+`/nvme/lexar-2/ai/models/Qwen3.8-27B-heretic-ara-DFlash2-fp8-magiccodingman`,
+seven speculative tokens, draft TP2, `TRITON_ATTN` for the drafter, the V2-compatible model
+runner, and `PIECEWISE` graph mode. The native-FP8 target, FP8 KV, 8K DFlash
+envelope, 85% allocation, and normal Radiance target paths remain unchanged.
+It is an experimental benchmark profile—not the compose default—because strict
+greedy equivalence still fails even though repeated outputs are deterministic.
+
+Use explicit JSON so manifests retain the full experiment contract:
+
+```bash
+VLLM_USE_V2_MODEL_RUNNER=1 \
+RADIANCE_USE_R4D_AR_QUANT=1 \
+MAX_NUM_BATCHED_TOKENS=4096 \
+COMPILATION_CONFIG_JSON='{"cudagraph_mode":"PIECEWISE"}' \
+RADIANCE_FAST_DRAFT=1 \
+SPECULATIVE_CONFIG_JSON='{"method":"dflash","model":"/models/Qwen3.8-27B-heretic-ara-DFlash2-fp8-magiccodingman","num_speculative_tokens":7,"draft_tensor_parallel_size":2,"attention_backend":"TRITON_ATTN","max_model_len":8192,"disable_padded_drafter_batch":true}' \
+BETTERBENCH_PROFILE=standard \
+benchmarks/bin/run_configuration.sh \
+  --run-root benchmarks/runs/RUN_ID --label tp2-r4d-dflash-k7 \
+  --tp 2 --spec on --image IMAGE --max-model-len 8192 --suite betterbench
+```
+
+K5 remains an important matched control. K7 won the 10-pass BetterBench corpus
+and c1/c2/c4/c8 sweep, but DFlash remains explicit-only because strict greedy
+equivalence against matched non-spec passes only 3/8 fixed prompts. K5, K7, and
+MTP were repeatable and produced the same fixed output stream, which localizes
+the difference to the shared speculative/runner numerical path without
+weakening the gate.
+
+For the AMD Quark MXFP4 target, use the base-model-matched selective-FP8
+`tcclaviger/Qwen3.8-27B-DFlash2-FP8` drafter. Stable vLLM 0.28.0 natively
+contains Qwen3.8 DFlash2 from PR #52816, so the former v0.27.1 source backport
+is retired. Its context precompute also materializes the draft's
+scaled FP8 K/V slices before the raw fused `F.linear`; normal draft linears stay
+FP8. Set the MXFP4 variables from the preceding section and replace only the
+`model` value in `SPECULATIVE_CONFIG_JSON`.
+
+Radiance 0.9.3 extends `RADIANCE_FAST_DRAFT=1` to DFlash2: eligible draft
+linears are quantized to W4 at load time and the LM head uses INT2-g128 with
+exact reranking. The entrypoint automatically separates the persistent graph
+caches used by fast and ordinary draft weights. Set
+`RADIANCE_FAST_DRAFT_CACHE_NAMESPACE=0` only for a deliberate cache diagnostic.
+The benchmark wrapper can run the required multi-tool JSON-schema gate on the
+same live server with `BENCH_TOOL_SCHEMA_ATTEMPTS=30`; the attempt count is
+retained in the manifest and every response is preserved.
+
+The Radiance 0.9.3/libr4d 0.5.0 publication root is
+`20260826T023001Z_radiance093-r4d050-mxfp4-continuation`. Under this contract,
+matched non-spec, fast DFlash K5, and fast DFlash K7 measured
+43.6/136.2/145.4 weighted TPS; the matched fast-MTP K4 control measured 102.3.
+Their aggregate c1/c2/c4/c8 results were 43.2/83.1/145.7/241.3,
+123.0/216.4/343.0/435.7, 132.4/234.6/343.3/416.9, and
+97.8/173.1/284.5/372.1 for MTP. The full category table, telemetry,
+isolated M48/M64 control, correctness result, and negative runs are documented
+in `docs/RADIANCE_093_R4D050_MXFP4.md`.
+
+### Stable vLLM v0.28 regression lane
+
+The v0.28 milestone keeps the same 8K/C8 BetterBench contract and adds two
+GPU-free checks before live qualification:
+
+```bash
+python benchmarks/bin/check_parser_shared_engine.py --tokenizer /path/to/model
+python benchmarks/bin/check_xgrammar_spec_termination.py
+```
+
+The first asserts that the `qwen3` reasoning plus `qwen3_coder` tool-parser
+pair remains a `DelegatingParser` and installs the structural tag used for
+strict/required tool schemas. The second retains the speculative XGrammar
+termination/reasoning-boundary check. A milestone run must still execute the
+sampled multi-tool gate on the live DFlash server; source checks do not replace
+generation evidence. Exact v0.28 run IDs and comparison results are in
+`docs/V028_UPGRADE.md`.
+
+Generic deferred-tool wrappers need an additional nested-object gate. Their
+outer function typically declares `arguments` as an open object and carries a
+second tool's payload inside it. Run the GPU-free compiler check first:
+
+```bash
+python benchmarks/bin/check_qwen_open_object_schema.py
+```
+
+Then exercise streaming and non-streaming provider-wire serialization against
+the live candidate. The default is deterministic; `--temperature 1.0` restores
+the historical sampled settings, and `--no-preserve-thinking` qualifies the
+current client profile independently:
+
+```bash
+python benchmarks/bin/run_open_object_tool_gate.py \
+  --base-url http://127.0.0.1:8000/v1 \
+  --model Qwen3.8-27B \
+  --runs 5 \
+  --temperature 1.0 \
+  --capture-root benchmarks/results/qwen-open-object-preserve-thinking
+
+python benchmarks/bin/run_open_object_tool_gate.py \
+  --base-url http://127.0.0.1:8000/v1 \
+  --model Qwen3.8-27B \
+  --runs 5 \
+  --temperature 1.0 \
+  --no-preserve-thinking \
+  --capture-root benchmarks/results/qwen-open-object-no-preserve-thinking
+```
+
+The gate records synthetic requests, response headers/request IDs, raw SSE or
+non-streaming bodies, token IDs, and classifications in a new immutable run
+directory. It rejects missing/changed nested values and any fields flattened
+beside `arguments`. Named tool choices deliberately accept vLLM's `stop`
+finish-reason policy; the two-call fixture uses `required`, where vLLM returns
+`tool_calls`.
+
+When speculative JSON names a local `/models/...` drafter, the manifest now
+records that checkpoint separately from the target, including its Hugging Face
+revision, config SHA-256, weight size, and Hub content OID. This avoids an
+otherwise easy-to-miss drafter change in future matched comparisons without
+rereading multi-gigabyte weight files for every run.
+
+## Results
+
+### Native CPU-KV restore gate and convoy baseline
+
+The v0.28 ROCm native-offload continuation adds two focused tools. They require
+the development reset endpoint (`VLLM_SERVER_DEV_MODE=1`) and must not enable
+that endpoint in production Compose.
+
+`run_kv_offload_restore_gate.py` performs cold fill, local GPU reuse, a
+local-only reset, and CPU restore with one deterministic meaningful prompt. It
+records exact output equality plus store/load bytes, time, external queries,
+and externally restored tokens. `run_kv_offload_baseline.py` primes a disjoint
+CPU prefix for each C1/C2/C4 case and releases simultaneous identical-prefix
+requests to expose transfer convoys without running a large throughput suite.
+
+```bash
+python benchmarks/bin/check_kv_offload_restore.py
+
+python benchmarks/bin/run_kv_offload_restore_gate.py \
+  --model Qwen3.8-27B \
+  --output benchmarks/results/$(date -u +%Y%m%dT%H%M%SZ)-restore/restore-gate.json
+
+python benchmarks/bin/run_kv_offload_baseline.py \
+  --model Qwen3.8-27B \
+  --output benchmarks/results/$(date -u +%Y%m%dT%H%M%SZ)-baseline/baseline.json
+```
+
+The first immutable baseline is
+`20260901T230544Z-dflash-cpu-kv-baseline-final2`; full configuration,
+correctness status, negative experiments, and results are in
+`docs/ROCM_KV_OFFLOAD_RESTORE_BASELINE.md`.
+
+### 128K/256K cache-placement pressure matrix
+
+`run_kv_offload_long_context.py` builds exact-token, disjoint prompts and runs
+a cold wave, immediate repeat, and optional forced CPU restore for each
+context/concurrency pair. It records streaming TTFT/TPOT, end-to-end and decode
+TPS, request queueing, preemptions, exact local-compute/local-cache/external-KV
+token counters, CPU transfer bytes/time, response equality, and a Prometheus
+trace. The raw phase name `gpu_hit` means immediate repeat; always use its
+source counters to determine whether it actually hit GPU, restored from CPU,
+or recomputed.
+
+```bash
+python benchmarks/bin/run_kv_offload_long_context.py \
+  --model Qwen3.8-27B \
+  --tokenizer /models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd \
+  --output-dir benchmarks/results/$(date -u +%Y%m%dT%H%M%SZ)-kv-long \
+  --label offload24 \
+  --cases 131072:1 131072:2 131072:4 262144:1 262144:2 262144:3 262144:4 \
+  --max-tokens 256 --cpu-restore --continue-on-error
+```
+
+The first matched no-offload/24-GiB runs are
+`20260901T234819Z-kv-long-allgpu` and
+`20260902T004340Z-kv-long-offload24`. The complete scoreboard, capacity
+boundary, metric semantics, and reproduction manifest are in
+`docs/ROCM_KV_OFFLOAD_LONG_CONTEXT_BASELINE.md`.
+
+Each committed run contains a readable `summary.json` plus exact zstd-compressed
+`results.json.zst` and `telemetry.jsonl.zst` evidence. Recover the raw stream
+with, for example, `zstd -dc results.json.zst > results.json`.
+
+Each timestamped directory beneath `runs/` includes exact manifests, resolved
+server commands, raw vLLM JSON, logs, two-second GPU/host telemetry, checksums,
+and consolidated CSV/JSON/Markdown summaries. `telemetry-summary.json` and
+`.csv` promote each case's peak VRAM/use/power/temperature and minimum VRAM and
+host-memory headroom so model-size changes remain auditable. Only GPUs named
+by the configuration's recorded `HIP_VISIBLE_DEVICES` are
+promoted; the host's 2 GiB integrated GPU is intentionally excluded from
+inference headroom summaries while its raw samples remain available.
+Fixed seed `20260822`, exact input/output lengths, forced output length, warmups,
+and repetitions make runs directly comparable across future images and forks.
