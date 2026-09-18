@@ -1,0 +1,10 @@
+--- a/vllm/parser/qwen3.py
++++ b/vllm/parser/qwen3.py
+@@ -195,6 +195,7 @@
+         stream_arg_deltas=True,
+         strip_trailing_reasoning_whitespace=False,
+         tool_args_json=False,
++        validate_tool_preamble=name == "qwen3",
+     )
+ 
+ 
