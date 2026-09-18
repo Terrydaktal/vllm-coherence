@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Portable entry point; deliberately usable without installing a Python package."""
+from coherence_cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

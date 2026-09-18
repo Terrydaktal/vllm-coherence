@@ -1,375 +1,467 @@
-# vllm-radiance
+# vLLM Coherence
 
-[![Docker Hub](https://img.shields.io/docker/v/magiccodingman/vllm-radiance?sort=semver&label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/magiccodingman/vllm-radiance)
-[![Docker Pulls](https://img.shields.io/docker/pulls/magiccodingman/vllm-radiance?logo=docker)](https://hub.docker.com/r/magiccodingman/vllm-radiance)
+**Fast, observable inference with validated execution and persistent sessions.**
 
-A vLLM inference-server image for the **AMD Radeon AI PRO R9700 (gfx1201 / RDNA4)**. It combines a pinned
-vLLM v0.28.0 ROCm stack with [libr4d](https://codeberg.org/StillDeadcode/libr4d)'s hand-written RDNA4
-attention, gated-delta-net, vision, all-reduce, MXFP4, and DFlash kernels while retaining Radiance's tuned
-FP8 GEMM and speculative-decoding paths.
+Coherence is an independently maintained **downstream fork of
+[Radiance](https://github.com/magiccodingman/vllm-radiance)** for the AMD Radeon AI
+PRO R9700. It combines numerical repairs, measured performance backports,
+reusable conformance instrumentation and durable Pi sessions.
 
-> **Status: experimental.** The primary qualified environment is two R9700s (TP2), native FP8 or AMD
-> Quark MXFP4 target weights, and mandatory FP8 KV. Other models, quantization recipes, GPU counts, and
-> hardware may work but have not received the same qualification. Speculative modes remain opt-in because
-> their strict cross-mode output-equivalence gate has not passed.
+This is a standalone GitHub repository. Its first commit is the unchanged
+Radiance 1.0.16 source at `f295b9ef51ad413a68e4192371e0377741a354ce`; subsequent
+commits describe Coherence's additions. See [attribution](ATTRIBUTION.md).
 
-This fork tracks and credits DeadCode's
-[vllm-radiance](https://codeberg.org/StillDeadcode/vllm-radiance) and libr4d work, with additional compiler
-pins, native v0.28 DFlash2 plus focused post-release correctness backports, native gfx1201 MXFP4/W4A8
-support, reproducible benchmarks, and deployment qualification. Published images are at
-[`magiccodingman/vllm-radiance`](https://hub.docker.com/r/magiccodingman/vllm-radiance).
-
-Two additional opt-in laboratories preserve the qualified default: immutable,
-checkpoint-bound FP8 attention/KV calibration sidecars for fidelity work, and
-an offline collect → tune → verified-serve PyTorch TunableOp workflow for
-residual BLAS GEMMs. Neither is enabled until its exact model/profile passes
-the normal correctness and benchmark gates. See
-[FP8-KV calibration and persisted TunableOp](docs/FP8_KV_TUNABLEOP.md).
-
-## Quick start
-
-The portable Compose file contains no machine-local paths. Copy the environment template and point it at
-your model directory:
-
-```bash
-git clone https://gitlab.sayou.io/lance-wright/vllm-radiance.git
-cd vllm-radiance
-cp .env.example .env
-# Edit MODELS, MODEL_PATH, and SERVED_MODEL_NAME in .env.
-mkdir -p vllm-cache
-docker compose up -d
-docker compose logs -f
-```
-
-The reusable baseline is native FP8 weights, FP8 KV, TP2, 16K maximum context, 85% GPU allocation, an
-eight-request admission ceiling, and automatic prefix caching with hybrid-GDN state alignment. It listens
-on `0.0.0.0:8000`, retains language and vision support, enables Qwen tool/reasoning parsers, loads the
-checkpoint-native chat template and generation defaults, and allows clients to override request-level
-sampling and reasoning effort.
-
-`MAX_NUM_SEQS` is an admission ceiling—not a promise that every admitted request can simultaneously reach
-`MAX_MODEL_LEN`. Select both from the measured capacity tables below.
-
-Common operations:
-
-```bash
-docker compose up -d
-docker compose ps
-docker compose logs -f vllm
-curl -fsS http://localhost:8000/health
-docker compose down
-```
-
-Host paths, GPU IDs, private image tags, and local overrides belong in the gitignored `.env` or an ignored
-`docker-compose.dev.yml`, never in the public Compose file. See `.env.example` and
-`docker-compose.dev.example.yml` in the
-[source repository](https://gitlab.sayou.io/lance-wright/vllm-radiance).
-
-## Target formats
-
-### Native FP8
-
-The default Compose profile expects a native-FP8 checkpoint:
-
-```dotenv
-WEIGHT_QUANTIZATION=fp8
-GPU_UTIL=0.85
-MAX_MODEL_LEN=16384
-MAX_NUM_SEQS=8
-```
-
-Radiance keeps its preshuffled block-FP8 dispatcher, fused RMSNorm/FP8 quantization, split-K fixes, R4D
-attention/GDN, and custom TP2 all-reduce. Replacing the FP8 dispatcher with the generic upstream AITER
-linear path was 9–11% slower in matched controls.
-
-### AMD Quark MXFP4 with native W4A8
-
-For [`amd/Qwen3.8-27B-Quark-AWQ-MXFP4`](https://huggingface.co/amd/Qwen3.8-27B-Quark-AWQ-MXFP4), point
-`MODEL_PATH` at the checkpoint and use:
-
-```dotenv
-WEIGHT_QUANTIZATION=auto
-RADIANCE_MXFP4=1
-RADIANCE_MXFP4_W4A8=1
-RADIANCE_MXFP4_W4A8_MIN_M=0
-RADIANCE_MXFP4_DECODE_MAX_M=64
-RADIANCE_MXFP4_TN4_MIN_M=2048
-RADIANCE_MXFP4_WPERM=1
-RADIANCE_MXFP4_DECODE_NT=1
-```
-
-`auto` lets vLLM consume the checkpoint's Quark metadata. On gfx1201, W4A8 retains packed OCP group-32
-MXFP4 weights and dynamically quantizes activations to FP8 E4M3 so the kernels use RDNA4's native FP8 WMMA
-path. Keep `RADIANCE_MXFP4_W4A8_MIN_M=0`: the generic AITER W4A4 fallback is numerically incorrect for one
-of the qualified Qwen GDN projections. The decode-shaped kernel covers `M<=64`; larger batches use the
-prefill kernel.
-
-The final two switches are the qualified RX5-safe decode subset. They store
-weights in the kernel's fragment order and use non-temporal decode loads. The
-more aggressive RX5 A-tiled, norm-quant, and FP8-stream paths remain available
-only as disabled experiments; do not infer that `RX5` as a whole is qualified.
-
-The checkpoint's embedded MTP tensors are BF16. Add `RADIANCE_QUARK_BF16_MTP=1` only when selecting its MTP
-profile. Non-spec and DFlash do not need that override.
-
-Implementation, numerical controls, provenance, and immutable runs are documented in
-[MXFP4/W4A8 on dual R9700](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/MXFP4_W4A8_R9700.md).
-
-The later ggz14 RX4 traced-quant and FP8 residual-stream kernels are included
-but remain off by default. On this dual-R9700 qualification they produced only
-a mixed +2.1% weighted single-stream signal, regressed ITL 1%-low by 21%, did
-not improve c1/c2/c8 or prefill, and failed strict greedy/tool-call gates. Do
-not enable `RADIANCE_NORMQUANT_FUSION` or `RADIANCE_FP8_STREAM` in production;
-see the [RX4 continuation report](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/MXFP4_RX4_CONTINUATION.md).
-The subsequent safe-kernel selection, FP8-KV calibration work, and complete
-RX5 negative results are recorded in the
-[RX5 continuation report](docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
-
-## Serving modes
-
-Choose exactly one mode. `RADIANCE_SPECULATIVE_CONFIG` contains either MTP or DFlash; the modes are not
-cumulative.
-
-| Mode | Separate drafter | Required profile |
-|---|---|---|
-| Qualified non-spec | No | Leave speculative variables unset |
-| Fast MTP | No; head is stored in the target | MTP JSON plus `RADIANCE_FAST_DRAFT=1` |
-| Experimental DFlash2 | Yes | V2 runner, `PIECEWISE` graphs, draft TP2, matched context, fast draft |
-
-### Fast MTP
-
-For a Qwen checkpoint with an in-checkpoint MTP head:
-
-```dotenv
-RADIANCE_SPECULATIVE_CONFIG='{"method":"mtp","num_speculative_tokens":8,"attention_backend":"R4D","disable_padded_drafter_batch":true}'
-RADIANCE_FAST_DRAFT=1
-```
-
-K8 is a ceiling. Radiance's dynamic controller may select a shallower depth based on confidence and active
-batch size. Fast draft uses an INT2-g128 LM-head copy with exact top-64 reranking; target verification remains
-in place.
-
-### DFlash2
-
-For the native-FP8 ARA target and its selective-FP8 drafter:
-
-```dotenv
-MAX_MODEL_LEN=8192
-VLLM_USE_V2_MODEL_RUNNER=1
-RADIANCE_COMPILATION_CONFIG='{"cudagraph_mode":"PIECEWISE"}'
-RADIANCE_FAST_DRAFT=1
-RADIANCE_SPECULATIVE_CONFIG='{"method":"dflash","model":"/models/Qwen3.8-27B-heretic-ara-DFlash2-fp8-magiccodingman","num_speculative_tokens":7,"draft_tensor_parallel_size":2,"attention_backend":"TRITON_ATTN","max_model_len":8192,"disable_padded_drafter_batch":true}'
-```
-
-For AMD's Quark MXFP4 target, use the target-matched
-[`tcclaviger/Qwen3.8-27B-DFlash2-FP8`](https://huggingface.co/tcclaviger/Qwen3.8-27B-DFlash2-FP8)
-drafter. `RADIANCE_FAST_DRAFT=1` runtime-quantizes eligible draft linears to W4 and uses the INT2 exact-rerank
-head. The target retains R4D attention while the drafter uses Triton attention. The current image also
-merges GDN input projections, uses libr4d's fused speculative GDN update, increases exact-rerank width to
-64, and narrows DFlash verification per request only at c5 and above when observed acceptance says the
-full K7 target verification is wasteful. Every optimization is independently reversible through the
-controls documented in `benchmarks/README.md`.
-
-Prefix caching and `MAMBA_CACHE_MODE=align` remain the deployment defaults. Disable them only for a cold,
-nonce-disjoint benchmark or a deliberate maximum-capacity experiment. Recreate the container after changing
-modes:
-
-```bash
-docker compose down
-docker compose up -d
-```
-
-## Measured capacity on two 32 GiB R9700s
-
-These values include FP8 KV, TP2, no CPU/KV offload, and deliberate VRAM headroom. They are model- and
-profile-specific; larger models and different drafters must be requalified.
-
-### Native FP8 target plus selective-FP8 DFlash drafter
-
-Measured at 85% GPU allocation with prefix caching disabled for the capacity laboratory:
-
-| Maximum context | Conservative `MAX_NUM_SEQS` | Highest completed burst |
-|---:|---:|---:|
-| 8K | 8 | 8 |
-| 16K | 7 | 8 |
-| 32K | 5 | 6 |
-| 64K | 3 | 3 |
-| 128K | 2 | 2 |
-| 256K | 1 | 1 |
-
-Every submission completed; minimum observed physical headroom was 4.41 GiB per GPU.
-
-### Quark MXFP4/W4A8 target plus matched DFlash drafter
-
-Measured at 90% GPU allocation. The target payload is 18.44 GiB versus 28.75 GiB for the native-FP8
-regression target, a 10.31 GiB (35.9%) reduction.
-
-| Maximum context | Conservative production C | Highest completed burst |
-|---:|---:|---:|
-| 32K | 8 | 11 |
-| 64K | 6 | 7 |
-| 128K | 4 | 4 |
-| 256K | 2 | 2 |
-
-The recommended long-context deployment is **128K/C4**, 90% allocation, prefix caching enabled,
-`MAMBA_CACHE_MODE=align`, and DFlash K7. The capacity qualification itself used K5 (the draft depth does not
-change the reserved model/KV capacity): it exposed 576,001 GPU KV tokens (4.39 full 128K requests), completed
-four simultaneous full-context requests without OOM or preemption, and retained 5.17 GiB minimum physical
-headroom per GPU. A repeated 32K prefix reduced TTFT from 9.04 seconds cold to 0.70–0.71 seconds warm. Prefer
-K5 only for a workload that remains dominated by steady c8 traffic.
-
-Full methodology and run IDs are in the
-[Compose capacity report](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/COMPOSE_CAPACITY.md).
-
-### Optional CPU KV offload
-
-Set `RADIANCE_KV_OFFLOADING_SIZE` (GiB) only when the required long-context
-envelope exceeds the GPU KV tier. Radiance coordinates mmap host registration
-across TP workers and defaults `RADIANCE_KV_OFFLOAD_PIN_POLICY=auto`: every rank
-uses pinned DMA only when all ranks register successfully; otherwise the failed
-HIP error is drained and all ranks coherently use slower pageable DMA. Use
-`required` when silently losing pinned-transfer performance is unacceptable, or
-`disabled` as a diagnostic control.
-
-`RADIANCE_KV_OFFLOAD_REGISTER_CHUNK_GIB=0` is the shipped default and preserves
-one whole-region registration. Positive chunk sizes are experimental until
-qualified on the deployment host. The dual-R9700 32/36 GiB investigation and
-reproducible maintenance probe are documented in
-[ROCm KV-offload registration hardening](docs/ROCM_KV_OFFLOAD_REGISTRATION.md).
-
-## Measured performance
-
-BetterBench v0.2.2 used its v1 corpus, ten measured passes per category, greedy decoding, cold nonce-prefixed
-prompts, and c1/c2/c4/c8 on two R9700s. The current recommended MXFP4 kernel
-profile adds `RADIANCE_MXFP4_WPERM=1` and `RADIANCE_MXFP4_DECODE_NT=1` while
-keeping full RX5 (`A_TILED`, `GDN_NORM_QUANT`, `NORMQUANT_FUSION`, and
-`FP8_STREAM`) disabled. The measured serving lane used the matched DFlash K7
-drafter, TP2, FP8 KV, and PIECEWISE graphs:
-
-| Weighted single-stream | ITL 1%-low | TTFT p50 | c1 | c2 | c4 | c8 |
-|---:|---:|---:|---:|---:|---:|---:|
-| **183.1 TPS** | **137.6 TPS** | **64 ms** | **163.0** | **286.1** | **462.0** | **523.5** |
-
-Single-stream category medians:
-
-| Category | Decode TPS | ITL 1%-low TPS | TTFT p50 |
-|---|---:|---:|---:|
-| Chat | 140.4 | 118.6 | 66.0 ms |
-| Code | 188.8 | 116.5 | 63.1 ms |
-| File edit | 218.8 | 152.6 | 67.5 ms |
-| JSON | 249.4 | 183.4 | 63.5 ms |
-| Math | 243.7 | 196.4 | 62.8 ms |
-| Prose | 117.9 | 108.2 | 63.1 ms |
-| Reasoning | 134.8 | 108.6 | 63.1 ms |
-| Summarization | 210.1 | 186.5 | 68.3 ms |
-
-Cold prefill measured **4,031.8 / 4,444.7 / 4,268.6 TPS** at the 2K/4K/7K target depths. Every concurrency
-arm completed 24/24 requests. These are the standard 8K/C8 laboratory results at 85% GPU allocation with
-prefix caching and CPU offload disabled; the 128K/C4 production profile above intentionally has a different
-capacity/latency contract. Exact category TTFT, ITL, prefill, run metadata, and immutable raw results are in
-the [current safe-subset BetterBench report](benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard/betterbench/report.md)
-and [RX5 continuation report](docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
-
-DFlash remains experimental and opt-in because strict speculative/non-spec greedy equivalence has not passed,
-even though the stable-default lane passed its meaningful-output and sampled tool-call qualification. The
-full RX4/RX5 traced-quant, tiled-prefill, GDN norm-quant, and FP8
-residual-stream profile is not represented by the table above and remains off.
-The full RX5+DFlash interaction passed only 93/100 tool calls; constraining it
-to one tool call improved that to 98/100 but did not qualify it.
-
-For historical mode-to-mode context, the earlier Radiance 0.9.3/libr4d 0.5.0 matched publication measured:
-
-| Mode | Weighted single-stream TPS | c1 | c2 | c4 | c8 |
-|---|---:|---:|---:|---:|---:|
-| Non-spec | 43.6 | 43.2 | 83.1 | 145.7 | 241.3 |
-| Fast MTP K4 | 102.3 | 97.8 | 173.1 | 284.5 | 372.1 |
-| Fast DFlash K5 | 136.2 | 123.0 | 216.4 | 343.0 | **435.7** |
-| Fast DFlash K7 | **145.4** | **132.4** | **234.6** | **343.3** | 416.9 |
-
-This older table is retained because non-spec, MTP, K5, and K7 have not all been rerun on the current RX4-dark
-image. Do not treat it as the current K7 performance ceiling. Its per-category TPS, acceptance, TTFT/TPOT,
-prefill, telemetry, confidence intervals, negative results, and immutable run IDs are in the
-[Radiance 0.9.3 qualification report](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/RADIANCE_093_R4D050_MXFP4.md).
+[Quick start](#quick-start) · [Numerical report](reports/d7-rdna4-2026-09-17/REPORT.md)
+· [Verification](docs/VERIFICATION.md) · [Architecture](docs/ARCHITECTURE.md)
+· [Pi](docs/PI.md) · [Releases](https://github.com/Terrydaktal/vllm-coherence/releases)
 
 ## What is included
 
-- **libr4d 0.5.0:** RDNA4 attention, GDN prefill/decode/spec-state handling, vision flash attention, exact and
-  rotated-six-bit TP2 all-reduce, BF16/DFlash GEMMs, and DFlash-specific kernels.
-- **Radiance FP8 paths:** preshuffled block-FP8 GEMMs, split-K alignment fixes, fused RMSNorm/quantization,
-  and guarded fallbacks.
-- **Native Quark MXFP4/W4A8:** packed OCP group-32 weights with dynamic FP8 activation quantization and
-  separate small-M decode and prefill kernels.
-- **Fast speculative drafting:** dynamic MTP depth, verbatim n-gram tails, INT2 exact-rerank heads, and W4
-  DFlash draft linears.
-- **Hybrid-safe prefix caching:** automatic prefix caching with GDN convolution/recurrent-state restoration
-  through `--mamba-cache-mode=align`.
-- **Spec-safe structured output:** upstream XGrammar termination and reasoning-boundary fixes prevent
-  speculative draft batches from overrunning or desynchronizing the tool-call grammar; Qwen structural-tag
-  normalization also preserves open nested objects used by generic deferred-tool wrappers.
-- **Topology qualification:** a background startup sweep reports GPU enumeration, P2P access, NUMA distance,
-  and peer-copy bandwidth.
+- **Target conformance diagnostics:** forced-token replay and isolated stage
+  checks expose M1/M8 and eager/compiled differences. This revision retains the
+  original arithmetic; alignment is introduced in the following commit.
+- **Measured baseline:** full compiled stage timings and isolated correctness
+  checks identify the numerical repairs introduced by the following commit.
+- **Target-head diagnostics:** capture candidate recall and numerical differences.
+  The global-256 replacement is introduced in the next feature commit.
+- **Persistent conversations:** compressed incremental snapshots, buffered tails,
+  explicit flushes, verified publication before retiring old heads, generation-
+  aware garbage collection and cumulative disk-write accounting.
+- **Shared-GPU scheduling:** hand over at response/tool boundaries, retain short
+  tool calls with a grace period, and support per-answer `/priority`.
+- **Transparent Pi:** prefill/restore/queue phases, a three-second token-rate
+  window, context/residency counters, shared temperature/fan probes, expandable
+  backend errors and transactional compaction that preserves editor input.
+- **Reusable verification:** forced-token replay, logical-state comparison,
+  first-divergence capture, operator checks, deliberate fault injection and small,
+  explicitly scoped machine-checked obligations.
 
-Unsupported geometries fall back per operator. AITER, FLA, Triton, and RCCL controls remain available for
-matched experiments.
+<!-- COHERENCE_CURRENT_RESULTS -->
+## Current numerical results
 
-## Build
+Original eager M1 versus original compiled M8, using the **full BF16 target head**: 10,000 forced decode tokens across 23 Pi continuations, with 23 separately checked prefill predictions.
 
-The published image is built entirely from pinned source commits:
+| Prediction | Same token set | Same ordering | Mean shared tokens |
+| --- | ---: | ---: | ---: |
+| Top 1 | 9,838 / 10,000 (98.38%) | 9,838 / 10,000 (98.38%) | 0.9838 / 1 |
+| Top 10 | 4,878 / 10,000 (48.78%) | 761 / 10,000 (7.61%) | 9.3516 / 10 |
+| Top 20 | 2,313 / 10,000 (23.13%) | 4 / 10,000 (0.04%) | 18.6883 / 20 |
 
-| Component | Version/pin |
-|---|---|
-| vLLM | 0.28.0, `2cf0a6915ce544dc493a0990f2ea38d81601128a`, plus reviewed DFlash/XGrammar/parser/ROCm-graph fixes |
-| AMD PyTorch | 2.12 branch, `6bbd26020da1c6dc198625dfcdd968b1e4e6b1c5` |
-| AMD Triton | 3.7.1, `f0b55c07da61c71775bef6d1a15ebf846430ac75` |
-| AITER | 0.1.20, `fc2e5d57fb5b8ad8e7e23f7103071dde798ea618` |
-| libr4d | 0.5.0, `e8de4bc1f3dbd608dcb8d3ffceb6b48acdf83bb7` |
-| ROCm userspace | 7.14 |
+The mismatches above are unresolved in this revision. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.
 
-```bash
-docker build \
-  -t vllm-radiance:$(cat VERSION) \
-  --build-arg RADIANCE_VERSION=$(cat VERSION) \
-  .
+## Compiled backend stages
+
+Original **compiled, piecewise-graph M8**, full BF16 head, same 60K-input Pi fixture as the report. Values are the report's existing measurements, summed across all layer instances per round. Six matching complete-inventory rounds are retained. This is not eager timing, and these GPU durations must not be added to host/queue timers.
+
+**Set/order** means the same top-20 token set, followed by the same ranking. For example, `320/320; 320/320` means both checks passed at every tested token. Operator-byte checks and whole-model checks are labelled separately; each result retains its stated test scope.
+
+| Stage | Current GPU ms per round | Current correctness evidence | Implementation / measurement boundary |
+| --- | ---: | --- | --- |
+| Embedding + first input normalization | 0.004 | 320/320; 320/320 | Original pinned implementation. |
+| Layer input residual/normalization | 0.155 | 320/320; 320/320 | Original pinned implementation. |
+| GDN input activation FP8 quantization | 0.127 | 320/320; 320/320 | Original pinned implementation. |
+| GDN input projection | 3.875 | 320/320; 320/320 | Original pinned implementation. |
+| GDN layout/copies and buffer initialization | 0.284 | State/layout checked with convolution and recurrence | Original pinned implementation. |
+| GDN convolution | 0.494 | 9/320; 0/320 | Original pinned implementation. |
+| GDN recurrence and gates | 1.162 | 13/320; 0/320 | Original pinned implementation. |
+| GDN output gated normalization | 0.138 | 320/320; 320/320 | Original pinned implementation. |
+| GDN output activation FP8 quantization | 0.128 | 320/320; 320/320 | Original pinned implementation. |
+| GDN output projection | 1.884 | 320/320; 320/320 | Original pinned implementation. |
+| Attention input activation FP8 quantization | 0.043 | 320/320; 320/320 | Original pinned implementation. |
+| Attention input projection | 1.099 | 320/320; 320/320 | Original pinned implementation. |
+| Attention Q/K normalization, RoPE and layout | 0.079 | 320/320; 320/320 | Original pinned implementation. |
+| Attention KV write | 0.046 | 320/320; 320/320 | Original pinned implementation. |
+| Attention decode | 4.224 | 22/320; 0/320 | Original pinned implementation. |
+| Attention split-KV merge | 0.138 | 22/320; 0/320 | Original pinned implementation. |
+| Attention output gating | 0.028 | 320/320; 320/320 | Original pinned implementation. |
+| Attention output activation FP8 quantization | 0.046 | 320/320; 320/320 | Original pinned implementation. |
+| Attention output projection | 0.557 | 320/320; 320/320 | Original pinned implementation. |
+| Post-attention/GDN residual/normalization | 0.142 | 320/320; 320/320 | Original pinned implementation. |
+| MLP gate/up input FP8 quantization | 0.165 | 320/320; 320/320 | Original pinned implementation. |
+| MLP gate/up projection | 25.271 | 320/320; 320/320 | Original pinned implementation. |
+| MLP SiLU and gating | 0.156 | 320/320; 320/320 | Original pinned implementation. |
+| MLP down input FP8 quantization | 0.297 | 320/320; 320/320 | Original pinned implementation. |
+| MLP down projection | 5.147 | 320/320; 320/320 | Original pinned implementation. |
+| Final normalization/layout | 0.002 | 320/320; 320/320 | Original pinned implementation. |
+| Full BF16 target head | 4.024 | 320/320; 319/320 | Original pinned implementation. |
+| Drafter | 6.328 | N/A: no isolated target top-20 prediction | Original pinned implementation. |
+| Other GPU bookkeeping | 0.551 | N/A: no isolated target top-20 prediction | Original pinned implementation. |
+
+**Sum of measured GPU dispatch durations: 56.596 ms per profiled round.** This sum excludes host gaps and queue time and is not the uninstrumented round timer.
+
+<details>
+<summary>Every decoder layer: current projection and remaining-work timings</summary>
+
+Each layer has four projections. Gate and up are one joint GEMM; there is no separately measured gate/up split.
+
+| Layer | Type | All layer work ms | Input projection ms | Output projection ms | Gate/up projection ms | Down projection ms | Other work ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | GDN | 0.6255 | 0.0756 | 0.0388 | 0.3712 | 0.0802 | 0.0597 |
+| 1 | GDN | 0.6274 | 0.0797 | 0.0387 | 0.3712 | 0.0802 | 0.0577 |
+| 2 | GDN | 0.6321 | 0.0798 | 0.0385 | 0.3716 | 0.0806 | 0.0616 |
+| 3 | Attention | 0.8453 | 0.0683 | 0.0352 | 0.3747 | 0.0797 | 0.2876 |
+| 4 | GDN | 0.6372 | 0.0798 | 0.0390 | 0.3797 | 0.0805 | 0.0582 |
+| 5 | GDN | 0.6423 | 0.0805 | 0.0392 | 0.3828 | 0.0799 | 0.0599 |
+| 6 | GDN | 0.6501 | 0.0811 | 0.0389 | 0.3868 | 0.0803 | 0.0630 |
+| 7 | Attention | 0.8685 | 0.0690 | 0.0347 | 0.3884 | 0.0796 | 0.2968 |
+| 8 | GDN | 0.6468 | 0.0797 | 0.0392 | 0.3876 | 0.0802 | 0.0600 |
+| 9 | GDN | 0.6481 | 0.0805 | 0.0395 | 0.3875 | 0.0802 | 0.0604 |
+| 10 | GDN | 0.6543 | 0.0807 | 0.0391 | 0.3902 | 0.0802 | 0.0641 |
+| 11 | Attention | 0.8717 | 0.0684 | 0.0343 | 0.3912 | 0.0799 | 0.2979 |
+| 12 | GDN | 0.6526 | 0.0805 | 0.0394 | 0.3912 | 0.0799 | 0.0615 |
+| 13 | GDN | 0.6521 | 0.0811 | 0.0393 | 0.3904 | 0.0800 | 0.0612 |
+| 14 | GDN | 0.6536 | 0.0818 | 0.0391 | 0.3881 | 0.0803 | 0.0643 |
+| 15 | Attention | 0.8739 | 0.0687 | 0.0354 | 0.3909 | 0.0798 | 0.2991 |
+| 16 | GDN | 0.6519 | 0.0806 | 0.0388 | 0.3909 | 0.0804 | 0.0612 |
+| 17 | GDN | 0.6531 | 0.0808 | 0.0394 | 0.3911 | 0.0807 | 0.0610 |
+| 18 | GDN | 0.6587 | 0.0807 | 0.0401 | 0.3910 | 0.0808 | 0.0662 |
+| 19 | Attention | 0.8778 | 0.0684 | 0.0345 | 0.3926 | 0.0802 | 0.3020 |
+| 20 | GDN | 0.6580 | 0.0809 | 0.0394 | 0.3955 | 0.0803 | 0.0620 |
+| 21 | GDN | 0.6583 | 0.0806 | 0.0390 | 0.3971 | 0.0803 | 0.0614 |
+| 22 | GDN | 0.6630 | 0.0804 | 0.0386 | 0.3977 | 0.0808 | 0.0654 |
+| 23 | Attention | 0.8782 | 0.0682 | 0.0348 | 0.3938 | 0.0800 | 0.3014 |
+| 24 | GDN | 0.6550 | 0.0806 | 0.0391 | 0.3926 | 0.0809 | 0.0619 |
+| 25 | GDN | 0.6546 | 0.0803 | 0.0396 | 0.3926 | 0.0806 | 0.0615 |
+| 26 | GDN | 0.6622 | 0.0817 | 0.0393 | 0.3948 | 0.0805 | 0.0659 |
+| 27 | Attention | 0.8835 | 0.0694 | 0.0352 | 0.3948 | 0.0801 | 0.3040 |
+| 28 | GDN | 0.6579 | 0.0815 | 0.0397 | 0.3946 | 0.0803 | 0.0617 |
+| 29 | GDN | 0.6606 | 0.0813 | 0.0390 | 0.3970 | 0.0805 | 0.0628 |
+| 30 | GDN | 0.6652 | 0.0809 | 0.0392 | 0.3983 | 0.0808 | 0.0660 |
+| 31 | Attention | 0.8834 | 0.0693 | 0.0348 | 0.3966 | 0.0803 | 0.3025 |
+| 32 | GDN | 0.6588 | 0.0812 | 0.0393 | 0.3970 | 0.0805 | 0.0608 |
+| 33 | GDN | 0.6600 | 0.0811 | 0.0396 | 0.3965 | 0.0806 | 0.0622 |
+| 34 | GDN | 0.6646 | 0.0806 | 0.0392 | 0.3981 | 0.0811 | 0.0656 |
+| 35 | Attention | 0.8900 | 0.0688 | 0.0346 | 0.4003 | 0.0801 | 0.3062 |
+| 36 | GDN | 0.6646 | 0.0814 | 0.0398 | 0.4001 | 0.0804 | 0.0628 |
+| 37 | GDN | 0.6616 | 0.0806 | 0.0396 | 0.3983 | 0.0808 | 0.0622 |
+| 38 | GDN | 0.6671 | 0.0811 | 0.0390 | 0.4007 | 0.0809 | 0.0654 |
+| 39 | Attention | 0.8897 | 0.0685 | 0.0345 | 0.4000 | 0.0801 | 0.3066 |
+| 40 | GDN | 0.6629 | 0.0809 | 0.0393 | 0.3994 | 0.0806 | 0.0627 |
+| 41 | GDN | 0.6629 | 0.0812 | 0.0392 | 0.3993 | 0.0804 | 0.0627 |
+| 42 | GDN | 0.6651 | 0.0804 | 0.0398 | 0.3992 | 0.0803 | 0.0655 |
+| 43 | Attention | 0.8903 | 0.0684 | 0.0351 | 0.4013 | 0.0801 | 0.3053 |
+| 44 | GDN | 0.6671 | 0.0820 | 0.0394 | 0.4023 | 0.0802 | 0.0632 |
+| 45 | GDN | 0.6669 | 0.0808 | 0.0392 | 0.4030 | 0.0807 | 0.0632 |
+| 46 | GDN | 0.6671 | 0.0802 | 0.0389 | 0.4009 | 0.0814 | 0.0658 |
+| 47 | Attention | 0.8922 | 0.0685 | 0.0347 | 0.4026 | 0.0802 | 0.3062 |
+| 48 | GDN | 0.6687 | 0.0814 | 0.0396 | 0.4040 | 0.0809 | 0.0628 |
+| 49 | GDN | 0.6713 | 0.0812 | 0.0393 | 0.4064 | 0.0811 | 0.0633 |
+| 50 | GDN | 0.6709 | 0.0805 | 0.0395 | 0.4037 | 0.0809 | 0.0663 |
+| 51 | Attention | 0.8912 | 0.0685 | 0.0349 | 0.4003 | 0.0809 | 0.3065 |
+| 52 | GDN | 0.6629 | 0.0802 | 0.0398 | 0.3994 | 0.0805 | 0.0630 |
+| 53 | GDN | 0.6618 | 0.0802 | 0.0394 | 0.3997 | 0.0808 | 0.0617 |
+| 54 | GDN | 0.6692 | 0.0822 | 0.0386 | 0.4012 | 0.0810 | 0.0663 |
+| 55 | Attention | 0.8885 | 0.0691 | 0.0345 | 0.3995 | 0.0802 | 0.3051 |
+| 56 | GDN | 0.6586 | 0.0803 | 0.0387 | 0.3974 | 0.0803 | 0.0619 |
+| 57 | GDN | 0.6636 | 0.0808 | 0.0395 | 0.3996 | 0.0809 | 0.0628 |
+| 58 | GDN | 0.6692 | 0.0814 | 0.0397 | 0.4010 | 0.0807 | 0.0664 |
+| 59 | Attention | 0.8904 | 0.0685 | 0.0347 | 0.4009 | 0.0804 | 0.3059 |
+| 60 | GDN | 0.6652 | 0.0817 | 0.0392 | 0.4008 | 0.0806 | 0.0630 |
+| 61 | GDN | 0.6649 | 0.0813 | 0.0395 | 0.4011 | 0.0802 | 0.0627 |
+| 62 | GDN | 0.6688 | 0.0809 | 0.0392 | 0.4018 | 0.0808 | 0.0661 |
+| 63 | Attention | 0.8917 | 0.0691 | 0.0350 | 0.4010 | 0.0799 | 0.3067 |
+
+</details>
+
+<details>
+<summary>Every recorded kernel, grouped by stage</summary>
+
+| Stage / compiled kernel | Calls in retained rounds | Current GPU ms per round |
+| --- | ---: | ---: |
+| Drafter / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x16x32_MI16x16x1_SN_LDSB1_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR0_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS0_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA128_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB2_ONLL1_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_2_1.kd` | 6 | 0.007179 |
+| Drafter / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x32x256_MI16x16x1_SN_LDSB0_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR1_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS1_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA512_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB16_ONLL0_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_4_1.kd` | 6 | 0.177347 |
+| Drafter / `__amd_rocclr_copyBuffer.kd` | 6 | 0.001919 |
+| Drafter / `__amd_rocclr_fillBufferAligned.kd` | 18 | 0.007077 |
+| Drafter / `_cache_draft_logits_kernel.kd` | 6 | 0.002359 |
+| Drafter / `_draft_head_int2.kd` | 6 | 0.824683 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_17408_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 30 | 0.730700 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_25600_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 6 | 0.218080 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_4096_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 30 | 0.202844 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_272_cache_modifier_NONE.kd` | 30 | 1.446181 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_48_cache_modifier_NONE.kd` | 30 | 0.273222 |
+| Drafter / `_prepare_dflash_inputs_kernel.kd` | 6 | 0.007819 |
+| Drafter / `_rerank_exact.kd` | 6 | 0.008606 |
+| Drafter / `_selector_walk_kernel.kd` | 6 | 0.007866 |
+| Drafter / `kernel_unified_attention.kd` | 30 | 1.852924 |
+| Drafter / `reshape_and_cache_kernel_flash.kd` | 60 | 0.026984 |
+| Drafter / `triton_per_fused_4.kd` | 6 | 0.001926 |
+| Drafter / `triton_per_fused_9.kd` | 24 | 0.007490 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_0.kd` | 30 | 0.009582 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_2.kd` | 6 | 0.002272 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_4.kd` | 54 | 0.014478 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_view_0.kd` | 6 | 0.004099 |
+| Drafter / `triton_poi_fused_0.kd` | 6 | 0.002686 |
+| Drafter / `triton_poi_fused_10.kd` | 24 | 0.007503 |
+| Drafter / `triton_poi_fused_5.kd` | 6 | 0.002232 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_mul_preshuffle_gemm_silu_slice_squeeze_view_7.kd` | 30 | 0.015428 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_1.kd` | 30 | 0.011795 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_3.kd` | 6 | 0.002059 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_5.kd` | 54 | 0.016371 |
+| Drafter / `triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_3.kd` | 54 | 0.019358 |
+| Drafter / `triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_ge_mul_rms_norm_select_slice_unsqueeze_view_1.kd` | 6 | 0.002306 |
+| Drafter / `triton_poi_fused_add_permute_unsqueeze_view_2.kd` | 6 | 0.001846 |
+| Drafter / `triton_poi_fused_cat_expand_index_mul_slice_unsqueeze_view_1.kd` | 6 | 0.002546 |
+| Drafter / `triton_red_fused__to_copy_abs_clamp_div_max_mul_preshuffle_gemm_silu_slice_squeeze_view_6.kd` | 30 | 0.013422 |
+| Drafter / `triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_2.kd` | 30 | 0.030876 |
+| Drafter / `triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_8.kd` | 24 | 0.025756 |
+| Drafter / `triton_red_fused__to_copy_embedding_mul_rms_norm_w4_gemm_0.kd` | 6 | 0.003846 |
+| Drafter / `triton_red_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_8.kd` | 6 | 0.006719 |
+| Drafter / `void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]` | 12 | 0.009285 |
+| Drafter / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003526 |
+| Drafter / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 6 | 0.002879 |
+| Drafter / `void at::native::bitonicSortKVInPlace<2, -1, 16, 16, c10::BFloat16, long, at::native::GTOp<c10::BFloat16, true>, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<c10::BFloat16, true>) [clone .kd]` | 6 | 0.003232 |
+| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 6 | 0.005012 |
+| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 6 | 0.002586 |
+| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 6 | 0.003506 |
+| Drafter / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003146 |
+| Drafter / `void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 12 | 0.038345 |
+| Drafter / `void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 24 | 0.055463 |
+| Drafter / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 12 | 0.022351 |
+| Drafter / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 24 | 0.028736 |
+| Drafter / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 12 | 0.003018 |
+| Drafter / `void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 6 | 0.021039 |
+| Drafter / `void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 6 | 0.008879 |
+| Drafter / `void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]` | 6 | 0.003759 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.001732 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.002479 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 12 | 0.003785 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 12 | 0.005351 |
+| Drafter / `void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]` | 6 | 0.002099 |
+| Drafter / `void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]` | 6 | 0.004952 |
+| Drafter / `void r4d_gemm_w4a16_nt_m64_kernel<1, 1, false>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]` | 6 | 0.004506 |
+| Drafter / `void r4d_gemm_w4a16_nt_m64_kernel<1, 1, true>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]` | 60 | 0.080050 |
+| Drafter / `void vllm::rms_norm_kernel<c10::BFloat16, 8, 2, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]` | 6 | 0.003059 |
+| Drafter / `void vllm::rms_norm_kernel<c10::BFloat16, 8, 4, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]` | 6 | 0.002752 |
+| Drafter / `void vllm::rotary_embedding_kernel<c10::BFloat16, c10::BFloat16, true>(long const*, c10::BFloat16*, c10::BFloat16*, c10::BFloat16 const*, int, long, long, long, int, int, int, long, bool) [clone .kd]` | 6 | 0.002499 |
+| Attention KV write / `reshape_and_cache_kernel_flash.kd` | 96 | 0.046324 |
+| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_6.kd` | 96 | 0.022437 |
+| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_8.kd` | 96 | 0.030144 |
+| Attention Q/K normalization, RoPE and layout / `triton_red_fused_7.kd` | 96 | 0.026091 |
+| Attention decode / `void r4d_attn_decode_kernel<3, 16, 256, 6, 16, 0, 3430971>(R4DArgs, int) [clone .kd]` | 96 | 4.224365 |
+| Attention input activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 96 | 0.042844 |
+| Attention input projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 96 | 1.099262 |
+| Attention output activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 96 | 0.045851 |
+| Attention output gating / `triton_poi_fused_mul_mxfp4_linear_sigmoid_view_0.kd` | 96 | 0.028144 |
+| Attention output projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 96 | 0.556920 |
+| Attention split-KV merge / `void r4d_attn_splitkv_combine_kernel<256, 4, 1>(R4DArgs, int, int) [clone .kd]` | 96 | 0.137671 |
+| Embedding + first input normalization / `triton_red_fused__to_copy_add_embedding_mxfp4_linear_rms_norm_0.kd` | 6 | 0.004112 |
+| Final normalization/layout / `triton_red_fused__to_copy_add_fused_add_rms_norm_3.kd` | 6 | 0.002392 |
+| GDN convolution / `void r4d_gdn_conv_update_kernel<1>(unsigned short const*, long, unsigned short const*, unsigned short const*, unsigned short*, long, long, long, int, int const*, long, int const*, unsigned short*, unsigned short*, unsigned short*, int const*, int, int, int) [clone .kd]` | 288 | 0.494015 |
+| GDN input activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 288 | 0.127500 |
+| GDN input projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 288 | 3.875011 |
+| GDN layout/copies and buffer initialization / `triton_per_fused_1.kd` | 96 | 0.022318 |
+| GDN layout/copies and buffer initialization / `triton_poi_fused_0.kd` | 96 | 0.031257 |
+| GDN layout/copies and buffer initialization / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 288 | 0.156100 |
+| GDN layout/copies and buffer initialization / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 288 | 0.074632 |
+| GDN output activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 288 | 0.128079 |
+| GDN output gated normalization / `triton_per_fused__to_copy_mean_pow_view_0.kd` | 192 | 0.050375 |
+| GDN output gated normalization / `triton_poi_fused__to_copy_add_mean_mul_mxfp4_linear_pow_rsqrt_silu_view_1.kd` | 192 | 0.058742 |
+| GDN output gated normalization / `triton_poi_fused__to_copy_add_mean_mul_mxfp4_linear_pow_rsqrt_silu_view_2.kd` | 96 | 0.028797 |
+| GDN output projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 288 | 1.884129 |
+| GDN recurrence and gates / `void r4d_gdn_recurrent_update_kernel<1, 0, 2>(unsigned short const*, unsigned short const*, unsigned short const*, void const*, void const*, long, float const*, float const*, float*, long, long, unsigned short*, int const*, int const*, long, int const*, unsigned short const*, float const*, float, int, int, int, float, float) [clone .kd]` | 288 | 1.161877 |
+| Layer input residual/normalization / `triton_red_fused__to_copy_add_fused_add_rms_norm_mxfp4_linear_3.kd` | 90 | 0.037245 |
+| Layer input residual/normalization / `triton_red_fused__to_copy_add_fused_add_rms_norm_mxfp4_linear_4.kd` | 192 | 0.078508 |
+| Layer input residual/normalization / `triton_red_fused__to_copy_add_fused_add_rms_norm_mxfp4_linear_5.kd` | 96 | 0.039184 |
+| MLP SiLU and gating / `triton_poi_fused_mul_mxfp4_linear_silu_slice_2.kd` | 96 | 0.044918 |
+| MLP SiLU and gating / `triton_poi_fused_mul_mxfp4_linear_silu_slice_3.kd` | 192 | 0.066262 |
+| MLP SiLU and gating / `triton_poi_fused_mul_mxfp4_linear_silu_slice_4.kd` | 96 | 0.045138 |
+| MLP down input FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 384 | 0.296558 |
+| MLP down projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 384 | 5.147348 |
+| MLP gate/up input FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 384 | 0.164856 |
+| MLP gate/up projection / `void radiance_mxfp4_fp8_gemm_folded<2, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, std::bfloat16_t*, int, int, int) [clone .kd]` | 384 | 25.271205 |
+| Post-attention/GDN residual/normalization / `triton_red_fused__to_copy_add_fused_add_rms_norm_mxfp4_linear_1.kd` | 96 | 0.035164 |
+| Post-attention/GDN residual/normalization / `triton_red_fused__to_copy_add_fused_add_rms_norm_mxfp4_linear_2.kd` | 192 | 0.064875 |
+| Post-attention/GDN residual/normalization / `triton_red_fused__to_copy_add_fused_add_rms_norm_mxfp4_linear_3.kd` | 96 | 0.042258 |
+| Full BF16 target head / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x32x256_MI16x16x1_SN_LDSB0_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR1_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS1_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA512_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB16_ONLL0_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS1_SPO0_SRVW0_SSO0_SVW1_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_4_1.kd` | 6 | 4.024325 |
+| Other GPU bookkeeping / `__amd_rocclr_copyBuffer.kd` | 172 | 0.075278 |
+| Other GPU bookkeeping / `__amd_rocclr_fillBufferAligned.kd` | 6 | 0.002699 |
+| Other GPU bookkeeping / `_combine_sampled_and_draft_tokens_kernel.kd` | 7 | 0.003432 |
+| Other GPU bookkeeping / `_compute_local_logits_stats_kernel.kd` | 6 | 0.028659 |
+| Other GPU bookkeeping / `_compute_slot_mappings_kernel.kd` | 7 | 0.003386 |
+| Other GPU bookkeeping / `_expand_idx_mapping_kernel.kd` | 7 | 0.002185 |
+| Other GPU bookkeeping / `_gather_block_tables_kernel.kd` | 7 | 0.005632 |
+| Other GPU bookkeeping / `_get_num_sampled_and_rejected_kernel.kd` | 6 | 0.002632 |
+| Other GPU bookkeeping / `_insert_resampled_kernel.kd` | 6 | 0.003466 |
+| Other GPU bookkeeping / `_post_update_kernel.kd` | 6 | 0.005292 |
+| Other GPU bookkeeping / `_prepare_pos_seq_lens_kernel.kd` | 7 | 0.002499 |
+| Other GPU bookkeeping / `_prepare_rope_positions_kernel.kd` | 7 | 0.003119 |
+| Other GPU bookkeeping / `_rejection_kernel.kd` | 6 | 0.007559 |
+| Other GPU bookkeeping / `_resample_kernel.kd` | 6 | 0.014159 |
+| Other GPU bookkeeping / `_scatter_num_accepted_kernel.kd` | 6 | 0.001939 |
+| Other GPU bookkeeping / `postprocess_mamba_fused_kernel.kd` | 6 | 0.002552 |
+| Other GPU bookkeeping / `precopy_mamba_align_fused_kernel.kd` | 7 | 0.003079 |
+| Other GPU bookkeeping / `preprocess_mamba_align_fused_kernel.kd` | 7 | 0.003119 |
+| Other GPU bookkeeping / `void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*) [clone .kd]` | 42 | 0.010240 |
+| Other GPU bookkeeping / `void (anonymous namespace)::softmax_warp_forward<float, float, float, 6, false, false, 32>(float*, float const*, int, int, int, bool const*, int, bool) [clone .kd]` | 6 | 0.002226 |
+| Other GPU bookkeeping / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 48 | 0.015452 |
+| Other GPU bookkeeping / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 6 | 0.002579 |
+| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 48 | 0.020612 |
+| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}) [clone .kd]` | 42 | 0.021400 |
+| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}) [clone .kd]` | 18 | 0.018944 |
+| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 109 | 0.053089 |
+| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 12 | 0.005945 |
+| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003059 |
+| Other GPU bookkeeping / `void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 24 | 0.050263 |
+| Other GPU bookkeeping / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 24 | 0.037523 |
+| Other GPU bookkeeping / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 6 | 0.001612 |
+| Other GPU bookkeeping / `void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 6 | 0.026179 |
+| Other GPU bookkeeping / `void at::native::tensor_kernel_scan_innermost_dim<float, std::plus<float> >(float*, float const*, unsigned int, unsigned int, unsigned int, float, std::plus<float>) [clone .kd]` | 6 | 0.002646 |
+| Other GPU bookkeeping / `void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast) [clone .kd]` | 42 | 0.012020 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul>) [clone .kd]` | 6 | 0.002759 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>) [clone .kd]` | 7 | 0.002119 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul> >(int, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.002286 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>) [clone .kd]` | 42 | 0.012046 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.001772 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul> >(int, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul>) [clone .kd]` | 6 | 0.010073 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul> >(int, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul>) [clone .kd]` | 12 | 0.004605 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul> >(int, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul>) [clone .kd]` | 42 | 0.019407 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>) [clone .kd]` | 48 | 0.013725 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.001966 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>) [clone .kd]` | 6 | 0.001939 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>) [clone .kd]` | 12 | 0.003618 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>) [clone .kd]` | 7 | 0.001932 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.010886 |
+| Other GPU bookkeeping / `void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]` | 6 | 0.002086 |
+| Other GPU bookkeeping / `void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]` | 6 | 0.004832 |
+
+</details>
+
+## Uninstrumented performance
+
+Separate uninstrumented compiled direct-engine controls with the full BF16 target head. Three natural responses on the same 60,000-input-token Pi prefix; excludes HTTP/Pi, tool execution, snapshot publication, cold prefill and warm-up.
+
+| Measurement | Current result |
+| --- | ---: |
+| Median round | 59.684 ms |
+| Pooled rate after first output | 85.561 tok/s |
+| Output tokens / natural responses | 2,582 / 3 |
+| Timed post-first output | 30.142 s |
+
+These approximately 80–86 tok/s results are brief **60K-input** controls, not the separate 60K-generated-token head benchmark. No eager execution or instrumented timing is substituted for these complete-round measurements.
+
+Aggregate data: [current measurements](benchmarks/results/coherence-current.json). Historical methodology and detailed numerical evidence: [technical report](reports/d7-rdna4-2026-09-17/REPORT.md).
+
+<!-- /COHERENCE_CURRENT_RESULTS -->
+
+## Quick start
+
+The initial serving profile targets **one R9700, Linux x86-64, Qwen3.8-27B-
+Uncensored-MXFP4-awq and Qwen3.8-27B-DFlash2-FP8**. Obtain the target and matching
+drafter separately. Model weights and private benchmark inputs are not included.
+
+The GPU host needs ROCm device access, Python 3.12+, rootless Podman,
+at least 18 GiB free `/dev/shm`, and space for compiler caches and snapshots. The
+profile uses 10 GB of GPU KV memory, an 18 GiB CPU offload arena, and additional
+per-chat handover/tail RAM; allow ample system RAM.
+
+```sh
+git clone https://github.com/Terrydaktal/vllm-coherence.git
+cd vllm-coherence
+tools/coherence doctor
+tools/coherence prepare
+tools/coherence serve --model /path/to/target --draft /path/to/drafter
 ```
 
-The multi-stage build compiles the stack for `gfx1201`, prunes unrelated ROCm device code, builds libr4d with
-the image's `hipcc`, and copies only the runtime into the release stage. A compiler and headers remain in the
-release image because AITER JIT-compiles kernels on first use. The pruned image measured 3.66 GiB compressed,
-down from 9.35 GiB before pruning. A full build takes hours; `Dockerfile.patch` provides a guarded overlay for
-ordinary Radiance/libr4d iteration without rebuilding PyTorch and the compiler stack.
+`prepare` verifies the versioned source/kernel bundle without opening the GPU.
+`serve` starts the digest-pinned image and installs the verified additions before
+graph capture. Initial compilation can take several minutes. The API binds to
+`127.0.0.1:8080`.
 
-Do not independently bump PyTorch, Triton, torchvision, or vLLM. The qualified versions are a compiler stack,
-and an earlier mismatched combination caused sustained TP hangs.
+```sh
+curl http://127.0.0.1:8080/v1/models
+```
 
-## Documentation
+Use `--dry-run` to inspect the complete command, or `--head full-bf16` for the
+complete target vocabulary head. The default
+`global256` profile uses faster, approximate candidate selection.
 
-- [Upgrade and reproducibility history](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/UPGRADE_PROGRESS.md)
-- [Stable vLLM v0.28 upgrade and qualification](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/V028_UPGRADE.md)
-- [Radiance 0.9.3 / libr4d 0.5.0 qualification](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/RADIANCE_093_R4D050_MXFP4.md)
-- [MXFP4/W4A8 implementation and validation](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/MXFP4_W4A8_R9700.md)
-- [RX4 MXFP4 continuation and qualification](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/MXFP4_RX4_CONTINUATION.md)
-- [Compose capacity and prefix-cache qualification](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/COMPOSE_CAPACITY.md)
-- [DFlash2 optimization and correctness investigation](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/DFLASH2_OPTIMIZATION.md)
-- [XGrammar speculative-decoding backport](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/XGRAMMAR_SPECULATIVE_BACKPORT.md)
-- [Qwen open nested-object tool-call fix](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/QWEN_OPEN_OBJECT_TOOL_FIX.md)
-- [BetterBench methodology and earlier mode comparison](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/LIBR4D_BETTERBENCH.md)
-- [Benchmark laboratory usage](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/benchmarks/README.md)
-- [Complete runtime knob reference](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/DOCKERHUB.md)
+Keep the pinned compiler/image stack together. Rebuilding numerical code needs
+fresh qualification; replacing hashes does not transfer evidence.
+[BUILDING.md](docs/BUILDING.md) describes the source-to-bundle pipeline.
 
-The source repository is the canonical location for detailed qualification evidence. This landing page is
-intentionally concise so the same content can be published as the Docker Hub repository overview.
+## Pi
 
-## Upstream and attribution
+Install uv, Node.js/npm, Git and jq on the client. From the workspace whose history
+you want to use:
 
-This fork exists on top of two unusually strong RDNA4 efforts:
+```sh
+/path/to/vllm-coherence/tools/coherence pi -- --thinking xhigh
+/path/to/vllm-coherence/tools/coherence pi -- --session last
+```
 
-- [StillDeadcode/vllm-radiance](https://codeberg.org/StillDeadcode/vllm-radiance) and
-  [StillDeadcode/libr4d](https://codeberg.org/StillDeadcode/libr4d) provide the core Radiance runtime and
-  hand-written gfx1201 kernels.
-- [ggz14/radiance-vllm-mxfp4](https://codeberg.org/ggz14/radiance-vllm-mxfp4), authored by Brian, is the
-  source of the native Quark MXFP4/W4A8 work and the RX3/RX4 optimization series adapted here. Its original
-  authorship is preserved in the Git history.
+For a remote GPU host:
 
-The continuation pins the exact audited ggz14 upstream commit in its qualification report. Changes are
-ported selectively because this fork carries a different vLLM/libr4d base and additional DFlash and
-correctness patches; attractive results from incompatible or failed experiments are not silently copied.
+```sh
+/path/to/vllm-coherence/tools/coherence pi --ssh gpu-host -- --session last
+```
+
+The launcher installs patched Pi 0.84.2 into private Coherence state, verifies its
+patches on reuse, chooses an available SSH forwarding port, and loads the operating
+prompt and extensions. Sessions live in the current workspace's `.pi/sessions`.
+Pi does not load workspace `AGENTS.md` as context. Supply a bespoke search tool
+with `--search-extension /path/to/index.ts`, including a VM-specific extension.
+
+`/compact` commits only a validated checkpoint. `/priority` shows/changes answer
+ownership. Cache/temperature monitoring shares probes across windows.
+See [Pi setup and recovery](docs/PI.md).
+
+## Cache inspection
+
+On the GPU host:
+
+```sh
+tools/coherence cache -- status --details
+tools/coherence cache -- audit
+tools/coherence cache -- watch --interval 5
+```
+
+The inventory distinguishes disk usage, cumulative disk traffic, published token
+coverage, handover RAM and buffered tail RAM. It flags incomplete/duplicate
+snapshots and failed cleanup. Dirty tails normally flush after about 8,192 new
+tokens, and on explicit flush, eviction, successful compaction and clean shutdown.
+Allow the server's clean shutdown timeout to finish. A crash may require prefilling
+the unflushed tail.
+
+## Verification and development
+
+```sh
+uv sync --frozen --extra cpu-tests
+uv run --frozen --extra cpu-tests pytest -q
+uv run --frozen coherence-conformance --help
+python3 tools/check_publication.py
+```
+
+CPU tests use CPU-only Torch. Native qualification requires an explicit isolated
+GPU run with the lease. Original Pi fixtures stay private; use the synthetic tests
+or your own owner-only fixture. See [coverage and reference scope](docs/VERIFICATION.md).
+
+## Repository map
+
+```text
+tools/                         Portable launcher, Pi connection, packaging and audits
+releases/                      Versioned archive/image identities and inventories
+src/qwen_r9700_lab/             Conformance, references, logical state and diagnostics
+experiments/radiance-public/    Runtime adapters, HIP kernels and build/probe/replay drivers
+  upstream-correctness/        Attributed upstream backports and component licenses
+  rocr-poll-backoff/            CPU idle-wait repair and build recipe
+integrations/pi/               Client lock, operating prompt and extensions
+scripts/                       Pi installer/patchers and shared cache/telemetry helpers
+configs/profiles/              Finite-precision numerical contracts
+tests/                         Synthetic regressions and negative controls
+reports/                       Public numerical report and aggregate evidence
+docs/                          Setup, architecture, verification and performance records
+benchmarks/                    Original Radiance fixtures and upstream historical results
+Dockerfile, patch_*, radiance_* Original base/build and focused upstream-facing changes
+```
+
+The `qwen_r9700_lab` namespace and wire-format names remain for evidence/snapshot
+compatibility. Root Radiance Dockerfiles support upstream reproduction;
+**`tools/coherence` launches the assembled Coherence profile**. Research drivers
+require explicit inputs and do not run automatically during serving.
+
+## Contributing
+
+Submit a minimized failure or measured optimization with state/output comparisons,
+negative controls and precise hardware/profile scope. Read
+[CONTRIBUTING.md](CONTRIBUTING.md). Existing upstream PRs remain independent and are
+linked from [ATTRIBUTION.md](ATTRIBUTION.md). See [LICENSE](LICENSE) for component terms.
