@@ -1,0 +1,206 @@
+{
+  "lazy": {
+    "status": "SAMPLE_CHECKED",
+    "rows": 320,
+    "timings": [
+      {
+        "path": "oracle",
+        "previous": 1,
+        "ms": 0.023624379634857178
+      },
+      {
+        "path": "candidate",
+        "previous": 1,
+        "ms": 0.018053590059280394
+      },
+      {
+        "path": "oracle",
+        "previous": 4,
+        "ms": 0.021654388904571532
+      },
+      {
+        "path": "candidate",
+        "previous": 4,
+        "ms": 0.01895719051361084
+      },
+      {
+        "path": "oracle",
+        "previous": 8,
+        "ms": 0.021434779167175292
+      },
+      {
+        "path": "candidate",
+        "previous": 8,
+        "ms": 0.022195179462432862
+      }
+    ],
+    "private_chat_read": false,
+    "formal_equivalence": "UNPROVED",
+    "width_pairs": 64,
+    "alignment_cases": 24,
+    "canonical_snapshot_roundtrip": true,
+    "negative_controls": true,
+    "sources": {
+      "stock_gdn_lazy_kernel.py": "5050795b471426220f28a68788ae90183e30c9ddfe03f046431bba5a2ac456a5",
+      "stock_gdn_scan_kernel.py": "bc38321d7a0954d718f86e0f6b19d6b6ad9218cf88aeb03d49e08953bd5e7163",
+      "probe_stock_gdn_lazy.py": "b9eb1e272e80293c14bb385bc3e00dbd320405138458b11b9f0fbfd78ec96d21"
+    },
+    "checks": 537,
+    "compared_bytes": 1508939784,
+    "unequal_bytes": 0,
+    "production_disk_restore": "UNQUALIFIED"
+  },
+  "fp8": {
+    "status": "SAMPLE_CHECKED",
+    "timings": [
+      {
+        "stage": "norm-reference",
+        "rows": 1,
+        "ms": 0.010307589769363404
+      },
+      {
+        "stage": "norm-fused",
+        "rows": 1,
+        "ms": 0.010100790262222291
+      },
+      {
+        "stage": "silu-reference",
+        "rows": 1,
+        "ms": 0.007965189814567565
+      },
+      {
+        "stage": "silu-fused",
+        "rows": 1,
+        "ms": 0.011662390232086182
+      },
+      {
+        "stage": "norm-reference",
+        "rows": 8,
+        "ms": 0.010345189571380616
+      },
+      {
+        "stage": "norm-fused",
+        "rows": 8,
+        "ms": 0.010105190277099609
+      },
+      {
+        "stage": "silu-reference",
+        "rows": 8,
+        "ms": 0.008847190141677857
+      },
+      {
+        "stage": "silu-fused",
+        "rows": 8,
+        "ms": 0.011637189388275147
+      }
+    ],
+    "private_chat_read": false,
+    "input": "320 deterministic synthetic BF16 rows plus zero/tiny/adversarial values",
+    "formal_equivalence": "UNPROVED",
+    "build": {
+      "status": "BUILT_UNTESTED",
+      "source_sha256": "f688bfc232477c3b1ea3e94546ba303f8c8bc667a91e1f7b8d0dc331f06046b4",
+      "gpu_used": false,
+      "binary_sha256": "c5b73309c33a4cc3d00454eff332fffe32262add525858667d7cdfccf9f35108",
+      "abi": "qwen-stock-fp8-epilogue-v1"
+    },
+    "silu_reference_compiled": true,
+    "norm_reference": "same opaque qualified HIP norm used by compiled M8",
+    "negative_control": true,
+    "sources": {
+      "stock_fp8_epilogue.py": "0fc77929657cf69718bec865813451c070da316f3318cfa666fe5a6e4e18c325",
+      "stock_fp8_epilogue.hip": "f688bfc232477c3b1ea3e94546ba303f8c8bc667a91e1f7b8d0dc331f06046b4",
+      "probe_stock_fp8_epilogue.py": "ef7b0ac82c44b661ce3c740ca21e336bb0cec0d56d4ffb883db703481554a754"
+    },
+    "checks": 1892,
+    "compared_bytes": 19118440,
+    "unequal_bytes": 0
+  },
+  "silu_enabled": false,
+  "whole_model_performance": "NOT_MEASURED",
+  "experimental_lazy_integration": {
+    "status": "SMOKE_CHECKED",
+    "responses": [
+      {
+        "generated_tokens": 64,
+        "finish_reason": "length",
+        "output_sha256": "cfe8ffa99126a53f5cadb31835a0e9df63f51f4d0449c76d8f4e3cef1aea292d"
+      },
+      {
+        "generated_tokens": 64,
+        "finish_reason": "length",
+        "output_sha256": "b4ad6599b87b9c0674abfc6a1e6dd4517226dd492b10ed57dbd645e6692e06d7"
+      }
+    ],
+    "enforce_eager": false,
+    "compilation_mode": 3,
+    "lazy": {
+      "decode": 1248,
+      "prefill_invalidations": 96,
+      "abi": "stock-fp32-lazy-v1"
+    },
+    "fp8": {
+      "norm": 1024,
+      "prefill": 768,
+      "silu": 0,
+      "silu_enabled": false,
+      "bf16_auxiliary_taps": [
+        6,
+        20,
+        34,
+        48,
+        62
+      ]
+    },
+    "bundle": "/qualification/preflight/tp1-lazy-backport-v1/bundle-v5",
+    "clean_shutdown": true,
+    "private_chat_read": false
+  },
+  "selected_configuration": {
+    "gdn_state_layout": "existing-nine-slot",
+    "lazy_gdn_enabled": false,
+    "gemm_dispatch_enabled": true,
+    "fp8_norm_quant_enabled": true,
+    "cache_abi": "unchanged",
+    "bundle": "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1",
+    "cpu_checks_passed": 51
+  },
+  "integration": {
+    "status": "SMOKE_CHECKED",
+    "gdn_state_layout": "existing",
+    "responses": [
+      {
+        "generated_tokens": 64,
+        "finish_reason": "length",
+        "output_sha256": "cfe8ffa99126a53f5cadb31835a0e9df63f51f4d0449c76d8f4e3cef1aea292d"
+      },
+      {
+        "generated_tokens": 64,
+        "finish_reason": "length",
+        "output_sha256": "b4ad6599b87b9c0674abfc6a1e6dd4517226dd492b10ed57dbd645e6692e06d7"
+      }
+    ],
+    "enforce_eager": false,
+    "graph_mode": "PIECEWISE",
+    "lazy_gdn": null,
+    "fp8": {
+      "norm": 1024,
+      "prefill": 768,
+      "silu": 0,
+      "silu_enabled": false,
+      "bf16_auxiliary_taps": [
+        6,
+        20,
+        34,
+        48,
+        62
+      ]
+    },
+    "matches_lazy_smoke_output_hashes": [
+      true,
+      true
+    ],
+    "clean_shutdown": true,
+    "private_chat_read": false
+  }
+}

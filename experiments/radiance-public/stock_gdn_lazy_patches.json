@@ -1,0 +1,118 @@
+{
+  "upstream": "GGZ14/vllm-mxfp4@3f542b7cbfce3fa0d01dc55665af4c77a7093ce8/patch_gdn_lazy.py",
+  "upstream_sha256": "700a89b143e95f54a3c0046be7230b15000e16fe4e0c8149db62b3fdd78ef639",
+  "preimages": {
+    "model_executor/layers/mamba/abstract.py": "7b53ee512a12067d323d9ebd4f877297dbea7800d476130d6442fb0ea5eee202",
+    "v1/attention/backends/gdn_attn.py": "212e3c96c46d18dafa8db54256f449d22495c68d1264ae4401849d1dbb62785c",
+    "v1/worker/mamba_utils.py": "790ae216cc62650225cf13471d65f923c5ecf33af3047df6c0d22fcd1aba28cd"
+  },
+  "patches": [
+    {
+      "file": "model_executor/layers/mamba/abstract.py",
+      "before": "            num_speculative_blocks=(\n                vllm_config.speculative_config.num_speculative_tokens\n                if vllm_config.speculative_config\n                else 0\n            ),\n",
+      "after": "            num_speculative_blocks=_radiance_lazy_spec_blocks(self, vllm_config),  # radiance lazy gdn\n",
+      "purpose": "abstract.get_kv_cache_spec: one stash block under RADIANCE_GDN_LAZY"
+    },
+    {
+      "file": "model_executor/layers/mamba/abstract.py",
+      "before": "class MambaBase(AttentionLayerBase):",
+      "after": "def _radiance_lazy_spec_blocks(layer, vllm_config):\n    \"\"\"radiance lazy gdn: a lazy cache keeps one stash block per request instead of one block per\n    draft token (stock_gdn_lazy_runtime.py). GDN layers only; everything else keeps the stock count.\"\"\"\n    import os as _os\n    n = (vllm_config.speculative_config.num_speculative_tokens\n         if vllm_config.speculative_config else 0)\n    if n > 0 and _os.environ.get(\"QWEN_STOCK_GDN_LAZY\", \"0\") == \"1\" \\\n            and \"GDN\" in str(getattr(layer.mamba_type, \"name\", layer.mamba_type)).upper():\n        return 1\n    return n\n\n\nclass MambaBase(AttentionLayerBase):",
+      "purpose": "abstract: lazy spec-block helper"
+    },
+    {
+      "file": "v1/attention/backends/gdn_attn.py",
+      "before": "    num_accepted_tokens: torch.Tensor | None = None  # shape: [batch,]\n",
+      "after": "    num_accepted_tokens: torch.Tensor | None = None  # shape: [batch,]\n    # radiance lazy gdn: the stash block of every batch row (window column 1), for prefill\n    # invalidation. None unless QWEN_STOCK_GDN_LAZY=1.\n    radiance_stash_indices: torch.Tensor | None = None\n",
+      "purpose": "gdn_attn: stash-index metadata field"
+    },
+    {
+      "file": "v1/attention/backends/gdn_attn.py",
+      "before": "        self.spec_state_indices_tensor: torch.Tensor = torch.empty(\n            (self.decode_cudagraph_max_bs, self.num_spec + 1),\n",
+      "after": "        import os as _rl_os  # radiance lazy gdn: 2 state columns (running, stash)\n        self._rad_lazy = _rl_os.environ.get(\"QWEN_STOCK_GDN_LAZY\", \"0\") == \"1\"\n        self.spec_state_indices_tensor: torch.Tensor = torch.empty(\n            (self.decode_cudagraph_max_bs, 2 if self._rad_lazy else self.num_spec + 1),\n",
+      "purpose": "gdn_attn: 2-wide spec-state buffer under lazy"
+    },
+    {
+      "file": "v1/attention/backends/gdn_attn.py",
+      "before": "            self.num_accepted_tokens[:bs].copy_(sh[\"acc_src\"], non_blocking=True)\n            return _dc.replace(\n                sh[\"md\"],\n",
+      "after": "            self.num_accepted_tokens[:bs].copy_(sh[\"acc_src\"], non_blocking=True)\n            return _dc.replace(\n                sh[\"md\"],\n                radiance_stash_indices=(bt[:bs, 1] if self._rad_lazy else None),  # radiance lazy gdn\n",
+      "purpose": "gdn_attn: stash indices on the shared-build path"
+    },
+    {
+      "file": "v1/attention/backends/gdn_attn.py",
+      "before": "        attn_metadata = GDNAttentionMetadata(\n            num_prefills=num_prefills,\n",
+      "after": "        attn_metadata = GDNAttentionMetadata(\n            radiance_stash_indices=(block_table_tensor[:, 1] if self._rad_lazy else None),  # radiance lazy gdn\n            num_prefills=num_prefills,\n",
+      "purpose": "gdn_attn: stash indices on the full build path"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "    PRECOMPUTED_NEW_COMPUTED: tl.constexpr = False,\n",
+      "after": "    PRECOMPUTED_NEW_COMPUTED: tl.constexpr = False,\n    LAZY_TEMPORAL: tl.constexpr = False,\n",
+      "purpose": "mamba_utils: LAZY_TEMPORAL on the postprocess kernel"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "    bt_row_idx = batch_idx if HAS_IDX_MAPPING else req_idx\n    _copy_mamba_state_block(\n",
+      "after": "    if LAZY_TEMPORAL:  # radiance lazy gdn\n        if tl.load(state_conv_widths_ptr + state_idx) == 0:\n            return\n    bt_row_idx = batch_idx if HAS_IDX_MAPPING else req_idx\n    _copy_mamba_state_block(\n",
+      "purpose": "mamba_utils: postprocess skips temporal states under lazy"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "    HAS_IDX_MAPPING: tl.constexpr = True,\n",
+      "after": "    HAS_IDX_MAPPING: tl.constexpr = True,\n    LAZY_TEMPORAL: tl.constexpr = False,\n",
+      "purpose": "mamba_utils: LAZY_TEMPORAL on the precopy kernel"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "    token_bias = tl.load(token_bias_ptr + req_idx)\n    _copy_mamba_state_block(\n        state_idx,\n        batch_idx,\n        src_col,\n        dst_col,\n        token_bias,\n",
+      "after": "    if LAZY_TEMPORAL:  # radiance lazy gdn\n        if tl.load(state_conv_widths_ptr + state_idx) == 0:\n            return\n    token_bias = tl.load(token_bias_ptr + req_idx)\n    _copy_mamba_state_block(\n        state_idx,\n        batch_idx,\n        src_col,\n        dst_col,\n        token_bias,\n",
+      "purpose": "mamba_utils: precopy skips temporal states under lazy"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "        # This only runs once per worker.\n",
+      "after": "        self._radiance_kv_cfg = kv_cache_config\n        self._radiance_fwd_ctx = forward_context\n        self._radiance_copy_funcs = mamba_state_copy_funcs\n        # This only runs once per worker.\n",
+      "purpose": "mamba_utils: keep the forward context for the lazy tables"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "        if num_reqs == 0 or not self.is_initialized:\n            return\n\n        # Initialize output to current values (unchanged unless src==dst)\n",
+      "after": "        if num_reqs == 0 or not self.is_initialized:\n            return\n        if _radiance_lazy():  # radiance lazy gdn\n            raise RuntimeError(\"QWEN_STOCK_GDN_LAZY needs the V2 model runner (align postprocess)\")\n\n        # Initialize output to current values (unchanged unless src==dst)\n",
+      "purpose": "mamba_utils: V1 postprocess refuses lazy"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "            idx_mapping,\n            num_reqs,\n            COPY_BLOCK_SIZE=1024,\n            CONV_STATE_DIM_FIRST=is_conv_state_dim_first(),\n            HAS_IDX_MAPPING=idx_mapping is not None,\n            TEMPORAL_TILES=_TEMPORAL_TILES,\n        )\n",
+      "after": "            idx_mapping,\n            num_reqs,\n            COPY_BLOCK_SIZE=1024,\n            CONV_STATE_DIM_FIRST=is_conv_state_dim_first(),\n            HAS_IDX_MAPPING=idx_mapping is not None,\n            TEMPORAL_TILES=_TEMPORAL_TILES,\n            LAZY_TEMPORAL=_radiance_lazy(),\n        )\n        if _radiance_lazy():  # radiance lazy gdn: temporal migration = base + replay\n            import stock_gdn_lazy_runtime\n            stock_gdn_lazy_runtime.materialize(self, 0, num_reqs, state_idx_gpu, src_col_gpu,\n                                          token_bias_gpu, idx_mapping)\n",
+      "purpose": "mamba_utils: lazy materialize after the precopy"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "        num_accepted_tokens_snapshot.copy_(num_accepted_tokens_gpu)\n",
+      "after": "        num_accepted_tokens_snapshot.copy_(num_accepted_tokens_gpu)\n\n        if _radiance_lazy():\n            import stock_gdn_lazy_runtime\n            stock_gdn_lazy_runtime.materialize(self, 1, num_reqs, num_accepted_tokens_snapshot,\n                                              state_idx_gpu, new_num_computed_tokens_gpu, idx_mapping)\n",
+      "purpose": "mamba_utils: lazy materialize before the align postprocess"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "            PRECOMPUTED_NEW_COMPUTED=True,\n",
+      "after": "            PRECOMPUTED_NEW_COMPUTED=True,\n            LAZY_TEMPORAL=_radiance_lazy(),\n",
+      "purpose": "mamba_utils: LAZY_TEMPORAL on the align postprocess launch"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "def get_mamba_groups(kv_cache_config: KVCacheConfig) -> tuple[list[int], MambaSpec]:",
+      "after": "def _radiance_lazy() -> bool:\n    \"\"\"radiance lazy gdn: QWEN_STOCK_GDN_LAZY=1 (read once).\"\"\"\n    import os as _os\n    v = getattr(_radiance_lazy, \"_v\", None)\n    if v is None:\n        v = _radiance_lazy._v = _os.environ.get(\"QWEN_STOCK_GDN_LAZY\", \"0\") == \"1\"\n    return v\n\n\ndef get_mamba_groups(kv_cache_config: KVCacheConfig) -> tuple[list[int], MambaSpec]:",
+      "purpose": "mamba_utils: lazy flag helper"
+    },
+    {
+      "file": "v1/worker/mamba_utils.py",
+      "before": "        self.is_initialized = True\n",
+      "after": "        if _radiance_lazy():\n            from stock_gdn_lazy_runtime import Tables\n            self._qwen_lazy_tables = Tables(self)\n        self.is_initialized = True\n",
+      "purpose": "Build lazy pointer tables inside the existing initialization synchronization scope"
+    }
+  ],
+  "postimages": {
+    "model_executor/layers/mamba/abstract.py": "46a33b7c8cf1f51bd27b0a2c2f8428b7e38440f03efc73dffcec0b65077861d7",
+    "v1/attention/backends/gdn_attn.py": "ab6e978b730a26ed6ce17ab761134d403d15e29be4648524313a78c45f55d0bb",
+    "v1/worker/mamba_utils.py": "e60333f2b1a559962c065c33a0e825d3fc8b30fcbeb06c2926a0d6cf6052c35b"
+  }
+}

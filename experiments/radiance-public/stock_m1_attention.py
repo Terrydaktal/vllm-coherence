@@ -38,6 +38,26 @@ def split_groups(width, bound):
     return groups
 
 
+def active_decode_buffers(query, output, width):
+    """Ignore graph padding; native M1 launches may access only the live rows."""
+    if (
+        not 1 <= width <= 8
+        or len(query.shape) != 3
+        or len(output.shape) != 3
+        or tuple(query.shape[1:]) != (24, 256)
+        or tuple(output.shape[1:]) != (24, 256)
+        or query.shape[0] < width
+        or output.shape[0] < width
+        or not query.is_contiguous()
+        or not output.is_contiguous()
+    ):
+        raise DiagnosticError(
+            f"independent attention layout changed: live={width}, "
+            f"query={tuple(query.shape)}, output={tuple(output.shape)}"
+        )
+    return query[:width], output[:width]
+
+
 class StockM1Attention:
     def __init__(self, hooks):
         import torch  # isort: skip
@@ -91,15 +111,10 @@ class StockM1Attention:
                 raise DiagnosticError(
                     "independent attention geometry differs from the pinned model"
                 )
-            if (
-                query.shape != (width, 24, 256)
-                or output.shape != query.shape
-                or not query.is_contiguous()
-                or not output.is_contiguous()
-                or query.dtype != torch.bfloat16
-                or output.dtype != query.dtype
-            ):
-                raise DiagnosticError("independent attention query/output layout changed")
+            full_output = output
+            query, output = active_decode_buffers(query, output, width)
+            if query.dtype != torch.bfloat16 or output.dtype != query.dtype:
+                raise DiagnosticError("independent attention query/output dtype changed")
             variant, block_stride, head_stride = impl._geometry(kv_cache, query, output)
             groups = split_groups(width, md.r4d_max_ctx)
             table = md.block_table[:1].expand(width, -1).contiguous()
@@ -146,7 +161,7 @@ class StockM1Attention:
                 )
             self.calls += 1
             self.rows += width
-            return output
+            return full_output
 
         hooks.replace(native.R4DAttentionImpl, "forward", forward)
 

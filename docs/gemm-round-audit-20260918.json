@@ -1,0 +1,48 @@
+{
+  "original": {
+    "median_of_response_median_round_ms": 56.764115986879915,
+    "mean_of_response_mean_round_ms": 57.95309426367455,
+    "after_first_tps": 92.27209143193681,
+    "tokens": 2375,
+    "all_natural": true,
+    "selected_gemm_binary": "8c895e15556970efeb325b3930807dbb41d9149058e29c9d9cbe497ecd7dcd51",
+    "profile_gpu_ms_per_round": 54.79776750000001
+  },
+  "candidate": {
+    "median_of_response_median_round_ms": 42.85229950619396,
+    "mean_of_response_mean_round_ms": 43.953940726452736,
+    "after_first_tps": 121.15479710057986,
+    "tokens": 2375,
+    "all_natural": true,
+    "selected_gemm_binary": "1abc8fd9250f51b8980e005399c428ab13baa747277c1d927dc7106186d8c7c0",
+    "profile_gpu_ms_per_round": 41.28070225000001
+  },
+  "candidate-full-bf16": {
+    "median_of_response_median_round_ms": 45.93211199971847,
+    "mean_of_response_mean_round_ms": 47.039745660273326,
+    "after_first_tps": 115.73133440754775,
+    "tokens": 2375,
+    "all_natural": true,
+    "selected_gemm_binary": "1abc8fd9250f51b8980e005399c428ab13baa747277c1d927dc7106186d8c7c0",
+    "profile_gpu_ms_per_round": 44.425493500000016
+  },
+  "output_hashes_match": true,
+  "scope": "Three unprofiled natural completions per configuration on the existing 60K Pi fixture; one additional bounded 8-round profiler pass. Compiled direct engine; private text and token arrays not inspected.",
+  "gemm_stage": {
+    "matching_kernel_dispatches": 2048,
+    "profiled_rounds": 8,
+    "stages": {
+      "remaining_MXFP4_GEMMs": {
+        "calls": 1536,
+        "original_ms": 12.540312375000003,
+        "candidate_ms": 12.888727500000014
+      },
+      "gate_up_64_layers": {
+        "calls": 512,
+        "original_ms": 25.116629500000005,
+        "candidate_ms": 11.33102312499999
+      }
+    },
+    "method": "Ordered pairing of all MXFP4 kernel dispatches; every unchanged dispatch name agrees; 512 folded gate/up dispatches map to decode<8,128,1>."
+  }
+}

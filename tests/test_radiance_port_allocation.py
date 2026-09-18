@@ -125,6 +125,9 @@ done
     local_bin.mkdir(parents=True)
     (local_bin / "pi").symlink_to(fake_pi)
 
+    searchtool = tmp_path / "searchtool.mjs"
+    searchtool.write_text("export default function () {}\n", encoding="utf-8")
+
     environment = os.environ.copy()
     environment.update(
         {
@@ -132,20 +135,26 @@ done
             "PATH": f"{fake_bin}:{environment['PATH']}",
             "FAKE_RADIANCE_SERVER": str(server),
             "XDG_RUNTIME_DIR": str(runtime_directory),
+            "QWEN_PI_SEARCHTOOL_EXTENSION": str(searchtool),
         }
     )
     return environment, home, project
 
 
-def test_omitted_radiance_port_stays_automatic_through_main_launcher() -> None:
+def test_omitted_radiance_port_stays_automatic_through_main_launcher(tmp_path: Path) -> None:
+    environment, _, project = _fake_environment(tmp_path)
     direct = subprocess.run(
         [str(RADIANCE_LAUNCHER), "--dry-run"],
+        cwd=project,
+        env=environment,
         check=False,
         capture_output=True,
         text=True,
     )
     delegated = subprocess.run(
         [str(MAIN_LAUNCHER), "--model", "radiance-uncensored", "--dry-run"],
+        cwd=project,
+        env=environment,
         check=False,
         capture_output=True,
         text=True,

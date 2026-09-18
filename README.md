@@ -21,9 +21,9 @@ commits describe Coherence's additions. See [attribution](ATTRIBUTION.md).
   prefill; matching normalization, attention and vocabulary-head arithmetic;
   preserved intermediate BF16 rounding in compiled execution; the pinned native
   RoPE rounding correction.
-- **Performance recovery:** arithmetic-preserving packed GDN transport, shared
-  attention reads and an interleaved full vocabulary head. The GGZ14 backports
-  are introduced in a later commit.
+- **Measured performance work:** guarded wide GEMM dispatch, normalization/FP8
+  fusion, GDN spatial scan tiling and tiled prefill activation layout, retaining
+  the existing recurrent-state layout.
 - **Global-256 target head:** search the complete INT2 score row, then rescore
   256 candidates using BF16 weights. Removes the eight-candidates-per-tile capacity
   defect; unsupported sampling modes retain a full-head fallback.
@@ -42,55 +42,55 @@ commits describe Coherence's additions. See [attribution](ATTRIBUTION.md).
 <!-- COHERENCE_CURRENT_RESULTS -->
 ## Current numerical results
 
-Corrected eager M1 versus corrected compiled M8, using the **full BF16 target head**: 10,000 forced decode tokens across 23 Pi continuations, with 23 separately checked prefill predictions.
+Current backported compiled M8 versus the aligned pre-backport compiled M8 control, using the **full BF16 target head**: 320 forced decode tokens on the same 60K Pi prefix, plus one prefill prediction. The 10K eager-M1/compiled-M8 study belongs to the preceding alignment revision; it was not rerun after these backports.
 
 | Prediction | Same token set | Same ordering | Mean shared tokens |
 | --- | ---: | ---: | ---: |
-| Top 1 | 10,000 / 10,000 (100.00%) | 10,000 / 10,000 (100.00%) | 1.0000 / 1 |
-| Top 10 | 10,000 / 10,000 (100.00%) | 10,000 / 10,000 (100.00%) | 10.0000 / 10 |
-| Top 20 | 10,000 / 10,000 (100.00%) | 10,000 / 10,000 (100.00%) | 20.0000 / 20 |
+| Top 1 | 320 / 320 (100.00%) | 320 / 320 (100.00%) | 1.0000 / 1 |
+| Top 10 | 320 / 320 (100.00%) | 320 / 320 (100.00%) | 10.0000 / 10 |
+| Top 20 | 320 / 320 (100.00%) | 320 / 320 (100.00%) | 20.0000 / 20 |
 
-All 10,000 full-vocabulary hashes and 23 prefill predictions matched. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.
+All 320 full-vocabulary hashes and the prefill prediction matched. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.
 
 ## Compiled backend stages
 
-Aligned **compiled, piecewise-graph M8**, full BF16 head, same 60K-input Pi fixture as the report. Values are the report's existing measurements, summed across all layer instances per round. Six matching complete-inventory rounds are retained. This is not eager timing, and these GPU durations must not be added to host/queue timers.
+Latest retained **compiled, piecewise-graph** decode profile, 60K-input Pi fixture, global-256 head, both alignment repairs and the GGZ14-derived backports. Seven of eight rounds have a complete modal kernel inventory; the incomplete round is excluded by inventory, never by its duration. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Every observed dispatch in the retained rounds is counted once; fused constituents have no separately measurable time.
 
 **Set/order** means the same top-20 token set, followed by the same ranking. For example, `320/320; 320/320` means both checks passed at every tested token. Operator-byte checks and whole-model checks are labelled separately; each result retains its stated test scope.
 
 | Stage | Current GPU ms per round | Current correctness evidence | Implementation / measurement boundary |
 | --- | ---: | --- | --- |
-| Embedding + first input normalization | 0.008 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve the reference normalization rounding; the original embedding/norm fusion is indivisible. |
-| Layer input residual/normalization | 0.346 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve reduction and rounding; retain FP32 residual sums in registers. |
-| GDN input activation FP8 quantization | 0.127 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same quantization kernel and call count; the small timing delta is unassigned. |
-| GDN input projection | 3.873 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Unchanged MXFP4 projection arithmetic; timing differences are observations, not a projection optimization. |
-| GDN layout/copies and buffer initialization | 0.332 | State/layout checked with convolution and recurrence | Preserve packed QKV views; remove split materializations and repacking. Remaining copies are included. |
-| GDN convolution | 0.226 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Match serial product/accumulation order and rolling history; packed transport removes surrounding copies. |
-| GDN recurrence and gates | 1.219 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Match gate precision, reduction order, recurrent-state transition and output rounding. |
-| GDN output gated normalization | 0.097 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Keep the serial row tile while processing independent rows concurrently; original fused constituents remain grouped. |
-| GDN output activation FP8 quantization | 0.131 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same quantization kernel and call count; the small timing delta is unassigned. |
-| GDN output projection | 1.884 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Unchanged MXFP4 arithmetic; no causal speedup claimed. |
-| Attention input activation FP8 quantization | 0.042 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same quantization kernel and call count; timing cause is not isolated. |
-| Attention input projection | 1.099 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Unchanged QKV MXFP4 projection; no causal speedup claimed. |
-| Attention Q/K normalization, RoPE and layout | 0.236 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve serial normalization and BF16 RoPE product rounding. Fused original constituents share one timing. |
-| Attention KV write | 0.047 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same cache-write kernel and KV format; timing cause is not isolated. |
-| Attention decode | 5.285 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve each query's causal tile/softmax decisions. Share KV reads within one or two tile-aligned query groups; two groups repeat context work. |
-| Attention split-KV merge | 0.120 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Use each query's serial split/merge arithmetic; the observed reduction has not been isolated from the decode change. |
-| Attention output gating | 0.032 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve the BF16 sigmoid result before multiplying the output gate. |
-| Attention output activation FP8 quantization | 0.046 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same quantization kernel and call count; timing cause is not isolated. |
-| Attention output projection | 0.521 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Unchanged output MXFP4 projection; no causal speedup claimed. |
-| Post-attention/GDN residual/normalization | 0.353 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve serial reduction/rounding and keep residual values in registers. |
-| MLP gate/up input FP8 quantization | 0.167 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same quantization kernel and call count; timing cause is not isolated. |
-| MLP gate/up projection | 25.437 | 320/320; 320/320; eager/compiled 320/320; 320/320 | One joint gate/up GEMM per layer, 64 per round. The per-layer table subdivides this total; gate and up have no separate measured durations. |
-| MLP SiLU and gating | 0.189 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve the BF16 SiLU result before multiplication; retain one fused pointwise launch. |
-| MLP down input FP8 quantization | 0.297 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Same quantization kernel and call count; timing cause is not isolated. |
-| MLP down projection | 5.143 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Unchanged MXFP4 down projection; no causal speedup claimed. |
-| Final normalization/layout | 0.006 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Preserve final-normalization reduction and the BF16 rounding of its retained residual sum; isolated check includes that fused addition. |
-| Full BF16 target head | 4.140 | 320/320; 320/320; eager/compiled 320/320; 320/320 | Interleave two arithmetic-preserving M4 groups in one HIP launch, removing duplicated launch and concatenation overhead. |
-| Drafter | 6.518 | N/A: no isolated target top-20 prediction | Unchanged proposal model; its timings and predictions are not target-M1 equivalence measurements. |
-| Other GPU bookkeeping | 0.560 | N/A: no isolated target top-20 prediction | Sampling/state bookkeeping outside the model scopes. Exact semantic attribution is unavailable; each kernel remains listed below. |
+| Embedding + first input normalization + FP8 production | 0.010 | 320 rows + adversarial values: exact FP8/scales/BF16 residual; prefill 1,000 rows per site | Native rounding retained; fused FP8 output replaces a separate quantizer. Prefill uses its own admitted reduction layout. |
+| Layer input residual/normalization + FP8 production | 0.512 | 320 rows + adversarial values: exact FP8/scales/BF16 residual; prefill 1,000 rows per site | Native rounding retained; fused FP8 output replaces a separate quantizer. Prefill uses its own admitted reduction layout. |
+| GDN input activation FP8 quantization | Included in input norm | Exact fused FP8 bytes/scales; see norm row | FP8 production is fused into layer input normalization. |
+| GDN input projection | 3.948 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| GDN layout/copies and buffer initialization | 0.307 | State/layout checked with convolution and recurrence | Packed QKV views and existing state layout. |
+| GDN convolution | 0.210 | 320/320; 320/320 in alignment study; unchanged operator | Corrected serial product/accumulation order and rolling history. |
+| GDN recurrence and gates | 1.183 | Decode unchanged; tiled prefill output/state exact at 1/8/64/320/1,000/1,648/2,048 rows | Corrected chronological transitions; spatial tiling changes prefill only. Existing nine-slot state layout. |
+| GDN output gated normalization + FP8 production | 0.161 | 1,000 rows × 48 sites × M1/M8: exact bytes and scales | All 48 sites fused; native intermediate BF16 rounding and Gluon layout retained. |
+| GDN output activation FP8 quantization | Included in GDN output norm | 1,000 rows × 48 sites × M1/M8: exact bytes and scales | One fused gated-normalization/quantization launch. |
+| GDN output projection | 1.899 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Attention input activation FP8 quantization | Included in input norm | Exact fused FP8 bytes/scales; see norm row | FP8 production is fused into layer input normalization. |
+| Attention input projection | 1.161 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Attention Q/K normalization, RoPE and layout | 0.218 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Attention KV write | 0.044 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Attention decode | 5.119 | 320/320; 320/320 in alignment study; unchanged operator | Corrected causal tile/reduction policy; shared KV loads. |
+| Attention split-KV merge | 0.128 | 320/320; 320/320 in alignment study; unchanged operator | Corrected serial split/merge arithmetic. |
+| Attention output gating | 0.031 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Attention output activation FP8 quantization | 0.043 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Attention output projection | 0.528 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Post-attention/GDN residual/normalization + FP8 production | 0.533 | 320 rows + adversarial values: exact FP8/scales/BF16 residual; prefill 1,000 rows per site | Native rounding retained; fused FP8 output replaces a separate quantizer. Prefill uses its own admitted reduction layout. |
+| MLP gate/up input FP8 quantization | Included in post norm | Exact fused FP8 bytes/scales; see norm row | FP8 production is fused into post-attention/GDN normalization. |
+| MLP gate/up projection | 11.375 | 115,841,664 elements: 0 differences; 320 rows on 3 checkpoint matrices plus boundary cases | Guarded wide-N decode dispatch replaces folded GEMM; four projections per layer still validated. |
+| MLP SiLU and gating | 0.180 | 320/320; 320/320 in alignment study; unchanged operator | BF16 intermediate preserved; no speculative slower SiLU backport. |
+| MLP down input FP8 quantization | 0.265 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| MLP down projection | 5.369 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Final normalization/layout | 0.005 | 320/320; 320/320 in alignment study; unchanged operator | Same corrected operator; measured again in the retained backport trace. |
+| Global-256 target head | 1.012 | Approximate: head-study top-20 retained 119,786/119,988; ranking/probabilities not certified | Current serving head; whole-vocabulary INT2 selection then BF16 rerank. Full-head correctness controls are separate. |
+| Drafter | 6.368 | N/A: no isolated target top-20 prediction | Same corrected operator; measured again in the retained backport trace. |
+| Other GPU bookkeeping | 0.527 | N/A: no isolated target top-20 prediction | Sampling/state bookkeeping outside the model scopes; kernel list below. |
 
-**Sum of measured GPU dispatch durations: 58.481 ms per profiled round.** This sum excludes host gaps and queue time and is not the uninstrumented round timer.
+**Sum of measured GPU dispatch durations: 41.133 ms per profiled round.** This sum excludes host gaps and queue time and is not the uninstrumented round timer.
 
 <details>
 <summary>Every decoder layer: current projection and remaining-work timings</summary>
@@ -99,70 +99,70 @@ Each layer has four projections. Gate and up are one joint GEMM; there is no sep
 
 | Layer | Type | All layer work ms | Input projection ms | Output projection ms | Gate/up projection ms | Down projection ms | Other work ms |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 0 | GDN | 0.6298 | 0.0760 | 0.0388 | 0.3704 | 0.0798 | 0.0649 |
-| 1 | GDN | 0.6246 | 0.0801 | 0.0383 | 0.3664 | 0.0799 | 0.0599 |
-| 2 | GDN | 0.6298 | 0.0799 | 0.0389 | 0.3692 | 0.0798 | 0.0620 |
-| 3 | Attention | 0.9203 | 0.0679 | 0.0325 | 0.3743 | 0.0796 | 0.3659 |
-| 4 | GDN | 0.6387 | 0.0795 | 0.0389 | 0.3784 | 0.0802 | 0.0617 |
-| 5 | GDN | 0.6460 | 0.0803 | 0.0387 | 0.3844 | 0.0798 | 0.0627 |
-| 6 | GDN | 0.6501 | 0.0799 | 0.0392 | 0.3858 | 0.0804 | 0.0647 |
-| 7 | Attention | 0.9506 | 0.0687 | 0.0325 | 0.3909 | 0.0794 | 0.3790 |
-| 8 | GDN | 0.6532 | 0.0800 | 0.0387 | 0.3905 | 0.0799 | 0.0641 |
-| 9 | GDN | 0.6572 | 0.0806 | 0.0394 | 0.3924 | 0.0805 | 0.0644 |
-| 10 | GDN | 0.6575 | 0.0811 | 0.0397 | 0.3913 | 0.0800 | 0.0653 |
-| 11 | Attention | 0.9490 | 0.0679 | 0.0323 | 0.3899 | 0.0800 | 0.3788 |
-| 12 | GDN | 0.6541 | 0.0805 | 0.0397 | 0.3905 | 0.0799 | 0.0634 |
-| 13 | GDN | 0.6551 | 0.0816 | 0.0391 | 0.3897 | 0.0802 | 0.0645 |
-| 14 | GDN | 0.6587 | 0.0808 | 0.0386 | 0.3939 | 0.0801 | 0.0653 |
-| 15 | Attention | 0.9551 | 0.0681 | 0.0325 | 0.3940 | 0.0802 | 0.3803 |
-| 16 | GDN | 0.6576 | 0.0809 | 0.0388 | 0.3931 | 0.0803 | 0.0646 |
-| 17 | GDN | 0.6607 | 0.0810 | 0.0392 | 0.3952 | 0.0802 | 0.0651 |
-| 18 | GDN | 0.6637 | 0.0805 | 0.0396 | 0.3972 | 0.0803 | 0.0661 |
-| 19 | Attention | 0.9606 | 0.0689 | 0.0327 | 0.3961 | 0.0798 | 0.3831 |
-| 20 | GDN | 0.6628 | 0.0804 | 0.0398 | 0.3949 | 0.0804 | 0.0673 |
-| 21 | GDN | 0.6637 | 0.0815 | 0.0401 | 0.3955 | 0.0806 | 0.0660 |
-| 22 | GDN | 0.6630 | 0.0810 | 0.0391 | 0.3966 | 0.0808 | 0.0654 |
-| 23 | Attention | 0.9618 | 0.0687 | 0.0329 | 0.3966 | 0.0797 | 0.3839 |
-| 24 | GDN | 0.6633 | 0.0809 | 0.0392 | 0.3970 | 0.0807 | 0.0653 |
-| 25 | GDN | 0.6629 | 0.0808 | 0.0395 | 0.3959 | 0.0810 | 0.0658 |
-| 26 | GDN | 0.6633 | 0.0812 | 0.0392 | 0.3968 | 0.0807 | 0.0653 |
-| 27 | Attention | 0.9642 | 0.0690 | 0.0325 | 0.3978 | 0.0799 | 0.3850 |
-| 28 | GDN | 0.6658 | 0.0806 | 0.0392 | 0.3989 | 0.0802 | 0.0670 |
-| 29 | GDN | 0.6682 | 0.0814 | 0.0392 | 0.4009 | 0.0807 | 0.0661 |
-| 30 | GDN | 0.6682 | 0.0807 | 0.0390 | 0.4019 | 0.0807 | 0.0659 |
-| 31 | Attention | 0.9707 | 0.0688 | 0.0325 | 0.4007 | 0.0798 | 0.3889 |
-| 32 | GDN | 0.6671 | 0.0805 | 0.0390 | 0.3999 | 0.0809 | 0.0668 |
-| 33 | GDN | 0.6675 | 0.0806 | 0.0390 | 0.4013 | 0.0809 | 0.0656 |
-| 34 | GDN | 0.6704 | 0.0807 | 0.0393 | 0.4022 | 0.0808 | 0.0674 |
-| 35 | Attention | 0.9715 | 0.0689 | 0.0325 | 0.4021 | 0.0802 | 0.3880 |
-| 36 | GDN | 0.6680 | 0.0802 | 0.0392 | 0.4024 | 0.0803 | 0.0660 |
-| 37 | GDN | 0.6701 | 0.0811 | 0.0395 | 0.4033 | 0.0807 | 0.0655 |
-| 38 | GDN | 0.6717 | 0.0803 | 0.0396 | 0.4043 | 0.0810 | 0.0665 |
-| 39 | Attention | 0.9784 | 0.0687 | 0.0326 | 0.4058 | 0.0803 | 0.3911 |
-| 40 | GDN | 0.6723 | 0.0808 | 0.0391 | 0.4064 | 0.0807 | 0.0652 |
-| 41 | GDN | 0.6730 | 0.0807 | 0.0394 | 0.4057 | 0.0806 | 0.0666 |
-| 42 | GDN | 0.6751 | 0.0816 | 0.0399 | 0.4062 | 0.0813 | 0.0661 |
-| 43 | Attention | 0.9743 | 0.0685 | 0.0327 | 0.4038 | 0.0802 | 0.3892 |
-| 44 | GDN | 0.6686 | 0.0805 | 0.0388 | 0.4022 | 0.0805 | 0.0665 |
-| 45 | GDN | 0.6672 | 0.0807 | 0.0394 | 0.4014 | 0.0805 | 0.0653 |
-| 46 | GDN | 0.6699 | 0.0815 | 0.0388 | 0.4026 | 0.0809 | 0.0661 |
-| 47 | Attention | 0.9736 | 0.0691 | 0.0328 | 0.4041 | 0.0800 | 0.3877 |
-| 48 | GDN | 0.6745 | 0.0810 | 0.0392 | 0.4057 | 0.0807 | 0.0679 |
-| 49 | GDN | 0.6746 | 0.0807 | 0.0390 | 0.4075 | 0.0807 | 0.0667 |
-| 50 | GDN | 0.6721 | 0.0810 | 0.0397 | 0.4043 | 0.0804 | 0.0667 |
-| 51 | Attention | 0.9744 | 0.0686 | 0.0323 | 0.4037 | 0.0801 | 0.3898 |
-| 52 | GDN | 0.6704 | 0.0806 | 0.0391 | 0.4040 | 0.0804 | 0.0663 |
-| 53 | GDN | 0.6711 | 0.0813 | 0.0390 | 0.4047 | 0.0805 | 0.0656 |
-| 54 | GDN | 0.6741 | 0.0814 | 0.0393 | 0.4058 | 0.0811 | 0.0665 |
-| 55 | Attention | 0.9742 | 0.0685 | 0.0325 | 0.4032 | 0.0800 | 0.3899 |
-| 56 | GDN | 0.6692 | 0.0805 | 0.0393 | 0.4028 | 0.0806 | 0.0660 |
-| 57 | GDN | 0.6692 | 0.0818 | 0.0397 | 0.4014 | 0.0804 | 0.0659 |
-| 58 | GDN | 0.6695 | 0.0804 | 0.0399 | 0.4021 | 0.0809 | 0.0662 |
-| 59 | Attention | 0.9620 | 0.0693 | 0.0327 | 0.4019 | 0.0800 | 0.3781 |
-| 60 | GDN | 0.6723 | 0.0805 | 0.0394 | 0.4053 | 0.0805 | 0.0667 |
-| 61 | GDN | 0.6802 | 0.0815 | 0.0398 | 0.4099 | 0.0807 | 0.0682 |
-| 62 | GDN | 0.6779 | 0.0815 | 0.0393 | 0.4077 | 0.0809 | 0.0686 |
-| 63 | Attention | 0.9819 | 0.0694 | 0.0330 | 0.4064 | 0.0801 | 0.3932 |
+| 0 | GDN | 0.4341 | 0.0758 | 0.0391 | 0.1749 | 0.0800 | 0.0644 |
+| 1 | GDN | 0.4523 | 0.0807 | 0.0398 | 0.1834 | 0.0871 | 0.0612 |
+| 2 | GDN | 0.4567 | 0.0835 | 0.0396 | 0.1834 | 0.0880 | 0.0623 |
+| 3 | Attention | 0.7360 | 0.0733 | 0.0330 | 0.1704 | 0.0806 | 0.3787 |
+| 4 | GDN | 0.4372 | 0.0820 | 0.0385 | 0.1738 | 0.0809 | 0.0620 |
+| 5 | GDN | 0.4498 | 0.0812 | 0.0404 | 0.1828 | 0.0853 | 0.0601 |
+| 6 | GDN | 0.4576 | 0.0845 | 0.0397 | 0.1824 | 0.0886 | 0.0624 |
+| 7 | Attention | 0.7335 | 0.0720 | 0.0330 | 0.1724 | 0.0802 | 0.3759 |
+| 8 | GDN | 0.4375 | 0.0821 | 0.0386 | 0.1732 | 0.0809 | 0.0628 |
+| 9 | GDN | 0.4526 | 0.0807 | 0.0397 | 0.1824 | 0.0885 | 0.0613 |
+| 10 | GDN | 0.4618 | 0.0842 | 0.0402 | 0.1856 | 0.0887 | 0.0629 |
+| 11 | Attention | 0.7294 | 0.0731 | 0.0330 | 0.1701 | 0.0804 | 0.3728 |
+| 12 | GDN | 0.4380 | 0.0815 | 0.0393 | 0.1756 | 0.0800 | 0.0616 |
+| 13 | GDN | 0.4522 | 0.0805 | 0.0398 | 0.1835 | 0.0879 | 0.0604 |
+| 14 | GDN | 0.4571 | 0.0846 | 0.0400 | 0.1819 | 0.0881 | 0.0624 |
+| 15 | Attention | 0.7318 | 0.0732 | 0.0332 | 0.1711 | 0.0807 | 0.3736 |
+| 16 | GDN | 0.4367 | 0.0815 | 0.0387 | 0.1738 | 0.0806 | 0.0622 |
+| 17 | GDN | 0.4497 | 0.0813 | 0.0399 | 0.1814 | 0.0859 | 0.0612 |
+| 18 | GDN | 0.4572 | 0.0835 | 0.0392 | 0.1826 | 0.0885 | 0.0634 |
+| 19 | Attention | 0.7307 | 0.0729 | 0.0331 | 0.1711 | 0.0804 | 0.3733 |
+| 20 | GDN | 0.4398 | 0.0817 | 0.0390 | 0.1753 | 0.0807 | 0.0631 |
+| 21 | GDN | 0.4499 | 0.0815 | 0.0400 | 0.1816 | 0.0857 | 0.0610 |
+| 22 | GDN | 0.4560 | 0.0837 | 0.0397 | 0.1826 | 0.0878 | 0.0623 |
+| 23 | Attention | 0.7329 | 0.0721 | 0.0330 | 0.1702 | 0.0805 | 0.3771 |
+| 24 | GDN | 0.4373 | 0.0816 | 0.0392 | 0.1738 | 0.0802 | 0.0625 |
+| 25 | GDN | 0.4541 | 0.0811 | 0.0404 | 0.1840 | 0.0873 | 0.0614 |
+| 26 | GDN | 0.4554 | 0.0840 | 0.0394 | 0.1814 | 0.0873 | 0.0633 |
+| 27 | Attention | 0.7300 | 0.0731 | 0.0328 | 0.1703 | 0.0803 | 0.3735 |
+| 28 | GDN | 0.4377 | 0.0813 | 0.0393 | 0.1746 | 0.0805 | 0.0620 |
+| 29 | GDN | 0.4530 | 0.0824 | 0.0398 | 0.1837 | 0.0859 | 0.0612 |
+| 30 | GDN | 0.4583 | 0.0832 | 0.0400 | 0.1846 | 0.0876 | 0.0630 |
+| 31 | Attention | 0.7293 | 0.0722 | 0.0329 | 0.1691 | 0.0804 | 0.3747 |
+| 32 | GDN | 0.4375 | 0.0814 | 0.0390 | 0.1736 | 0.0807 | 0.0628 |
+| 33 | GDN | 0.4506 | 0.0814 | 0.0403 | 0.1808 | 0.0870 | 0.0611 |
+| 34 | GDN | 0.4597 | 0.0833 | 0.0395 | 0.1833 | 0.0875 | 0.0661 |
+| 35 | Attention | 0.7303 | 0.0737 | 0.0332 | 0.1702 | 0.0803 | 0.3730 |
+| 36 | GDN | 0.4415 | 0.0824 | 0.0394 | 0.1758 | 0.0814 | 0.0626 |
+| 37 | GDN | 0.4504 | 0.0819 | 0.0397 | 0.1821 | 0.0861 | 0.0605 |
+| 38 | GDN | 0.4581 | 0.0841 | 0.0398 | 0.1841 | 0.0880 | 0.0622 |
+| 39 | Attention | 0.7265 | 0.0727 | 0.0328 | 0.1701 | 0.0805 | 0.3703 |
+| 40 | GDN | 0.4402 | 0.0816 | 0.0389 | 0.1761 | 0.0814 | 0.0623 |
+| 41 | GDN | 0.4501 | 0.0808 | 0.0398 | 0.1825 | 0.0868 | 0.0602 |
+| 42 | GDN | 0.4608 | 0.0848 | 0.0404 | 0.1853 | 0.0879 | 0.0624 |
+| 43 | Attention | 0.7260 | 0.0721 | 0.0330 | 0.1705 | 0.0806 | 0.3698 |
+| 44 | GDN | 0.4357 | 0.0815 | 0.0386 | 0.1750 | 0.0798 | 0.0609 |
+| 45 | GDN | 0.4512 | 0.0814 | 0.0397 | 0.1821 | 0.0875 | 0.0605 |
+| 46 | GDN | 0.4556 | 0.0845 | 0.0400 | 0.1821 | 0.0873 | 0.0617 |
+| 47 | Attention | 0.7316 | 0.0719 | 0.0330 | 0.1707 | 0.0806 | 0.3753 |
+| 48 | GDN | 0.4406 | 0.0823 | 0.0387 | 0.1755 | 0.0806 | 0.0635 |
+| 49 | GDN | 0.4504 | 0.0820 | 0.0391 | 0.1818 | 0.0872 | 0.0603 |
+| 50 | GDN | 0.4597 | 0.0849 | 0.0405 | 0.1849 | 0.0873 | 0.0620 |
+| 51 | Attention | 0.7252 | 0.0726 | 0.0329 | 0.1702 | 0.0801 | 0.3694 |
+| 52 | GDN | 0.4369 | 0.0817 | 0.0388 | 0.1751 | 0.0796 | 0.0617 |
+| 53 | GDN | 0.4514 | 0.0825 | 0.0398 | 0.1816 | 0.0874 | 0.0600 |
+| 54 | GDN | 0.4538 | 0.0844 | 0.0399 | 0.1818 | 0.0855 | 0.0623 |
+| 55 | Attention | 0.7274 | 0.0709 | 0.0330 | 0.1704 | 0.0800 | 0.3732 |
+| 56 | GDN | 0.4376 | 0.0818 | 0.0385 | 0.1747 | 0.0808 | 0.0618 |
+| 57 | GDN | 0.4507 | 0.0806 | 0.0402 | 0.1830 | 0.0870 | 0.0598 |
+| 58 | GDN | 0.4559 | 0.0831 | 0.0398 | 0.1829 | 0.0876 | 0.0625 |
+| 59 | Attention | 0.7261 | 0.0724 | 0.0328 | 0.1708 | 0.0805 | 0.3696 |
+| 60 | GDN | 0.4367 | 0.0819 | 0.0391 | 0.1737 | 0.0806 | 0.0614 |
+| 61 | GDN | 0.4519 | 0.0808 | 0.0399 | 0.1832 | 0.0882 | 0.0598 |
+| 62 | GDN | 0.4579 | 0.0845 | 0.0398 | 0.1834 | 0.0869 | 0.0632 |
+| 63 | Attention | 0.7279 | 0.0728 | 0.0331 | 0.1710 | 0.0801 | 0.3709 |
 
 </details>
 
@@ -171,178 +171,187 @@ Each layer has four projections. Gate and up are one joint GEMM; there is no sep
 
 | Stage / compiled kernel | Calls in retained rounds | Current GPU ms per round |
 | --- | ---: | ---: |
-| Drafter / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x16x32_MI16x16x1_SN_LDSB1_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR0_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS0_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA128_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB2_ONLL1_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_2_1.kd` | 6 | 0.007186 |
-| Drafter / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x32x256_MI16x16x1_SN_LDSB0_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR1_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS1_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA512_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB16_ONLL0_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_4_1.kd` | 6 | 0.177167 |
-| Drafter / `__amd_rocclr_copyBuffer.kd` | 6 | 0.002012 |
-| Drafter / `__amd_rocclr_fillBufferAligned.kd` | 18 | 0.006977 |
-| Drafter / `_cache_draft_logits_kernel.kd` | 6 | 0.002292 |
-| Drafter / `_draft_head_int2.kd` | 6 | 0.840683 |
-| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_17408_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 30 | 0.739805 |
-| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_25600_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 6 | 0.228567 |
-| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_4096_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 30 | 0.203789 |
-| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_272_cache_modifier_NONE.kd` | 30 | 1.447936 |
-| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_48_cache_modifier_NONE.kd` | 30 | 0.274569 |
-| Drafter / `_prepare_dflash_inputs_kernel.kd` | 6 | 0.008032 |
-| Drafter / `_rerank_exact.kd` | 6 | 0.008919 |
-| Drafter / `_selector_walk_kernel.kd` | 6 | 0.008092 |
-| Drafter / `kernel_unified_attention.kd` | 30 | 1.957785 |
-| Drafter / `reshape_and_cache_kernel_flash.kd` | 60 | 0.027483 |
-| Drafter / `triton_per_fused_4.kd` | 6 | 0.001986 |
-| Drafter / `triton_per_fused_8.kd` | 24 | 0.007603 |
-| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_0.kd` | 30 | 0.010142 |
-| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_2.kd` | 6 | 0.002086 |
-| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_4.kd` | 54 | 0.016224 |
-| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_view_0.kd` | 6 | 0.005499 |
-| Drafter / `triton_poi_fused_0.kd` | 6 | 0.002606 |
-| Drafter / `triton_poi_fused_5.kd` | 6 | 0.002319 |
-| Drafter / `triton_poi_fused_9.kd` | 24 | 0.009156 |
-| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_1.kd` | 30 | 0.011862 |
-| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_3.kd` | 6 | 0.002146 |
-| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_5.kd` | 54 | 0.016211 |
-| Drafter / `triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_3.kd` | 54 | 0.031305 |
-| Drafter / `triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_ge_mul_rms_norm_select_slice_unsqueeze_view_1.kd` | 6 | 0.023693 |
-| Drafter / `triton_poi_fused_add_permute_unsqueeze_view_2.kd` | 6 | 0.001846 |
-| Drafter / `triton_poi_fused_cat_expand_index_mul_slice_unsqueeze_view_1.kd` | 6 | 0.002539 |
-| Drafter / `triton_red_fused__to_copy_abs_clamp_div_max_mul_preshuffle_gemm_silu_slice_squeeze_view_6.kd` | 30 | 0.018855 |
-| Drafter / `triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_2.kd` | 30 | 0.032549 |
-| Drafter / `triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_7.kd` | 24 | 0.027043 |
-| Drafter / `triton_red_fused__to_copy_embedding_mul_rms_norm_w4_gemm_0.kd` | 6 | 0.004519 |
-| Drafter / `triton_red_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_7.kd` | 6 | 0.006599 |
-| Drafter / `void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]` | 12 | 0.009498 |
-| Drafter / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003532 |
-| Drafter / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003066 |
-| Drafter / `void at::native::bitonicSortKVInPlace<2, -1, 16, 16, c10::BFloat16, long, at::native::GTOp<c10::BFloat16, true>, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<c10::BFloat16, true>) [clone .kd]` | 6 | 0.003306 |
-| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 6 | 0.005039 |
-| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 6 | 0.002546 |
-| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 6 | 0.003692 |
-| Drafter / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003146 |
-| Drafter / `void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 12 | 0.041232 |
-| Drafter / `void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 24 | 0.057470 |
-| Drafter / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 12 | 0.022578 |
-| Drafter / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 24 | 0.029063 |
-| Drafter / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 12 | 0.003005 |
-| Drafter / `void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 6 | 0.021259 |
-| Drafter / `void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 6 | 0.013026 |
-| Drafter / `void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]` | 6 | 0.003799 |
-| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.001866 |
-| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.002486 |
-| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 12 | 0.003858 |
-| Drafter / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 12 | 0.005218 |
-| Drafter / `void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]` | 6 | 0.002139 |
-| Drafter / `void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]` | 6 | 0.005019 |
-| Drafter / `void r4d_gemm_w4a16_nt_m64_kernel<1, 1, false>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]` | 6 | 0.004599 |
-| Drafter / `void r4d_gemm_w4a16_nt_m64_kernel<1, 1, true>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]` | 60 | 0.081410 |
-| Drafter / `void vllm::rms_norm_kernel<c10::BFloat16, 8, 2, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]` | 6 | 0.003192 |
-| Drafter / `void vllm::rms_norm_kernel<c10::BFloat16, 8, 4, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]` | 6 | 0.002779 |
-| Drafter / `void vllm::rotary_embedding_kernel<c10::BFloat16, c10::BFloat16, true>(long const*, c10::BFloat16*, c10::BFloat16*, c10::BFloat16 const*, int, long, long, long, int, int, int, long, bool) [clone .kd]` | 6 | 0.002579 |
-| Attention KV write / `reshape_and_cache_kernel_flash.kd` | 96 | 0.046878 |
-| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_1.kd` | 96 | 0.024404 |
-| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_3.kd` | 96 | 0.027984 |
-| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_4.kd` | 96 | 0.028471 |
-| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_arange_bitwise_and_eq_index_lt_remainder_select_split_where_2.kd` | 96 | 0.029938 |
-| Attention Q/K normalization, RoPE and layout / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 96 | 0.033671 |
-| Attention Q/K normalization, RoPE and layout / `void stock_m1_gemma_norm<false, 256, 32>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 96 | 0.050797 |
-| Attention Q/K normalization, RoPE and layout / `void stock_m1_gemma_norm<false, 256, 64>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 96 | 0.040311 |
-| Attention decode / `void qwen_stock_m1_shared_decode<4, 16, 256, 6, 16, 0, 3430971>(R4DArgs, int) [clone .kd]` | 96 | 5.285290 |
-| Attention input activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 96 | 0.042158 |
-| Attention input projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 96 | 1.098923 |
-| Attention output activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 96 | 0.045791 |
-| Attention output gating / `triton_poi_fused_mul_mxfp4_linear_sigmoid_view_0.kd` | 96 | 0.032364 |
-| Attention output projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 96 | 0.521433 |
-| Attention split-KV merge / `void qwen_stock_m1_shared_merge<256, 4, 1>(R4DArgs, int, int) [clone .kd]` | 96 | 0.119631 |
-| Embedding + first input normalization / `triton_poi_fused__to_copy_embedding_0.kd` | 6 | 0.002599 |
-| Embedding + first input normalization / `void stock_m1_gemma_norm<false, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 6 | 0.005159 |
-| Final normalization/layout / `void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 6 | 0.005612 |
-| GDN convolution / `_causal_conv1d_update_kernel.kd` | 288 | 0.226365 |
-| GDN input activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 288 | 0.127346 |
-| GDN input projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 288 | 3.872797 |
-| GDN layout/copies and buffer initialization / `triton_poi_fused_add_1.kd` | 18 | 0.004004 |
-| GDN layout/copies and buffer initialization / `triton_poi_fused_add_2.kd` | 12 | 0.002738 |
-| GDN layout/copies and buffer initialization / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 288 | 0.157119 |
-| GDN layout/copies and buffer initialization / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]` | 288 | 0.092759 |
-| GDN layout/copies and buffer initialization / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 288 | 0.074886 |
-| GDN output activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 288 | 0.131086 |
-| GDN output gated normalization / `layer_norm_fwd_kernel.kd` | 288 | 0.097307 |
-| GDN output projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 288 | 1.883793 |
-| GDN recurrence and gates / `stock_gdn_scan_kernel.kd` | 288 | 1.218805 |
-| Layer input residual/normalization / `void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 378 | 0.345972 |
-| MLP SiLU and gating / `triton_poi_fused_mul_mxfp4_linear_silu_slice_0.kd` | 288 | 0.141272 |
-| MLP SiLU and gating / `triton_poi_fused_mul_mxfp4_linear_silu_slice_1.kd` | 96 | 0.048204 |
-| MLP down input FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 384 | 0.297344 |
-| MLP down projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 384 | 5.142933 |
-| MLP gate/up input FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 384 | 0.166543 |
-| MLP gate/up projection / `void radiance_mxfp4_fp8_gemm_folded<2, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, std::bfloat16_t*, int, int, int) [clone .kd]` | 384 | 25.437279 |
-| Post-attention/GDN residual/normalization / `void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 384 | 0.352599 |
-| Full BF16 target head / `(anonymous namespace)::stock_m1_head_pair(__hip_bfloat16 const*, __hip_bfloat16 const*, __hip_bfloat16*) [clone .kd]` | 6 | 4.139846 |
-| Other GPU bookkeeping / `__amd_rocclr_copyBuffer.kd` | 172 | 0.076165 |
-| Other GPU bookkeeping / `__amd_rocclr_fillBufferAligned.kd` | 6 | 0.002519 |
-| Other GPU bookkeeping / `_combine_sampled_and_draft_tokens_kernel.kd` | 7 | 0.003485 |
-| Other GPU bookkeeping / `_compute_local_logits_stats_kernel.kd` | 6 | 0.028819 |
-| Other GPU bookkeeping / `_compute_slot_mappings_kernel.kd` | 7 | 0.003485 |
-| Other GPU bookkeeping / `_expand_idx_mapping_kernel.kd` | 7 | 0.002339 |
-| Other GPU bookkeeping / `_gather_block_tables_kernel.kd` | 7 | 0.005852 |
-| Other GPU bookkeeping / `_get_num_sampled_and_rejected_kernel.kd` | 6 | 0.002792 |
-| Other GPU bookkeeping / `_insert_resampled_kernel.kd` | 6 | 0.003499 |
-| Other GPU bookkeeping / `_post_update_kernel.kd` | 6 | 0.005206 |
-| Other GPU bookkeeping / `_prepare_pos_seq_lens_kernel.kd` | 7 | 0.002392 |
-| Other GPU bookkeeping / `_prepare_rope_positions_kernel.kd` | 7 | 0.003232 |
-| Other GPU bookkeeping / `_rejection_kernel.kd` | 6 | 0.007219 |
-| Other GPU bookkeeping / `_resample_kernel.kd` | 6 | 0.015366 |
-| Other GPU bookkeeping / `_scatter_num_accepted_kernel.kd` | 6 | 0.001986 |
-| Other GPU bookkeeping / `postprocess_mamba_fused_kernel.kd` | 6 | 0.002699 |
-| Other GPU bookkeeping / `precopy_mamba_align_fused_kernel.kd` | 7 | 0.003099 |
-| Other GPU bookkeeping / `preprocess_mamba_align_fused_kernel.kd` | 7 | 0.003012 |
-| Other GPU bookkeeping / `void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*) [clone .kd]` | 42 | 0.014853 |
-| Other GPU bookkeeping / `void (anonymous namespace)::softmax_warp_forward<float, float, float, 6, false, false, 32>(float*, float const*, int, int, int, bool const*, int, bool) [clone .kd]` | 6 | 0.002352 |
-| Other GPU bookkeeping / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 48 | 0.015559 |
-| Other GPU bookkeeping / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 6 | 0.003046 |
-| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 48 | 0.020886 |
-| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}) [clone .kd]` | 42 | 0.018933 |
-| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}) [clone .kd]` | 18 | 0.019577 |
-| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 109 | 0.053589 |
-| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 12 | 0.005985 |
-| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 6 | 0.002979 |
-| Other GPU bookkeeping / `void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 24 | 0.052110 |
-| Other GPU bookkeeping / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 24 | 0.038716 |
-| Other GPU bookkeeping / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 6 | 0.001706 |
-| Other GPU bookkeeping / `void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 6 | 0.026026 |
-| Other GPU bookkeeping / `void at::native::tensor_kernel_scan_innermost_dim<float, std::plus<float> >(float*, float const*, unsigned int, unsigned int, unsigned int, float, std::plus<float>) [clone .kd]` | 6 | 0.002726 |
-| Other GPU bookkeeping / `void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast) [clone .kd]` | 42 | 0.012020 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul>) [clone .kd]` | 6 | 0.002659 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>) [clone .kd]` | 7 | 0.002185 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul> >(int, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.002332 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>) [clone .kd]` | 42 | 0.014173 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.001859 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul> >(int, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul>) [clone .kd]` | 6 | 0.010066 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul> >(int, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul>) [clone .kd]` | 12 | 0.004878 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul> >(int, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul>) [clone .kd]` | 42 | 0.015160 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>) [clone .kd]` | 48 | 0.016085 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.001899 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>) [clone .kd]` | 6 | 0.001992 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>) [clone .kd]` | 12 | 0.003111 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>) [clone .kd]` | 7 | 0.001886 |
-| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 6 | 0.009939 |
-| Other GPU bookkeeping / `void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]` | 6 | 0.002252 |
-| Other GPU bookkeeping / `void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]` | 6 | 0.004999 |
+| Drafter / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x16x32_MI16x16x1_SN_LDSB1_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR0_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS0_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA128_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB2_ONLL1_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_2_1.kd` | 7 | 0.007090 |
+| Drafter / `Cijk_Alik_Bljk_BBS_BH_Bias_HA_S_SAV_UserArgs_MT16x32x256_MI16x16x1_SN_LDSB0_AFC1_AG0_AGGSUA0_AGNTAB0_AFEM1_AFEM1_ASEM1_CD1_1_CLR1_CLS0_CADS0_DTLA0_DTLB0_DTLM0_DTVA0_DTVB1_DTVMXSA0_DTVMXSB0_DTVSM0_DPLB0_EPS1_ELFLR0_EMLLn1_FDSI0_GRPM1_GRVWA8_GRVWB8_GSUAMB_GLS0_HPLR0_ISA1201_ICIW0_IU1_K1_LDSTI0_LBSPPA512_LBSPPB0_LBSPPMXSA0_LBSPPMXSB0_LBSPPM0_LPA16_LPB0_LPMXSA0_LPMXSB0_LPM0_LRVW8_LWPMn1_MIAV1_MIWT1_1_MXLIBL_MXSFNS_MO40_MGRIPM1_NTn1_NTA0_NTB0_NTC0_NTD0_NTE0_NTMXSA0_NTMXSB0_NTM0_NTWS0_NVn1_NVA0_NVB0_NVC0_NVD0_NVE0_NVMXSA0_NVMXSB0_NVM0_NVWS0_NEPBS0_NLCA1_NLCB16_ONLL0_PAP0_PGL0_PGR1_PLR1_PKA0_SGROB0_SIA3_SS0_SPO0_SRVW0_SSO0_SVW8_SK0_SKFTR0_SKFDPO0_SKXCCM0_SNLL0_SIP1_SGRO0_TDMI0_TDMIM0_TDMS0_TIN0_THn1_THA0_THB0_THC0_THD0_THE0_THMXSA0_THMXSB0_THM0_THWS0_TLDS1_TLDSM1_ULSGRO0_USL1_USLMX0_UIOFGRO0_UPLRP0_USFGROn1_USI0_VSn1_VWA1_VWB1_WSGRA0_WSGRB0_WS32_WG16_4_1.kd` | 7 | 0.176760 |
+| Drafter / `__amd_rocclr_copyBuffer.kd` | 7 | 0.001948 |
+| Drafter / `__amd_rocclr_fillBufferAligned.kd` | 21 | 0.006877 |
+| Drafter / `_cache_draft_logits_kernel.kd` | 7 | 0.002416 |
+| Drafter / `_draft_head_int2.kd` | 7 | 0.826031 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_17408_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 35 | 0.738124 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_25600_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 7 | 0.235794 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_4096_EVEN_K_1_GRID_MN_40_cache_modifier_NONE.kd` | 35 | 0.202362 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_272_cache_modifier_NONE.kd` | 35 | 1.447715 |
+| Drafter / `_gemm_a8w8_blockscale_preshuffle_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_16_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_5120_EVEN_K_1_GRID_MN_48_cache_modifier_NONE.kd` | 35 | 0.272956 |
+| Drafter / `_prepare_dflash_inputs_kernel.kd` | 7 | 0.007542 |
+| Drafter / `_rerank_exact.kd` | 7 | 0.008850 |
+| Drafter / `_selector_walk_kernel.kd` | 7 | 0.007993 |
+| Drafter / `kernel_unified_attention.kd` | 35 | 1.843762 |
+| Drafter / `reshape_and_cache_kernel_flash.kd` | 70 | 0.026356 |
+| Drafter / `triton_per_fused_4.kd` | 7 | 0.001942 |
+| Drafter / `triton_per_fused_8.kd` | 28 | 0.007527 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_0.kd` | 35 | 0.009738 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_2.kd` | 7 | 0.001999 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_preshuffle_gemm_squeeze_view_4.kd` | 63 | 0.016128 |
+| Drafter / `triton_per_fused__to_copy_abs_clamp_div_max_view_0.kd` | 7 | 0.004988 |
+| Drafter / `triton_poi_fused_0.kd` | 7 | 0.002662 |
+| Drafter / `triton_poi_fused_5.kd` | 7 | 0.002228 |
+| Drafter / `triton_poi_fused_9.kd` | 28 | 0.010059 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_1.kd` | 35 | 0.012252 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_3.kd` | 7 | 0.002028 |
+| Drafter / `triton_poi_fused__to_copy_clamp_div_preshuffle_gemm_squeeze_view_5.kd` | 63 | 0.016614 |
+| Drafter / `triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_3.kd` | 63 | 0.022545 |
+| Drafter / `triton_poi_fused_add_arange_bitwise_and_constant_pad_nd_ge_mul_rms_norm_select_slice_unsqueeze_view_1.kd` | 7 | 0.023102 |
+| Drafter / `triton_poi_fused_add_permute_unsqueeze_view_2.kd` | 7 | 0.001810 |
+| Drafter / `triton_poi_fused_cat_expand_index_mul_slice_unsqueeze_view_1.kd` | 7 | 0.002519 |
+| Drafter / `triton_red_fused__to_copy_abs_clamp_div_max_mul_preshuffle_gemm_silu_slice_squeeze_view_6.kd` | 35 | 0.017275 |
+| Drafter / `triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_2.kd` | 35 | 0.031390 |
+| Drafter / `triton_red_fused__to_copy_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_w4_gemm_7.kd` | 28 | 0.025836 |
+| Drafter / `triton_red_fused__to_copy_embedding_mul_rms_norm_w4_gemm_0.kd` | 7 | 0.004245 |
+| Drafter / `triton_red_fused_add_arange_bitwise_and_constant_pad_nd_fused_add_rms_norm_ge_mul_select_slice_unsqueeze_view_7.kd` | 7 | 0.006593 |
+| Drafter / `void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]` | 14 | 0.009198 |
+| Drafter / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 7 | 0.003570 |
+| Drafter / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 7 | 0.003256 |
+| Drafter / `void at::native::bitonicSortKVInPlace<2, -1, 16, 16, c10::BFloat16, long, at::native::GTOp<c10::BFloat16, true>, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<c10::BFloat16, true>) [clone .kd]` | 7 | 0.003102 |
+| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 7 | 0.004953 |
+| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 7 | 0.002519 |
+| Drafter / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 7 | 0.003496 |
+| Drafter / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 7 | 0.003096 |
+| Drafter / `void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 14 | 0.038553 |
+| Drafter / `void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 28 | 0.055408 |
+| Drafter / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 14 | 0.022135 |
+| Drafter / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 28 | 0.028647 |
+| Drafter / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 14 | 0.002901 |
+| Drafter / `void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 7 | 0.023502 |
+| Drafter / `void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 7 | 0.008902 |
+| Drafter / `void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]` | 7 | 0.003793 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.001719 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.002450 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 14 | 0.003855 |
+| Drafter / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 14 | 0.005192 |
+| Drafter / `void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]` | 7 | 0.002090 |
+| Drafter / `void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]` | 7 | 0.004913 |
+| Drafter / `void r4d_gemm_w4a16_nt_m64_kernel<1, 1, false>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]` | 7 | 0.004462 |
+| Drafter / `void r4d_gemm_w4a16_nt_m64_kernel<1, 1, true>(unsigned short const*, unsigned int const*, unsigned int const*, __hip_bfloat16*, int, int, int, int, int) [clone .kd]` | 70 | 0.081664 |
+| Drafter / `void vllm::rms_norm_kernel<c10::BFloat16, 8, 2, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]` | 7 | 0.002965 |
+| Drafter / `void vllm::rms_norm_kernel<c10::BFloat16, 8, 4, true>(c10::BFloat16*, c10::BFloat16 const*, long, long, long, long, long, c10::BFloat16 const*, long, float, int, int) [clone .kd]` | 7 | 0.002753 |
+| Drafter / `void vllm::rotary_embedding_kernel<c10::BFloat16, c10::BFloat16, true>(long const*, c10::BFloat16*, c10::BFloat16*, c10::BFloat16 const*, int, long, long, long, int, int, int, long, bool) [clone .kd]` | 7 | 0.002382 |
+| Attention KV write / `reshape_and_cache_kernel_flash.kd` | 112 | 0.043841 |
+| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_1.kd` | 112 | 0.020961 |
+| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_3.kd` | 112 | 0.028590 |
+| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_4.kd` | 112 | 0.025390 |
+| Attention Q/K normalization, RoPE and layout / `triton_poi_fused_arange_bitwise_and_eq_index_lt_remainder_select_split_where_2.kd` | 112 | 0.028150 |
+| Attention Q/K normalization, RoPE and layout / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 112 | 0.029818 |
+| Attention Q/K normalization, RoPE and layout / `void stock_m1_gemma_norm<false, 256, 32>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 112 | 0.047344 |
+| Attention Q/K normalization, RoPE and layout / `void stock_m1_gemma_norm<false, 256, 64>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 112 | 0.037333 |
+| Attention decode / `void qwen_stock_m1_shared_decode<4, 16, 256, 6, 16, 0, 3430971>(R4DArgs, int) [clone .kd]` | 112 | 5.119284 |
+| Attention input projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 112 | 1.160880 |
+| Attention output activation FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 112 | 0.043224 |
+| Attention output gating / `triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_sigmoid_view_0.kd` | 112 | 0.031133 |
+| Attention output projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 112 | 0.527620 |
+| Attention split-KV merge / `void qwen_stock_m1_shared_merge<256, 4, 1>(R4DArgs, int, int) [clone .kd]` | 112 | 0.128076 |
+| Embedding + first input normalization / `triton_poi_fused__to_copy_embedding_0.kd` | 7 | 0.002405 |
+| Embedding + first input normalization / `void norm_quant<false, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]` | 7 | 0.007176 |
+| Final normalization/layout / `void stock_m1_gemma_norm<true, 5120, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long, long, float, float*) [clone .kd]` | 7 | 0.005130 |
+| GDN convolution / `_causal_conv1d_update_kernel.kd` | 336 | 0.209805 |
+| GDN input projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 336 | 3.947534 |
+| GDN layout/copies and buffer initialization / `triton_poi_fused_add_1.kd` | 21 | 0.003906 |
+| GDN layout/copies and buffer initialization / `triton_poi_fused_add_2.kd` | 14 | 0.002581 |
+| GDN layout/copies and buffer initialization / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 336 | 0.146159 |
+| GDN layout/copies and buffer initialization / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]` | 336 | 0.085546 |
+| GDN layout/copies and buffer initialization / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 336 | 0.068815 |
+| GDN output gated normalization / `gdn_norm_quant_kernel.kd` | 336 | 0.160655 |
+| GDN output projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 336 | 1.898577 |
+| GDN recurrence and gates / `stock_gdn_scan_kernel.kd` | 336 | 1.183110 |
+| Layer input residual/normalization / `void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]` | 441 | 0.512087 |
+| MLP SiLU and gating / `triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_silu_slice_0.kd` | 336 | 0.125907 |
+| MLP SiLU and gating / `triton_poi_fused_dynamic_per_token_scaled_fp8_quant_mul_silu_slice_1.kd` | 112 | 0.053767 |
+| MLP down input FP8 quantization / `void vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<c10::BFloat16, c10::Float8_e4m3fn>(c10::Float8_e4m3fn*, float*, c10::BFloat16 const*, float const*, int, long, long) [clone .kd]` | 448 | 0.265069 |
+| MLP down projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 448 | 5.368755 |
+| MLP gate/up projection / `void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]` | 448 | 11.374764 |
+| Post-attention/GDN residual/normalization / `void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]` | 448 | 0.533053 |
+| Target head (global256) / `__amd_rocclr_fillBufferAligned.kd` | 7 | 0.002422 |
+| Target head (global256) / `_draft_head_int2.kd` | 7 | 0.774574 |
+| Target head (global256) / `_rerank_exact.kd` | 7 | 0.029519 |
+| Target head (global256) / `void at::native::(anonymous namespace)::CatArrayBatchedCopy_contig<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 2, 128, 1>(at::native::(anonymous namespace)::OpaqueType<2u>*, at::native::(anonymous namespace)::CatArrInputTensorMetadata<at::native::(anonymous namespace)::OpaqueType<2u>, unsigned int, 128, 1>, at::native::(anonymous namespace)::TensorSizeStride<unsigned int, 4u>, int, unsigned int) [clone .kd]` | 7 | 0.004508 |
+| Target head (global256) / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<2>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 7 | 0.003490 |
+| Target head (global256) / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 7 | 0.002776 |
+| Target head (global256) / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 7 | 0.005182 |
+| Target head (global256) / `void at::native::mbtopk::computeBlockDigitCounts<c10::BFloat16, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 14 | 0.090736 |
+| Target head (global256) / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, c10::BFloat16>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 14 | 0.038444 |
+| Target head (global256) / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 7 | 0.001530 |
+| Target head (global256) / `void at::native::mbtopk::gatherTopK<c10::BFloat16, unsigned int, 2>(at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, c10::BFloat16*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 7 | 0.040611 |
+| Target head (global256) / `void at::native::radixSortKVInPlace<2, -1, 128, 8, c10::BFloat16, long, unsigned int>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, bool) [clone .kd]` | 7 | 0.005410 |
+| Target head (global256) / `void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4> >(at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, float, 4, 4>) [clone .kd]` | 7 | 0.003833 |
+| Target head (global256) / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.001633 |
+| Target head (global256) / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.002228 |
+| Target head (global256) / `void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]` | 14 | 0.005169 |
+| Other GPU bookkeeping / `__amd_rocclr_copyBuffer.kd` | 175 | 0.066467 |
+| Other GPU bookkeeping / `__amd_rocclr_fillBufferAligned.kd` | 7 | 0.002296 |
+| Other GPU bookkeeping / `_combine_sampled_and_draft_tokens_kernel.kd` | 7 | 0.003010 |
+| Other GPU bookkeeping / `_compute_local_logits_stats_kernel.kd` | 7 | 0.028256 |
+| Other GPU bookkeeping / `_compute_slot_mappings_kernel.kd` | 7 | 0.002942 |
+| Other GPU bookkeeping / `_expand_idx_mapping_kernel.kd` | 7 | 0.001896 |
+| Other GPU bookkeeping / `_gather_block_tables_kernel.kd` | 7 | 0.004685 |
+| Other GPU bookkeeping / `_get_num_sampled_and_rejected_kernel.kd` | 7 | 0.002542 |
+| Other GPU bookkeeping / `_insert_resampled_kernel.kd` | 7 | 0.003410 |
+| Other GPU bookkeeping / `_post_update_kernel.kd` | 7 | 0.004913 |
+| Other GPU bookkeeping / `_prepare_pos_seq_lens_kernel.kd` | 7 | 0.002068 |
+| Other GPU bookkeeping / `_prepare_rope_positions_kernel.kd` | 7 | 0.002759 |
+| Other GPU bookkeeping / `_rejection_kernel.kd` | 7 | 0.007245 |
+| Other GPU bookkeeping / `_resample_kernel.kd` | 7 | 0.014068 |
+| Other GPU bookkeeping / `_scatter_num_accepted_kernel.kd` | 7 | 0.002073 |
+| Other GPU bookkeeping / `_temperature_kernel.kd` | 7 | 0.013805 |
+| Other GPU bookkeeping / `postprocess_mamba_fused_kernel.kd` | 7 | 0.002519 |
+| Other GPU bookkeeping / `precopy_mamba_align_fused_kernel.kd` | 7 | 0.002770 |
+| Other GPU bookkeeping / `preprocess_mamba_align_fused_kernel.kd` | 7 | 0.002622 |
+| Other GPU bookkeeping / `void (anonymous namespace)::elementwise_kernel_with_index<int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>(int, at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}, function_traits<at::native::arange_cuda_out(c10::Scalar const&, c10::Scalar const&, c10::Scalar const&, at::Tensor&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(long)#1}>::result_type*) [clone .kd]` | 42 | 0.013063 |
+| Other GPU bookkeeping / `void (anonymous namespace)::softmax_warp_forward<float, float, float, 6, false, false, 32>(float*, float const*, int, int, int, bool const*, int, bool) [clone .kd]` | 7 | 0.002273 |
+| Other GPU bookkeeping / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<false, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 49 | 0.013667 |
+| Other GPU bookkeeping / `void at::native::_scatter_gather_elementwise_kernel<256, 4, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}>(int, at::native::_cuda_scatter_gather_internal_kernel<true, at::native::OpaqueType<4>, long>::operator()<at::native::TensorAssign>(at::TensorIterator&, long, long, long, at::native::TensorAssign const&)::{lambda(int)#1}) [clone .kd]` | 7 | 0.002428 |
+| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1} const&)::{lambda(int, bool)#1}) [clone .kd]` | 49 | 0.014016 |
+| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<int> >(at::TensorIteratorBase&, at::native::CUDAFunctor_add<int> const&)::{lambda(int, bool)#1}) [clone .kd]` | 42 | 0.014634 |
+| Other GPU bookkeeping / `void at::native::elementwise_kernel_manual_unroll<128, 8, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::CompareFunctor<float> >(at::TensorIteratorBase&, at::native::(anonymous namespace)::CompareFunctor<float> const&)::{lambda(int, bool)#1}) [clone .kd]` | 21 | 0.018666 |
+| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<4> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 112 | 0.048521 |
+| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_kernel_impl<at::native::OpaqueType<8> >(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 14 | 0.005895 |
+| Other GPU bookkeeping / `void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}>(long, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1}>(at::TensorIteratorBase&, c10::ArrayRef<long>, c10::ArrayRef<long>, at::native::index_put_kernel_impl<at::native::OpaqueType<8> >(at::TensorIterator&, c10::ArrayRef<long>, c10::ArrayRef<long>)::{lambda(char*, char const*, long)#1} const&, bool)::{lambda(int)#1}) [clone .kd]` | 7 | 0.003056 |
+| Other GPU bookkeeping / `void at::native::mbtopk::computeBlockDigitCounts<float, unsigned int, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int*, unsigned int, unsigned int, int, int, unsigned int, unsigned int, unsigned int*, short*) [clone .kd]` | 28 | 0.060642 |
+| Other GPU bookkeeping / `void at::native::mbtopk::computeBlockwiseWithinKCounts<unsigned int, float>(unsigned int*, short*, unsigned int*, unsigned int, int, bool, unsigned int*, float*, unsigned int*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 28 | 0.033745 |
+| Other GPU bookkeeping / `void at::native::mbtopk::fill<unsigned int, unsigned int>(unsigned int*, unsigned int, unsigned int) [clone .kd]` | 7 | 0.001468 |
+| Other GPU bookkeeping / `void at::native::mbtopk::gatherTopK<float, unsigned int, 2>(at::cuda::detail::TensorInfo<float const, unsigned int>, unsigned int, unsigned int, bool, unsigned int, unsigned int, at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, unsigned int, unsigned int, float*, unsigned int*, unsigned int*, unsigned int) [clone .kd]` | 7 | 0.026502 |
+| Other GPU bookkeeping / `void at::native::tensor_kernel_scan_innermost_dim<float, std::plus<float> >(float*, float const*, unsigned int, unsigned int, unsigned int, float, std::plus<float>) [clone .kd]` | 7 | 0.002468 |
+| Other GPU bookkeeping / `void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, 4, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast>(int, at::native::CUDAFunctor_add<int>, std::array<char*, 3ul>, TrivialOffsetCalculator<2, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithoutCast, at::native::memory::StoreWithoutCast) [clone .kd]` | 42 | 0.010285 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul> >(int, at::native::BinaryFunctor<bool, bool, bool, at::native::BitwiseOrFunctor<bool> >, std::array<char*, 3ul>) [clone .kd]` | 7 | 0.002468 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::FillFunctor<bool>, std::array<char*, 1ul> >(int, at::native::FillFunctor<bool>, std::array<char*, 1ul>) [clone .kd]` | 7 | 0.001833 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<16, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul> >(int, at::native::bitwise_not_kernel_cuda(at::TensorIteratorBase&)::{lambda(bool)#1}, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.002313 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>) [clone .kd]` | 42 | 0.012428 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul> >(int, at::native::(anonymous namespace)::launch_clamp_scalar(at::TensorIteratorBase&, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::{lambda()#1}::operator()() const::{lambda()#4}::operator()() const::{lambda(long)#1}, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.001759 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul> >(int, at::native::(anonymous namespace)::masked_fill_kernel(at::TensorIterator&, c10::Scalar const&)::{lambda()#1}::operator()() const::{lambda()#7}::operator()() const::{lambda(float, bool)#1}, std::array<char*, 3ul>) [clone .kd]` | 7 | 0.009730 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul> >(int, at::native::(anonymous namespace)::where_kernel_impl(at::TensorIterator&)::{lambda()#1}::operator()() const::{lambda()#11}::operator()() const::{lambda(bool, float, float)#1}, std::array<char*, 4ul>) [clone .kd]` | 14 | 0.004272 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul> >(int, at::native::BUnaryFunctor<int, int, int, at::native::binary_internal::div_floor_kernel_cuda(at::TensorIteratorBase&)::{lambda()#1}::operator()() const::{lambda()#3}::operator()() const::{lambda(int, int)#1}>, std::array<char*, 2ul>) [clone .kd]` | 42 | 0.013468 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<int>, std::array<char*, 2ul>) [clone .kd]` | 49 | 0.011862 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul> >(int, at::native::CUDAFunctorOnSelf_add<long>, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.001999 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>) [clone .kd]` | 7 | 0.001913 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>) [clone .kd]` | 14 | 0.003404 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>) [clone .kd]` | 7 | 0.001679 |
+| Other GPU bookkeeping / `void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul> >(int, at::native::bfloat16tofloat32_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(c10::BFloat16)#1}, std::array<char*, 2ul>) [clone .kd]` | 7 | 0.009685 |
+| Other GPU bookkeeping / `void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool) [clone .kd]` | 7 | 0.001999 |
+| Other GPU bookkeeping / `void at::native::warpMergeSortKVInPlace<2, -1, 128, 16, float, long, at::native::GTOp<float, true>, unsigned int, 32>(at::cuda::detail::TensorInfo<float, unsigned int>, unsigned int, unsigned int, unsigned int, at::cuda::detail::TensorInfo<long, unsigned int>, unsigned int, at::native::GTOp<float, true>, float) [clone .kd]` | 7 | 0.004656 |
 
 </details>
 
 ## Uninstrumented performance
 
-Separate uninstrumented compiled direct-engine controls with the full BF16 target head. Three natural responses on the same 60,000-input-token Pi prefix; excludes HTTP/Pi, tool execution, snapshot publication, cold prefill and warm-up.
+Normal compiled serving with snapshots enabled, no diagnostic worker or timing hooks. Three natural completions on a 60,000-input-token private Pi fixture; 2,375 generated tokens, temperature 0.6, top-p 0.95, top-k 20. Current global-256 head and all selected backports.
 
 | Measurement | Current result |
 | --- | ---: |
-| Median round | 60.052 ms |
-| Pooled rate after first output | 84.342 tok/s |
-| Output tokens / natural responses | 2,525 / 3 |
-| Timed post-first output | 29.902 s |
-| Separate rounding-control median round | 60.900 ms |
-| Rounding-control natural responses / output tokens | 6 / 5,050 |
-| Rounding-control mean committed tokens per round | 5.211 |
-| Rounding-control pooled rate | 83.070 tok/s |
+| Weighted mean generation round | 44.037 ms |
+| Pooled rate after first output | 124.24 tok/s |
+| Output tokens / natural responses | 2,375 / 3 |
+| Cold 60K time to first token | 31.98 s (single observation) |
+| Pi-temperature-1.0 pooled backend rate | 120.65 tok/s; 2,363 tokens across 3 natural completions |
 
-These approximately 80–86 tok/s results are brief **60K-input** controls, not the separate 60K-generated-token head benchmark. No eager execution or instrumented timing is substituted for these complete-round measurements.
+These are brief 60K-input controls, **not** 60K-output throughput and not an end-to-end Pi UI/VM benchmark. Cold first-token time includes CPU/request overhead and initial generation. Throughput varies with draft acceptance, context and GPU clocks. [Measurements and limits](docs/pi-prefill-generation-20260918.md).
 
 Aggregate data: [current measurements](benchmarks/results/coherence-current.json). Historical methodology and detailed numerical evidence: [technical report](reports/d7-rdna4-2026-09-17/REPORT.md).
 

@@ -111,3 +111,51 @@ def test_dummy_compatibility_cannot_bypass_live_or_graph_captured_repairs():
     performance.close()
     assert attention.forward is repaired_attention
     installed.close()
+
+
+def test_lazy_warmup_never_writes_through_the_eight_column_state_abi(monkeypatch):
+    path = Path(__file__).parents[1] / "experiments/radiance-public/optimized_d7_startup.py"
+    spec = importlib.util.spec_from_file_location("optimized_lazy_startup_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setenv("QWEN_STOCK_GDN_LAZY", "1")
+    events = []
+    capturing = [False]
+
+    def old_state_writer(*args):
+        raise AssertionError("old speculative state layout was invoked")
+
+    def repaired(*args):
+        events.append("live corrected lazy kernel")
+
+    native = types.SimpleNamespace(
+        forward_core_fused=repaired,
+        conv_update=old_state_writer,
+        recurrent_update=old_state_writer,
+        _metadata=lambda layer: types.SimpleNamespace(num_spec_decodes=1),
+    )
+    bindings = HookSet()
+    bindings.replace(native, "conv_update", repaired)
+    bindings.replace(native, "recurrent_update", repaired)
+    repairs = types.SimpleNamespace(
+        hooks=bindings,
+        prefill=types.SimpleNamespace(native=native, original=old_state_writer),
+    )
+    torch = types.SimpleNamespace(
+        cuda=types.SimpleNamespace(is_current_stream_capturing=lambda: capturing[0])
+    )
+    layer = types.SimpleNamespace(_radiance_z="discarded startup temporary")
+    output = types.SimpleNamespace(zero_=lambda: events.append("zero dummy output"))
+    args = (layer, types.SimpleNamespace(shape=(8, 10240)), None, None, output)
+    with module.startup_prefill_compatibility(repairs, torch) as receipt:
+        assert native.forward_core_fused(*args) is True
+        assert events == ["zero dummy output"]
+        assert receipt["lazy_synthetic_spec_skips"] == 1
+        assert not hasattr(layer, "_radiance_z")
+        capturing[0] = True
+        with pytest.raises(DiagnosticError, match="captured graph"):
+            native.forward_core_fused(*args)
+        assert events == ["zero dummy output"]
+    native.forward_core_fused(*args)
+    assert events[-1] == "live corrected lazy kernel"
+    bindings.close()

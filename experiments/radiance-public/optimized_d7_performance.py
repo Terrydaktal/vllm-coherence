@@ -48,6 +48,10 @@ class PerformanceRepairs:
 
         self.manifest = private_json(Path(path))
         authenticate(self.manifest)
+        if self.manifest.get("tp1_fp8") or self.manifest.get("lazy_gdn"):
+            from tp1_lazy_backports import validate_runtime_layout
+
+            validate_runtime_layout(self.manifest)
         require(
             self.manifest["reference_repair"] == repairs.manifest["sha256"],
             "performance paths require their qualified numerical reference",
@@ -59,10 +63,21 @@ class PerformanceRepairs:
             )
         for entry in self.manifest["stages"].values():
             qualified_stage(entry)
+        self.gemm_dispatch = None
+        if self.manifest.get("gemm_dispatch"):
+            from mxfp4_dispatch import install
+
+            self.gemm_dispatch = install(self.manifest["gemm_dispatch"])
         self.head = StockM1HeadPair(self.manifest["stages"]["head"]["build"])
         self.attention = SharedM1Attention(self.manifest["stages"]["attention"]["build"])
         self.hooks = HookSet()
         self.calls = Counter()
+        self.lazy_gdn = None
+        self.fp8_stream = None
+        self.gdn_norm_quant = None
+        self.prefill_scan = None
+        self.activation_tiles = None
+        self.repairs = repairs
         heads = [m for n, m in model.named_modules() if n.endswith("logits_processor")]
         require(len(heads) == 1, "target head module changed")
         original_head = heads[0]._apply_head
@@ -164,6 +179,48 @@ class PerformanceRepairs:
 
             self.hooks.replace(gdn, "conv_update", convolution)
             self.hooks.replace(gdn, "recurrent_update", recurrent)
+            if self.manifest.get("lazy_gdn"):
+                from tp1_lazy_backports import install_lazy
+
+                self.lazy_gdn = install_lazy(self.manifest["lazy_gdn"], repairs, self.hooks, conv)
+        elif self.manifest.get("lazy_gdn"):
+            raise ValueError("lazy GDN needs its qualified packed convolution")
+
+    def install_producers(self, model):
+        """After corrected compiled norm wrappers, before compilation/capture."""
+        if self.manifest.get("tp1_fp8"):
+            from tp1_lazy_backports import install_fp8
+
+            self.fp8_stream = install_fp8(self.manifest["tp1_fp8"], model, self.hooks)
+        if self.manifest.get("gdn_norm_quant"):
+            from pi_prefill_admission import gdn_evidence
+            from stock_gdn_norm_quant import install
+
+            gdn_evidence(self.manifest["gdn_norm_quant"])
+            self.gdn_norm_quant = install(model, self.hooks)
+        if self.manifest.get("prefill_scan"):
+            from optimized_prefill_scan import PrefillScan
+            from pi_prefill_admission import scan_evidence
+
+            scan_evidence(self.manifest["prefill_scan"])
+            previous = self.repairs.prefill.scan
+            self.hooks.replace(
+                self.repairs.prefill, "scan", PrefillScan(previous.torch, previous.device)
+            )
+            self.prefill_scan = {"spatial_tiles": [8, 16], "chronological_arithmetic": "unchanged"}
+        if self.manifest.get("activation_tiles"):
+            from prefill_tiles_admission import install
+
+            self.activation_tiles = install(self.manifest["activation_tiles"])
 
     def receipt(self):
-        return {"manifest": self.manifest["sha256"], "calls": dict(self.calls)}
+        return {
+            "manifest": self.manifest["sha256"],
+            "calls": dict(self.calls),
+            "gemm_dispatch": self.gemm_dispatch,
+            "lazy_gdn": self.lazy_gdn,
+            "tp1_fp8": self.fp8_stream,
+            "gdn_norm_quant": self.gdn_norm_quant,
+            "prefill_scan": self.prefill_scan,
+            "activation_tiles": self.activation_tiles,
+        }

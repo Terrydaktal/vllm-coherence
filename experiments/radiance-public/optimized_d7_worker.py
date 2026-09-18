@@ -164,6 +164,17 @@ class OptimizedWorker(Worker):
             if performance:
                 from optimized_d7_performance import PerformanceRepairs
 
+                prospective = private_json(Path(performance))
+                authenticate(prospective)
+                if prospective.get("lazy_gdn"):
+                    require(
+                        self.vllm_config.kv_transfer_config is None,
+                        "lazy GDN disk/offload integration has not been qualified",
+                    )
+                    require(
+                        self.cache_config.mamba_cache_mode == "align",
+                        "lazy GDN requires align-mode cache copies",
+                    )
                 self._qwen_performance_repairs = PerformanceRepairs(
                     performance, self.model_runner.model, self._qwen_persistent_repairs
                 )
@@ -180,6 +191,8 @@ class OptimizedWorker(Worker):
                 residual_build=residual,
             )
             self._qwen_compiled_dispatch["gdn_reference_dispatch"] = dispatch
+            if self._qwen_performance_repairs is not None:
+                self._qwen_performance_repairs.install_producers(self.model_runner.model)
         marker = Path(os.environ["QWEN_OPTIMIZED_STARTUP_RECEIPT"])
         write_private(
             marker,
