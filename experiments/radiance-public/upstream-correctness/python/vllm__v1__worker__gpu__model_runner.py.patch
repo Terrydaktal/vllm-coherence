@@ -1,0 +1,10 @@
+--- a/vllm/v1/worker/gpu/model_runner.py
++++ b/vllm/v1/worker/gpu/model_runner.py
+@@ -498,6 +498,7 @@
+     def initialize_kv_cache(self, kv_cache_config: KVCacheConfig) -> None:
+         kv_cache_config = deepcopy(kv_cache_config)
+         self.kv_cache_config = kv_cache_config
++        self.model_state.set_kv_cache_config(kv_cache_config)
+ 
+         block_table_max_model_len = self.max_model_len
+         if self.is_encoder_decoder:
