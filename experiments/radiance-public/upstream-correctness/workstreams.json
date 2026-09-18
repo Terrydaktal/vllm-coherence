@@ -1,0 +1,313 @@
+{
+  "schema": "urn:qwen:upstream-backport-workstreams:v1",
+  "workstreams": [
+    {
+      "id": "zero_draft_state",
+      "component": "python",
+      "implementation": "Zero-proposal decoding retains previous acceptance offsets in V1, V2 and Radiance metadata; prefill stays separate.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56531",
+          "head": "c323e0c3c6953e8a27a6c5f0659f11defd976958",
+          "metadata_sha256": "530047f4372831a70281b8fe073fd562b29a6f5fbfe1e3fc4c8edbd7ed6bae01"
+        }
+      ]
+    },
+    {
+      "id": "guarded_runtime_loop",
+      "component": "triton",
+      "implementation": "Use Normal region simplification in the pinned AMD compiler; one-warp native reproducer is included. Compiler wheel rebuild and GPU run remain required.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/triton-lang/triton/pull/11793",
+          "head": "d58fcee59620c6bdcbfe0364418c60be6591f79d",
+          "metadata_sha256": "eca5cb876e202f4656f306e96dd2a3ddbee8ee12a04c6ba81195da51351d0233"
+        },
+        {
+          "url": "https://github.com/triton-lang/triton/pull/10496",
+          "head": "092c52ab812dd085fd429b7a4afadb4c5299ca84",
+          "metadata_sha256": "8436f03276db9cf01fa5b8b0c66fa0123ef28722c46b018b361a9d6d86cb8656"
+        }
+      ]
+    },
+    {
+      "id": "short_prefill_conv_destination",
+      "component": "python",
+      "implementation": "Resolve the last scheduled destination block for both short-convolution branches; include shared-prefix/continuation native regression.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56196",
+          "head": "b09ed4fb8697fc443a7a73af9838aa0f769fde49",
+          "metadata_sha256": "7c93a3c39109d564976d10c8afba0055616e1673788030b10adfe7061e0723f5"
+        }
+      ],
+      "integration_note": "The same combined file retains both FP32 operand promotions from vLLM #52905 (our duplicate #57007). The standalone update-only precision installer is not reapplied over this combined postimage."
+    },
+    {
+      "id": "hybrid_failed_load",
+      "component": "python",
+      "implementation": "Handle every hybrid cache group, ignore null blocks, align rollback and invalidate dependent suffixes. Keep production fail-on-load-error policy; broader asynchronous worker rewind is not enabled.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54733",
+          "head": "d94e67fcf2891dbbd57090efda92d5c5949bd97c",
+          "metadata_sha256": "fe28877038e36a85d1cfb717a2fa4d6c6829e10ce1bd8a2a1b3ac969b28613dd"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53298",
+          "head": "88bf6637f071a27c5eb7175a702b3afbe1b743a7",
+          "metadata_sha256": "0d5c3e3a07fba11bcb37a9ec02e2142bf3c7a66270b5f9b5a8d2434c60263486"
+        }
+      ]
+    },
+    {
+      "id": "dflash_cache_key",
+      "component": "python",
+      "implementation": "Bind parallel draft depth to compilation identity.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53292",
+          "head": "15722ec85422f3cfbc459db0e56b0e8ba8ea83a3",
+          "metadata_sha256": "5f545f4aa85afd9619e4c1851998e7592457da998b768cc8da910c14b465d087"
+        }
+      ]
+    },
+    {
+      "id": "mamba_resume_block_units",
+      "component": "python",
+      "implementation": "Bind resolved Mamba KV spec before requests arrive and index resumed state in that group\u2019s block units.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53798",
+          "head": "af5357c2b90b37bd2033578bbc97d0ddfa6cc69f",
+          "metadata_sha256": "b67e41c8054cebaeae15a9e884230d467c2b8655f19b45940ec0d59c9100f21d"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/55601",
+          "head": "7cd542548ba15924106eba2ec651796a67953f10",
+          "metadata_sha256": "19d773c369b45cae7f33050ba68472e42636fcd43a74886d83e235abb0e8e0f5"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53398",
+          "head": "6e48a596295b48b5a25b147d216882604bba0bde",
+          "metadata_sha256": "99c24c94831bbd5278ae773bc2b0d36c26abea0efcbabca803dd12b2b32d5780"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/55507",
+          "head": "14e86625f67ebb38ca593d21471ca6f90fe7853e",
+          "metadata_sha256": "cccbc94d504d5c3af6e6ca6ca44240e05acdd687fd4156974e1ff4a9bd1f1b4d"
+        }
+      ]
+    },
+    {
+      "id": "reasoning_tool_transition",
+      "component": "python",
+      "implementation": "Preserve full post-reasoning tool text and reasoning deltas; validate tool preambles and preserve literal/incomplete openers at EOF.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56113",
+          "head": "832b057ea800bcc82ed216cb9a145f4e82d29222",
+          "metadata_sha256": "03e82601aaf806fe1ffb5f0459c47af537fda36a141d477d8a2617cf6673fd33"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56661",
+          "head": "24fbbd82657e09d9cfe5b1989240115eabf0e1c6",
+          "metadata_sha256": "ffaeb8238d45ea4c259fce6f533f756b37a7981ebebce642650537d203bd0e01"
+        }
+      ]
+    },
+    {
+      "id": "registered_memory_pin",
+      "component": "rocr",
+      "implementation": "Backport SVM registration pinning, deferred unpin and API-version checks; preserve the existing idle-poll backoff. Runtime rebuild and GPU stress qualification remain required.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/ROCm/rocm-systems/pull/11140",
+          "head": "fc4fe39b327c6845082624d77398571cc7a5545f",
+          "metadata_sha256": "08a3c84274af40370a15c745bde96a7d197903d516141e903eb78edbe27ae775"
+        },
+        {
+          "url": "https://github.com/ROCm/rocm-systems/pull/9394",
+          "head": "9cf2ed3197436942a967897aff2df02aeb200162",
+          "metadata_sha256": "e3074699c9acef8014e95da40a902a9a2d486aa050adae5857216e087d272f08"
+        },
+        {
+          "url": "https://github.com/ROCm/rocm-systems/pull/11411",
+          "head": "9722f5c3efab1530cff7e7c37e7f54e89af47fd3",
+          "metadata_sha256": "c036302fcb9e301e5ca7dab7b75e8035604f65d184bb89db15bad04b7295d25f"
+        }
+      ]
+    },
+    {
+      "id": "prefix_publication",
+      "component": "python",
+      "implementation": "Fence tentative hashes by nonempty GPU completion; roll them back before freeing aborted/preempted requests; prevent stale partial hashes, zero recycled recurrent pages and publish completed terminal prefixes.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/43569",
+          "head": "660c9326c06aa2afd7170a5fb423cb705ad39d4f",
+          "metadata_sha256": "94a75b797e0c358b6981485154a762cefdfa6205ab68f88299a93349258e0d03"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56525",
+          "head": "557596bf7aa40b315d1b743f44e296cab3c423e7",
+          "metadata_sha256": "e313d84fecded97ab8e90fd692a2228d98105c7e0cfae6d762d51d606801c975"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/56524",
+          "head": "a6c7ca8fc5d00bc40da317870f6a5768dca5b462",
+          "metadata_sha256": "63ab392cd4eabb40022663bc57b4485f5f01f726ec860245f581764ca763425a"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/52972",
+          "head": "016863c15c7973992d715a4b890c272a133e825b",
+          "metadata_sha256": "99e4abc314472c251131bfd429315405fd977e7d387db29041574daee602907d"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/53158",
+          "head": "f179777519921feee6a7c601979102e1b7d57e00",
+          "metadata_sha256": "77ff052c39ebb64614e46565667fc80454c22df429d24a824fef587afe0024f0"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54979",
+          "head": "fc99cc53652a304834fe9d0deabfa1de369f5742",
+          "metadata_sha256": "214d562b5adf415efe01e05f7f9de6edb3396713385058a4d43948c270b92f24"
+        }
+      ]
+    },
+    {
+      "id": "drafter_prefix_restore",
+      "component": "python",
+      "implementation": "Use the DFlash-appropriate cache-hit boundary rather than EAGLE last-block dropping. Keep the existing snapshot path that stores every configured group; do not discard restored draft KV with a target-only mask.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/47926",
+          "head": "36ca8e5a1de06c86c68c1076a58d47df680f8788",
+          "metadata_sha256": "4a6b9e7c4dd8efa80ce63a991ba33637f9a88766ffd9c6b2d0c5c8c7e536a86d"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54163",
+          "head": "ccc71957c46ea5d970c41062e08287e30040939b",
+          "metadata_sha256": "2f37227a4b33b10a62da4a895c2217ccc4fa4e7290fe989604888c07959c17b6"
+        },
+        {
+          "url": "https://github.com/vllm-project/vllm/pull/54165",
+          "head": "5317f3eac0dc05e5af6ee82ad5ec14ee4cc0eb86",
+          "metadata_sha256": "434415a8d015a24b9d73b283751f5c82dbcf45409b00825a85fc14a3f0905da7"
+        }
+      ]
+    },
+    {
+      "id": "grammar_tool_boundaries",
+      "component": "xgrammar",
+      "implementation": "Backport strided bitmasks, grammar stop terminals, empty XML closure, escaped-Unicode length, combinator sibling constraints, embedded NUL and malformed tool schema validation.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/651",
+          "head": "39f38396371416c91872eb864f39ac36f3cd77a7",
+          "metadata_sha256": "dfbe66f6a8e6f2510ad5aa0419561fc60095f2afd610b8d989a4e967cb1257cb"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/699",
+          "head": "8eb2e0b665fa69026011af82a924564d3382d59b",
+          "metadata_sha256": "fcf1a34e6c5c779fb9274625e6a6ce23fe20651c8537cdbc8d9a6f0759b52499"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/710",
+          "head": "537f0820478e21fe528d040f0d74c133ad6aeb41",
+          "metadata_sha256": "f16c9f4200b9f3a4b0b43ad6511a40e8a17d490d7e3192a548232b7d06197423"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/803",
+          "head": "d4db8e8207e8267cae5de8397707b47fbf92fec5",
+          "metadata_sha256": "e77d4c5710e9e7e295f80a00b64c25b5eded9a2eaea92af4fde221f82127142e"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/828",
+          "head": "ba4f4b3575d40d1ee7dd3ac83551a7c9b75c8a64",
+          "metadata_sha256": "4f079ff0dd0da054cda16d3e788fe9b62862e5f964beb616dd0b50432a0aa2c7"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/837",
+          "head": "3f63083fa11161c09bdd55373d36ee96579e632f",
+          "metadata_sha256": "bf7a41698ad126a58b86fce52e8025262dd023d86dc29632905848a7aa3aee7e"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/859",
+          "head": "778ea5ed15c75b8e0cd61dc731203dc2f1daf5de",
+          "metadata_sha256": "5f93bed79612cf69bac7fce3196a92017f2c4aabb6798bea7c607edf4914560d"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/865",
+          "head": "824fdf71f5d050e8c32f148e5e8fc3d73b7beea3",
+          "metadata_sha256": "b1788cab8ff3cb081c148a2ea10e4f038fbbceae9d6337cbf3dcd7a61ef5e30c"
+        },
+        {
+          "url": "https://github.com/mlc-ai/xgrammar/pull/881",
+          "head": "a79fd29630111bd424ef5277e0a024ab675f5622",
+          "metadata_sha256": "5f3e0a493f649610e123b0b0299f89967ebbb6180899943922b2d2c2cd140f25"
+        }
+      ]
+    },
+    {
+      "id": "tokenizer_initialization",
+      "component": "python",
+      "implementation": "Preserve legacy special tokens when the new field is empty. Do not globally rewrite content=None or patch inactive HF training/quantization paths.",
+      "source_status": "BACKPORTED_APPLICABLE_PATH",
+      "native_gpu_status": "NOT_RUN",
+      "upstream": [
+        {
+          "url": "https://github.com/huggingface/transformers/pull/47855",
+          "head": "e7f47b6a3abacf33fd5a466720349d07118e8514",
+          "metadata_sha256": "08c9b1135bf212bbdfe2b18b538946f4d35d842ca09b2ef6b6b868414ccafca2"
+        },
+        {
+          "url": "https://github.com/huggingface/transformers/pull/45422",
+          "head": "646cf8b53f20423f63cc1acdf4cef37ab0d5a587",
+          "metadata_sha256": "1f431f16624713c6298820e36c056a840c42e3e9f83180d0e9af3d8a7a66f554"
+        },
+        {
+          "url": "https://github.com/huggingface/transformers/pull/48708",
+          "head": "3b0f2af7b7146045617aa8a6e4b61a5423cdaa84",
+          "metadata_sha256": "896a5211fd60f19464754f544edb6d3ff4083f9faa6052bd03338e881a02a298"
+        },
+        {
+          "url": "https://github.com/huggingface/transformers/pull/47990",
+          "head": "30c295f20c59903db082bd14739d7f062548eb0c",
+          "metadata_sha256": "9fd6725f7bd133c3a07777a6e67e8cbc1e10125b71ee58e9192b54914da9c6a5"
+        }
+      ]
+    }
+  ],
+  "not_a_claim": "These are 12 reviewed workstreams, not 12 separately qualified bugs or unconditional adoption of every referenced PR.",
+  "excluded_proposals": {
+    "vllm#53298": "Broad asynchronous worker rewind requires a separate integration; production retains kv_load_failure_policy=fail.",
+    "vllm#47926": "Unconditional target-only mask would discard valid restored drafter KV; partial-block masking is not complete.",
+    "xgrammar#651": "Locks proper prefixes inside otherwise valid arbitrary strings; changes admitted language and is not a lossless repair.",
+    "xgrammar#837": "Alternative to the narrower empty-root XML repair; not stacked.",
+    "transformers#45422": "Global None-to-empty normalization changes template semantics and has a reported regression.",
+    "transformers#48708,#47990": "Inactive training/Transformers quantizer paths."
+  }
+}

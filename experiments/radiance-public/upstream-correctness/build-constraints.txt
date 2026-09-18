@@ -1,0 +1,2 @@
+# Native ABI dependency in the pinned serving image.
+apache-tvm-ffi==0.1.10
