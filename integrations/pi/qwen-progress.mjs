@@ -1,6 +1,9 @@
 import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus, REQUEST_PHASE_LABELS } from "./qwen-radiance-scheduler-telemetry.mjs";
 
-const TICK_MS = 1000;
+// The combined telemetry reader is cheap and shared across extensions. Keep
+// the spinner cadence aligned with it so round/acceptance values do not sit
+// stale behind a slower UI timer.
+const TICK_MS = 100;
 const MIN_LIVE_RATE_SECONDS = 0.5;
 const OUTPUT_IDLE_MS = 2000;
 const ROLLING_RATE_MS = 3000;
@@ -393,6 +396,22 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		return Math.max(0, exactOutputTokens - tokensAtStart) / seconds;
 	}
 
+	function generationStats(observation) {
+		// Keep the current round and the weighted acceptance over the same three
+		// second window as the displayed rolling token rate visible during short
+		// buffering, handover and tool/scheduler phases.
+		const row = observation?.requestPhase ?? observation?.lastRequestTiming;
+		if (!row) return "";
+		const values = [];
+		if (typeof row.last_round_ms === "number" && Number.isFinite(row.last_round_ms)) {
+			values.push(`round ${row.last_round_ms.toFixed(1)} ms`);
+		}
+		if (typeof row.acceptance_rate_3s === "number" && Number.isFinite(row.acceptance_rate_3s)) {
+			values.push(`acceptance ${(100 * row.acceptance_rate_3s).toFixed(1)}%`);
+		}
+		return values.join(" \u2022 ");
+	}
+
 	function observeOutput(outputTokens, reasoningTokens, hasDelta = false, now = monotonicNow()) {
 		const advanced = outputTokens !== undefined && outputTokens > (exactOutputTokens ?? 0);
 		const reasoningAdvanced = reasoningTokens !== undefined && reasoningTokens > (exactReasoningTokens ?? 0);
@@ -461,10 +480,16 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 			const blocked = idle || schedulerStateSince > lastOutputAt ? blockedStatus(schedulerState, false) : undefined;
 			const idleSeconds = Math.floor((now - lastOutputAt) / 1000);
 			const waiting = blocked ?? (idle ? idleStatus(schedulerState, idleSeconds) : undefined);
-			const rateText = waiting?.detail ??
-				(rate === undefined || recentRate === undefined
-					? "measuring t/s"
-					: `${recentRate.toFixed(1)} t/s, ${rate.toFixed(1)} t/s avg`);
+			const throughput = rate === undefined || recentRate === undefined
+				? "measuring t/s"
+				: `${recentRate.toFixed(1)} t/s, ${rate.toFixed(1)} t/s avg`;
+			const stats = generationStats(schedulerState);
+			// Keep the round and rolling acceptance telemetry visible while a request
+			// is briefly classified as waiting (for example during a handover).
+			// The waiting explanation must not hide these current-window values.
+			const rateText = waiting
+				? [waiting.detail, stats].filter(Boolean).join(" \u2022 ")
+				: [throughput, stats].filter(Boolean).join(" \u2022 ");
 			activeUi.setWorkingMessage(
 				`Qwen ${waiting?.phase ?? phase}: ${output} \u2022 ${rateText} ` +
 					`\u2022 first data ${firstData} \u2022 ${elapsedSeconds}s`,

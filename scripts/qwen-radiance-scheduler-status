@@ -8,6 +8,7 @@ readonly CLIENT_STALE_SECONDS=20
 readonly SAMPLE_INTERVAL_SECONDS=0.5
 readonly SAMPLE_SCHEMA=urn:qwen-r9700:scheduler-telemetry:v2
 readonly LEGACY_SAMPLE_SCHEMA=urn:qwen-r9700:scheduler-telemetry:v1
+readonly COMBINED_SCHEMA=urn:qwen-r9700:telemetry:v1
 
 die() {
 	printf '%s: %s\n' "$PROGRAM" "$*" >&2
@@ -65,30 +66,90 @@ write_coverage() {
 	fi
 }
 
+read_temperature_sample() {
+	local path="$state_directory/sample.json" details sample
+	if [[ ! -f $path || -L $path ]]; then
+		printf 'null'
+		return 0
+	fi
+	details=$(stat -c '%u:%h:%a:%s' -- "$path" 2>/dev/null) || {
+		printf 'null'
+		return 0
+	}
+	[[ $details == "$(id -u):1:600:"* ]] || {
+		printf 'null'
+		return 0
+	}
+	local size=${details##*:}
+	[[ $size =~ ^[0-9]+$ && $size -le 1024 ]] || {
+		printf 'null'
+		return 0
+	}
+	sample=$(cat -- "$path" 2>/dev/null) || {
+		printf 'null'
+		return 0
+	}
+	if [[ $sample == \{*\} && ${#sample} -le 1024 && $sample != *$'\n'* && $sample != *$'\r'* && $sample != *$'\t'* ]]; then
+		printf '%s' "$sample"
+	else
+		printf 'null'
+	fi
+}
+
 write_sample() {
-	local scheduler=$1 worker=$2 coverage=${3:-null} coverage_v2=${4:-null} phases=${5:-null} observed stage legacy_stage
-	write_coverage "$phases" request-phases.json || return 1
-	write_coverage "$coverage" cache-residency.json || return 1
-	write_coverage "$coverage_v2" cache-residency-v2.json || return 1
+	local scheduler=$1 worker=$2 coverage=${3:-null} coverage_v2=${4:-null} phases=${5:-null}
+	local temperature observed stage legacy_stage telemetry_stage telemetry_signature separator
 	((${#scheduler} >= 2 && ${#scheduler} <= 32767)) || return 1
 	[[ $scheduler == \{*\} && $scheduler != *$'\n'* && $scheduler != *$'\r'* && $scheduler != *$'\t'* ]] || return 1
 	if [[ $worker != null ]]; then
 		((${#worker} >= 2 && ${#worker} <= 32767)) || return 1
 		[[ $worker == \{*\} && $worker != *$'\n'* && $worker != *$'\r'* && $worker != *$'\t'* ]] || return 1
 	fi
+	# A generation-round phase update arrives more often than the full
+	# scheduler sample. Do not rewrite the larger scheduler/coverage files when
+	# their payload is unchanged; request-phases.json and the combined snapshot
+	# remain eventful at round cadence while preserving the normal half-second
+	# scheduler feed.
+	if [[ $phases != "${last_phases-}" ]]; then
+		write_coverage "$phases" request-phases.json || return 1
+		last_phases=$phases
+	fi
+	if [[ $coverage != "${last_coverage-}" ]]; then
+		write_coverage "$coverage" cache-residency.json || return 1
+		last_coverage=$coverage
+	fi
+	if [[ $coverage_v2 != "${last_coverage_v2-}" ]]; then
+		write_coverage "$coverage_v2" cache-residency-v2.json || return 1
+		last_coverage_v2=$coverage_v2
+	fi
+	temperature=$(read_temperature_sample)
+	separator=$'\037'
+	telemetry_signature="$scheduler$separator$worker$separator$phases$separator$coverage_v2$separator$temperature"
 	observed=${EPOCHREALTIME/./}
 	observed=${observed:0:13}
 	[[ $observed =~ ^[0-9]{13}$ ]] || return 1
-	stage=$(mktemp "$state_directory/.scheduler.XXXXXX") || return 1
-	chmod 0600 -- "$stage"
-	printf '{"schema":"%s","observed_at_ms":%s,"backend":{"scheduler":%s,"worker":%s}}\n' \
-		"$SAMPLE_SCHEMA" "$observed" "$scheduler" "$worker" >"$stage"
-	mv -fT -- "$stage" "$state_directory/scheduler-v2.json"
-	legacy_stage=$(mktemp "$state_directory/.scheduler-legacy.XXXXXX") || return 1
-	chmod 0600 -- "$legacy_stage"
-	printf '{"schema":"%s","observed_at_ms":%s,"scheduler":%s}\n' \
-		"$LEGACY_SAMPLE_SCHEMA" "$observed" "$scheduler" >"$legacy_stage"
-	mv -fT -- "$legacy_stage" "$state_directory/scheduler.json"
+	if [[ $scheduler != "${last_scheduler-}" || $worker != "${last_worker-}" ]]; then
+		stage=$(mktemp "$state_directory/.scheduler.XXXXXX") || return 1
+		chmod 0600 -- "$stage"
+		printf '{"schema":"%s","observed_at_ms":%s,"backend":{"scheduler":%s,"worker":%s}}\n' \
+			"$SAMPLE_SCHEMA" "$observed" "$scheduler" "$worker" >"$stage"
+		mv -fT -- "$stage" "$state_directory/scheduler-v2.json"
+		legacy_stage=$(mktemp "$state_directory/.scheduler-legacy.XXXXXX") || return 1
+		chmod 0600 -- "$legacy_stage"
+		printf '{"schema":"%s","observed_at_ms":%s,"scheduler":%s}\n' \
+			"$LEGACY_SAMPLE_SCHEMA" "$observed" "$scheduler" >"$legacy_stage"
+		mv -fT -- "$legacy_stage" "$state_directory/scheduler.json"
+		last_scheduler=$scheduler
+		last_worker=$worker
+	fi
+	if [[ $telemetry_signature != "${last_telemetry_signature-}" ]]; then
+		telemetry_stage=$(mktemp "$state_directory/.telemetry.XXXXXX") || return 1
+		chmod 0600 -- "$telemetry_stage"
+		printf '{"schema":"%s","observed_at_ms":%s,"scheduler":%s,"worker":%s,"phases":%s,"cache":%s,"temperature":%s}\n' \
+			"$COMBINED_SCHEMA" "$observed" "$scheduler" "$worker" "$phases" "$coverage_v2" "$temperature" >"$telemetry_stage"
+		mv -fT -- "$telemetry_stage" "$state_directory/telemetry-v1.json"
+		last_telemetry_signature=$telemetry_signature
+	fi
 }
 
 probe_command() {
@@ -101,11 +162,15 @@ probe_command() {
 }
 
 run_monitor() {
-	local lock_details scheduler worker coverage coverage_v2 phases probe_source cache_root
+	local lock_details scheduler worker coverage coverage_v2 phases probe_source cache_root container
+	local last_scheduler='' last_worker='' last_coverage='' last_coverage_v2='' last_phases='' last_telemetry_signature=''
 	probe_source="${self%/*}/../src/qwen_r9700_lab/radiance_cache_residency.py"
 	[[ -f $probe_source && ! -L $probe_source ]] || die 'cache residency probe source is missing or unsafe'
 	cache_root=${QWEN_RADIANCE_CACHE_ROOT:-/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1}
 	[[ $cache_root =~ ^/[A-Za-z0-9_./-]+$ ]] || die 'invalid cache probe path'
+	# Sessions started before explicit deployment selection keep their legacy target.
+	container=${QWEN_RADIANCE_CONTAINER:-qwen38-27b-uncensored-mxfp4-public-snapshot-candidate}
+	[[ $container =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || die 'invalid backend container'
 	validate_state_directory "$state_directory"
 	if [[ -e $state_directory/scheduler-monitor.lock || -L $state_directory/scheduler-monitor.lock ]]; then
 		[[ -f $state_directory/scheduler-monitor.lock && ! -L $state_directory/scheduler-monitor.lock ]] ||
@@ -124,7 +189,7 @@ run_monitor() {
 		have_active_client || break
 	done < <(
 		probe_command /usr/bin/python3 -u - \
-			"$SAMPLE_INTERVAL_SECONDS" "$cache_root" auto <"$probe_source"
+			"$SAMPLE_INTERVAL_SECONDS" "$cache_root" auto --container "$container" <"$probe_source"
 	)
 }
 

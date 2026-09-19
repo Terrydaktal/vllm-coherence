@@ -58,10 +58,10 @@ readonly PROGRAM=pi-remote-qwen-radiance
 readonly PI_VERSION=0.84.2
 readonly MODEL_ID=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
 readonly PI_MODEL="qwen-r9700/$MODEL_ID"
-readonly SNAPSHOT_ABI=ae24d7a7e462ab1812f3ded42bd5a69065ee572b59e2c3e91a03ea22d50503b7
+readonly SNAPSHOT_ABI=df78d938df4dc138b057e6b902362346bbbad0e691cc47a87a8fa2cee3f5b412
 readonly SNAPSHOT_DATA_ABI=36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5
 readonly SNAPSHOT_PATCH_SHA256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
-readonly REMOTE_LAUNCHER_SHA256=e4d622cd4556c59004f6ba055d87564f696824c351b1a3525a4c565cd8e11a81
+readonly REMOTE_LAUNCHER_SHA256=b8535bd50f841599da99a013d280d9d46dd217edf0f617eafecb347ec07a99a5
 readonly IMAGE_ID=4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf
 readonly DEFAULT_REMOTE=lewis@ai
 readonly AUTO_LOCAL_PORT_FIRST=8012
@@ -758,6 +758,7 @@ if [[ -t 0 && -t 1 ]]; then
 	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \
 		UV_CACHE_DIR=/data/.cache/uv \
 		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
+		QWEN_RADIANCE_CONTAINER="$CONTAINER" \
 		QWEN_RADIANCE_GPU_TEMPERATURE_STATE="$gpu_temperature_state" \
 		QWEN_RADIANCE_GPU_TEMPERATURE_HELPER="$gpu_temperature_helper" \
 		QWEN_RADIANCE_SCHEDULER_HELPER="$scheduler_status_helper" \
@@ -768,6 +769,7 @@ else
 	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \
 		UV_CACHE_DIR=/data/.cache/uv \
 		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
+		QWEN_RADIANCE_CONTAINER="$CONTAINER" \
 		QWEN_RADIANCE_GPU_TEMPERATURE_STATE="$gpu_temperature_state" \
 		QWEN_RADIANCE_GPU_TEMPERATURE_HELPER="$gpu_temperature_helper" \
 		QWEN_RADIANCE_SCHEDULER_HELPER="$scheduler_status_helper" \

@@ -165,13 +165,20 @@ manifest["runtime"]["fair_scheduler"] = {
         "and separate allocation and transfer timings"
     ),
     "request_phase_telemetry": {
-        "schema": "urn:qwen-r9700:request-phases:v1",
+        "schema": "urn:qwen-r9700:request-phases:v2",
         "counter_interval_seconds": 0.5,
         "transitions": (
             "immediate tmpfs publication; shared inotify/SSH feed; local file notifications"
         ),
-        "retention": "last numeric response timings per generation; at most 16 generations",
-        "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests",
+        "retention": (
+            "last numeric response timings plus cumulative generation-round and "
+            "draft/accepted counters per generation; at most 16 generations"
+        ),
+        "contract": (
+            "no token IDs, text, tensors, GPU synchronization, or extra model requests; "
+            "round duration is content-free wall time between consecutive generation "
+            "updates for one request"
+        ),
     },
 }
 manifest["serving"]["max_num_seqs"] = 2

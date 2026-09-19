@@ -6,6 +6,7 @@ monitor connection. It must not import project or model-runtime packages.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -57,6 +58,10 @@ class StatusChanges:
             b"qwen-radiance-fair-public-scheduler.json",
             b"qwen-radiance-fair-public-worker.json",
             b"qwen-radiance-fair-public-phases.json",
+            # The round stream is the authoritative source for the latest
+            # per-round acceptance.  Phase publication can be overwritten by
+            # a final target-only/EOS round, so wake the reader for appends too.
+            b"qwen-radiance-fair-public-rounds.jsonl",
         }
         deadline = time.monotonic() + timeout
         while select.select([self.fd], [], [], max(0, deadline - time.monotonic()))[0]:
@@ -196,6 +201,174 @@ def optional_json(path):
         return read_json(path)
     except (OSError, ValueError):
         return None
+
+
+def _round_acceptance_event(value):
+    """Return only safe numeric round telemetry, never payload text."""
+    if not isinstance(value, dict) or value.get("schema") != "urn:qwen-r9700:decode-rounds:v1":
+        return None
+    identity_value = identity(value)
+    pid = value.get("pid")
+    observed_at_ms = value.get("observed_at_ms")
+    draft_tokens = value.get("draft_tokens")
+    accepted_tokens = value.get("accepted_tokens")
+    round_ms = value.get("round_ms")
+    rate = value.get("acceptance_rate")
+    if (
+        identity_value is None
+        or type(pid) is not int
+        or pid <= 0
+        or type(observed_at_ms) is not int
+        or observed_at_ms <= 0
+        or type(draft_tokens) is not int
+        or draft_tokens < 0
+        or type(accepted_tokens) is not int
+        or accepted_tokens < 0
+        or accepted_tokens > draft_tokens
+        or type(round_ms) not in (int, float)
+        or not math.isfinite(round_ms)
+        or round_ms < 0
+    ):
+        return None
+    if draft_tokens and (
+        type(rate) not in (int, float) or not math.isfinite(rate) or not 0 <= rate <= 1
+    ):
+        return None
+    return identity_value, pid, observed_at_ms, draft_tokens, accepted_tokens
+
+
+class RoundAcceptance:
+    """Incrementally read the content-free decode-round telemetry stream."""
+
+    PATH = "/dev/shm/qwen-radiance-fair-public-rounds.jsonl"
+    MAX_INITIAL_READ = 8 * 1024 * 1024
+    WINDOW_MS = 3_000
+
+    def __init__(self, path=PATH):
+        self.path = path
+        self.inode = None
+        self.offset = 0
+        self.pending = b""
+        self.latest = {}
+
+    def _consume(self, data):
+        complete, separator, pending = data.rpartition(b"\n")
+        self.pending = pending if separator else data
+        for line in complete.splitlines() if separator else ():
+            try:
+                event = _round_acceptance_event(json.loads(line))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            if event is not None:
+                identity_value, pid, observed_at_ms, draft_tokens, accepted_tokens = event
+                rows = self.latest.setdefault(identity_value, [])
+                rows.append((pid, observed_at_ms, draft_tokens, accepted_tokens))
+                cutoff = observed_at_ms - self.WINDOW_MS
+                self.latest[identity_value] = [row for row in rows if row[1] >= cutoff]
+
+    def _read_rotated(self):
+        """Read the bounded predecessor so a recent chat survives log rotation."""
+        try:
+            fd = os.open(str(self.path) + ".1", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except OSError:
+            return
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > self.MAX_INITIAL_READ:
+                return
+            data = stream.read(self.MAX_INITIAL_READ + 1)
+            after = os.fstat(stream.fileno())
+        if before.st_ino == after.st_ino and before.st_size == after.st_size:
+            self._consume(data)
+
+    def read(self):
+        initial = self.inode is None
+        if initial:
+            self._read_rotated()
+        try:
+            fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except OSError:
+            return self.latest
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode):
+                return self.latest
+            if initial or self.inode != before.st_ino or before.st_size < self.offset:
+                # The backend rotates the bounded log by rename.  The current
+                # file is authoritative for new events, while its predecessor
+                # retains recent rows that may belong to another chat.
+                self.pending = b""
+                if not initial:
+                    self._read_rotated()
+                self.inode = before.st_ino
+                self.offset = 0
+            if self.offset == 0 and before.st_size > self.MAX_INITIAL_READ:
+                stream.seek(before.st_size - self.MAX_INITIAL_READ)
+                self.offset = before.st_size - self.MAX_INITIAL_READ
+            else:
+                stream.seek(self.offset)
+            data = stream.read()
+            after = os.fstat(stream.fileno())
+        if before.st_ino != after.st_ino or before.st_size != after.st_size:
+            # An append raced the read.  Leave the offset unchanged and retry
+            # on the next event rather than accepting a partial record.
+            return self.latest
+        self.offset = after.st_size
+        data = self.pending + data
+        complete, separator, pending = data.rpartition(b"\n")
+        self.pending = pending if separator else data
+        for line in complete.splitlines() if separator else ():
+            try:
+                event = _round_acceptance_event(json.loads(line))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            if event is not None:
+                identity_value, pid, observed_at_ms, draft_tokens, accepted_tokens = event
+                rows = self.latest.setdefault(identity_value, [])
+                rows.append((pid, observed_at_ms, draft_tokens, accepted_tokens))
+                cutoff = observed_at_ms - self.WINDOW_MS
+                self.latest[identity_value] = [row for row in rows if row[1] >= cutoff]
+        return self.latest
+
+    def rolling_rate(self, identity_value, pid, at_ms):
+        """Return weighted accepted/draft tokens in the same three-second window."""
+        rows = self.latest.get(identity_value, [])
+        cutoff = at_ms - self.WINDOW_MS
+        eligible = [
+            row for row in rows if row[0] == pid and cutoff <= row[1] <= at_ms
+        ]
+        self.latest[identity_value] = [row for row in rows if row[1] >= cutoff]
+        draft_tokens = sum(row[2] for row in eligible)
+        if not draft_tokens:
+            return None
+        return sum(row[3] for row in eligible) / draft_tokens
+
+
+def restore_last_round_acceptance(phases, round_acceptance):
+    """Attach weighted three-second acceptance from the numeric round feed."""
+    if not isinstance(phases, dict) or not hasattr(round_acceptance, "rolling_rate"):
+        return phases
+    backend_pid = phases.get("pid")
+    updated_at = phases.get("updated_at")
+    at_ms = updated_at * 1000 if type(updated_at) in (int, float) and math.isfinite(updated_at) else None
+    result = dict(phases)
+    for key in ("requests", "recent"):
+        rows = phases.get(key)
+        if not isinstance(rows, list):
+            continue
+        copied = []
+        for row in rows:
+            if not isinstance(row, dict):
+                copied.append(row)
+                continue
+            rate = (
+                round_acceptance.rolling_rate(identity(row), backend_pid, int(at_ms))
+                if at_ms is not None
+                else None
+            )
+            copied.append({**row, "acceptance_rate_3s": rate})
+        result[key] = copied
+    return result
 
 
 def fresh(value, now, max_age):
@@ -455,6 +628,14 @@ class ResidencyProbe:
 
 
 def main():
+    global BACKEND_CONTAINER
+    options = argparse.ArgumentParser(description=__doc__)
+    options.add_argument("--once", action="store_true")
+    options.add_argument("--container", default=BACKEND_CONTAINER)
+    options = options.parse_args(sys.argv[4:])
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", options.container):
+        raise SystemExit("invalid backend container")
+    BACKEND_CONTAINER = options.container
     interval = float(sys.argv[1]) if len(sys.argv) > 1 else 0.5
     root = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_ROOT
     abi = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_ABI
@@ -467,6 +648,7 @@ def main():
     namespace = LiveCacheNamespace(root) if abi == "auto" else None
     probe = None if namespace else ResidencyProbe(root, abi)
     changes = StatusChanges()
+    round_acceptance = RoundAcceptance()
     disk_inventory, last_disk_check = None, 0.0
     while True:
         scheduler = optional_json("/dev/shm/qwen-radiance-fair-public-scheduler.json")
@@ -484,6 +666,8 @@ def main():
             last_disk_check = time.monotonic()
         tail = optional_json("/dev/shm/qwen-radiance-snapshot-tail.json")
         scheduler = observe_idle_scheduler(scheduler, tail)
+        round_acceptance.read()
+        phases = restore_last_round_acceptance(phases, round_acceptance)
         coverage = (
             probe.sample(scheduler, worker, tail, disk_inventory=disk_inventory) if probe else None
         )
@@ -494,7 +678,7 @@ def main():
             ),
             flush=True,
         )
-        if sys.argv[4:] == ["--once"]:
+        if options.once:
             changes.close()
             break
         changes.wait(interval)

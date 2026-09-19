@@ -1,0 +1,65 @@
+{
+  "providers": {
+    "qwen-r9700": {
+      "name": "Qwen R9700 Local",
+      "baseUrl": "http://127.0.0.1:8012/v1",
+      "api": "openai-completions",
+      "apiKey": "local",
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsUsageInStreaming": true,
+        "maxTokensField": "max_completion_tokens",
+        "requiresThinkingAsText": false,
+        "requiresReasoningContentOnAssistantMessages": false,
+        "thinkingFormat": "chat-template",
+        "chatTemplateKwargs": {
+          "enable_thinking": {
+            "$var": "thinking.enabled"
+          },
+          "preserve_thinking": true,
+          "reasoning_effort": {
+            "$var": "thinking.effort",
+            "omitWhenOff": true
+          }
+        },
+        "supportsThinkingTokenBudget": false,
+        "supportsStrictMode": false,
+        "supportsOpenAIGrammarTools": false,
+        "supportsLongCacheRetention": false
+      },
+      "models": [
+        {
+          "id": "qwen3.8-27b-uncensored-mxfp4-experimental",
+          "name": "Qwen3.8 27B Uncensored Radiance MXFP4 Experimental",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": null,
+            "xhigh": "xhigh",
+            "max": null
+          },
+          "input": [
+            "text"
+          ],
+          "contextWindow": 253792,
+          "maxTokens": 253792,
+          "samplingParams": {
+            "temperature": 0,
+            "top_p": 1,
+            "top_k": 1
+          },
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ]
+    }
+  }
+}

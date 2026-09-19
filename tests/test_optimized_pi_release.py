@@ -46,7 +46,7 @@ def test_installs_existing_layout_and_required_precision(tmp_path):
     release.configure(publish(tmp_path, manifest), tmp_path, root=root, environ=env)
     assert env["RADIANCE_GDN_LAZY"] == env["QWEN_STOCK_GDN_LAZY"] == "0"
     assert env["TORCHINDUCTOR_EMULATE_PRECISION_CASTS"] == "1"
-    assert env["PYTHONPATH"] == "/qualification/runtime"
+    assert env["PYTHONPATH"] == "/opt/vllm/lib/python3.12/site-packages:/qualification/runtime"
 
 
 def test_modified_payload_fails_before_environment_publication(tmp_path):

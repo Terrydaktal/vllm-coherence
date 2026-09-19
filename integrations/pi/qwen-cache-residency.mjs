@@ -81,9 +81,18 @@ export class CacheResidencyTelemetry extends SchedulerTelemetry {
     super.bind(ctx);
   }
 
-  readBreakdown(contextTokens, now = Date.now()) {
-    if (!this.config || !this.chat) return undefined;
-    for (const name of ["cache-residency-v2.json", "cache-residency.json"]) {
+	readBreakdown(contextTokens, now = Date.now()) {
+		if (!this.config || !this.chat) return undefined;
+		const combined = this.readCombinedSnapshot(now);
+		if (combined?.cache !== null && combined?.cache !== undefined) {
+			try {
+				const sample = parseResidencySample(JSON.stringify(combined.cache), process.env.QWEN_RADIANCE_CACHE_ABI, now);
+				return formatCacheBreakdown(cacheBreakdown(sample, this.chat, contextTokens));
+			} catch {
+				// Keep the separately authenticated v2/legacy files as a compatibility fallback.
+			}
+		}
+		for (const name of ["cache-residency-v2.json", "cache-residency.json"]) {
       try {
         const path = join(this.config.stateDirectory, name);
         const details = lstatSync(path);

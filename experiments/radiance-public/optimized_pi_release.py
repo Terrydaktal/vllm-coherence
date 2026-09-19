@@ -74,5 +74,16 @@ def configure(profile, patches, *, root=Path("/qualification"), environ=None):
     if any(env.get(key) != value for key, value in required.items()):
         raise ValueError("optimized arithmetic/state-layout contract changed")
     environ.update(env)
-    environ["PYTHONPATH"] = os.pathsep.join(manifest["pythonpath"])
+    # The frozen preflight trees deliberately retain their historical modules,
+    # but some of those names also exist in the pinned Radiance image.  Putting
+    # the image's authenticated site-packages directory first prevents a stale
+    # preflight copy from shadowing the current runtime integration.  In
+    # particular, the old v1 ``qwen_radiance_fair_scheduler`` emitted only the
+    # legacy phase schema and silently removed round/acceptance telemetry even
+    # though the v2 module was present in the image.
+    runtime_pythonpath = [
+        "/opt/vllm/lib/python3.12/site-packages",
+        *manifest["pythonpath"],
+    ]
+    environ["PYTHONPATH"] = os.pathsep.join(runtime_pythonpath)
     return manifest

@@ -116,6 +116,7 @@ if [[ ${1:-} == --version ]]; then
 fi
 printf '%s\\n' "$QWEN_RADIANCE_LOCAL_PORT" >>"$HOME/selected-ports"
 printf '%s\\n' "$QWEN_RADIANCE_GPU_TEMPERATURE_STATE" >>"$HOME/temperature-states"
+[[ $QWEN_RADIANCE_CONTAINER == qwen38-27b-uncensored-mxfp4-public-snapshot-candidate ]]
 while [[ ! -e $HOME/release-pi ]]; do
     sleep 0.05
 done

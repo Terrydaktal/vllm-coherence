@@ -81,7 +81,7 @@
       "gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
       "qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
       "optimized-release.json": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
-      "optimized_pi_release.py": "7f1211486bf24e3068551b282b2956c59dd4b470fc1cabee6bae95a397144694",
+      "optimized_pi_release.py": "c97a35d1d613a7bbfd7a17b49d956cab6480580ce9c44a58657a5d7f3998d6f8",
       "radiance_verifyhead_global.py": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
       "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
     },
@@ -163,8 +163,8 @@
         "radiance_cache.py": "04adc11af696ab006570ee481b9e0b04d673e4bc6282469ea03061e6567abe03",
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
         "radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
-        "radiance_fair_scheduler.py": "31cc3b73c7f69d15da7062768522c94d59e7c45fc4a26e7b2046312826bcfe1c",
-        "patch_chat_snapshot.py": "445799dd68446740da4eb8d3487956b2b408d20dc765b52d006601774f2f5f54"
+        "radiance_fair_scheduler.py": "0bcd71bf39ac1d18f53c1475eac309898642fe62e725fb83684c78a5398daeb2",
+        "patch_chat_snapshot.py": "edabd083e5bbeebf76a02c45cee040e58b8af6a61990308e2dd0a90ef3026ce6"
       }
     },
     "memory_report": {
@@ -216,11 +216,11 @@
       "handover": "flush pending stores; discard a superseded same-chat generation in place; otherwise swap packed GPU state; retain V2 request state",
       "residency_telemetry": "content-free chat and generation hashes, useful and allocated pinned bytes, and separate allocation and transfer timings",
       "request_phase_telemetry": {
-        "schema": "urn:qwen-r9700:request-phases:v1",
+        "schema": "urn:qwen-r9700:request-phases:v2",
         "counter_interval_seconds": 0.5,
         "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
-        "retention": "last numeric response timings per generation; at most 16 generations",
-        "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests"
+        "retention": "last numeric response timings plus cumulative generation-round and draft/accepted counters per generation; at most 16 generations",
+        "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
       }
     }
   },

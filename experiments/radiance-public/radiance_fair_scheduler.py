@@ -30,7 +30,19 @@ HANDOVER_TOKEN = "qwen_tool_handover"
 OUTCOME_ACK_SECONDS = 0.25
 _outcome_tasks = set()
 _phase_scheduler = None
-PHASE_SCHEMA = "urn:qwen-r9700:request-phases:v1"
+PHASE_SCHEMA = "urn:qwen-r9700:request-phases:v2"
+ROUND_LOG_SCHEMA = "urn:qwen-r9700:decode-rounds:v1"
+ROUND_LOG_MAX_BYTES = 8 * 1024 * 1024
+# The qualified DFlash decode path schedules at most eight model tokens per
+# execution. A larger batch is a prompt-prefill execution and must not be
+# treated as the first decode boundary.
+DECODE_SYNC_MAX_SCHEDULED_TOKENS = 8
+# The release diagnosis reproduced the slow queue state after roughly thirty
+# decode launches, while a host pause and HIP GPU timing events did not repair it.
+# Retire that state before the following launch and re-arm the same bounded
+# recovery every interval.  A single fence per request was insufficient: the
+# live 60K capture returned to the slow state later in the same answer.
+DECODE_SYNC_RECOVERY_AFTER_ROUNDS = 30
 
 
 class RequestPhases:
@@ -39,6 +51,21 @@ class RequestPhases:
     def __init__(self):
         self.live = {}
         self.recent = {}
+        # Completed-round events are flushed to a separate bounded JSONL feed
+        # by FairScheduler._write_phase_status. Keeping this queue here means
+        # a failed telemetry write can be retried without losing a round.
+        self._round_events = []
+        # The qualified scheduler dispatches one response at a time. Keeping
+        # the previous completed generation request here lets us measure the
+        # wall-clock duration of consecutive backend rounds without charging a
+        # GPU handover or another chat's work to the resumed response.
+        self._last_generation_request_id = None
+        self._last_generation_at = None
+
+    def _reset_generation_clock(self, request_id=None):
+        if request_id is None or request_id == self._last_generation_request_id:
+            self._last_generation_request_id = None
+            self._last_generation_at = None
 
     def set(self, request, phase, blocker=None):
         now = time.monotonic()
@@ -53,6 +80,11 @@ class RequestPhases:
                 "started": now,
                 "since": now,
                 "first_token_ms": None,
+                "last_round_ms": None,
+                "last_acceptance_rate": None,
+                "generation_rounds": 0,
+                "draft_tokens": 0,
+                "accepted_tokens": 0,
             }
             return True
         row = self.live[rid]
@@ -63,7 +95,84 @@ class RequestPhases:
         row.update(phase=phase, blocker=blocker, since=now)
         if phase == "generate" and row["first_token_ms"] is None:
             row["first_token_ms"] = max(0, (now - row["started"]) * 1000)
+        if phase != "generate":
+            self._reset_generation_clock(rid)
         return True
+
+    def observe_generation(
+        self,
+        request,
+        *,
+        draft_tokens=0,
+        accepted_tokens=0,
+        scheduled_shape=None,
+        now=None,
+    ):
+        """Record content-free round and speculative acceptance counters.
+
+        This runs after a completed engine step. It only reads scheduler-side
+        integer counts; it never synchronizes the GPU or inspects token data.
+        A round duration is published only for consecutive steps of the same
+        request, so time spent while another chat owns the GPU is excluded.
+        """
+        row = self.live.get(request.request_id)
+        if row is None:
+            return
+        now = time.monotonic() if now is None else now
+        if not isinstance(draft_tokens, int) or draft_tokens < 0:
+            draft_tokens = 0
+        if not isinstance(accepted_tokens, int) or accepted_tokens < 0:
+            accepted_tokens = 0
+        if accepted_tokens > draft_tokens:
+            accepted_tokens = draft_tokens
+        if (
+            self._last_generation_request_id == request.request_id
+            and self._last_generation_at is not None
+        ):
+            row["last_round_ms"] = max(0.0, (now - self._last_generation_at) * 1000)
+        self._last_generation_request_id = request.request_id
+        self._last_generation_at = now
+        # A final target-only/EOS step can legitimately have no draft
+        # tokens.  It still counts as a generation round, but it must not
+        # erase the most recent meaningful speculative acceptance value from
+        # the live feed.  Otherwise Pi loses the percentage exactly when a
+        # response finishes and the retained recent row is displayed.
+        if draft_tokens:
+            row["last_acceptance_rate"] = accepted_tokens / draft_tokens
+        row["generation_rounds"] += 1
+        row["draft_tokens"] += draft_tokens
+        row["accepted_tokens"] += accepted_tokens
+        event = {
+            "schema": ROUND_LOG_SCHEMA,
+            "pid": os.getpid(),
+            "observed_at_ms": int(time.time() * 1000),
+            "chat_id": row["chat_id"],
+            "generation": row["generation"],
+            "request_id": row["request_id"],
+            "round": row["generation_rounds"],
+            "round_ms": (
+                round(row["last_round_ms"], 3)
+                if row["last_round_ms"] is not None
+                else None
+            ),
+            "draft_tokens": draft_tokens,
+            "accepted_tokens": accepted_tokens,
+            "acceptance_rate": (
+                accepted_tokens / draft_tokens if draft_tokens else None
+            ),
+        }
+        if scheduled_shape is not None:
+            event["scheduled_shape"] = scheduled_shape
+        self._round_events.append(event)
+
+    def take_round_events(self):
+        events = self._round_events
+        self._round_events = []
+        return events
+
+    def restore_round_events(self, events):
+        if events:
+            self._round_events[0:0] = events
 
     def row(self, request):
         value = self.live.get(request.request_id)
@@ -84,6 +193,20 @@ class RequestPhases:
             "elapsed_ms": round(max(0, (now - value["started"]) * 1000), 3),
             "phase_elapsed_ms": round(elapsed, 3),
             "first_token_ms": value["first_token_ms"],
+            "last_round_ms": (
+                round(value["last_round_ms"], 3)
+                if value["last_round_ms"] is not None
+                else None
+            ),
+            "last_acceptance_rate": value["last_acceptance_rate"],
+            "generation_rounds": value["generation_rounds"],
+            "draft_tokens": value["draft_tokens"],
+            "accepted_tokens": value["accepted_tokens"],
+            "acceptance_rate": (
+                value["accepted_tokens"] / value["draft_tokens"]
+                if value["draft_tokens"] > 0
+                else None
+            ),
             "timings_ms": timings,
         }
 
@@ -99,6 +222,7 @@ class RequestPhases:
         while len(self.recent) > 16:
             self.recent.pop(next(iter(self.recent)))
         self.live.pop(request.request_id)
+        self._reset_generation_clock(request.request_id)
 
 
 def worker_phase(phase):
@@ -107,6 +231,173 @@ def worker_phase(phase):
     scheduler = _phase_scheduler() if _phase_scheduler is not None else None
     if scheduler is not None and scheduler.response_request is not None:
         scheduler._phase(scheduler.response_request, phase)
+
+
+def _record_decode_sync(runner, banks, *, key, total, reason):
+    """Synchronize the transition and publish only numeric diagnostic state.
+
+    Cache/mamba preparation can enqueue work on more than the worker's current
+    stream.  The latency investigation showed that a device-wide fence retires
+    the residual HIP queue state, while a current-stream fence is not sufficient
+    for every connector/runtime path.  This is called only once at a transition
+    boundary (and once for the long-response recovery), so it is not part of the
+    steady-state round.
+    """
+    cuda = banks.torch.cuda
+    started = time.perf_counter()
+    device_sync = getattr(cuda, "synchronize", None)
+    if callable(device_sync):
+        device_sync()
+        mode = "device"
+    else:
+        # Older/test runtimes may expose only current_stream(). Keep the
+        # compatibility fallback instead of silently skipping the fence.
+        cuda.current_stream().synchronize()
+        mode = "current_stream"
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    stream = cuda.current_stream()
+    stream_value = getattr(stream, "cuda_stream", stream)
+    try:
+        stream_id = str(int(stream_value))
+    except (TypeError, ValueError):
+        stream_id = str(stream_value)
+    count = int(getattr(runner, "_qwen_decode_sync_count", 0)) + 1
+    runner._qwen_decode_sync_count = count
+    runner._qwen_decode_last_sync_mode = mode
+    runner._qwen_decode_last_sync_reason = reason
+    runner._qwen_decode_last_sync_elapsed_ms = round(elapsed_ms, 3)
+    runner._qwen_decode_last_sync_at_ms = int(time.time() * 1000)
+    status_path = getattr(banks, "status_path", None)
+    if status_path:
+        write_status(
+            status_path + "-sync.json",
+            {
+                "schema": "urn:qwen-r9700:decode-sync:v1",
+                "pid": os.getpid(),
+                "updated_at": time.time(),
+                "count": count,
+                "mode": mode,
+                "reason": reason,
+                "scheduled_tokens": int(total),
+                "elapsed_ms": round(elapsed_ms, 3),
+                "stream": stream_id,
+                # The normal scheduler key is already a digest. Hash the
+                # compatibility fallback as well so chat/generation identity
+                # never enters this diagnostic file.
+                "transition": hashlib.sha256(str(key).encode()).hexdigest(),
+            },
+        )
+    return True
+
+
+def _sync_decode_transition(runner, scheduler_output, metadata):
+    """Fence the first decode after each prefill/cache-restore transition.
+
+    The slow-round diagnosis found persistent HIP stream/queue state after a
+    prefill or cache restore. A device-wide synchronization clears that state,
+    but doing it for every decode round would turn the workaround into a
+    permanent throughput penalty. The scheduler supplies a content-free
+    request/transition key, so a later request in the same chat bank is armed
+    again without fencing every decode round.
+
+    This hook runs before the connector's final preparation. It only arms the
+    transition and counts the round; the actual fence is deferred to
+    ``after_forward_prepare`` so every cache/mamba copy that belongs to the
+    round is included in the drain.
+    """
+    total = getattr(scheduler_output, "total_num_scheduled_tokens", None)
+    if total is None:
+        return False
+    try:
+        total = int(total)
+    except (TypeError, ValueError):
+        return False
+    # A prefill, cache-restore frame, or explicit bank barrier starts a new
+    # transition. It does not need this decode fence itself, but it must clear
+    # the previous decode latch so the first subsequent decode is fenced.
+    if metadata.get("barrier") or total <= 0 or total > DECODE_SYNC_MAX_SCHEDULED_TOKENS:
+        if metadata.get("barrier") or total > DECODE_SYNC_MAX_SCHEDULED_TOKENS:
+            runner._qwen_decode_sync_key = None
+            runner._qwen_decode_prepared_key = None
+            runner._qwen_decode_round_key = None
+            runner._qwen_decode_rounds = 0
+            runner._qwen_decode_recovery_pending = None
+        return False
+    bank = metadata.get("bank")
+    if bank is None:
+        return False
+    key = metadata.get("decode_sync_key") or bank
+    banks = getattr(runner, "qwen_banks", None)
+    if banks is None:
+        return False
+    previous_key = getattr(runner, "_qwen_decode_round_key", None)
+    if previous_key != key:
+        runner._qwen_decode_round_key = key
+        runner._qwen_decode_rounds = 0
+    runner._qwen_decode_rounds = int(getattr(runner, "_qwen_decode_rounds", 0)) + 1
+
+    # The first fence is performed by ``after_forward_prepare``. That hook is
+    # placed after mamba/cache preparation and immediately before the model
+    # forward; the old before-forward location was too early to drain those
+    # asynchronous copies. The deferred fence below remains the recovery path
+    # for residual queue state that accumulates during a long response.
+    should_sync = (
+        runner._qwen_decode_rounds > DECODE_SYNC_RECOVERY_AFTER_ROUNDS
+        and (runner._qwen_decode_rounds - 1) % DECODE_SYNC_RECOVERY_AFTER_ROUNDS == 0
+    )
+    if not should_sync:
+        return False
+    runner._qwen_decode_recovery_pending = (key, total)
+    return True
+
+
+def after_forward_prepare(runner, scheduler_output):
+    """Fence the first decode after all cache/mamba preparation has run."""
+    metadata = scheduler_output.qwen_fair
+    if metadata is None or metadata.get("barrier"):
+        return False
+    total = getattr(scheduler_output, "total_num_scheduled_tokens", None)
+    try:
+        total = int(total)
+    except (TypeError, ValueError):
+        return False
+    if total <= 0 or total > DECODE_SYNC_MAX_SCHEDULED_TOKENS:
+        return False
+    bank = metadata.get("bank")
+    key = metadata.get("decode_sync_key") or bank
+    if key is None or getattr(runner, "_qwen_decode_prepared_key", None) == key:
+        prepared = False
+    else:
+        prepared = True
+    banks = getattr(runner, "qwen_banks", None)
+    if banks is None:
+        return False
+    did_sync = False
+    if prepared:
+        _record_decode_sync(
+            runner,
+            banks,
+            key=key,
+            total=total,
+            reason="after_cache_prepare",
+        )
+        runner._qwen_decode_prepared_key = key
+        runner._qwen_decode_sync_key = key
+        did_sync = True
+    pending = getattr(runner, "_qwen_decode_recovery_pending", None)
+    if pending is not None:
+        pending_key, pending_total = pending
+        if pending_key == key:
+            _record_decode_sync(
+                runner,
+                banks,
+                key=key,
+                total=pending_total,
+                reason="long_response_recovery",
+            )
+            did_sync = True
+        runner._qwen_decode_recovery_pending = None
+    return did_sync
 
 
 def prepare_tool_handover(request):
@@ -243,6 +534,35 @@ def write_status(path, data):
     with os.fdopen(fd, "w") as stream:
         json.dump(data, stream, separators=(",", ":"))
     temporary.replace(path)
+
+
+def append_round_log(path, events):
+    """Append numeric decode-round events without syncing the filesystem."""
+    if not events:
+        return
+    path = Path(path)
+    payload = b"".join(
+        (json.dumps(event, separators=(",", ":"), allow_nan=False) + "\n").encode()
+        for event in events
+    )
+    if path.exists() and path.stat().st_size + len(payload) > ROUND_LOG_MAX_BYTES:
+        rotated = path.with_name(path.name + ".1")
+        try:
+            rotated.unlink()
+        except FileNotFoundError:
+            pass
+        path.replace(rotated)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("short decode-round telemetry write")
+            view = view[written:]
+    finally:
+        os.close(fd)
 
 
 class CacheBanks:
@@ -453,7 +773,14 @@ class FairScheduler(Scheduler):
         self.switch_count = 0
         self.last_handover_seconds = 0.0
         self._step_worker_metadata = None
+        self._decode_sync_epochs = {}
         self.request_phases = RequestPhases()
+        # The full scheduler feed remains rate-limited, but generation phase
+        # counters are published whenever a completed engine round changes
+        # them.  Pi watches the phase file separately, so round latency and
+        # acceptance can follow streamed token-rate updates without making the
+        # larger scheduler snapshot a per-round write.
+        self._last_phase_signature = None
         self._install_phase_hooks()
         global _phase_scheduler
         _phase_scheduler = weakref.ref(self)
@@ -479,12 +806,21 @@ class FairScheduler(Scheduler):
 
     def _phase(self, request, phase, blocker=None):
         phases = getattr(self, "request_phases", None)
-        if (
-            phases is not None
-            and request.request_id in phases.live
-            and phases.set(request, phase, blocker)
-        ):
-            self._publish_status(force=True)
+        if phases is None or request.request_id not in phases.live:
+            return
+        previous = phases.live[request.request_id]["phase"]
+        changed = phases.set(request, phase, blocker)
+        if not changed:
+            return
+        if phase in {"cache_restore", "prefill"} and previous not in {
+            "cache_restore",
+            "prefill",
+        }:
+            epochs = getattr(self, "_decode_sync_epochs", None)
+            if epochs is None:
+                epochs = self._decode_sync_epochs = {}
+            epochs[request.request_id] = epochs.get(request.request_id, 0) + 1
+        self._publish_status(force=True)
 
     def _cache_wait(self, request):
         connector = getattr(getattr(self, "connector", None), "connector_scheduler", None)
@@ -814,6 +1150,7 @@ class FairScheduler(Scheduler):
             self.tool_handover.select(self.response_request)
             self.last_served[self.banks.active] = time.monotonic()
         self._refresh_request_phases()
+        self._attach_decode_sync_key(output, metadata)
         self._publish_status()
         return output
 
@@ -823,6 +1160,103 @@ class FairScheduler(Scheduler):
         scheduler_output.qwen_fair = self._step_worker_metadata
         return super()._build_kv_connector_meta(connector, scheduler_output)
 
+    @staticmethod
+    def _scheduled_request_ids(scheduler_output):
+        scheduled = getattr(scheduler_output, "num_scheduled_tokens", None)
+        if not hasattr(scheduled, "items"):
+            return ()
+        request_ids = []
+        for request_id, count in scheduled.items():
+            try:
+                count = int(count)
+            except (TypeError, ValueError):
+                continue
+            if count > 0:
+                request_ids.append(str(request_id))
+        return tuple(sorted(set(request_ids)))
+
+    @staticmethod
+    def _scheduled_shape(scheduler_output):
+        """Return bounded per-round shape metadata without request payloads."""
+        total = getattr(scheduler_output, "total_num_scheduled_tokens", None)
+        try:
+            total = int(total) if total is not None else None
+        except (TypeError, ValueError):
+            total = None
+        scheduled = getattr(scheduler_output, "num_scheduled_tokens", None)
+        counts = []
+        if hasattr(scheduled, "items"):
+            for value in scheduled.values():
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if value > 0:
+                    counts.append(value)
+        elif total is not None and total > 0:
+            counts = [total]
+        counts.sort()
+        drafts = getattr(scheduler_output, "scheduled_spec_decode_tokens", None)
+        draft_widths = []
+        if hasattr(drafts, "items"):
+            for value in drafts.values():
+                try:
+                    width = len(value)
+                except TypeError:
+                    continue
+                if width > 0:
+                    draft_widths.append(width)
+        draft_widths.sort()
+        return {
+            "mode": (
+                "decode"
+                if total is not None and 1 <= total <= 16
+                else "prefill_or_other"
+                if total is not None
+                else "unknown"
+            ),
+            "scheduled_tokens": total,
+            "request_count": len(counts),
+            "tokens_per_request": counts,
+            "draft_widths": draft_widths,
+        }
+
+    def _attach_decode_sync_key(self, scheduler_output, metadata):
+        """Bind the fence to this request, not to its reusable chat bank.
+
+        A bank survives multiple Pi turns. ``request_id`` does not, so it is
+        the right content-free identity for a fresh prefill/cache-restore to
+        decode transition. The phase epoch also changes if one request enters
+        another restore/prefill cycle. The qualified scheduler dispatches one
+        request at a time; retaining all scheduled IDs keeps this safe if that
+        contract is widened later. The digest avoids carrying a raw client
+        identifier into worker metadata.
+        """
+        request_ids = self._scheduled_request_ids(scheduler_output)
+        if not request_ids:
+            request_ids = tuple(
+                str(request.request_id)
+                for request in self.running
+                if getattr(request, "request_id", None) is not None
+            )
+        response_request = getattr(self, "response_request", None)
+        if not request_ids and response_request is not None:
+            request_id = getattr(response_request, "request_id", None)
+            if request_id is not None:
+                request_ids = (str(request_id),)
+        bank = metadata.get("bank")
+        if request_ids and bank is not None:
+            epochs = getattr(self, "_decode_sync_epochs", {})
+            transition = "|".join(
+                f"{request_id}:{epochs.get(request_id, 0)}" for request_id in request_ids
+            )
+            seed = bank + "|" + transition
+            metadata["decode_sync_key"] = hashlib.sha256(seed.encode()).hexdigest()
+        else:
+            # Preserve the old bounded fallback for runtimes that do not
+            # expose num_scheduled_tokens to this overlay.
+            metadata["decode_sync_key"] = bank
+
     def _worker_metadata(self, save_blocks, *, barrier=False, discard_active=False):
         value = {
             "bank": self.banks.active,
@@ -830,6 +1264,7 @@ class FairScheduler(Scheduler):
             "drop_banks": self.drop_banks,
             "barrier": barrier,
             "discard_active": discard_active,
+            "decode_sync_key": None,
             "max_banks": self.max_banks,
             "status_path": self.status_path,
         }
@@ -847,9 +1282,32 @@ class FairScheduler(Scheduler):
         before = len(self.requests)
         tracked = list(self.requests.values()) if hasattr(self, "request_phases") else []
         result = super().update_from_output(scheduler_output, model_runner_output)
+        # vLLM has already resolved speculative acceptance by this point. Read
+        # the same scheduler-side counts used by its commit path so the public
+        # status feed can show exact cumulative acceptance without touching the
+        # GPU or scraping the global Prometheus endpoint. The qualified runtime
+        # dispatches one response at a time, but keep the lookup per request so
+        # this remains content-free and safe if that contract is widened later.
+        scheduled_drafts = getattr(scheduler_output, "scheduled_spec_decode_tokens", {}) or {}
+        scheduled_shape = self._scheduled_shape(scheduler_output)
+        req_to_index = getattr(model_runner_output, "req_id_to_index", {}) or {}
+        sampled = getattr(model_runner_output, "sampled_token_ids", None) or []
+        sampled_per_step = max(1, int(getattr(self, "num_sampled_tokens_per_step", 1)))
+        observed_at = time.monotonic()
         for request in tracked:
             if request.num_output_tokens:
                 self._phase(request, "generate")
+                draft = scheduled_drafts.get(request.request_id) or ()
+                index = req_to_index.get(request.request_id)
+                generated = sampled[index] if index is not None and index < len(sampled) else ()
+                accepted = max(len(generated) - sampled_per_step, 0) if draft else 0
+                self.request_phases.observe_generation(
+                    request,
+                    draft_tokens=len(draft),
+                    accepted_tokens=accepted,
+                    scheduled_shape=scheduled_shape,
+                    now=observed_at,
+                )
             if request.is_finished():
                 self.request_phases.finish(request)
         self.tool_handover.finish()
@@ -873,6 +1331,7 @@ class FairScheduler(Scheduler):
         if hasattr(self, "request_phases"):
             for request in result or ():
                 self.request_phases.finish(request)
+                getattr(self, "_decode_sync_epochs", {}).pop(request.request_id, None)
             self._publish_status(force=True)
         return result
 
@@ -911,11 +1370,19 @@ class FairScheduler(Scheduler):
             self.grace_status and (self.grace_status["chat_id"], self.grace_status["phase"]),
             self.switch_count,
         )
+        phase_rows = self._phase_rows()
+        phase_signature = self._phase_signature(phase_rows)
         if (
             not force
             and signature == getattr(self, "_last_status_signature", None)
             and now - self.last_status < 0.5
         ):
+            # Keep the scheduler/worker status cadence at two writes per
+            # second, while letting the small phase feed follow each completed
+            # generation round.  This is content-free numeric telemetry and
+            # remains on tmpfs; it does not synchronize or inspect the GPU.
+            if phase_signature != getattr(self, "_last_phase_signature", None):
+                self._write_phase_status(phase_rows, time.time(), phase_signature)
             return
         self.last_status = now
         self._last_status_signature = signature
@@ -934,23 +1401,62 @@ class FairScheduler(Scheduler):
                 "requests": rows,
             },
         )
-        if hasattr(self, "request_phases"):
-            phase_rows = [
-                row
-                for request in self.requests.values()
-                if not request.is_finished()
-                and (row := self.request_phases.row(request)) is not None
-            ]
-            write_status(
-                self.status_path + "-phases.json",
-                {
-                    "schema": PHASE_SCHEMA,
-                    "pid": os.getpid(),
-                    "updated_at": published_at,
-                    "requests": phase_rows,
-                    "recent": list(self.request_phases.recent.values()),
-                },
+        self._write_phase_status(phase_rows, published_at, phase_signature)
+
+    def _phase_rows(self):
+        phases = getattr(self, "request_phases", None)
+        if phases is None:
+            return []
+        return [
+            row
+            for request in self.requests.values()
+            if not request.is_finished()
+            and (row := phases.row(request)) is not None
+        ]
+
+    @staticmethod
+    def _phase_signature(rows):
+        """Return only fields whose change requires a fresh Pi redraw."""
+        return tuple(
+            (
+                row["request_id"],
+                row["phase"],
+                row["blocker"],
+                row["last_round_ms"],
+                row["last_acceptance_rate"],
+                row["generation_rounds"],
+                row["draft_tokens"],
+                row["accepted_tokens"],
+                row["acceptance_rate"],
             )
+            for row in rows
+        )
+
+    def _write_phase_status(self, rows, published_at, signature):
+        if not hasattr(self, "request_phases"):
+            return
+        events = self.request_phases.take_round_events()
+        if events:
+            try:
+                append_round_log(self.status_path + "-rounds.jsonl", events)
+            except OSError as exc:
+                # Telemetry must never abort inference. Keep the events queued
+                # so a later status publication can retry the same rounds.
+                self.request_phases.restore_round_events(events)
+                logging.getLogger(__name__).warning(
+                    "decode-round telemetry write failed: %s", type(exc).__name__
+                )
+        write_status(
+            self.status_path + "-phases.json",
+            {
+                "schema": PHASE_SCHEMA,
+                "pid": os.getpid(),
+                "updated_at": published_at,
+                "requests": rows,
+                "recent": list(self.request_phases.recent.values()),
+            },
+        )
+        self._last_phase_signature = signature
 
 
 class WorkerBanks:
@@ -1229,6 +1735,7 @@ def before_forward(runner, scheduler_output):
     if changed or metadata["barrier"]:
         worker_phase("handover")
     runner.qwen_banks.before(metadata)
+    _sync_decode_transition(runner, scheduler_output, metadata)
     scheduler = _phase_scheduler() if _phase_scheduler is not None else None
     if scheduler is not None and not metadata["barrier"]:
         scheduler._refresh_request_phases()

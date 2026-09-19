@@ -76,6 +76,8 @@ def make_fair_runtime_fixtures(root):
         "def execute_model(self, scheduler_output, dummy_run=False):\n"
         "        if not dummy_run:\n"
         "            # Update the request states.\n"
+        "            with context:\n"
+        "                self.kv_connector.pre_forward(scheduler_output)\n"
     )
     return output, runner
 
@@ -297,6 +299,7 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     assert factory.read_text().count("qwen_chat_fs") == 1
     assert output.read_text().count("qwen_fair: dict | None = None") == 1
     assert runner.read_text().count("before_forward(self, scheduler_output)") == 1
+    assert runner.read_text().count("after_forward_prepare(self, scheduler_output)") == 1
     assert scheduler.read_text().count("fair.get('barrier')") == 1
     fair_scheduler = scheduler.read_text()
     fair_start = fair_scheduler.index("store_jobs = self._build_store_jobs")

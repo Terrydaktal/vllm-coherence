@@ -5,7 +5,12 @@ import json
 import pytest
 
 from qwen_r9700_lab import radiance_cache_residency as residency_module
-from qwen_r9700_lab.radiance_cache_residency import ResidencyProbe, legacy_sample
+from qwen_r9700_lab.radiance_cache_residency import (
+    RoundAcceptance,
+    ResidencyProbe,
+    legacy_sample,
+    restore_last_round_acceptance,
+)
 
 ABI, CHAT, GEN, OTHER = "a" * 64, "b" * 64, "c" * 64, "d" * 64
 
@@ -514,3 +519,125 @@ def test_phase_file_notifications_wake_the_shared_probe_without_faster_polling(t
         thread.join()
         changes.close()
     assert changes.fd == -1
+
+
+def test_round_acceptance_restores_last_numeric_round_after_target_only_phase(tmp_path):
+    path = tmp_path / "rounds.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "urn:qwen-r9700:decode-rounds:v1",
+                "pid": 123,
+                "observed_at_ms": 1000,
+                "chat_id": CHAT,
+                "generation": GEN,
+                "round": 17,
+                "round_ms": 43.7,
+                "draft_tokens": 7,
+                "accepted_tokens": 5,
+                "acceptance_rate": 5 / 7,
+                "private_text": "must not be transported",
+            }
+        )
+        + "\n"
+    )
+    feed = RoundAcceptance(path)
+    feed.read()
+    phases = {
+        "pid": 123,
+        "requests": [],
+        "recent": [
+            {"chat_id": CHAT, "generation": GEN, "last_acceptance_rate": None},
+            {"chat_id": OTHER, "generation": GEN, "last_acceptance_rate": 0.25},
+        ],
+    }
+    phases["updated_at"] = 1.0
+    restored = restore_last_round_acceptance(phases, feed)
+    assert restored["recent"][0]["acceptance_rate_3s"] == pytest.approx(5 / 7)
+    assert restored["recent"][1]["last_acceptance_rate"] == 0.25
+    assert restored["recent"][1]["acceptance_rate_3s"] is None
+    assert "private_text" not in json.dumps(restored)
+
+
+def test_round_acceptance_reads_appends_incrementally_and_ignores_invalid_rates(tmp_path):
+    path = tmp_path / "rounds.jsonl"
+    feed = RoundAcceptance(path)
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "urn:qwen-r9700:decode-rounds:v1",
+                "pid": 123,
+                "observed_at_ms": 1000,
+                "chat_id": CHAT,
+                "generation": GEN,
+                "draft_tokens": 2,
+                "accepted_tokens": 1,
+                "round_ms": 40.0,
+                "acceptance_rate": 0.5,
+            }
+        )
+        + "\n"
+    )
+    feed.read()
+    assert feed.rolling_rate((CHAT, GEN), 123, 1000) == pytest.approx(0.5)
+    with path.open("a") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "schema": "urn:qwen-r9700:decode-rounds:v1",
+                    "pid": 123,
+                    "observed_at_ms": 1500,
+                    "chat_id": CHAT,
+                    "generation": GEN,
+                    "draft_tokens": 2,
+                    "accepted_tokens": 1,
+                    "round_ms": 40.0,
+                    "acceptance_rate": 1.5,
+                }
+            )
+            + "\n"
+        )
+    feed.read()
+    assert feed.rolling_rate((CHAT, GEN), 123, 1500) == pytest.approx(0.5)
+    with path.open("a") as stream:
+        stream.write(
+            json.dumps(
+                {
+                    "schema": "urn:qwen-r9700:decode-rounds:v1",
+                    "pid": 123,
+                    "observed_at_ms": 2000,
+                    "chat_id": CHAT,
+                    "generation": GEN,
+                    "draft_tokens": 2,
+                    "accepted_tokens": 2,
+                    "round_ms": 40.0,
+                    "acceptance_rate": 6 / 7,
+                }
+            )
+            + "\n"
+        )
+    feed.read()
+    assert feed.rolling_rate((CHAT, GEN), 123, 2000) == pytest.approx(3 / 4)
+
+
+def test_round_acceptance_reads_bounded_rotated_predecessor(tmp_path):
+    path = tmp_path / "rounds.jsonl"
+    path.with_name("rounds.jsonl.1").write_text(
+        json.dumps(
+            {
+                "schema": "urn:qwen-r9700:decode-rounds:v1",
+                "pid": 123,
+                "observed_at_ms": 1000,
+                "chat_id": CHAT,
+                "generation": GEN,
+                "draft_tokens": 7,
+                "accepted_tokens": 2,
+                "round_ms": 40.0,
+                "acceptance_rate": 2 / 7,
+            }
+        )
+        + "\n"
+    )
+    feed = RoundAcceptance(path)
+    feed.read()
+    assert feed.rolling_rate((CHAT, GEN), 123, 1000) == pytest.approx(2 / 7)

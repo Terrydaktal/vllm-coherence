@@ -18,11 +18,19 @@ import { radianceChatIdentity } from "./qwen-radiance-cache.mjs";
 const TARGET_PROVIDER = "qwen-r9700";
 const SAMPLE_SCHEMA_V1 = "urn:qwen-r9700:scheduler-telemetry:v1";
 const SAMPLE_SCHEMA_V2 = "urn:qwen-r9700:scheduler-telemetry:v2";
+export const COMBINED_TELEMETRY_SCHEMA = "urn:qwen-r9700:telemetry:v1";
 const SAMPLE_STALE_MS = 5_000;
-const SAMPLE_REFRESH_MS = 500;
+const SAMPLE_REFRESH_MS = 100;
+const COMBINED_REFRESH_MS = 100;
 const HEARTBEAT_MS = 5_000;
 const ENSURE_RETRY_MS = 10_000;
 const HEX_ID = /^[0-9a-f]{64}$/;
+const REQUEST_PHASE_SCHEMA_V1 = "urn:qwen-r9700:request-phases:v1";
+const REQUEST_PHASE_SCHEMA_V2 = "urn:qwen-r9700:request-phases:v2";
+// All Pi extensions share this short-lived immutable read. Nested payloads
+// retain their own timestamps, so a 100 ms consumer cadence never implies
+// that a 1 Hz hardware probe or 0.5 Hz cache probe became fresher.
+const combinedSnapshots = new Map();
 export const REQUEST_PHASE_LABELS = {
 	admission: "Preparing next response",
 	gpu_queue: "Queued for GPU",
@@ -42,19 +50,46 @@ export const REQUEST_PHASE_LABELS = {
 export function parseRequestPhases(text, pid, now = Date.now()) {
 	const value = JSON.parse(text);
 	const milliseconds = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+	const phaseV2 = value.schema === REQUEST_PHASE_SCHEMA_V2;
 	const identity = (n) => n && hasExactKeys(n, ["chat_id", "generation"]) &&
 		HEX_ID.test(n.chat_id) && HEX_ID.test(n.generation);
-	const row = (r) => hasExactKeys(r, ["chat_id", "generation", "request_id", "phase", "blocker",
-		"input_tokens", "computed_tokens", "cached_tokens", "elapsed_ms", "phase_elapsed_ms", "first_token_ms", "timings_ms"]) &&
-		HEX_ID.test(r.chat_id) && HEX_ID.test(r.generation) && HEX_ID.test(r.request_id) &&
-		Object.hasOwn(REQUEST_PHASE_LABELS, r.phase) && (r.blocker === null || identity(r.blocker)) &&
-		validCount(r.input_tokens) && validCount(r.computed_tokens) && (r.cached_tokens === null || validCount(r.cached_tokens)) &&
-		milliseconds(r.elapsed_ms) && milliseconds(r.phase_elapsed_ms) &&
-		(r.first_token_ms === null || milliseconds(r.first_token_ms)) &&
-		r.timings_ms !== null && typeof r.timings_ms === "object" && !Array.isArray(r.timings_ms) &&
-		Object.entries(r.timings_ms).every(([key, ms]) => Object.hasOwn(REQUEST_PHASE_LABELS, key) && milliseconds(ms));
+	const row = (r) => {
+		const baseKeys = ["chat_id", "generation", "request_id", "phase", "blocker",
+			"input_tokens", "computed_tokens", "cached_tokens", "elapsed_ms", "phase_elapsed_ms", "first_token_ms"];
+		const generationKeys = phaseV2
+			? ["last_round_ms", "generation_rounds", "draft_tokens", "accepted_tokens", "acceptance_rate",
+				...(Object.hasOwn(r, "last_acceptance_rate") ? ["last_acceptance_rate"] : []),
+				...(Object.hasOwn(r, "acceptance_rate_3s") ? ["acceptance_rate_3s"] : [])]
+			: [];
+		return hasExactKeys(r, [...baseKeys, ...generationKeys, "timings_ms"]) &&
+			HEX_ID.test(r.chat_id) && HEX_ID.test(r.generation) && HEX_ID.test(r.request_id) &&
+			Object.hasOwn(REQUEST_PHASE_LABELS, r.phase) && (r.blocker === null || identity(r.blocker)) &&
+			validCount(r.input_tokens) && validCount(r.computed_tokens) && (r.cached_tokens === null || validCount(r.cached_tokens)) &&
+			milliseconds(r.elapsed_ms) && milliseconds(r.phase_elapsed_ms) &&
+			(r.first_token_ms === null || milliseconds(r.first_token_ms)) &&
+			(!phaseV2 || (
+				(r.last_round_ms === null || milliseconds(r.last_round_ms)) &&
+				validCount(r.generation_rounds) && validCount(r.draft_tokens) && validCount(r.accepted_tokens) &&
+				r.accepted_tokens <= r.draft_tokens &&
+				(r.acceptance_rate === null || (
+					typeof r.acceptance_rate === "number" && Number.isFinite(r.acceptance_rate) &&
+					r.acceptance_rate >= 0 && r.acceptance_rate <= 1
+				)) &&
+					(!Object.hasOwn(r, "last_acceptance_rate") || r.last_acceptance_rate === null || (
+						typeof r.last_acceptance_rate === "number" && Number.isFinite(r.last_acceptance_rate) &&
+						r.last_acceptance_rate >= 0 && r.last_acceptance_rate <= 1
+					)) &&
+					(!Object.hasOwn(r, "acceptance_rate_3s") || r.acceptance_rate_3s === null || (
+						typeof r.acceptance_rate_3s === "number" && Number.isFinite(r.acceptance_rate_3s) &&
+						r.acceptance_rate_3s >= 0 && r.acceptance_rate_3s <= 1
+					))
+			)) &&
+			r.timings_ms !== null && typeof r.timings_ms === "object" && !Array.isArray(r.timings_ms) &&
+			Object.entries(r.timings_ms).every(([key, ms]) => Object.hasOwn(REQUEST_PHASE_LABELS, key) && milliseconds(ms));
+	};
 	if (!hasExactKeys(value, ["schema", "pid", "updated_at", "requests", "recent"]) ||
-		value.schema !== "urn:qwen-r9700:request-phases:v1" || value.pid !== pid ||
+		(!phaseV2 && value.schema !== REQUEST_PHASE_SCHEMA_V1) ||
+		(phaseV2 && value.schema !== REQUEST_PHASE_SCHEMA_V2) || value.pid !== pid ||
 		!milliseconds(value.updated_at) || now - value.updated_at * 1000 > 30_000 || value.updated_at * 1000 - now > 5_000 ||
 		!Array.isArray(value.requests) || value.requests.length > 16 || !value.requests.every(row) ||
 		!Array.isArray(value.recent) || value.recent.length > 16 || !value.recent.every(row)) {
@@ -128,6 +163,20 @@ function validateSampleFile(path) {
 		details.size > 64 * 1024
 	) {
 		throw new Error("unsafe scheduler telemetry sample");
+	}
+}
+
+function validateCombinedSampleFile(path) {
+	const details = lstatSync(path);
+	if (
+		!details.isFile() ||
+		details.isSymbolicLink() ||
+		details.nlink !== 1 ||
+		details.uid !== process.getuid() ||
+		(details.mode & 0o022) !== 0 ||
+		details.size > 256 * 1024
+	) {
+		throw new Error("unsafe combined telemetry sample");
 	}
 }
 
@@ -265,6 +314,25 @@ export function parseSchedulerSample(text, now = Date.now()) {
 	return scheduler;
 }
 
+export function parseCombinedTelemetry(text, now = Date.now()) {
+	const sample = JSON.parse(text);
+	if (
+		!hasExactKeys(sample, ["schema", "observed_at_ms", "scheduler", "worker", "phases", "cache", "temperature"]) ||
+		sample.schema !== COMBINED_TELEMETRY_SCHEMA ||
+		!Number.isSafeInteger(sample.observed_at_ms) ||
+		sample.observed_at_ms > now + 1_000 ||
+		now - sample.observed_at_ms > SAMPLE_STALE_MS ||
+		sample.scheduler === null || typeof sample.scheduler !== "object" || Array.isArray(sample.scheduler) ||
+		(sample.worker !== null && (typeof sample.worker !== "object" || Array.isArray(sample.worker))) ||
+		(sample.phases !== null && (typeof sample.phases !== "object" || Array.isArray(sample.phases))) ||
+		(sample.cache !== null && (typeof sample.cache !== "object" || Array.isArray(sample.cache))) ||
+		(sample.temperature !== null && (typeof sample.temperature !== "object" || Array.isArray(sample.temperature)))
+	) {
+		throw new Error("invalid or stale combined telemetry sample");
+	}
+	return sample;
+}
+
 export function schedulerStatusForChat(scheduler, chat) {
 	const request = scheduler.requests.find(
 		(row) => row.chat_id === chat.id && row.generation === chat.generation,
@@ -298,6 +366,18 @@ export function toolGraceDescription(grace) {
 	return grace.phase === "tool_grace"
 		? `giving ${owner}'s tool time to finish · ${grace.remaining_seconds.toFixed(1)}s grace remaining`
 		: `confirming whether ${owner} finished with a tool call`;
+}
+
+function attachRequestPhases(observation, phases, chat) {
+	if (phases === undefined) return observation;
+	const matches = (row) => row.chat_id === chat.id && row.generation === chat.generation;
+	observation.requestPhase = phases.requests.find(matches);
+	const blocker = observation.requestPhase?.blocker;
+	observation.blockingRequestPhase = blocker && phases.requests.find((row) =>
+		row.chat_id === blocker.chat_id && row.generation === blocker.generation);
+	observation.lastRequestTiming = phases.recent.find(matches);
+	observation.phaseObservedAt = phases.updated_at * 1000;
+	return observation;
 }
 
 function configuration() {
@@ -382,8 +462,12 @@ export class SchedulerTelemetry {
 				this.config = config;
 				this.markerPath = markerPath;
 				try {
-					this.watcher = watch(config.stateDirectory, { persistent: false }, (_event, name) => {
-						if (!["request-phases.json", "scheduler-v2.json", "scheduler.json"].includes(String(name))) return;
+				this.watcher = watch(config.stateDirectory, { persistent: false }, (_event, name) => {
+						const fileName = String(name);
+						if (!["telemetry-v1.json", "request-phases.json", "scheduler-v2.json", "scheduler.json"].includes(fileName)) return;
+						if (fileName === "telemetry-v1.json") {
+							combinedSnapshots.delete(join(config.stateDirectory, fileName));
+						}
 						this.lastReadAt = 0;
 						for (const listener of this.listeners) listener();
 					});
@@ -419,41 +503,74 @@ export class SchedulerTelemetry {
 	}
 
 	read(now = Date.now()) {
-	        if (!this.config) return { available: false, configured: false };
-	        if (!this.chat) return { available: false, configured: true };
-			if (now - this.lastReadAt < SAMPLE_REFRESH_MS) return this.cached;
-			this.lastReadAt = now;
-			for (const name of ["scheduler-v2.json", "scheduler.json"]) {
-				try {
-					const samplePath = join(this.config.stateDirectory, name);
-					validateSampleFile(samplePath);
-					const scheduler = parseSchedulerSample(readFileSync(samplePath, "utf8"), now);
-						this.cached = schedulerStatusForChat(scheduler, this.chat);
-						try {
-							const path = join(this.config.stateDirectory, "request-phases.json");
-							validateSampleFile(path);
-							const phases = parseRequestPhases(readFileSync(path, "utf8"), scheduler.pid, now);
-							const matches = (r) => r.chat_id === this.chat.id && r.generation === this.chat.generation;
-							this.cached.requestPhase = phases.requests.find(matches);
-							const blocker = this.cached.requestPhase?.blocker;
-							this.cached.blockingRequestPhase = blocker && phases.requests.find((r) =>
-								r.chat_id === blocker.chat_id && r.generation === blocker.generation);
-							this.cached.lastRequestTiming = phases.recent.find(matches);
-							this.cached.phaseObservedAt = phases.updated_at * 1000;
-						} catch { /* Old backends have no detailed phase feed. */ }
-					return this.cached;
-				} catch {
-					// A running old monitor has only scheduler.json; malformed or stale
-					// v2 data likewise falls back to the authenticated legacy sample.
+		if (!this.config) return { available: false, configured: false };
+		if (!this.chat) return { available: false, configured: true };
+		if (now - this.lastReadAt < SAMPLE_REFRESH_MS) return this.cached;
+		this.lastReadAt = now;
+
+		const combined = this.readCombinedSnapshot(now);
+		if (combined !== undefined) {
+			try {
+				const scheduler = parseSchedulerSample(JSON.stringify({
+					schema: SAMPLE_SCHEMA_V2,
+					observed_at_ms: combined.observed_at_ms,
+					backend: { scheduler: combined.scheduler, worker: combined.worker },
+				}), now);
+				let phases;
+				if (combined.phases !== null) {
+					try {
+						phases = parseRequestPhases(JSON.stringify(combined.phases), scheduler.pid, now);
+					} catch { /* The scheduler sample remains useful without a phase row. */ }
 				}
+				this.cached = attachRequestPhases(schedulerStatusForChat(scheduler, this.chat), phases, this.chat);
+				return this.cached;
+			} catch {
+				// Fall through to the individually authenticated legacy files.
 			}
-	        this.cached = { available: false, configured: true };
-			this.ensure(now);
-			return this.cached;
 		}
 
+		for (const name of ["scheduler-v2.json", "scheduler.json"]) {
+			try {
+				const samplePath = join(this.config.stateDirectory, name);
+				validateSampleFile(samplePath);
+				const scheduler = parseSchedulerSample(readFileSync(samplePath, "utf8"), now);
+				let phases;
+				try {
+					const path = join(this.config.stateDirectory, "request-phases.json");
+					validateSampleFile(path);
+					phases = parseRequestPhases(readFileSync(path, "utf8"), scheduler.pid, now);
+				} catch { /* Old backends have no detailed phase feed. */ }
+				this.cached = attachRequestPhases(schedulerStatusForChat(scheduler, this.chat), phases, this.chat);
+				return this.cached;
+			} catch {
+				// A running old monitor has only scheduler.json; malformed or stale
+				// v2 data likewise falls back to the authenticated legacy sample.
+			}
+		}
+		this.cached = { available: false, configured: true };
+		this.ensure(now);
+		return this.cached;
+	}
+
+	readCombinedSnapshot(now = Date.now()) {
+		if (!this.config) return undefined;
+		const path = join(this.config.stateDirectory, "telemetry-v1.json");
+		const previous = combinedSnapshots.get(path);
+		if (previous !== undefined && now - previous.readAt < COMBINED_REFRESH_MS) return previous.sample;
+		let sample;
+		try {
+			validateCombinedSampleFile(path);
+			sample = parseCombinedTelemetry(readFileSync(path, "utf8"), now);
+		} catch {
+			sample = undefined;
+		}
+		combinedSnapshots.set(path, { readAt: now, sample });
+		return sample;
+	}
+
 	stop() {
-			this.watcher?.close();
+		if (this.config) combinedSnapshots.delete(join(this.config.stateDirectory, "telemetry-v1.json"));
+		this.watcher?.close();
 			this.watcher = undefined;
 		if (this.heartbeatTimer !== undefined) {
 			clearInterval(this.heartbeatTimer);

@@ -194,6 +194,7 @@ def launch(args, pi_args):
             "PI_CODING_AGENT_DIR": str(agent),
             "PI_OFFLINE": "1",
             "QWEN_RADIANCE_CACHE_HOST": host,
+            "QWEN_RADIANCE_CONTAINER": "vllm-coherence",
             "QWEN_RADIANCE_CACHE_ROOT": connection["cache_root"],
             "QWEN_RADIANCE_CACHE_ABI": connection["abi"],
             "QWEN_RADIANCE_LOCAL_PORT": str(port),

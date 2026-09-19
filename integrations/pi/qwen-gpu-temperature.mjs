@@ -15,7 +15,7 @@ import { CacheResidencyTelemetry } from "./qwen-cache-residency.mjs";
 const STATUS_KEY = "qwen-gpu-temperature";
 const TARGET_PROVIDER = "qwen-r9700";
 const REFRESH_MS = 1_000;
-const RESIDENCY_REFRESH_MS = 500;
+const RESIDENCY_REFRESH_MS = 100;
 const SAMPLE_STALE_MS = 15_000;
 const ENSURE_RETRY_MS = 10_000;
 const SAMPLE_SCHEMA_V1 = "urn:qwen-r9700:gpu-temperature:v1";
@@ -139,9 +139,20 @@ export default function qwenGpuTemperature(pi, { residency = new CacheResidencyT
 			return;
 		}
 		try {
-			const samplePath = join(config.stateDirectory, "sample.json");
-			validateSampleFile(samplePath);
-			const sample = parseTemperatureSample(readFileSync(samplePath, "utf8"), now);
+			let sample;
+			const combined = residency.readCombinedSnapshot?.(now);
+			if (combined?.temperature !== null && combined?.temperature !== undefined) {
+				try {
+					sample = parseTemperatureSample(JSON.stringify(combined.temperature), now);
+				} catch {
+					// Fall through to the standalone temperature monitor sample.
+				}
+			}
+			if (!sample) {
+				const samplePath = join(config.stateDirectory, "sample.json");
+				validateSampleFile(samplePath);
+				sample = parseTemperatureSample(readFileSync(samplePath, "utf8"), now);
+			}
 			setStatus(formatTemperatureStatus(sample));
 		}
 		catch {

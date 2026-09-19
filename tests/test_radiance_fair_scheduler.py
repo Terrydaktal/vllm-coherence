@@ -1101,6 +1101,78 @@ def test_running_transition_is_published_immediately_but_counters_are_throttled(
     assert path.stat().st_mtime_ns == old
 
 
+def test_generation_phase_counters_publish_each_round_without_rewriting_scheduler_status(
+    tmp_path, monkeypatch
+):
+    module = load_module(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    scheduler, request = phase_fixture(module, tmp_path)
+    scheduler_path = Path(scheduler.status_path + "-scheduler.json")
+    phases_path = Path(scheduler.status_path + "-phases.json")
+    rounds_path = Path(scheduler.status_path + "-rounds.jsonl")
+
+    scheduler._publish_status(force=True)
+    scheduler_bytes = scheduler_path.read_bytes()
+    assert json.loads(phases_path.read_text())["requests"][0]["generation_rounds"] == 0
+
+    scheduler.request_phases.set(request, "generate")
+    scheduler.request_phases.observe_generation(
+        request,
+        draft_tokens=7,
+        accepted_tokens=3,
+        scheduled_shape={"mode": "decode", "scheduled_tokens": 8},
+        now=clock[0],
+    )
+    clock[0] += 0.0437
+    scheduler._publish_status()
+    first = json.loads(phases_path.read_text())["requests"][0]
+    assert scheduler_path.read_bytes() == scheduler_bytes
+    assert first["generation_rounds"] == 1
+    assert first["last_round_ms"] is None
+    assert first["acceptance_rate"] == pytest.approx(3 / 7)
+    assert first["last_acceptance_rate"] == pytest.approx(3 / 7)
+    first_round = json.loads(rounds_path.read_text().splitlines()[0])
+    assert first_round["schema"] == "urn:qwen-r9700:decode-rounds:v1"
+    assert first_round["round"] == 1
+    assert first_round["round_ms"] is None
+    assert first_round["draft_tokens"] == 7
+    assert first_round["accepted_tokens"] == 3
+    assert first_round["scheduled_shape"] == {"mode": "decode", "scheduled_tokens": 8}
+
+    scheduler.request_phases.observe_generation(
+        request, draft_tokens=7, accepted_tokens=4, now=clock[0]
+    )
+    clock[0] += 0.005
+    scheduler._publish_status()
+    second = json.loads(phases_path.read_text())["requests"][0]
+    assert scheduler_path.read_bytes() == scheduler_bytes
+    assert second["generation_rounds"] == 2
+    assert second["last_round_ms"] == pytest.approx(43.7)
+    assert second["acceptance_rate"] == pytest.approx(7 / 14)
+    assert second["last_acceptance_rate"] == pytest.approx(4 / 7)
+    rounds = [json.loads(line) for line in rounds_path.read_text().splitlines()]
+    assert [event["round"] for event in rounds] == [1, 2]
+    assert rounds[1]["round_ms"] == pytest.approx(43.7)
+
+
+def test_decode_round_log_rotates_before_it_exceeds_bounded_size(tmp_path, monkeypatch):
+    module = load_module(monkeypatch)
+    path = tmp_path / "rounds.jsonl"
+    monkeypatch.setattr(module, "ROUND_LOG_MAX_BYTES", 80)
+    event = {
+        "schema": "urn:qwen-r9700:decode-rounds:v1",
+        "round": 1,
+        "round_ms": 45.2,
+    }
+    module.append_round_log(path, [event])
+    first = path.read_bytes()
+    module.append_round_log(path, [{**event, "round": 2}])
+    assert path.exists()
+    assert path.with_name("rounds.jsonl.1").read_bytes() == first
+    assert json.loads(path.read_text())["round"] == 2
+
+
 def test_cache_update_lookup_and_restore_keep_separate_durations_and_return_values(
     tmp_path, monkeypatch
 ):
@@ -1128,6 +1200,7 @@ def test_cache_update_lookup_and_restore_keep_separate_durations_and_return_valu
     row = scheduler.request_phases.row(request)
     assert row["phase"] == "cache_restore"
     assert row["cached_tokens"] == 150024
+    assert scheduler._decode_sync_epochs[request.request_id] == 1
     assert row["timings_ms"]["cache_update"] == 237
     assert row["timings_ms"]["cache_lookup"] == 3
     clock[0] += 0.2
@@ -1141,6 +1214,55 @@ def test_cache_update_lookup_and_restore_keep_separate_durations_and_return_valu
     assert recent["first_token_ms"] == pytest.approx(540)
     assert "synthetic-only" not in json.dumps(recent)
     assert not scheduler.request_phases.live
+
+
+def test_request_phase_generation_metrics_track_consecutive_rounds_and_acceptance(
+    tmp_path, monkeypatch
+):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    scheduler.request_phases.set(request, "generate")
+    scheduler.request_phases.observe_generation(
+        request, draft_tokens=7, accepted_tokens=3, now=clock[0]
+    )
+    clock[0] += 0.0437
+    scheduler.request_phases.observe_generation(
+        request, draft_tokens=7, accepted_tokens=4, now=clock[0]
+    )
+    row = scheduler.request_phases.row(request)
+    assert row["last_round_ms"] == pytest.approx(43.7)
+    assert row["generation_rounds"] == 2
+    assert row["draft_tokens"] == 14
+    assert row["accepted_tokens"] == 7
+    assert row["acceptance_rate"] == pytest.approx(0.5)
+    assert row["last_acceptance_rate"] == pytest.approx(4 / 7)
+
+    # A target-only final/EOS round has no speculative denominator.  It must
+    # not erase the last actual round acceptance shown to Pi.
+    clock[0] += 0.006
+    scheduler.request_phases.observe_generation(
+        request, draft_tokens=0, accepted_tokens=0, now=clock[0]
+    )
+    final_round = scheduler.request_phases.row(request)
+    assert final_round["generation_rounds"] == 3
+    assert final_round["acceptance_rate"] == pytest.approx(7 / 14)
+    assert final_round["last_acceptance_rate"] == pytest.approx(4 / 7)
+
+    # A handover breaks the consecutive-round interval; resumed output must
+    # not include time spent while another chat owned the GPU.
+    scheduler.request_phases.set(request, "gpu_queue", module.bank_identity(BANK_B))
+    scheduler.request_phases.set(request, "generate")
+    clock[0] += 10
+    scheduler.request_phases.observe_generation(
+        request, draft_tokens=7, accepted_tokens=2, now=clock[0]
+    )
+    resumed = scheduler.request_phases.row(request)
+    # The retained duration is the target-only final round immediately before
+    # handover; the ten seconds parked in the other phase are excluded.
+    assert resumed["last_round_ms"] == pytest.approx(6.0)
+    assert resumed["last_acceptance_rate"] == pytest.approx(2 / 7)
 
 
 def test_queue_phase_requires_another_selected_response(tmp_path, monkeypatch):
@@ -1160,3 +1282,199 @@ def test_queue_phase_requires_another_selected_response(tmp_path, monkeypatch):
     scheduler._refresh_request_phases()
     assert scheduler.request_phases.row(request)["phase"] == "handover"
     assert scheduler.request_phases.row(request)["blocker"] is None
+
+
+def test_decode_transition_stream_sync_is_once_per_request_transition(monkeypatch):
+    module = load_module(monkeypatch)
+    calls = []
+
+    class Stream:
+        def synchronize(self):
+            calls.append("sync")
+
+    class Cuda:
+        @staticmethod
+        def current_stream():
+            return Stream()
+
+    fake_torch = SimpleNamespace(cuda=Cuda())
+    banks = SimpleNamespace(
+        active=BANK_A,
+        torch=fake_torch,
+        before=lambda metadata: None,
+    )
+    runner = SimpleNamespace(qwen_banks=banks)
+    metadata = {
+        "bank": BANK_A,
+        "barrier": False,
+        "drop_banks": [],
+        "decode_sync_key": "bank-a-request-1",
+    }
+
+    prefill = SimpleNamespace(total_num_scheduled_tokens=2048, qwen_fair=metadata)
+    module.before_forward(runner, prefill)
+    assert calls == []
+
+    decode = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+    module.before_forward(runner, decode)
+    module.before_forward(runner, decode)
+    assert calls == []
+    assert module.after_forward_prepare(runner, decode)
+    module.after_forward_prepare(runner, decode)
+    assert calls == ["sync"]
+
+    # A new Pi turn gets a new request identity while retaining the same
+    # chat-generation bank. It must be fenced on its own cadence rather than
+    # inheriting the previous turn's latch.
+    next_request = {**metadata, "decode_sync_key": "bank-a-request-2"}
+    module.before_forward(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_request),
+    )
+    module.before_forward(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_request),
+    )
+    assert calls == ["sync"]
+    assert module.after_forward_prepare(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_request),
+    )
+    assert calls == ["sync", "sync"]
+
+    # A second prefill/cache-restore transition in the same request re-arms
+    # the first subsequent decode without fencing the prefill itself.
+    module.before_forward(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=2048, qwen_fair=next_request),
+    )
+    assert calls == ["sync", "sync"]
+    module.before_forward(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_request),
+    )
+    assert calls == ["sync", "sync"]
+    assert module.after_forward_prepare(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_request),
+    )
+    assert calls == ["sync", "sync", "sync"]
+
+    next_generation = {
+        **metadata,
+        "bank": BANK_A_NEXT,
+        "decode_sync_key": "bank-a-next-request-1",
+    }
+    module.before_forward(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_generation),
+    )
+    assert calls == ["sync", "sync", "sync"]
+    assert module.after_forward_prepare(
+        runner,
+        SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=next_generation),
+    )
+    assert calls == ["sync", "sync", "sync", "sync"]
+
+
+def test_decode_transition_key_uses_scheduled_request_identity(monkeypatch):
+    module = load_module(monkeypatch)
+    scheduler = module.FairScheduler.__new__(module.FairScheduler)
+    scheduler.running = [SimpleNamespace(request_id="request-a")]
+    scheduler.response_request = None
+    scheduler._decode_sync_epochs = {"request-a": 1}
+    metadata = {"bank": BANK_A}
+
+    scheduler._attach_decode_sync_key(
+        SimpleNamespace(num_scheduled_tokens={"request-a": 8}), metadata
+    )
+    first = metadata["decode_sync_key"]
+    assert isinstance(first, str) and len(first) == 64
+
+    scheduler._decode_sync_epochs["request-a"] = 2
+    scheduler._attach_decode_sync_key(
+        SimpleNamespace(num_scheduled_tokens={"request-a": 8}), metadata
+    )
+    assert metadata["decode_sync_key"] != first
+
+    scheduler.running = [SimpleNamespace(request_id="request-b")]
+    scheduler._attach_decode_sync_key(
+        SimpleNamespace(num_scheduled_tokens={"request-b": 8}), metadata
+    )
+    assert metadata["decode_sync_key"] != first
+
+
+def test_scheduled_shape_is_content_free_and_preserves_batch_widths(tmp_path, monkeypatch):
+    module = load_module(monkeypatch)
+    shape = module.FairScheduler._scheduled_shape(
+        SimpleNamespace(
+            total_num_scheduled_tokens=10,
+            num_scheduled_tokens={"private-a": 8, "private-b": 2},
+            scheduled_spec_decode_tokens={"private-a": [1, 2, 3]},
+        )
+    )
+    assert shape == {
+        "mode": "decode",
+        "scheduled_tokens": 10,
+        "request_count": 2,
+        "tokens_per_request": [2, 8],
+        "draft_widths": [3],
+    }
+    assert "private-a" not in json.dumps(shape)
+
+def test_decode_transition_retires_residual_queue_state_after_thirty_rounds(monkeypatch):
+    module = load_module(monkeypatch)
+    calls = []
+
+    class Stream:
+        def synchronize(self):
+            calls.append("sync")
+
+    class Cuda:
+        @staticmethod
+        def current_stream():
+            return Stream()
+
+    runner = SimpleNamespace(
+        qwen_banks=SimpleNamespace(
+            active=BANK_A,
+            torch=SimpleNamespace(cuda=Cuda()),
+            before=lambda metadata: None,
+        )
+    )
+    metadata = {
+        "bank": BANK_A,
+        "barrier": False,
+        "drop_banks": [],
+        "decode_sync_key": "bank-a-long-response",
+    }
+
+    first = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+    module.before_forward(runner, first)
+    assert module.after_forward_prepare(runner, first)
+    for _ in range(29):
+        step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+        module.before_forward(runner, step)
+        assert not module.after_forward_prepare(runner, step)
+    assert calls == ["sync"]
+
+    # The recovery fence is deferred until after connector preparation on
+    # launch 31, after the thirty slow-state reproductions captured by the
+    # live diagnostic.
+    step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+    module.before_forward(runner, step)
+    assert calls == ["sync"]
+    assert module.after_forward_prepare(runner, step)
+    assert calls == ["sync", "sync"]
+    for _ in range(29):
+        step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+        module.before_forward(runner, step)
+        assert not module.after_forward_prepare(runner, step)
+    assert calls == ["sync", "sync"]
+    # It is re-armed before launch 61, so a queue state that reaccumulates in
+    # a long answer is retired without waiting for a context-size boundary.
+    step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+    module.before_forward(runner, step)
+    assert calls == ["sync", "sync"]
+    assert module.after_forward_prepare(runner, step)
+    assert calls == ["sync", "sync", "sync"]

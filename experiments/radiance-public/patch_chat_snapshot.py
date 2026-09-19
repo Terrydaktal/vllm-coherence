@@ -75,6 +75,12 @@ FAIR_RUNNER_NEW = """        if not dummy_run:
             before_forward(self, scheduler_output)
             # Update the request states.
 """
+FAIR_PREPARE_OLD = """                self.kv_connector.pre_forward(scheduler_output)
+"""
+FAIR_PREPARE_NEW = """                self.kv_connector.pre_forward(scheduler_output)
+                from qwen_radiance_fair_scheduler import after_forward_prepare
+                after_forward_prepare(self, scheduler_output)
+"""
 TOOL_HANDOVER_SERVING = (
     (
         "        # Streaming response\n        tokenizer = self.renderer.tokenizer\n",
@@ -246,11 +252,15 @@ def add_fair_output(text: str) -> str:
 
 
 def add_fair_runner_hooks(text: str) -> str:
-    if FAIR_RUNNER_NEW in text:
-        return text
-    if text.count(FAIR_RUNNER_OLD) != 1:
-        raise ValueError("fair scheduler runner anchor changed")
-    return text.replace(FAIR_RUNNER_OLD, FAIR_RUNNER_NEW)
+    if FAIR_RUNNER_NEW not in text:
+        if text.count(FAIR_RUNNER_OLD) != 1:
+            raise ValueError("fair scheduler runner anchor changed")
+        text = text.replace(FAIR_RUNNER_OLD, FAIR_RUNNER_NEW)
+    if FAIR_PREPARE_NEW not in text:
+        if text.count(FAIR_PREPARE_OLD) < 1:
+            raise ValueError("fair scheduler cache-prepare anchor changed")
+        text = text.replace(FAIR_PREPARE_OLD, FAIR_PREPARE_NEW)
+    return text
 
 
 def transformed_sources(
