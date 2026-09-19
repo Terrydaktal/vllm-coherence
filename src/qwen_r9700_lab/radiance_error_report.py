@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import fcntl
 import hashlib
 import json
@@ -10,7 +11,6 @@ import re
 import selectors
 import stat
 import subprocess
-import sys
 import tempfile
 import time
 import urllib.request
@@ -153,6 +153,7 @@ def backend_state() -> dict:
     try:
         result = subprocess.run(
             ["podman", "inspect", "--format", "{{json .State}}", CONTAINER],
+            check=False,
             capture_output=True,
             text=True,
             timeout=2,
@@ -176,7 +177,8 @@ def backend_state() -> dict:
 
 def collect(now: int, directory: Path | None = None) -> dict:
     # A shared parsed result serves simultaneous failures, with no periodic probe.
-    directory = directory or Path(f"/dev/shm/qwen-radiance-backend-errors-{os.getuid()}")
+    container_key = hashlib.sha256(CONTAINER.encode()).hexdigest()[:16]
+    directory = directory or Path(f"/dev/shm/qwen-radiance-backend-errors-{os.getuid()}-{container_key}")
     directory.mkdir(mode=0o700, exist_ok=True)
     details = directory.lstat()
     if (
@@ -237,12 +239,23 @@ def report_for_window(collected: dict, since: int, until: int, *, latest: bool =
 
 
 def main() -> None:
+    global CONTAINER
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("since", type=int)
+    parser.add_argument("until", type=int)
+    parser.add_argument("--latest", action="store_true")
+    parser.add_argument("--metadata-only", action="store_true")
+    parser.add_argument("--container", default=CONTAINER)
+    options = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", options.container):
+        raise ValueError("invalid backend container")
+    CONTAINER = options.container
     now = int(time.time() * 1000)
-    since, until = int(sys.argv[1]), int(sys.argv[2])
+    since, until = options.since, options.until
     if since < now - 86400000 or until > now + 10000 or since > until:
         raise ValueError("invalid diagnostic time window")
-    report = report_for_window(collect(now), since, until, latest="--latest" in sys.argv[3:])
-    if "--metadata-only" in sys.argv[3:]:
+    report = report_for_window(collect(now), since, until, latest=options.latest)
+    if options.metadata_only:
         incident = report.pop("incident")
         report["incident_metadata"] = (
             None

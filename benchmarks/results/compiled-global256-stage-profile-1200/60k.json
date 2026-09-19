@@ -1,0 +1,61 @@
+{
+  "schema": "urn:coherence:compiled-global256-stage-profile-v1",
+  "scope": "Original compiled Global-256 25-stage profiler; bounded profiler windows merged from one long capture.",
+  "context": "60K",
+  "profile_rounds": 1191,
+  "included_rounds": 1132,
+  "trace_chunks": 10,
+  "stages_ms": {
+    "Embedding + first input normalization": 0.008918468197879862,
+    "GDN layout/copies and buffer initialization": 0.3269009796819821,
+    "GDN convolution": 0.21034892314487758,
+    "GDN recurrence and gates": 1.1771560653710242,
+    "GDN output gated normalization": 0.2006312067137808,
+    "Post-attention/GDN residual/normalization": 0.5093410344523014,
+    "MLP SiLU and gating": 0.17396618551236592,
+    "MLP down input FP8 quantization": 0.24997334893992848,
+    "GDN input projection": 3.9217940344522932,
+    "GDN output projection": 1.899273718197883,
+    "MLP gate/up projection": 11.31044470671379,
+    "MLP down projection": 5.34310641431094,
+    "Layer input residual/normalization": 0.49098961307421823,
+    "Attention Q/K normalization, RoPE and layout": 0.21188750000000264,
+    "Attention KV write": 0.0448963250883392,
+    "Attention decode": 5.782663310954064,
+    "Attention split-KV merge": 0.13153566166077713,
+    "Attention output gating": 0.031061909893993177,
+    "Attention output activation FP8 quantization": 0.04186895406360429,
+    "Attention input projection": 1.1620793904593634,
+    "Attention output projection": 0.519079046819788,
+    "Final normalization/layout": 0.00498272261484099,
+    "Other GPU bookkeeping": 0.5265207226148483,
+    "Drafter": 6.327643038869216,
+    "Target head (global256)": 0.9554903701413429
+  },
+  "all_gpu_ms": 41.562553651943446,
+  "round_timing": {
+    "boundary": "First target GPU kernel to the first target GPU kernel of the next round.",
+    "scope": "Profiled GPU cycle; gaps include launch/host/wait and possible profiler overhead. Individual causes are not attributed. Excludes request admission, prefill and Pi/transport latency.",
+    "equation": "elapsed_ms = kernel_sum_ms - gpu_overlap_ms + overhead_ms",
+    "mean": {
+      "elapsed_ms": 48.4650272316006,
+      "kernel_sum_ms": 41.56255365194346,
+      "gpu_busy_ms": 41.51131028265787,
+      "gpu_overlap_ms": 0.05124336928559644,
+      "overhead_ms": 6.953716948942729
+    }
+  },
+  "source_traces": [
+    "profile-trace-0001.json",
+    "profile-trace-0002.json",
+    "profile-trace-0003.json",
+    "profile-trace-0004.json",
+    "profile-trace-0005.json",
+    "profile-trace-0006.json",
+    "profile-trace-0007.json",
+    "profile-trace-0008.json",
+    "profile-trace-0009.json",
+    "profile-trace.json"
+  ],
+  "analyzer_sha256": "5663b2751d3e9f02c71012557de910d7f1e603e1b544acb7bbdb980a9da05fe6"
+}

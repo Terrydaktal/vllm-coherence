@@ -30,7 +30,7 @@ def event(choice, usage=None):
 
 
 def test_workload_order_is_eight_single_prompt_categories():
-    assert [name for name, _ in MODULE.TASKS] == [
+    assert [task.name for task in MODULE.TASKS] == [
         "Chat",
         "Code",
         "File edit",
@@ -41,6 +41,26 @@ def test_workload_order_is_eight_single_prompt_categories():
         "Summarisation",
     ]
     assert len(MODULE.TASKS) == 8
+    assert [task.output_kind for task in MODULE.TASKS] == [
+        "free_text",
+        "python_code",
+        "unified_diff",
+        "json_object",
+        "free_text",
+        "free_text",
+        "reasoning_prompt",
+        "free_text",
+    ]
+    assert [task.enable_thinking for task in MODULE.TASKS] == [
+        True,
+        False,
+        False,
+        False,
+        True,
+        True,
+        True,
+        True,
+    ]
 
 
 def test_sse_strips_prompt_ids_and_retains_exact_generated_ids():
@@ -59,6 +79,116 @@ def test_sse_strips_prompt_ids_and_retains_exact_generated_ids():
     assert result["token_ids"] == [7, 8]
     assert result["finish_reason"] == "stop"
     assert result["usage"]["completion_tokens"] == 2
+    assert result["content"] == "xy"
+    assert result["reasoning"] == ""
+    assert result["phase_token_counts_cover_output"] is False
+
+
+def test_sse_separates_reasoning_and_content_channels():
+    response = LinesResponse(
+        [
+            event(
+                {
+                    "index": 0,
+                    "token_ids": [7],
+                    "delta": {"reasoning_content": "check first"},
+                }
+            ),
+            event(
+                {
+                    "index": 0,
+                    "token_ids": [8],
+                    "delta": {"content": "answer"},
+                    "finish_reason": "stop",
+                }
+            ),
+            "data: [DONE]\n\n",
+        ]
+    )
+    result = MODULE._read_sse(response, [])
+    assert result["reasoning"] == "check first"
+    assert result["content"] == "answer"
+    assert result["unclassified"] == ""
+
+
+def test_sse_accepts_legacy_reasoning_text_and_message_fields():
+    response = LinesResponse(
+        [
+            event(
+                {
+                    "index": 0,
+                    "token_ids": [7],
+                    "delta": {"reasoning_text": "legacy thought"},
+                }
+            ),
+            event(
+                {
+                    "index": 0,
+                    "token_ids": [8],
+                    "message": {"reasoning": "final thought"},
+                    "finish_reason": "stop",
+                }
+            ),
+            "data: [DONE]\n\n",
+        ]
+    )
+    result = MODULE._read_sse(response, [])
+    assert result["reasoning"] == "legacy thoughtfinal thought"
+
+
+def test_content_only_validators_reject_the_wrong_phase_or_shape():
+    code = next(task for task in MODULE.TASKS if task.name == "Code")
+    valid_code = MODULE._validate_task_output(
+        code,
+        content="def first_repeat(items: list[str]) -> str:\n    return items[0]\n",
+        reasoning="",
+        unclassified="",
+    )
+    assert valid_code["passed"] is True
+    invalid_phase = MODULE._validate_task_output(
+        code,
+        content="def first_repeat(items):\n    return items[0]\n",
+        reasoning="drafting",
+        unclassified="",
+    )
+    assert invalid_phase["passed"] is False
+
+    json_task = next(task for task in MODULE.TASKS if task.name == "JSON")
+    valid_json = MODULE._validate_task_output(
+        json_task,
+        content='{"name":"x","count":3,"items":["a","b","c"]}',
+        reasoning="",
+        unclassified="",
+    )
+    assert valid_json["passed"] is True
+    invalid_json = MODULE._validate_task_output(
+        json_task,
+        content='Here is the JSON: {"name":"x","count":3,"items":["a","b","c"]}',
+        reasoning="",
+        unclassified="",
+    )
+    assert invalid_json["passed"] is False
+
+    diff_task = next(task for task in MODULE.TASKS if task.name == "File edit")
+    valid_diff = MODULE._validate_task_output(
+        diff_task,
+        content="--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-old\n+new\n",
+        reasoning="",
+        unclassified="",
+    )
+    assert valid_diff["passed"] is True
+
+    prose = next(task for task in MODULE.TASKS if task.name == "Prose")
+    assert MODULE._validate_task_output(
+        prose, content="rain", reasoning="", unclassified="token-id-only-frame"
+    )["passed"] is False
+
+    reasoning_task = next(task for task in MODULE.TASKS if task.name == "Reasoning")
+    reasoning_result = MODULE._validate_task_output(
+        reasoning_task, content="answer", reasoning="", unclassified=""
+    )
+    assert reasoning_result["passed"] is True
+    assert reasoning_result["reasoning_channel_observed"] is False
 
 
 def test_sse_rejects_a_missing_done_boundary():
@@ -82,6 +212,22 @@ def test_metric_summary_reports_mean_round_and_acceptance():
     assert result["mean_generation_round_ms"] == pytest.approx(20.0)
     assert result["acceptance_rate"] == pytest.approx(0.75)
     assert result["generated_tokens"] == 18
+
+
+def test_peak_rate_uses_only_complete_three_second_windows():
+    samples = [
+        (0.0, 0),
+        (0.5, 5),
+        (1.0, 8),
+        (2.0, 12),
+        (3.0, 20),
+        (4.0, 27),
+        (5.0, 40),
+    ]
+    assert MODULE._peak_rolling_tokens_per_second(samples) == pytest.approx(
+        28 / 3
+    )
+    assert MODULE._peak_rolling_tokens_per_second(samples[:3]) is None
 
 
 def test_published_result_has_both_chained_arms():

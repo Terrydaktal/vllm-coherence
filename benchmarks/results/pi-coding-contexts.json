@@ -1,0 +1,189 @@
+{
+  "schema": "urn:coherence:pi-coding-contexts:v1",
+  "status": "complete_with_validation_failure",
+  "started_at": "2026-09-20T03:39:23.417718+00:00",
+  "model": "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate",
+  "benchmark_sha256": "3f383be73dc8fa4cee3bae0c0a9800344eae5f2cd2c9c89ad1f82ba6eede843f",
+  "coding_prompt_sha256": "0a069a7743e94741cdb44f30002cb257b70d311b72b353622b86cb2512524e5c",
+  "tokenizer_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+  "runtime": null,
+  "privacy": "No prompt, response, decoded fixture text or token arrays are saved; only hashes and numeric measurements are retained.",
+  "sampling": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 20,
+    "seed": 0
+  },
+  "natural_stop_required": true,
+  "ignore_eos": false,
+  "coding_min_tokens": 5000,
+  "coding_max_tokens": 10000,
+  "model_context_tokens": 253792,
+  "contexts_requested": [
+    "0K",
+    "60K",
+    "200K"
+  ],
+  "fixture_sha256": {
+    "0K": null,
+    "60K": "ef0dac0ae0c14747f644ea6ec49d0c5c1061fb32563c239ae0cf21e70e3782a9",
+    "200K": "61325139dfe9ceba9188b7a19246264b76232af5c20d2663a8229aaa14ef84c5"
+  },
+  "prefix_token_ids_sha256": {
+    "0K": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "60K": "0cfca6ec44a6f36668e6b7c87244ff0bafbc56470b0493398e705350d28fc9b3",
+    "200K": "dadf842820a7e0dbf7192941fc6c27d3e5902f9100471964323d8f0cd84f70b9"
+  },
+  "contexts": {
+    "0K": {
+      "context": "0K",
+      "prefix_tokens": 0,
+      "stage": "coding",
+      "thinking_enabled": false,
+      "prompt_tokens": 203,
+      "suffix_tokens": 203,
+      "generated_tokens": 4734,
+      "elapsed_seconds": 41.4061937299557,
+      "cached_prompt_tokens": 0,
+      "uncached_prompt_tokens": 203,
+      "finish_reason": "stop",
+      "first_token_seconds": 0.5424945100676268,
+      "stream_seconds": 40.85562324500643,
+      "peak_3s_tokens_per_second": 162.38264142059234,
+      "peak_rate_window_seconds": 3.0,
+      "rate_sample_count": 1058,
+      "post_first_tokens_per_second": 115.84696607408847,
+      "generation_rounds": 1057,
+      "mean_generation_round_ms": 38.65368455058526,
+      "acceptance_rate": 0.4969590485200703,
+      "draft_tokens": 7399,
+      "accepted_tokens": 3677,
+      "inter_token_samples": 1057,
+      "output_sha256": "9dab0c8e7ef402a569c89fabd4924f1fb5f90eb69c4d0f99a7210b76f7f6a337",
+      "content_sha256": "9dab0c8e7ef402a569c89fabd4924f1fb5f90eb69c4d0f99a7210b76f7f6a337",
+      "reasoning_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reasoning_channel_observed": false,
+      "phase_token_counts": {
+        "content": 4732,
+        "reasoning": 0,
+        "unclassified": 1
+      },
+      "phase_token_counts_cover_output": false,
+      "phase_blocks": {
+        "reasoning_tokens": 0,
+        "prose_tokens": 748,
+        "file_edit_code_tokens": 3984,
+        "reasoning_blocks": 0,
+        "prose_blocks": 2,
+        "file_edit_code_blocks": 1,
+        "classification": "reasoning channel; non-fenced prose; all fenced file edits treated as code"
+      },
+      "minimum_output_tokens": 5000,
+      "minimum_output_met": false
+    },
+    "60K": {
+      "context": "60K",
+      "prefix_tokens": 60000,
+      "stage": "coding",
+      "thinking_enabled": false,
+      "prompt_tokens": 60208,
+      "suffix_tokens": 208,
+      "generated_tokens": 6994,
+      "elapsed_seconds": 98.79746061190963,
+      "cached_prompt_tokens": 0,
+      "uncached_prompt_tokens": 60208,
+      "finish_reason": "stop",
+      "first_token_seconds": 31.056933321990073,
+      "stream_seconds": 67.73030221299268,
+      "peak_3s_tokens_per_second": 138.55677110832872,
+      "peak_rate_window_seconds": 3.0,
+      "rate_sample_count": 1538,
+      "post_first_tokens_per_second": 103.24773065398392,
+      "generation_rounds": 1537,
+      "mean_generation_round_ms": 44.084825187393754,
+      "acceptance_rate": 0.5072032716795242,
+      "draft_tokens": 10759,
+      "accepted_tokens": 5457,
+      "inter_token_samples": 1537,
+      "output_sha256": "8312fc30c3eb6772829bc9f1922f249c73f496ba33960c74d3bd036f5791c245",
+      "content_sha256": "8312fc30c3eb6772829bc9f1922f249c73f496ba33960c74d3bd036f5791c245",
+      "reasoning_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reasoning_channel_observed": false,
+      "phase_token_counts": {
+        "content": 6987,
+        "reasoning": 0,
+        "unclassified": 1
+      },
+      "phase_token_counts_cover_output": false,
+      "phase_blocks": {
+        "reasoning_tokens": 0,
+        "prose_tokens": 605,
+        "file_edit_code_tokens": 6382,
+        "reasoning_blocks": 0,
+        "prose_blocks": 4,
+        "file_edit_code_blocks": 3,
+        "classification": "reasoning channel; non-fenced prose; all fenced file edits treated as code"
+      },
+      "minimum_output_tokens": 5000,
+      "minimum_output_met": true
+    },
+    "200K": {
+      "context": "200K",
+      "prefix_tokens": 200000,
+      "stage": "coding",
+      "thinking_enabled": false,
+      "prompt_tokens": 200208,
+      "suffix_tokens": 208,
+      "generated_tokens": 6149,
+      "elapsed_seconds": 229.75747340009548,
+      "cached_prompt_tokens": 0,
+      "uncached_prompt_tokens": 200208,
+      "finish_reason": "stop",
+      "first_token_seconds": 156.59307539998554,
+      "stream_seconds": 73.15686572203413,
+      "peak_3s_tokens_per_second": 119.68808176715235,
+      "peak_rate_window_seconds": 3.0,
+      "rate_sample_count": 1331,
+      "post_first_tokens_per_second": 84.03859213104974,
+      "generation_rounds": 1330,
+      "mean_generation_round_ms": 55.0697410759285,
+      "acceptance_rate": 0.5176154672395273,
+      "draft_tokens": 9310,
+      "accepted_tokens": 4819,
+      "inter_token_samples": 1330,
+      "output_sha256": "be136137170d9066a67d4a5f29dc823065f372bbc87b1ab33fce06257e4e5be5",
+      "content_sha256": "be136137170d9066a67d4a5f29dc823065f372bbc87b1ab33fce06257e4e5be5",
+      "reasoning_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reasoning_channel_observed": false,
+      "phase_token_counts": {
+        "content": 6149,
+        "reasoning": 0,
+        "unclassified": 1
+      },
+      "phase_token_counts_cover_output": false,
+      "phase_blocks": {
+        "reasoning_tokens": 0,
+        "prose_tokens": 778,
+        "file_edit_code_tokens": 5371,
+        "reasoning_blocks": 0,
+        "prose_blocks": 4,
+        "file_edit_code_blocks": 3,
+        "classification": "reasoning channel; non-fenced prose; all fenced file edits treated as code"
+      },
+      "minimum_output_tokens": 5000,
+      "minimum_output_met": true
+    }
+  },
+  "validation_failures": [
+    {
+      "context": "0K",
+      "failure": "natural completion produced 4,734 tokens; minimum is 5,000"
+    }
+  ],
+  "completed_at": "2026-09-20T03:45:33.515759+00:00",
+  "fixture_provenance": {
+    "0K": "empty prefix",
+    "60K": "operator-supplied private 60K token fixture; content not decoded",
+    "200K": "deterministic public synthetic 200K token prefix; no chat content"
+  }
+}

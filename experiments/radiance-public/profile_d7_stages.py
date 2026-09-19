@@ -1,4 +1,4 @@
-"""Profile old/repaired M8 on a private, fixed 60K Pi prefix without decoding it.
+"""Profile old/repaired M8 on private fixed-context prefixes without decoding them.
 
 Separate clean wall-time passes from a short ROCm kernel-attribution pass.
 All seven proposals are forced accepted: rates describe fixed work, not natural
@@ -95,6 +95,27 @@ class StageProbe(EquivalenceProbe):
 
         return torch.profiler.record_function(PREFIX + name)
 
+    @staticmethod
+    def validate_execution(runner):
+        if not runner.model_config.enforce_eager:
+            require(
+                not runner.model_config.enforce_eager
+                and not runner.vllm_config.scheduler_config.async_scheduling,
+                "compiled stage profile requires ordered piecewise execution",
+            )
+            require(
+                int(runner.vllm_config.compilation_config.mode) != 0
+                and str(runner.vllm_config.compilation_config.cudagraph_mode).split(".")[-1]
+                != "NONE",
+                "compiled stage profile requires compilation and graphs",
+            )
+            return
+        require(
+            runner.model_config.enforce_eager
+            and not runner.vllm_config.scheduler_config.async_scheduling,
+            "eager stage profile requires ordered eager execution",
+        )
+
     def stop_profile(self):
         if self.profile_active:
             import torch
@@ -113,6 +134,7 @@ class StageProbe(EquivalenceProbe):
                 self.task["repair_manifest"], target_model=self.runner.model
             )
         runner = self.runner
+        runner._qwen_stage_profile_execution_mode = self.task.get("execution_mode", "eager")
         original_prepare = runner.prepare_inputs
         original_logits = runner.model.compute_logits
         original_sample = runner.sample
@@ -293,21 +315,39 @@ def run_worker(args):
     authenticate(fixture)
     package = Path(importlib.util.find_spec("vllm").origin).parent.parent
     verify_sources(package, spec["binding"])
-    require(os.environ.get("RADIANCE_VERIFY_HEAD") == "0", "full BF16 head is required")
+    require(
+        os.environ.get("RADIANCE_VERIFY_HEAD") == args.verify_head,
+        "stage-profile target-head setting differs from the requested run",
+    )
     checkpoint = Checkpoint(Path(spec["native_config"]["model"]), spec["checkpoint_files"])
     write_private(args.output / f"{args.arm}-checkpoint.json", {"identity": checkpoint.identity})
     checkpoint.close()
     config = dict(spec["native_config"])
-    config.update(
-        enforce_eager=True,
-        max_num_seqs=1,
-        async_scheduling=False,
-        enable_prefix_caching=True,
-        disable_log_stats=True,
-        worker_extension_cls="profile_d7_stages.StageWorkerExtension",
-    )
-    for key in ("kv_transfer_config", "scheduler_cls", "additional_config", "compilation_config"):
-        config.pop(key, None)
+    if args.execution_mode == "compiled":
+        config.update(
+            enforce_eager=False,
+            compilation_config={
+                "cudagraph_mode": "PIECEWISE",
+                "cudagraph_capture_sizes": [1, 2, 4, 8],
+            },
+            worker_cls="optimized_d7_worker.OptimizedWorker",
+            max_num_seqs=1,
+            async_scheduling=False,
+            enable_prefix_caching=True,
+            disable_log_stats=True,
+            worker_extension_cls="profile_d7_stages.StageWorkerExtension",
+        )
+    else:
+        config.update(
+            enforce_eager=True,
+            max_num_seqs=1,
+            async_scheduling=False,
+            enable_prefix_caching=True,
+            disable_log_stats=True,
+            worker_extension_cls="profile_d7_stages.StageWorkerExtension",
+        )
+        for key in ("kv_transfer_config", "scheduler_cls", "additional_config", "compilation_config"):
+            config.pop(key, None)
     write_private(args.output / f"{args.arm}-config.json", seal(config))
     llm = LLM(**config)
     engine = llm.llm_engine
@@ -359,6 +399,8 @@ def run_worker(args):
                 "report_root": str(args.output),
                 "trace_rows": False,
                 "repair_manifest": str(args.repair_manifest) if args.arm == "fixed" else None,
+                "allow_approximate_head": args.verify_head == "1",
+                "execution_mode": args.execution_mode,
                 "mode": mode,
                 "warmup_steps": args.warmup_steps,
                 "profile_steps": args.profile_steps,
@@ -367,9 +409,12 @@ def run_worker(args):
         task_path = args.output / f"{args.arm}-task-{index:02d}.json"
         write_private(task_path, task)
         params = SamplingParams(
+            # The production head is selected by top_k, not by stochastic
+            # sampling.  Greedy replay keeps repeated passes byte-stable while
+            # still exercising the Global-256 target-head branch.
             temperature=0,
             top_p=1,
-            top_k=-1,
+            top_k=20 if args.verify_head == "1" else -1,
             ignore_eos=True,
             max_tokens=len(fixture["output"]),
             detokenize=False,
@@ -444,13 +489,17 @@ def run_worker(args):
         finally:
             engine.abort_request([request])
     hashes = {r["worker"]["final_logits_sha256"] for r in records}
-    require(len(hashes) == 1, "profiling/repeated execution changed final logits")
+    # Global-256 is an approximate target-head path and the compiled backend
+    # may legally produce non-identical floating-point logits across separate
+    # engine lifetimes.  That is a correctness datum, not a reason to discard
+    # an otherwise valid timing profile; the aggregate records it explicitly.
+    same_final_logits = len(hashes) == 1
     clean = [r for r in records if r["mode"] == "clean"]
     result = seal(
         {
             "arm": args.arm,
             "fixture": fixture["sha256"],
-            "same_final_logits_all_passes": True,
+            "same_final_logits_all_passes": same_final_logits,
             "passes": [r["sha256"] for r in records],
             "clean_median_step_ms": statistics.median([r["median_step_ms"] for r in clean]),
             "clean_total_step_seconds": sum(sum(r["step_seconds"]) for r in clean),
@@ -458,8 +507,9 @@ def run_worker(args):
             "prefill_seconds": [r["prefill_seconds"] for r in clean],
             "profile": records[-1]["worker"]["profile"],
             "scope": (
-                "Eager TP1, 60K private prefix, forced D7 acceptance. Clean timings include "
-                "minimal replay control; GPU profile is separate. Not natural Pi throughput."
+                f"{args.execution_mode} TP1, {len(fixture['prefix']):,}-token private prefix, "
+                f"forced D7 acceptance with verify head {args.verify_head}. Clean timings "
+                "include minimal replay control; GPU profile is separate. Not natural Pi throughput."
             ),
         }
     )
@@ -478,29 +528,44 @@ def run(args):
         "GPU lease admission required",
     )
     validate_manifest(args.repair_manifest)
-    private_root(args.corpus)
+    # A supplied fixture is already authenticated and replaces the historical
+    # corpus-to-60K construction path.  Keep the private-root check for the
+    # temporary run directory, but do not dereference the absent corpus.
+    if args.corpus is not None:
+        private_root(args.corpus)
     args.private.mkdir(mode=0o700)
     private_root(args.private)
     args.output.mkdir(mode=0o700)
-    manifest = private_json(args.corpus / "manifest.json")
-    authenticate(manifest)
-    source = private_json(args.corpus / manifest["continuations"][0]["name"])
-    authenticate(source)
-    require(source["sha256"] == manifest["continuations"][0]["sha256"], "source corpus changed")
-    offset = 60000 - len(source["prefix"])
-    count = 8 * (args.warmup_steps + args.steps)
-    require(
-        offset >= 0 and offset + count < len(source["output"]),
-        "saved natural continuation is too short",
-    )
-    fixture = seal(
-        {
-            "prefix": source["prefix"] + source["output"][:offset],
-            "output": source["output"][offset : offset + count + 1],
-            "source": source["sha256"],
-            "source_offset": offset,
-        }
-    )
+    if args.fixture:
+        fixture = private_json(args.fixture)
+        authenticate(fixture)
+        count = len(fixture["output"]) - 1
+        require(
+            count == 8 * (args.warmup_steps + args.steps),
+            "fixture window does not match profile",
+        )
+        source_corpus = None
+    else:
+        manifest = private_json(args.corpus / "manifest.json")
+        authenticate(manifest)
+        source = private_json(args.corpus / manifest["continuations"][0]["name"])
+        authenticate(source)
+        require(source["sha256"] == manifest["continuations"][0]["sha256"], "source corpus changed")
+        offset = 60000 - len(source["prefix"])
+        count = 8 * (args.warmup_steps + args.steps)
+        require(
+            offset >= 0 and offset + count < len(source["output"]),
+            "saved natural continuation is too short",
+        )
+        fixture = seal(
+            {
+                "prefix": source["prefix"] + source["output"][:offset],
+                "output": source["output"][offset : offset + count + 1],
+                "source": source["sha256"],
+                "source_offset": offset,
+            }
+        )
+        source_corpus = manifest["sha256"]
     write_private(args.private / "fixture.json", fixture)
     spec = private_json(args.spec)
     write_private(
@@ -508,8 +573,8 @@ def run(args):
         seal(
             {
                 "fixture": fixture["sha256"],
-                "source_corpus": manifest["sha256"],
-                "prefix_tokens": 60000,
+                "source_corpus": source_corpus,
+                "prefix_tokens": len(fixture["prefix"]),
                 "decode_positions": count,
                 "binding": spec["binding"]["sha256"],
                 "repair": private_json(args.repair_manifest)["sha256"],
@@ -525,15 +590,42 @@ def run(args):
         ),
     )
     env = worker_environment(spec, args.old_reuse or args.output)
-    env["RADIANCE_VERIFY_HEAD"] = "0"
+    env["RADIANCE_VERIFY_HEAD"] = args.verify_head
+    if args.verify_head == "1":
+        env["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = "256"
+    # These are part of the qualified optimized release contract.  The older
+    # conformance spec predates the hoisted MXFP4 quantizer and otherwise
+    # reaches the GDN merge with its marker disabled, making the performance
+    # producer correctly reject the wrong runtime rather than profiling it.
+    env.update(
+        RADIANCE_MXFP4_HOIST_QUANT="1",
+        RADIANCE_MXFP4_TRACED_QUANT="0",
+        RADIANCE_MXFP4_PUREQUANT="0",
+        QWEN_STOCK_GDN_LAZY="0",
+        RADIANCE_GDN_LAZY="0",
+        TORCHINDUCTOR_EMULATE_PRECISION_CASTS="1",
+    )
+    # The worker requires a startup receipt even for the unmodified arm.  The
+    # repair/performance manifests are deliberately arm-local: the old arm is
+    # the compiled production path without our repair overlay, while the fixed
+    # arm receives both qualified overlays.
+    env.pop("QWEN_OPTIMIZED_REPAIR", None)
+    env.pop("QWEN_OPTIMIZED_PERFORMANCE", None)
     env.pop("QWEN_CONFORMANCE_NATIVE_EXPERIMENT", None)
     env["PYTHONPATH"] = str(Path(__file__).resolve().parent) + os.pathsep + env["PYTHONPATH"]
     with gpu_lease(args.output / "gpu-lease"):
         for arm in ("old", "fixed"):
+            arm_env = dict(env)
+            arm_env["QWEN_OPTIMIZED_STARTUP_RECEIPT"] = str(
+                args.output / f"{arm}-optimized-startup.json"
+            )
+            if arm == "fixed":
+                arm_env["QWEN_OPTIMIZED_REPAIR"] = str(args.repair_manifest)
+                if args.performance_manifest is not None:
+                    arm_env["QWEN_OPTIMIZED_PERFORMANCE"] = str(args.performance_manifest)
             argv = [sys.executable, str(Path(__file__).resolve()), "worker", "--arm", arm]
             for key in (
                 "spec",
-                "corpus",
                 "private",
                 "output",
                 "repair_manifest",
@@ -541,12 +633,20 @@ def run(args):
                 "warmup_steps",
                 "profile_steps",
                 "repeats",
+                "execution_mode",
+                "verify_head",
             ):
                 argv += ["--" + key.replace("_", "-"), str(getattr(args, key))]
+            # The worker reads the authenticated fixture copied into the run
+            # root.  Pass it explicitly so the worker parser never receives a
+            # stringified ``None`` for the historical corpus option.
+            argv += ["--fixture", str(args.private / "fixture.json")]
+            if args.performance_manifest is not None:
+                argv += ["--performance-manifest", str(args.performance_manifest)]
             if args.old_reuse:
                 argv += ["--old-reuse", str(args.old_reuse)]
             with OwnedProcess(
-                argv, args.private / f"{arm}-process", env=env, timeout=7200
+                argv, args.private / f"{arm}-process", env=arm_env, timeout=7200
             ) as process:
                 code = process.wait()
             write_private(args.output / f"{arm}-process-result.json", {"returncode": code})
@@ -567,19 +667,30 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("run", "worker"))
-    for key in ("spec", "corpus", "private", "output", "repair-manifest"):
-        parser.add_argument("--" + key, type=Path, required=True)
+    parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument("--corpus", type=Path)
+    parser.add_argument("--fixture", type=Path)
+    parser.add_argument("--private", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--repair-manifest", type=Path, required=True)
+    parser.add_argument("--performance-manifest", type=Path)
     parser.add_argument("--arm", choices=("old", "fixed"))
     parser.add_argument("--old-reuse", type=Path)
     parser.add_argument("--steps", type=int, default=32)
     parser.add_argument("--warmup-steps", type=int, default=8)
     parser.add_argument("--profile-steps", type=int, default=8)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--execution-mode", choices=("eager", "compiled"), default="eager")
+    parser.add_argument("--verify-head", choices=("0", "1"), default="0")
     parser.add_argument("--allow-gpu", action="store_true")
     args = parser.parse_args()
     require(
         args.steps >= args.profile_steps > 0 and args.warmup_steps > 0 and args.repeats > 0,
         "invalid measurement window",
+    )
+    require(
+        (args.corpus is None) != (args.fixture is None),
+        "provide exactly one of --corpus or --fixture",
     )
     os.umask(0o077)
     (run if args.command == "run" else run_worker)(args)

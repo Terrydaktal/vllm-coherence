@@ -44,7 +44,13 @@ def phase(layer, region, name):
         if region != "mix" or layer % 4 != 3:
             raise ValueError("attention gate outside attention boundary")
         return "Attention output gating"
-    return semantic_phase(layer, region, name)
+    resolved = semantic_phase(layer, region, name)
+    # Keep the original 25-row profiler schema. New traces expose the GDN
+    # output FP8 producer as a separate kernel, but the original profiler
+    # attributed it to the combined GDN output gated-normalization stage.
+    if resolved == "GDN output activation FP8 quantization":
+        return "GDN output gated normalization"
+    return resolved
 
 
 def measure_round_windows(events, starts, selected):
@@ -132,12 +138,16 @@ def measure_round_windows(events, starts, selected):
     }
 
 
-def analyze(raw: bytes, head: str):
+def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
     trace = json.loads(raw)
     groups, graph_launches = launch_groups(trace["traceEvents"])
     targets = sorted((k, v) for k, v in groups.items() if k[0] == "target_body")
-    if len(targets) != 8 or any(graph_launches[k] != 65 for k, _ in targets):
-        raise ValueError("expected eight compiled rounds, 65 target graphs each")
+    if expected_rounds is not None and len(targets) != expected_rounds:
+        raise ValueError(
+            f"expected {expected_rounds} compiled rounds, found {len(targets)}"
+        )
+    if not targets or any(graph_launches[k] != 65 for k, _ in targets):
+        raise ValueError("compiled rounds must contain 65 target graphs each")
     inventories = [
         tuple(sorted(Counter(e["name"] for e in v).items())) for _, v in targets
     ]
@@ -146,9 +156,28 @@ def analyze(raw: bytes, head: str):
     # The last target has no following start. Keep it out of *both* the kernel
     # averages and the elapsed averages; never invent its closing boundary.
     selected = [i for i in complete if i + 1 < len(targets)]
-    if len(selected) < 6:
-        raise ValueError("insufficient complete target inventories")
     starts = [min(e["ts"] for e in events) for _, events in targets]
+    # A profiler restart can leave one asynchronous GPU event straddling the
+    # first/last boundary of a chunk.  Exclude only that contaminated round;
+    # complete rounds in the same trace remain valid for stage attribution.
+    work = [
+        (float(event["ts"]), float(event["dur"]))
+        for event in trace["traceEvents"]
+        if event.get("ph") == "X"
+        and event.get("cat") in {"kernel", "gpu_memcpy", "gpu_memset"}
+    ]
+    selected = [
+        index
+        for index in selected
+        if not any(
+            begin < starts[index]
+            or begin + duration > starts[index + 1]
+            for begin, duration in work
+            if begin < starts[index + 1] and begin + duration > starts[index]
+        )
+    ]
+    if len(selected) < min(6, len(targets) - 1):
+        raise ValueError("insufficient complete target inventories")
     timing = measure_round_windows(trace["traceEvents"], starts, selected)
     records, assigned = [], set()
 
@@ -221,7 +250,7 @@ def analyze(raw: bytes, head: str):
         for i, key in enumerate(sorted(k for k in groups if k[0] == scope))
     }
     for scope in ("drafter", "target_vocabulary_head"):
-        if sum(k[0] == scope for k in groups) != 8:
+        if sum(k[0] == scope for k in groups) != len(targets):
             raise ValueError("incomplete head/drafter scopes")
     for key, events in groups.items():
         scope, _ = key
@@ -263,8 +292,8 @@ def analyze(raw: bytes, head: str):
     return {
         "schema": "urn:coherence:compiled-stage-timings:v2",
         "trace_sha256": hashlib.sha256(raw).hexdigest(),
-        "scope": "Saved compiled 60K-input Pi decode trace. GPU dispatch sums and elapsed GPU cycles from the same bounded rounds; profiled, not uninstrumented serving latency. No new GPU run.",
-        "profile_rounds": 8,
+        "scope": "Saved compiled Global-256 Pi decode trace. GPU dispatch sums and elapsed GPU cycles from the same bounded rounds; profiled, not uninstrumented serving latency.",
+        "profile_rounds": len(targets),
         "included_rounds": selected,
         "selection": "Complete modal kernel inventory and an observed next-target start; no duration-based exclusions. Work before the first target is excluded.",
         "graph_launches_per_round": [graph_launches[k] for k, _ in targets],
@@ -284,7 +313,7 @@ def analyze(raw: bytes, head: str):
             }
             for (scope, stage, name), values in sorted(kernels.items())
         ],
-        "omitted_inventory_rounds": [i for i in range(8) if i not in complete],
+        "omitted_inventory_rounds": [i for i in range(len(targets)) if i not in complete],
         "omitted_unbounded_rounds": [i for i in complete if i + 1 == len(targets)],
     }
 
@@ -293,12 +322,13 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--trace", required=True, type=Path)
     p.add_argument("--head", required=True, choices=["global256", "full-bf16"])
+    p.add_argument("--profile-rounds", type=int)
     p.add_argument("--output", required=True, type=Path)
     a = p.parse_args()
     raw = a.trace.read_bytes()
     if a.trace.suffix == ".gz":
         raw = gzip.decompress(raw)
-    value = analyze(raw, a.head)
+    value = analyze(raw, a.head, a.profile_rounds)
     value["trace_file_sha256"] = hashlib.sha256(a.trace.read_bytes()).hexdigest()
     value["analyzer_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     a.output.parent.mkdir(parents=True, exist_ok=True)

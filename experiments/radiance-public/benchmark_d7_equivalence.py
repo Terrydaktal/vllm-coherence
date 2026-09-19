@@ -216,7 +216,11 @@ class EquivalenceProbe:
             if p.name == "site-packages"
         )
         verify_sources(package, task["binding"])
-        require(os.environ.get("RADIANCE_VERIFY_HEAD") == "0", "approximate target head is enabled")
+        if not task.get("allow_approximate_head", False):
+            require(
+                os.environ.get("RADIANCE_VERIFY_HEAD") == "0",
+                "approximate target head is enabled",
+            )
         self.validate_execution(runner)
         require(runner.vllm_config.kv_transfer_config is None, "snapshot reuse is not admitted")
         require(runner.cache_config.mamba_cache_mode == "align", "hybrid state convention changed")

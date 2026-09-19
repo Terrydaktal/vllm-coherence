@@ -1,0 +1,66 @@
+{
+  "schema": "urn:coherence:pi-code-thinking-unbounded:v1",
+  "status": "complete",
+  "model": "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate",
+  "fixture_sha256": "ef0dac0ae0c14747f644ea6ec49d0c5c1061fb32563c239ae0cf21e70e3782a9",
+  "tokenizer_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+  "benchmark_sha256": "f05d9f723d83eddb2ec4c2645645cd0bfe33eb113d33e3d7675a1e0c862e8dce",
+  "privacy": "No prompt, response, decoded fixture text or token arrays are saved; only hashes, counts and timings are retained.",
+  "sampling": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 20,
+    "seed": 0
+  },
+  "thinking_enabled": true,
+  "prompt_tokens": 60248,
+  "prefix_tokens": 60000,
+  "max_tokens": 193544,
+  "max_tokens_basis": "remaining model context capacity",
+  "generated_tokens": 45338,
+  "finish_reason": "stop",
+  "elapsed_seconds": 548.956700603012,
+  "first_token_seconds": 31.293359213974327,
+  "stream_seconds": 517.5382677610032,
+  "post_first_tokens_per_second": 87.60125158693853,
+  "peak_3s_tokens_per_second": 163.7336827465333,
+  "peak_rate_window_seconds": 3.0,
+  "rate_sample_count": 11361,
+  "phase_tokens": {
+    "visible_content": 45337,
+    "reasoning": 0
+  },
+  "phase_stream_seconds": {
+    "reasoning": null,
+    "visible_content": 517.5138141510542
+  },
+  "phase_tokens_per_second": {
+    "reasoning": null,
+    "visible_content": 87.60539092926867
+  },
+  "classified_content": {
+    "reasoning_tokens": 0,
+    "prose_tokens": 33693,
+    "file_edit_code_tokens": 11671,
+    "reasoning_blocks": 0,
+    "prose_blocks": 183,
+    "file_edit_code_blocks": 182,
+    "classification": "reasoning channel; non-fenced prose; all fenced file edits treated as code"
+  },
+  "output_sha256": "bf859453126ab03352befe7c7ea75e07073bd179014ebec2b7f353d3016f12b8",
+  "content_sha256": "bf859453126ab03352befe7c7ea75e07073bd179014ebec2b7f353d3016f12b8",
+  "reasoning_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "reasoning_channel_observed": false,
+  "phase_rate_note": "Reasoning and visible-content rates use each channel span. Code/prose rates below use the shared visible-content span because markdown category boundaries are classified after streaming.",
+  "code_tokens_per_second": 22.55205500001091,
+  "prose_tokens_per_second": 65.10550844960737,
+  "backend_metrics": {
+    "generation_rounds": 11360,
+    "generated_tokens": 45338,
+    "mean_generation_round_ms": 45.560228810473475,
+    "acceptance_rate": 0.4272887323943662,
+    "draft_tokens": 79520,
+    "accepted_tokens": 33978,
+    "inter_token_samples": 11360
+  }
+}

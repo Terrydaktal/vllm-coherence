@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from analyze_release_timings import analyze, measure_round_windows, phase
-from render_current_tables import update
+from render_current_tables import current_stage_profile, update
 
 
 def test_readme_is_current_only_and_matches_committed_measurements():
@@ -38,6 +38,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "GPU execution subtotal" not in readme
     from collections import Counter
 
+    profile_commit = current_stage_profile(data)["measurement_commit"]
     expected_links = Counter({data["measurement_commit"]: 1})
     parent = None
     for row in data["stages"]:
@@ -51,32 +52,106 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         )
         expected_links[data["stage_provenance"][provenance_stage]["commit"]] += 1
     expected_links[data["measurement_commit"]] += 1  # overhead evidence
-    for commit, count in expected_links.items():
+    for commit in expected_links:
         commit_url = f"https://github.com/Terrydaktal/vllm-coherence/commit/{commit}"
-        assert readme.count(commit_url) == count
+        assert readme.count(commit_url) >= 1
+    profile_url = (
+        f"https://github.com/Terrydaktal/vllm-coherence/commit/{profile_commit}"
+    )
+    assert readme.count(profile_url) >= 1
     assert "The timing-table header and each correctness result link to the commit" in readme
     assert (
-        f"Current ms per retained profile cycle (run [`{data['measurement_commit'][:7]}`]"
+        f"Current timing per retained compiled profile cycle (0K / 60K / 200K; milliseconds unless explicitly marked; evidence run [`{profile_commit[:7]}`]"
         in readme
     )
+    compiled_table = readme.split("## Compiled backend stages\n\n", 1)[1].split(
+        "\n\nThe table restores", 1
+    )[0]
+    row_names = [
+        line.split("|")[1].strip()
+        for line in compiled_table.splitlines()
+        if line.startswith("| **") or line.startswith("| ↳")
+    ]
+    assert row_names == [
+        "**1. Drafter**",
+        "**2. Embedding + first input normalization + FP8 production**",
+        "**3. Layer input residual/normalization + FP8 production**",
+        "↳ GDN input activation FP8 quantization",
+        "↳ Attention input activation FP8 quantization",
+        "**4. GDN input projection**",
+        "**5. GDN layout/copies and buffer initialization**",
+        "**6. GDN convolution**",
+        "**7. GDN recurrence and gates**",
+        "**8. GDN output gated normalization + FP8 production**",
+        "↳ GDN output activation FP8 quantization",
+        "**9. GDN output projection**",
+        "**10. Attention input projection**",
+        "**11. Attention Q/K normalization, RoPE and layout**",
+        "**12. Attention KV write**",
+        "**13. Attention decode**",
+        "**14. Attention split-KV merge**",
+        "**15. Attention output gating**",
+        "**16. Attention output activation FP8 quantization**",
+        "**17. Attention output projection**",
+        "**18. Post-attention/GDN residual/normalization + FP8 production**",
+        "↳ MLP gate/up input FP8 quantization",
+        "**19. MLP gate/up projection**",
+        "**20. MLP SiLU and gating**",
+        "**21. MLP down input FP8 quantization**",
+        "**22. MLP down projection**",
+        "**23. Final normalization/layout**",
+        "**24. Global-256 target head**",
+        "**25. Other GPU bookkeeping**",
+        "**26. Estimated runtime overhead**",
+    ]
+    assert "| **3. Input preparation and cache metadata** |" not in readme
+    assert "| **12. RoPE and layout** |" not in readme
+    assert "| **22. Target sampling and acceptance bookkeeping** |" not in readme
+    assert "| **24. Forced replay control** |" not in readme
+    assert "the ↳ rows are detail-only inclusion records and add no timing" in readme
+    assert "zero rows have no separately emitted scope" not in readme
     assert "Last relevant code commit / change" in readme
-    assert "fused rows inherit their parent stage's provenance" in readme
-    assert "— (derived measurement; no model-stage implementation)" in readme
-    assert "8 observed profile rounds" in readme
-    assert "6 complete retained rounds" in readme
-    assert "60,000-input-token Pi prefix" in readme
-    assert "no natural-completion output-token total" in readme
+    assert "The provenance column links the last relevant implementation commit" in readme
+    assert "2,183 / 1,191 / 1,191 requested rounds" in readme
+    assert "2,062 / 1,132 / 1,133 complete cycles" in readme
+    assert "0K / 60K / 200K" in readme
+    assert "separate uninstrumented full-round mean minus the sum of the 25 named instrumented-stage means" in readme
+    assert "profile-cycle wall time minus the 25 named stage kernel totals" not in readme
+    assert data["stage_profile_2k"]["stage26_benchmark"]["status"] == "pending"
+    for context in data["stage_profile_2k"]["contexts"].values():
+        assert "profile_residual_ms" not in context
+        assert "profile_stage26_ms" not in context
     assert "Calls in 6 retained cycles" in readme
-    assert readme.index("## Global-256 target-head benchmark") < readme.index(
-        "## 60K live-chat cache-state diagnosis"
-    )
-    assert readme.count("## Global-256 target-head benchmark") == 1
-    assert "**≈2.8**" in readme
-    assert "estimated from separate runs" in readme
+    assert readme.index("## Global-256 target-head") < readme.index("## Benchmarks")
+    assert readme.count("## Global-256 target-head") == 1
+    assert readme.count("## Benchmarks") == 1
+    assert "## Global-256 target-head benchmark" not in readme
+    assert "## 60K coding, prose, JSON, thinking and compaction benchmark" not in readme
+    assert "**≈2.8**" not in readme
+    assert "estimated from separate runs" not in readme
     assert "## Task workload performance" not in readme
-    assert "Status: pending fix" in readme
-    assert "stream/queue state" in readme
-    assert "Synchronize the current stream" in readme
+    assert "60K live-chat cache-state diagnosis" not in readme
+    assert "Coding task" in readme
+    assert "Prose about code measurement" in readme
+    assert "JSON task" in readme
+    assert "Thinking/prose task" in readme
+    assert "Compaction checkpoint" in readme
+    assert "## Coding task by context length" not in readme
+    assert "This is the same natural-stop coding task run independently" in readme
+    assert "benchmark_pi_coding_contexts.py" in readme
+    assert "| 0K |" in readme and "| 60K |" in readme and "| 200K |" in readme
+    assert "Peak 3s" in readme
+    assert "completion marker valid, required headings missing" in readme
+    assert "phase_token_counts_cover_output=false" in readme
+    assert "peak_3s_tokens_per_second" in readme
+    assert "### Known remaining symptoms and likely causes" in readme
+    assert readme.index("### Known remaining symptoms and likely causes") > readme.index(
+        "The earlier retained round log gives this historical partial latency histogram"
+    )
+    assert "#### Changes since `cbbf495`" not in readme
+    assert "### Remaining symptoms and likely causes" not in readme
+    assert "Status: pending fix" not in readme
+    assert "HIP/ROCr stream or queue dependency" in readme
     assert "After all 64 layers: finish target verification" not in readme
     assert "Draft proposals" not in readme
     assert "Total elapsed GPU cycle" not in readme

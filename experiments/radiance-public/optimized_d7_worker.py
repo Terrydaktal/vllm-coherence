@@ -47,6 +47,7 @@ class GraphObservation:
         self.profiler = None
         self.profile_requested = profile
         self.profile_active = False
+        self.profile_files = []
         original_replay = torch.cuda.CUDAGraph.replay
 
         def replay(graph):
@@ -108,13 +109,23 @@ class GraphObservation:
         torch.cuda.synchronize()
         self.profiler.stop()
         self.profile_active = False
-        self.profiler.export_chrome_trace(str(self.root / "profile-trace.json"))
+        name = "profile-trace.json" if not self.profile_files else (
+            f"profile-trace-{len(self.profile_files):04d}.json"
+        )
+        path = self.root / name
+        self.profiler.export_chrome_trace(str(path))
+        self.profile_files.append(str(path))
+        self.profiler = None
 
     def close(self):
         self.hooks.close()
         if self.profile_active:
             self.stop_profile()
-        return {"counts": dict(self.counts), "head_shapes": dict(self.head_shapes)}
+        return {
+            "counts": dict(self.counts),
+            "head_shapes": dict(self.head_shapes),
+            "profile_files": list(self.profile_files),
+        }
 
 
 class OptimizedWorker(Worker):

@@ -126,7 +126,13 @@ def worker(args):
             else (256 if mode == "warmup" else args.tokens)
         )
         if mode == "profile":
-            limit = 256
+            # Leave enough decode steps for the requested profile window and
+            # its warm-up.  The old profiler used a fixed 256-token request,
+            # which silently truncated any longer capture.
+            limit = max(
+                args.tokens,
+                args.profile_warmup_rounds + args.profile_rounds + 16,
+            )
         params = SamplingParams(
             temperature=0 if mode == "correctness" else 1,
             top_p=1 if mode == "correctness" else 0.95,
@@ -142,6 +148,7 @@ def worker(args):
         first_count = 0
         timings = []
         profile_started = profile_stopped = False
+        profile_next_stop = None
         started = time.perf_counter()
         last_progress = started
         with reject_dead_native_rpcs(engine.engine_core):
@@ -174,12 +181,32 @@ def worker(args):
                         first_at, first_count = time.perf_counter(), received
                     elif first_at is not None:
                         timings.append({"seconds": elapsed, "tokens": received - before})
-                    if mode == "profile" and len(timings) == 8:
+                    if mode == "profile" and len(timings) == args.profile_warmup_rounds:
                         llm.collective_rpc("qwen_optimized_profile", args=(True,))
                         profile_started = True
-                    if mode == "profile" and len(timings) == 16:
+                        profile_next_stop = args.profile_warmup_rounds + min(
+                            args.profile_chunk_rounds, args.profile_rounds
+                        )
+                    if (
+                        mode == "profile"
+                        and profile_started
+                        and not profile_stopped
+                        and len(timings) >= profile_next_stop
+                    ):
                         llm.collective_rpc("qwen_optimized_profile", args=(False,))
-                        profile_stopped = True
+                        if len(timings) >= args.profile_warmup_rounds + args.profile_rounds:
+                            profile_stopped = True
+                        else:
+                            llm.collective_rpc("qwen_optimized_profile", args=(True,))
+                            profile_next_stop = min(
+                                args.profile_warmup_rounds + args.profile_rounds,
+                                len(timings) + args.profile_chunk_rounds,
+                            )
+                    # The profile is the measurement.  Do not spend additional
+                    # GPU time generating an unrelated long natural completion
+                    # after the requested capture has been exported.
+                    if mode == "profile" and profile_stopped:
+                        break
                     if time.perf_counter() - last_progress > 10:
                         print(
                             json.dumps(
@@ -204,7 +231,7 @@ def worker(args):
                     private / "output.json",
                     seal({"token_ids": list(last.token_ids), "finish_reason": last.finish_reason}),
                 )
-                trimmed = timings[8:]
+                trimmed = timings[args.profile_warmup_rounds:]
                 record = seal(
                     {
                         "lane": args.lane,
@@ -305,6 +332,10 @@ def run(args):
                 "m1": args.m1,
                 "isolated_capture": args.isolated_capture,
                 "execution_mode": args.execution_mode,
+                "profile_rounds": args.profile_rounds,
+                "profile_warmup_rounds": args.profile_warmup_rounds,
+                "profile_chunk_rounds": args.profile_chunk_rounds,
+                "verify_head": args.verify_head,
                 "performance_manifest": str(args.performance_manifest)
                 if args.performance_manifest
                 else None,
@@ -317,7 +348,27 @@ def run(args):
             (args.output / lane).mkdir(mode=0o700)
             (args.private / lane).mkdir(mode=0o700)
             env = worker_environment(spec, args.output / lane)
-            env["RADIANCE_VERIFY_HEAD"] = "1" if lane == "old-fast" else "0"
+            env["RADIANCE_VERIFY_HEAD"] = (
+                str(args.verify_head)
+                if args.verify_head is not None
+                else ("1" if lane == "old-fast" else "0")
+            )
+            if env["RADIANCE_VERIFY_HEAD"] == "1":
+                env["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = "256"
+            else:
+                env.pop("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", None)
+            # The pinned conformance spec predates the qualified release
+            # environment.  Match the original compiled profiler's explicit
+            # release flags so the tuple-aware GDN merge is installed before
+            # the performance producer and graph capture.
+            env.update(
+                RADIANCE_MXFP4_HOIST_QUANT="1",
+                RADIANCE_MXFP4_TRACED_QUANT="0",
+                RADIANCE_MXFP4_PUREQUANT="0",
+                QWEN_STOCK_GDN_LAZY="0",
+                RADIANCE_GDN_LAZY="0",
+                TORCHINDUCTOR_EMULATE_PRECISION_CASTS="1",
+            )
             env["PYTHONPATH"] = (
                 str(Path(__file__).resolve().parent) + os.pathsep + env["PYTHONPATH"]
             )
@@ -339,6 +390,9 @@ def run(args):
                 "tokens",
                 "repeats",
                 "execution_mode",
+                "profile_rounds",
+                "profile_warmup_rounds",
+                "profile_chunk_rounds",
             ):
                 argv += ["--" + key.replace("_", "-"), str(getattr(args, key))]
             for flag in ("profile", "correctness", "with_correctness", "m1", "isolated_capture"):
@@ -368,6 +422,15 @@ def main():
     )
     parser.add_argument("--tokens", type=int, default=1024)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--profile-rounds", type=int, default=8)
+    parser.add_argument("--profile-warmup-rounds", type=int, default=8)
+    parser.add_argument("--profile-chunk-rounds", type=int, default=128)
+    parser.add_argument(
+        "--verify-head",
+        choices=("0", "1"),
+        default=None,
+        help="Override the lane default for the production target verify head.",
+    )
     parser.add_argument(
         "--execution-mode",
         choices=("compiled", "compiled-no-graphs", "eager"),
@@ -387,6 +450,9 @@ def main():
     require(
         args.tokens >= 128
         and args.repeats >= 0
+        and args.profile_rounds >= 1
+        and args.profile_warmup_rounds >= 0
+        and args.profile_chunk_rounds >= 1
         and (args.repeats > 0 or args.profile or args.correctness),
         "invalid timing budget",
     )

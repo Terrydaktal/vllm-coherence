@@ -25,12 +25,17 @@ export async function fetchBackendError({ since, until, latest = false, host = p
     return report;
   }
   if (!host || !/^[a-zA-Z0-9][a-zA-Z0-9_.@-]*$/.test(host)) throw new Error("backend host unavailable");
+  // An already-open legacy Pi has no container variable when extensions reload.
+  const container = process.env.QWEN_RADIANCE_CONTAINER || "qwen38-27b-uncensored-mxfp4-public-snapshot-candidate";
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(container)) throw new Error("invalid backend container");
   const source = await readFile(new URL("../../src/qwen_r9700_lab/radiance_error_report.py", import.meta.url), "utf8");
+  const probeArgs = ["-", String(Math.floor(since)), String(Math.floor(until)),
+    "--container", container, ...(latest ? ["--latest"] : [])];
   const args = ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=3", host, "/usr/bin/python3", "-",
-    String(Math.floor(since)), String(Math.floor(until)), ...(latest ? ["--latest"] : [])];
+    ...probeArgs.slice(1)];
   return await new Promise((resolve, reject) => {
     const local = host === "local";
-    const child = execFile(local ? "python3" : "ssh", local ? ["-", String(Math.floor(since)), String(Math.floor(until)), ...(latest ? ["--latest"] : [])] : args, { timeout: 8000, maxBuffer: 256 * 1024, encoding: "utf8" }, (error, stdout) => {
+    const child = execFile(local ? "python3" : "ssh", local ? probeArgs : args, { timeout: 8000, maxBuffer: 256 * 1024, encoding: "utf8" }, (error, stdout) => {
       if (error) return reject(new Error("backend diagnostic lookup failed"));
       try {
         const report = JSON.parse(stdout);
