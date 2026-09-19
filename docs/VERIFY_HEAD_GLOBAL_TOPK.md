@@ -61,14 +61,14 @@ head has 248,320 vocabulary rows and 5,120 hidden dimensions; its BF16 weights
 occupy about 2.37 GiB. The pinned model/drafter, fixed D7 speculation, graph
 configuration and cache format remain constant across methods.
 
-| Target path | Median M8 head time | Top-1 match | Complete reference top-20 retained | Measured tok/s | Estimated tok/s |
-|---|---:|---:|---:|---:|---:|
-| Full BF16 fallback | 4.122 ms | 119,988/119,988 (100.0000%) | 119,988/119,988 (100.0000%) | 63.9 | 63.9 |
-| Original block-8/64 + rerank-80 | 1.085 ms | 119,956/119,988 (99.9733%) | 98,452/119,988 (82.0515%) | 67.2 | 67.2 |
-| Global INT2 top-128 + BF16 rerank | 1.114 ms | 119,986/119,988 (99.9983%) | 118,254/119,988 (98.5549%) | 67.5 | 67.2 |
-| Global INT2 top-256 + BF16 rerank (default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) | 66.8 | 67.1 |
+| Target path | Median M8 head time | Top-1 match | Complete reference top-20 retained |
+|---|---:|---:|---:|
+| Full BF16 fallback | 4.122 ms | 119,988/119,988 (100.0000%) | 119,988/119,988 (100.0000%) |
+| Original block-8/64 + rerank-80 | 1.085 ms | 119,956/119,988 (99.9733%) | 98,452/119,988 (82.0515%) |
+| Global INT2 top-128 + BF16 rerank | 1.114 ms | 119,986/119,988 (99.9983%) | 118,254/119,988 (98.5549%) |
+| Global INT2 top-256 + BF16 rerank (default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) |
 
-### Generated output and throughput
+### Generated output and raw timing
 
 Each method completed **115 natural responses**, with temperature 1, top-p 0.95
 and top-k 20. The four methods receive the same prompt/seed in each comparison,
@@ -85,9 +85,8 @@ EOS enabled; no response was length-truncated and no tool call was executed.
 
 Across the 460 measured requests: **241,696 output tokens**, 4,427.450 seconds of
 request time and 3,637.917 seconds after first output. These totals exclude the
-separate capture pass, warmup and isolated head replay. Throughput divides the
-sum of output tokens after each request's first chunk by the summed time after
-first output; it is not the arithmetic mean of request rates.
+separate capture pass, warmup and isolated head replay. The raw totals are retained
+to identify the historical capture; no Global-256 throughput is derived from them.
 
 The complete first four-method comparison is uniformly excluded because it
 exposed first-use compilation. A separate extension warmed all four methods
@@ -104,12 +103,11 @@ global-256 outputs match the corresponding full-head output on **100/105/102 of
 115** pairs. These whole-output counts are separate from head recall and are
 not a quality score.
 
-Global-256 measured 4.5% faster than full BF16. The estimate holds full-head
-output and observed verification counts fixed, replacing only measured M8 head
-cost. It predicts about 67.1–67.2 tok/s for all fast methods. The measured
-end-to-end differences also include changed natural continuations, speculative
-acceptance and execution variation; they cannot be attributed solely to head
-cost. No TP2 or certified-adaptive timing is claimed.
+The old end-to-end throughput comparison is intentionally not carried forward:
+those rates predate the final M1/M8, eager/compiled and performance-backport
+changes. The retained output totals and wall times are historical context only;
+current complete-backend throughput is reported in the main README's uninstrumented
+performance section. No current Global-256 tok/s claim is made here.
 
 ### Identical-hidden-state accuracy and head latency
 

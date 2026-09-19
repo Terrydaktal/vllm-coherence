@@ -1,0 +1,86 @@
+{
+  "status": "SAMPLE_CHECKED",
+  "upstream_commit": "3f542b7cbfce3fa0d01dc55665af4c77a7093ce8",
+  "baseline_binary_sha256": "8c895e15556970efeb325b3930807dbb41d9149058e29c9d9cbe497ecd7dcd51",
+  "candidate": {
+    "command": [
+      "/opt/rocm/bin/hipcc",
+      "-O3",
+      "-std=c++17",
+      "-fPIC",
+      "-shared",
+      "--offload-arch=gfx1201",
+      "-Wno-unused-result",
+      "-I/usr/include/python3.12",
+      "-I/qualification/repo-021/.venv/lib/python3.12/site-packages/pybind11/include",
+      "/qualification/preflight/mxfp4-dispatch-v1/build-v2/candidate/radiance_mxfp4_fp8.hip",
+      "-o",
+      "/qualification/preflight/mxfp4-dispatch-v1/build-v2/candidate/radiance_mxfp4_fp8.so"
+    ],
+    "source_sha256": "0507fbdfef3c348266b011069bd55222f5cd3a8adeea4e1f272c154dd45a5f79",
+    "binary_sha256": "1abc8fd9250f51b8980e005399c428ab13baa747277c1d927dc7106186d8c7c0",
+    "python_sha256": "e1c6333cce1d880e9bd0993dd63634c84b02557e06dd299aa137f6bd2f1dc9a9"
+  },
+  "timings": [
+    {
+      "M": 1,
+      "N": 34816,
+      "K": 5120,
+      "method": "GPU events, graph replay, 9 alternating batches of 20",
+      "median_ms": {
+        "original": 0.4325840950012207,
+        "control": 0.42966012954711913,
+        "candidate": 0.15103005170822142
+      }
+    },
+    {
+      "M": 8,
+      "N": 34816,
+      "K": 5120,
+      "method": "GPU events, graph replay, 9 alternating batches of 20",
+      "median_ms": {
+        "original": 0.4243641376495361,
+        "control": 0.41844816207885743,
+        "candidate": 0.15591399669647216
+      }
+    }
+  ],
+  "checks": 55,
+  "candidate_vs_original_elements": 115841664,
+  "mismatches": 0,
+  "rows_per_layer": 320,
+  "layers": [
+    0,
+    31,
+    63
+  ],
+  "M": [
+    1,
+    8,
+    64,
+    65
+  ],
+  "N": [
+    32768,
+    32784,
+    34816,
+    36864,
+    36880
+  ],
+  "K": 5120,
+  "graph_replay": true,
+  "reference": "frozen shipped native kernel, plus independently rebuilt unchanged control",
+  "inputs": "deterministic synthetic BF16 activations; actual checkpoint weights",
+  "forced_split4_keeps_old_fallback_above_32768": true,
+  "scratch_delta_bytes": 4194304,
+  "scope": "native GEMM stage, no whole-model replay or end-to-end tokens/s measurement",
+  "runtime_bundle": "/qualification/preflight/mxfp4-dispatch-v1/qualified-runtime/performance.json",
+  "adapter_smoke": {
+    "build_sha256": "bae3f2c325442850c9194eabf650f5f17b2098d6c85e650626aa1c288f216136",
+    "binary_sha256": "1abc8fd9250f51b8980e005399c428ab13baa747277c1d927dc7106186d8c7c0",
+    "scratch_bytes": 37748736,
+    "scope": "TP1 decode width; exact sampled native/graph outputs, not a universal proof",
+    "status": "SAMPLE_CHECKED",
+    "native_adapter_graph_elements": 278528
+  }
+}

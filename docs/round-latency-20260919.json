@@ -1,0 +1,260 @@
+{
+  "schema": "coherence-round-latency-diagnostic-v1",
+  "date_utc": "2026-09-19",
+  "status": "Reproduced; narrowed to HIP stream/queue state reset by stream synchronization. Specific internal fence/dependency not established.",
+  "permanent_fix_deployed": false,
+  "scope": {
+    "private_prefix_tokens": 60000,
+    "prompt_tokens": 60077,
+    "generated_tokens_per_request": 530,
+    "generation_rounds_per_request": 196,
+    "sampling": {
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20,
+      "seed": 0
+    },
+    "acceptance_rate": 0.2434402332361516,
+    "all_recorded_requests": 29,
+    "responses_with_equal_text_and_token_hashes": 23,
+    "private_chat_text_read": false,
+    "compiled_graph_mode": "PIECEWISE",
+    "snapshot_data_abi": "36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5",
+    "release_manifest_sha256": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2"
+  },
+  "controls": [
+    {
+      "label": "control-noop",
+      "operation": "noop",
+      "before_interval_ms": 53.95296055237473,
+      "after_interval_ms": 52.89122427295131,
+      "intervention_ms": 0.0005399924702942371,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "fc85e5b5c581983ee0b39e8a22d05a18517e2cf50fa8d935136fcb70cd66cfc3"
+    },
+    {
+      "label": "control-host-pause",
+      "operation": "host_pause",
+      "before_interval_ms": 53.09668368989088,
+      "after_interval_ms": 53.03051128179174,
+      "intervention_ms": 50.063183007296175,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "8e8eac946555d975e6a535c0bdece8188913623e56f55f8a67f69cc8184cdc0c"
+    },
+    {
+      "label": "generation-event-control",
+      "operation": "timing_events",
+      "before_interval_ms": 52.234732102329744,
+      "after_interval_ms": 53.14697585417889,
+      "intervention_ms": 6.042892986442894,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "0bfd87935e14339aa05c8d547c6973b3e9efe497f28cdfb79fc1bb0a7d1e6b52"
+    },
+    {
+      "label": "control-stream-sync",
+      "operation": "stream_sync",
+      "before_interval_ms": 52.516274792463356,
+      "after_interval_ms": 43.88039196333425,
+      "intervention_ms": 6.383767991792411,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "61b86e3410a39ce0ab963951e41776b3f3f6ce9d6b3b776de707448a7187f32d"
+    },
+    {
+      "label": "generation-stream-control",
+      "operation": "stream_sync",
+      "before_interval_ms": 52.325569861969946,
+      "after_interval_ms": 44.10666789044626,
+      "intervention_ms": 6.393890012986958,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "c1e8d3600d7c9aec2b199eb262cb6fb018324bf933a11ce394484900cdc97295"
+    },
+    {
+      "label": "control-device-sync",
+      "operation": "device_sync",
+      "before_interval_ms": 52.189018001282136,
+      "after_interval_ms": 43.81780022734099,
+      "intervention_ms": 6.41229102620855,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "f7f8b10fdd10d435a0aa473c6289f7dee2fb51b455f7cf5c7c01c266b3451378"
+    },
+    {
+      "label": "original-rocr-control",
+      "operation": "stream_sync",
+      "before_interval_ms": 53.18495672364752,
+      "after_interval_ms": 43.64326114512303,
+      "intervention_ms": 6.383364030625671,
+      "before_intervals": 29,
+      "after_intervals": 110,
+      "source_sha256": "68b94e8a41862bace7b0464a3e74dfb4fbf25abd825bcb9c42dbabe4662cf85e"
+    }
+  ],
+  "telemetry": [
+    {
+      "label": "baseline",
+      "run": 0,
+      "samples": 29,
+      "round_ms": 43.587839683786285,
+      "gfx_mhz_mean": 3265.5172413793102,
+      "junction_c_max": 106.0,
+      "power_w_mean": 299.55172413793105,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "baseline",
+      "run": 1,
+      "samples": 29,
+      "round_ms": 43.672175061109726,
+      "gfx_mhz_mean": 3245.0689655172414,
+      "junction_c_max": 110.0,
+      "power_w_mean": 297.9655172413793,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "baseline",
+      "run": 2,
+      "samples": 29,
+      "round_ms": 43.752604428493434,
+      "gfx_mhz_mean": 3211.4137931034484,
+      "junction_c_max": 110.0,
+      "power_w_mean": 294.2068965517241,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "fresh-cache",
+      "run": 0,
+      "samples": 37,
+      "round_ms": 53.511625357157534,
+      "gfx_mhz_mean": 3288.5945945945946,
+      "junction_c_max": 107.0,
+      "power_w_mean": 283.5945945945946,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "fresh-cache",
+      "run": 1,
+      "samples": 37,
+      "round_ms": 53.71067654080119,
+      "gfx_mhz_mean": 3276.4864864864867,
+      "junction_c_max": 108.0,
+      "power_w_mean": 281.02702702702703,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "bank-return",
+      "run": 0,
+      "samples": 30,
+      "round_ms": 43.62490137757458,
+      "gfx_mhz_mean": 3254.866666666667,
+      "junction_c_max": 107.0,
+      "power_w_mean": 299.3,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 4096,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "bank-return",
+      "run": 1,
+      "samples": 29,
+      "round_ms": 43.70202975494939,
+      "gfx_mhz_mean": 3235.1724137931033,
+      "junction_c_max": 111.0,
+      "power_w_mean": 298.55172413793105,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "bank-b-return",
+      "run": 0,
+      "samples": 30,
+      "round_ms": 43.644694178436445,
+      "gfx_mhz_mean": 3254.8,
+      "junction_c_max": 108.0,
+      "power_w_mean": 299.03333333333336,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 0,
+      "process_write_bytes_delta": 0
+    },
+    {
+      "label": "slow-python",
+      "run": 0,
+      "samples": 38,
+      "round_ms": 53.85810925508849,
+      "gfx_mhz_mean": 3220.9736842105262,
+      "junction_c_max": 110.0,
+      "power_w_mean": 261.57894736842104,
+      "vram_mib_max": 32023.6953125,
+      "gtt_mib_max": 24.9296875,
+      "process_read_bytes_delta": 4096,
+      "process_write_bytes_delta": 0
+    }
+  ],
+  "profiles": [
+    {
+      "label": "raw-slow",
+      "complete_cycles": 6,
+      "kernels_per_cycle": 1326,
+      "mean_profiled_cycle_ms": 51.71733968098958,
+      "mean_profiled_kernel_sum_ms": 43.260932333333336,
+      "mean_target_gemm_ms": 24.27211833333333,
+      "norm_to_gemm_gap_us_mean": 7.4021571287964,
+      "norm_to_gemm_gap_samples": 889,
+      "source_sha256": "da47682e823274f6380c85ff4ce48265a7513470286410d1fc8ea9d9d91a80af"
+    },
+    {
+      "label": "raw-fast",
+      "complete_cycles": 6,
+      "kernels_per_cycle": 1326,
+      "mean_profiled_cycle_ms": 47.37166227213542,
+      "mean_profiled_kernel_sum_ms": 41.7805445,
+      "mean_target_gemm_ms": 24.213874,
+      "norm_to_gemm_gap_us_mean": 3.8850695127952757,
+      "norm_to_gemm_gap_samples": 1016,
+      "source_sha256": "b72a0765bb2d34d92d0ceb4eebac36921646c49818960aed68a60c28238904ed"
+    }
+  ],
+  "production_restore": {
+    "container": "0a53ef38d4e47c379bd15f0e9afb95a8f8d2c52951baf71890dad9d8b0f32a08",
+    "image": "4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf",
+    "original_model_arguments_equal": true,
+    "original_runtime_flags_equal": true,
+    "runtime_flags_sha256": "9dde5dc7182f6311c1cb7d85da6e150d7f5d4fb279c4a20a772143d38d472ea6",
+    "temporary_worker_extension": false,
+    "developer_rpc_enabled": false,
+    "native_attach_enabled": false,
+    "cpu_backoff_library_restored": true
+  },
+  "restored_health_http_status": 200,
+  "restored_developer_rpc_http_status": 404,
+  "measurement_limits": [
+    "Control intervals are streamed per-round arrival intervals, excluding intervention, not whole-request wall time.",
+    "Profiled absolute times include profiler overhead and cannot replace release timings.",
+    "29 requests include failed profiler-attachment and CPU-sampling attempts; not all are clean throughput benchmarks.",
+    "Fresh generation, disk restore and cold prefill each reproduced the slow state; CPU sleep/backoff removal did not prevent it.",
+    "GPU synchronization is a demonstrated recovery operation, not yet a qualified permanent fix."
+  ]
+}
