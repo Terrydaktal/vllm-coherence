@@ -121,7 +121,7 @@ def current_stage_profile(data):
     # measurement.  The table link therefore identifies the reproducible
     # evidence bundle rather than pretending the capture ran after a later
     # source change.
-    evidence_commit = "40486363738eae43373fa350464ce1d5d0fd069b"
+    evidence_commit = "b8d681001cc726089c387eeddfc7c78e2e74ac3c"
     grouped = copy.deepcopy(base)
     grouped["measurement_commit"] = evidence_commit
     grouped["scope"] = (
@@ -135,7 +135,8 @@ def current_stage_profile(data):
         "Row 26 carries the measured profile-cycle residual previously shown as "
         "Cycle overhead after stage sum: elapsed cycle boundary minus the 25 "
         "named stage sums. A separately controlled uninstrumented full-round "
-        "measurement remains distinct and is not claimed here. These are "
+        "measurement remains distinct and is not claimed here. The total row "
+        "sums the displayed rows 1–26 and excludes detail-only ↳ rows. These are "
         "diagnostic timings, not production throughput."
     )
     grouped["context_order"] = list(raw["context_order"])
@@ -431,6 +432,23 @@ def render_stage_profile_table(data):
     lines.append(
         f"| **26. {profile['stage26']['label']}** | {timing} | {evidence} | {provenance} | {profile['stage26']['definition']}. |"
     )
+    total = [
+        sum(
+            [
+                float(f"{contexts[key]['stages'][stage]:.3f}")
+                for stage in order
+            ]
+            + [float(f"{residual[index]:.3f}")]
+        )
+        for index, key in enumerate(context_order)
+    ]
+    total_timing = " / ".join(f"{value:.3f}" for value in total)
+    lines.append(
+        f"| **Total profile cycle (stages 1–26)** | **{total_timing}** | "
+        f"Sum of displayed rows 1–26; detail-only ↳ rows are excluded · {commit} | "
+        f"{commit}: profile-cycle evidence run | "
+        "Adds no work; sums the 25 named stage timings and row 26's measured residual. |"
+    )
     return lines
 
 
@@ -507,8 +525,8 @@ def render_coding_json_compaction_benchmark():
         ),
         "",
         (
-            "[`279e0fe`](https://github.com/Terrydaktal/vllm-coherence/commit/"
-            "279e0fe81ef63718914ab439530ffca5312fa3d8) added the missing HIP event-gap and "
+            "[`b8d6810`](https://github.com/Terrydaktal/vllm-coherence/commit/"
+            "b8d681001cc726089c387eeddfc7c78e2e74ac3c) carries the missing HIP event-gap and "
             "round-latency records and made backend failures retain a content-safe, expandable "
             "diagnostic report. These changes fix the previous lack of evidence and misleading "
             "Pi status; they do not make the underlying asynchronous queue issue mathematically "
@@ -873,7 +891,8 @@ def render(data):
         *render_stage_profile_table(data),
         "",
         (
-            "The table restores the historical grouped 26-row layout. Each timing "
+            "The table restores the historical grouped 26 measured-row layout and "
+            "adds a total row. Each timing "
             "cell is ordered **0K / 60K / 200K** and comes from the retained "
             "compiled profiler cycles in the evidence run named in the header. "
             "The original profiler recorded 2,183 / 1,191 / 1,191 requested "

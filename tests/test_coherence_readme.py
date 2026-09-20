@@ -103,6 +103,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         "**24. Global-256 target head**",
         "**25. Other GPU bookkeeping**",
         "**26. Estimated runtime overhead**",
+        "**Total profile cycle (stages 1–26)**",
     ]
     assert "| **3. Input preparation and cache metadata** |" not in readme
     assert "| **12. RoPE and layout** |" not in readme
