@@ -29,11 +29,11 @@
   "integration_sha256": {
     "experiments/radiance-public/bootstrap_radiance_release.py": "52de5de07f97ba70e3d880d3913ae491b9299934944bca2e2663cab4123ba63d",
     "experiments/radiance-public/optimized_pi_release.py": "c97a35d1d613a7bbfd7a17b49d956cab6480580ce9c44a58657a5d7f3998d6f8",
-    "experiments/radiance-public/runtime-radiance-1.0.16.json": "29efe5d350dcac1aa3ca405184844766465156c9e9406b497e2281d9f002dc87",
+    "experiments/radiance-public/runtime-radiance-1.0.16.json": "c4bdec893401a66d49704b38f45a0f9c449b79b5314e17950f1e0e7b85c61226",
     "experiments/radiance-public/patch_streaming_snapshot.py": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd",
     "experiments/radiance-public/patch_chat_snapshot.py": "edabd083e5bbeebf76a02c45cee040e58b8af6a61990308e2dd0a90ef3026ce6",
     "experiments/radiance-public/radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
-    "experiments/radiance-public/radiance_fair_scheduler.py": "e3bc6e2d35b674a85f95989820045c2cca2508bcc73826ff32a52bdab16ffbd4",
+    "experiments/radiance-public/radiance_fair_scheduler.py": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6",
     "experiments/radiance-public/radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
     "experiments/radiance-public/patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
     "experiments/radiance-public/patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
+import errno
 import importlib.util
 import json
+import mmap
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -344,6 +347,7 @@ def constructed_worker(tmp_path, monkeypatch):
         return StorageTensor([0] * amount)
 
     monkeypatch.setattr(Path, "read_text", read_text)
+    monkeypatch.setattr(module, "protect_pinned_host_mapping", lambda tensor: [(tensor.data_ptr(), tensor.data_ptr() + tensor.numel())])
     monkeypatch.setitem(
         sys.modules,
         "torch",
@@ -364,7 +368,82 @@ def constructed_worker(tmp_path, monkeypatch):
     def create():
         return module.WorkerBanks(runner, {"max_banks": 2, "status_path": str(tmp_path / "fair")})
 
-    return SimpleNamespace(create=create, memory=memory, allocations=allocations, gpu=gpu)
+    return SimpleNamespace(create=create, memory=memory, allocations=allocations, gpu=gpu, module=module)
+
+
+def test_pinned_mapping_policy_covers_allocator_slack_and_preserves_data(monkeypatch):
+    module = load_module(monkeypatch)
+    # The tensor exposes only the middle page; protect the backing allocation's
+    # prefix and unused tail too, as either can invalidate an HSA registration.
+    with mmap.mmap(-1, 8 * mmap.PAGESIZE) as region:
+        region[:] = b"Q" * len(region)
+        region.madvise(mmap.MADV_HUGEPAGE)
+        base = ctypes.addressof(ctypes.c_char.from_buffer(region))
+        tensor = SimpleNamespace(data_ptr=lambda: base + mmap.PAGESIZE,
+                                 numel=lambda: mmap.PAGESIZE, element_size=lambda: 1)
+        mappings = module.protect_pinned_host_mapping(tensor)
+        assert any(begin <= base and end >= base + len(region) for begin, end in mappings)
+        assert region[:] == b"Q" * len(region)
+        protected = 0
+        current = None
+        for line in Path("/proc/self/smaps").read_text().splitlines():
+            fields = line.split()
+            if fields and "-" in fields[0]:
+                current = tuple(int(part, 16) for part in fields[0].split("-"))
+            elif line.startswith("VmFlags:") and current is not None:
+                begin, end = current
+                if end > base and begin < base + len(region):
+                    assert "nh" in fields and "hg" not in fields
+                    protected += min(end, base + len(region)) - max(begin, base)
+        assert protected == len(region)
+
+
+@pytest.mark.parametrize("maps", [
+    "1000-3000 rw-p 00000000 00:00 0 [heap]\n",
+    "1000-3000 rw-s 00000000 00:01 1 /tmp/unrelated-file\n",
+    "1000-1800 r--p 00000000 00:00 0\n",
+    "1000-1800 rw-p 00000000 00:00 0\n2000-3000 rw-p 00000000 00:00 0\n",
+    "",
+])
+def test_pinned_mapping_policy_rejects_unknown_owners_or_holes(monkeypatch, maps):
+    module = load_module(monkeypatch)
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: maps)
+    tensor = SimpleNamespace(data_ptr=lambda: 0x1000, numel=lambda: 0x2000, element_size=lambda: 1)
+    with pytest.raises(RuntimeError, match="mapping"):
+        module.protect_pinned_host_mapping(tensor)
+
+
+def test_pinned_mapping_policy_surfaces_madvise_failure(monkeypatch):
+    module = load_module(monkeypatch)
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: "1000-3000 rw-s 00000000 00:01 1 /dev/zero (deleted)\n")
+    def fail(*args):
+        ctypes.set_errno(errno.EINVAL)
+        return -1
+    monkeypatch.setattr(module.ctypes, "CDLL", lambda *args, **kwargs: SimpleNamespace(madvise=fail))
+    tensor = SimpleNamespace(data_ptr=lambda: 0x1000, numel=lambda: 0x1000, element_size=lambda: 1)
+    with pytest.raises(OSError, match="huge-page promotion") as error:
+        module.protect_pinned_host_mapping(tensor)
+    assert error.value.errno == errno.EINVAL
+
+
+def test_failed_pinned_page_policy_does_not_publish_partial_banks(constructed_worker, monkeypatch):
+    fixture = constructed_worker
+    worker = fixture.create()
+    calls = []
+    def protect(tensor):
+        calls.append(tensor)
+        if len(calls) == 2:
+            raise OSError(errno.ENOMEM, "page policy failed")
+        return [(0x1000, 0x2000)]
+    monkeypatch.setattr(fixture.module, "protect_pinned_host_mapping", protect)
+    with pytest.raises(OSError, match="page policy failed"):
+        worker._ensure_buffers()
+    assert worker.stage is None and worker.free_buffers == []
+    assert worker.host_page_mappings == set()
+    assert worker.allocated_bytes == worker.allocation_events == 0
+    # A later allocation attempt can recover after a transient policy failure.
+    assert worker._ensure_buffers()[0] == 64
+    assert worker.host_page_mappings == {(0x1000, 0x2000)}
 
 
 @pytest.mark.parametrize("available", [0, 8 * 1024**3 - 1024])
@@ -601,6 +680,7 @@ def test_same_chat_successor_discards_gpu_bank_without_allocating_ram(tmp_path, 
 
 def test_worker_times_pinned_allocation_separately_from_gpu_transfer(tmp_path, monkeypatch):
     module = load_module(monkeypatch)
+    monkeypatch.setattr(module, "protect_pinned_host_mapping", lambda tensor: [(0x1000, 0x2000)])
     worker = module.WorkerBanks.__new__(module.WorkerBanks)
     original_read_text = Path.read_text
     monkeypatch.setattr(

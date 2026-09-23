@@ -1,28 +1,28 @@
 # Stage timing and runtime gaps
 
-The current stage table uses the September 23 compiled Global-256 serving capture. The separate coding histogram retains every timed round (3,736) and counts its three untimed first-token events separately. Neither includes traced rounds as ordinary Pi latency.
+The current stage table uses the September 23 compiled Global-256 serving capture with the pinned-RAM huge-page promotion repair. The separate coding histogram retains every timed round (3,736) and counts its three untimed first-token events separately. Neither includes traced rounds as ordinary Pi latency.
 
 ## Matched native measurements
 
-All values below use the same retained decode indices in each arm. A full natural warmup precedes control → trace → control. Output-token hashes, accepted-token sequences and scheduled shapes agree across the three arms. Sampling is temperature 1.0, top-p 0.95, top-k 40, seed 0; EOS remains enabled.
+All values below use the same retained decode indices in each arm. A full natural warmup precedes control → trace → control. Output-token hashes, accepted-token sequences and scheduled shapes agree across the three arms. Sampling is temperature 1.0, top-p 0.95, top-k 40, seed 0; EOS remains enabled. The existing manual GPU mode, −50 mV offset and 300 W cap were retained.
 
 | Starting context | Retained M8 cycles per arm | Clean before, ms | Traced, ms | Clean after, ms | GPU occupied union, ms | Estimated remainder, ms | Before/after remainder range, ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 0K | 917 | 38.803 | 47.599 | 38.802 | 36.699 | 2.103 | 2.103–2.104 |
-| 60K | 1,131 | 42.893 | 48.219 | 42.573 | 41.013 | 1.719 | 1.559–1.879 |
-| 200K | 779 | 50.382 | 55.787 | 50.355 | 47.850 | 2.519 | 2.506–2.533 |
+| 0K | 917 | 38.915 | 47.556 | 38.764 | 36.833 | 2.006 | 1.931–2.082 |
+| 60K | 1,130 | 43.113 | 47.980 | 42.538 | 40.230 | 2.596 | 2.308–2.883 |
+| 200K | 774 | 50.318 | 55.683 | 50.282 | 47.827 | 2.473 | 2.456–2.491 |
 
-Tracing added 8.796 / 5.487 / 5.418 ms per retained round. That observed slowdown is separate from the GPU kernel durations and is not included in the clean-control residual. The before/after range measures repeat variability; it is **not** a confidence interval or a bound on every possible observer effect.
+Tracing added 8.717 / 5.154 / 5.383 ms per retained round. That observed slowdown is separate from the GPU kernel durations and is not included in the clean-control residual. The before/after range measures repeat variability; it is **not** a confidence interval or a bound on every possible observer effect.
 
-The whole 60K controls averaged 45.216 and 42.649 ms, with almost identical 42.635 and 42.654 ms medians. The earlier control included 403 ms and 4,439 ms stalls. All native records are preserved. Its 4,439 ms stall occurred beyond the predeclared trace window, so it is not silently substituted into the matched stage cohort.
+The whole 60K controls averaged 42.978 and 42.628 ms. The earlier control retained one 660.499 ms pause; the later control's maximum was 46.526 ms. The separate first warmup contained a 6,072.966 ms pause. These isolated outliers remain unresolved and are preserved in the native records and [huge-page intervention evidence](../benchmarks/results/huge-page-promotion-20260923.json); removing the repeating huge-page stalls does not establish that every startup/cache/driver delay is gone.
 
-GPU activity is clipped at the worker-entry boundaries also timed by the controls. Mean trace-marker/host-clock boundary differences were below 0.00004 ms. CPU annotations, Python hooks and trace export are never added to a stage. GPU overlap is counted once: its mean was 0.002 / 0.002 / 0.016 ms. Controls retain ordinary production telemetry and one host boundary clock/record; they contain no tensor reads, forced sampling, stage events or additional synchronization.
+GPU activity is clipped at the worker-entry boundaries also timed by the controls. Mean trace-marker/host-clock boundary differences were at most 0.000014 ms, with a largest individual difference of 0.029411 ms. CPU annotations, Python hooks and trace export are never added to a stage. GPU overlap is counted once: its mean was 0.003 / 0.003 / 0.011 ms. Controls retain ordinary production telemetry and one host boundary clock/record; they contain no tensor reads, forced sampling, stage events or additional synchronization.
 
 The capture requested 1,152 traced rounds per context in bounded chunks. Natural completions contained 4,981 / 8,213 / 4,233 output tokens. First/last chunk boundaries, partial-width steps and structurally incomplete trace inventories are excluded from M8 stage attribution, independently of duration. Both valid short-context attention variants are included: a page crossing can execute two decode/merge pairs. Every omitted inventory is recorded in the aggregate; no missing operation is assigned zero time.
 
 Indirect profiler effects on clock speed, kernel execution and scheduling remain an uncertainty. Kernel activity durations exclude direct CPU profiling cost, but cannot establish zero disturbance for each kernel. [PyTorch documents profiler overhead](https://docs.pytorch.org/tutorials/beginner/profiler.html).
 
-[Profile and identities](../benchmarks/results/compiled-global256-stage-profile-20260923.json) · [clean controls](../benchmarks/results/stage26-control-20260923.json) · [residual calculation](../benchmarks/results/matched-stage-residual-20260923.json). Raw traces and private token fixtures remain outside the public repository. The normal backend was restored after capture.
+[Profile and identities](../benchmarks/results/compiled-global256-stage-profile-20260923.json) · [clean controls](../benchmarks/results/stage26-control-20260923.json) · [residual calculation](../benchmarks/results/matched-stage-residual-20260923.json). Runtime source hashes and observed pinned-memory page policies accompany the numerical build identity. Raw traces and private token fixtures remain outside the public repository. The normal backend was restored after capture.
 
 ## Superseded measurement
 

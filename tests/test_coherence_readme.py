@@ -1,5 +1,6 @@
 """Keep the published current tables accountable to their retained evidence."""
 
+import hashlib
 import json
 import math
 import sys
@@ -253,6 +254,34 @@ def test_current_context_results_account_for_every_round():
         assert len(values) == histogram["measured_round_count"] == capture["measured_round_count"]
         assert sum(row["count"] for row in histogram["bins"]) == len(values)
         assert math.isclose(histogram["mean_ms"], sum(values) / len(values), abs_tol=1e-8)
+
+
+def test_hugepage_repair_evidence_matches_the_full_rerun():
+    directory = ROOT / "benchmarks/results"
+    evidence = json.loads((directory / "huge-page-promotion-20260923.json").read_text())
+    for name, expected in evidence["rerun"]["source_sha256"].items():
+        assert hashlib.sha256((directory / name).read_bytes()).hexdigest() == expected
+    results = json.loads((directory / "pi-coding-contexts.json").read_text())
+    for context, row in evidence["rerun"]["contexts"].items():
+        observed = results["contexts"][context]
+        values = [r["round_ms"] for r in observed["round_capture"]["records"] if r["round_ms"] is not None]
+        assert row["timed_rounds"] == len(values)
+        assert row["max_ms"] == max(values)
+        assert row["spikes_over100ms"] == sum(value > 100 for value in values)
+        assert row["generated_tokens"] == observed["generated_tokens"]
+        assert row["output_sha256"] == observed["output_sha256"]
+        assert row["same_output_as_previous"] is True
+    scheduler = ROOT / "experiments/radiance-public/radiance_fair_scheduler.py"
+    assert hashlib.sha256(scheduler.read_bytes()).hexdigest() == evidence["runtime"]["scheduler_sha256"]
+    assert evidence["repair"]["global_thp_changed"] is False
+    assert evidence["repair"]["per_round_syscalls_added"] == 0
+    for comparison in evidence["intervention_comparisons"]:
+        assert comparison["output_exact"] is True
+        assert comparison["before"]["output_sha256"] == comparison["after"]["output_sha256"]
+        assert comparison["before"]["generated_tokens"] == comparison["after"]["generated_tokens"]
+    failures = evidence["rerun"]["validation_failures"]
+    assert failures["contexts"] == results["validation_failures"]
+    assert failures["chained"] == json.loads((directory / "pi-coding-json-compaction.json").read_text())["validation_failures"]
 
 
 def test_latest_profile_selects_complete_inventory_not_fast_rounds():

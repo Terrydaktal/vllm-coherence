@@ -61,6 +61,31 @@ def package(args):
         "measurement_source_state": f"{args.source_commit} plus recorded working-tree source; pinned September 23 numerical backend",
         "privacy": "No chat text or token arrays included.",
     }
+    # A host-memory policy can change round stalls without changing the
+    # numerical payload. Bind it separately so a rerun cannot silently claim
+    # to qualify a different scheduler or snapshot-runtime release.
+    runtime_binding = private / "runtime-binding.json"
+    if runtime_binding.exists():
+        host_runtime = read(runtime_binding)
+        sources = host_runtime["source_sha256"]
+        for name in ("radiance_fair_scheduler.py", "snapshot-abi-chat-cache-v1.json",
+                     "runtime-radiance-1.0.16.json", "optimized-release.json"):
+            local = ROOT / "experiments/radiance-public" / name
+            if hashlib.sha256(local.read_bytes()).hexdigest() != sources[name]:
+                raise ValueError(f"measured host runtime differs from source: {name}")
+        if sources["optimized-release.json"] != args.manifest_sha256:
+            raise ValueError("host runtime and numerical release identities differ")
+        binding["host_runtime"] = host_runtime
+        binding["host_runtime_binding_sha256"] = hashlib.sha256(runtime_binding.read_bytes()).hexdigest()
+        binding["host_page_policy_observations"] = {}
+        for context in analyses:
+            observation = read(private / f"{context}-host-page-policy.json")
+            if observation["allocated_bytes"]:
+                if observation["host_page_policy"] != "no_hugepage_promotion":
+                    raise ValueError(f"{context}: pinned RAM was not protected during measurement")
+                if observation["host_page_policy_bytes"] < observation["allocated_bytes"]:
+                    raise ValueError(f"{context}: page policy does not cover the pinned allocation")
+            binding["host_page_policy_observations"][context] = observation
     if binding["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] != "256":
         raise ValueError("Global-256 is required")
     identity = {"measurement_commit": args.source_commit, "execution_identity": digest(binding),

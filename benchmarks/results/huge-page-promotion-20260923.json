@@ -1,0 +1,561 @@
+{
+  "schema": "urn:coherence:pinned-host-hugepage-repair:v1",
+  "measurement_date": "2026-09-23",
+  "status": "sampled_native_validation_passed",
+  "scope": "Prevent periodic khugepaged/HSA queue invalidation from dedicated pinned chat-handover mappings.",
+  "privacy": "Only numeric measurements, artifact hashes and kernel function names; no chat text, token arrays, addresses or chat identities.",
+  "source_commit_before_repair": "3ba8b5a13da12155b84013251ecf8d0fb1267f2e",
+  "runtime": {
+    "old_runtime_abi": "5ce8c2291e3343c4591eb612e75683e12e1b8c864959361311cf303355e72b76",
+    "new_runtime_abi": "4450220c7ad28e7afff395cc43ff2a465b474e55fadaeecb67f35babe30d5ceb",
+    "snapshot_data_abi": "36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5",
+    "scheduler_sha256": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6"
+  },
+  "numerical_manifest_sha256": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
+  "diagnosis": {
+    "mechanism": "khugepaged promotes shared host-memory pages; collapse unmaps mappings and invokes MMU invalidation, which enters the AMDGPU HSA invalidation callback while the model waits for GPU completion.",
+    "observed_call_chain": [
+      "khugepaged",
+      "collapse_single_pmd",
+      "try_to_unmap",
+      "__rmap_walk_file",
+      "try_to_unmap_one",
+      "__mmu_notifier_invalidate_range_start",
+      "mn_itree_invalidate",
+      "amdgpu_hmm_invalidate_hsa"
+    ],
+    "period_seconds_approx": 10.24,
+    "scope_limit": "The captured notifier identifies the registered arena; the original trace alone did not identify its Python owner. The subsequent mapping advice and handover replay validate the pinned-bank intervention.",
+    "kernel_trace_sha256": "42d478eac2ac230c888945fe5b85bd42af4c4e0851bfc8372a63ce15ab77f978"
+  },
+  "repair": {
+    "policy": "MADV_NOHUGEPAGE",
+    "scope": "Whole dedicated writable anonymous backing mappings, including allocator slack, after allocation and before DMA/publication.",
+    "global_thp_changed": false,
+    "tensor_values_or_model_arithmetic_changed": false,
+    "per_round_syscalls_added": 0,
+    "failure_behavior": "Do not publish partial banks if allocation or advice fails; surface the error.",
+    "worker_status": {
+      "host_page_policy": "no_hugepage_promotion",
+      "host_page_policy_bytes": 17448304640,
+      "allocated_bytes": 10258743296
+    },
+    "global_thp": "[always] madvise never"
+  },
+  "intervention_artifact_sha256": "d75fe4f98854f62ac90d81fc3b78e2107712f517bd2d117cad14e092906ecf74",
+  "intervention_comparisons": [
+    {
+      "context": "60K",
+      "before_run": "run2-60k",
+      "after_run": "run6-60k-nohugepage",
+      "mean_round_change_percent": 0.14644358716171535,
+      "output_exact": true,
+      "before": {
+        "generated_tokens": 8213,
+        "output_sha256": "daa4949f60b8eb336da2e673b0ac35cfdc854fe7ba7e28ef22e33704c80fe44d",
+        "cached_prompt_tokens": 0,
+        "first_token_seconds": 56.6700594589347,
+        "post_first_tokens_per_second": 103.9671513119853,
+        "acceptance_rate": 0.4899830482354754,
+        "rounds": 1854,
+        "mean_ms": 42.63545738942826,
+        "median_ms": 42.605,
+        "max_ms": 53.145,
+        "p99_ms": 43.494,
+        "telemetry_status": "captured",
+        "artifact_sha256": "b6b1849de5e2d19b92da9ecc635e10cd4d344adec260bef8a756a3a90058da01",
+        "spikes_over100ms": []
+      },
+      "after": {
+        "generated_tokens": 8213,
+        "output_sha256": "daa4949f60b8eb336da2e673b0ac35cfdc854fe7ba7e28ef22e33704c80fe44d",
+        "cached_prompt_tokens": 0,
+        "first_token_seconds": 29.869756635045633,
+        "post_first_tokens_per_second": 103.76694415579907,
+        "acceptance_rate": 0.4899830482354754,
+        "rounds": 1854,
+        "mean_ms": 42.69789428263215,
+        "median_ms": 42.629,
+        "max_ms": 99.794,
+        "p99_ms": 43.59,
+        "telemetry_status": "captured",
+        "artifact_sha256": "97f1ef2328c6301dc90687a25696cf1f2c430c67e050b7b3987ecaef01ccce7a",
+        "spikes_over100ms": [],
+        "worker": {
+          "allocated_bytes": 0,
+          "host_page_policy": "unallocated",
+          "host_page_policy_bytes": 0,
+          "switches": 0,
+          "last_transfer_bytes": 0,
+          "last_transfer_seconds": 0.0
+        },
+        "protected_mappings": []
+      }
+    },
+    {
+      "context": "200K",
+      "before_run": "run4-200k-control",
+      "after_run": "run7-200k-nohugepage",
+      "mean_round_change_percent": -0.912446709711634,
+      "output_exact": true,
+      "before": {
+        "generated_tokens": 4233,
+        "output_sha256": "cb2ca8c79dcc605a03aa4f47847f11e3f088344e40115b1b7b9f1eceaba190cd",
+        "cached_prompt_tokens": 197760,
+        "first_token_seconds": 3.248505603056401,
+        "post_first_tokens_per_second": 95.15283199245087,
+        "acceptance_rate": 0.5474559686888454,
+        "rounds": 876,
+        "mean_ms": 50.845028538812784,
+        "median_ms": 50.147,
+        "max_ms": 206.051,
+        "p99_ms": 51.842,
+        "telemetry_status": "captured",
+        "artifact_sha256": "8d3a60c17d96a01b9a5981da0bbd0aab4d370523c95cd9828933469ec55622fe",
+        "spikes_over100ms": [
+          {
+            "round": 153,
+            "ms": 206.051
+          },
+          {
+            "round": 354,
+            "ms": 200.551
+          },
+          {
+            "round": 555,
+            "ms": 189.549
+          },
+          {
+            "round": 756,
+            "ms": 193.123
+          }
+        ]
+      },
+      "after": {
+        "generated_tokens": 4233,
+        "output_sha256": "cb2ca8c79dcc605a03aa4f47847f11e3f088344e40115b1b7b9f1eceaba190cd",
+        "cached_prompt_tokens": 0,
+        "first_token_seconds": 194.30273262097035,
+        "post_first_tokens_per_second": 96.29882419032853,
+        "acceptance_rate": 0.5474559686888454,
+        "rounds": 876,
+        "mean_ms": 50.381094748858445,
+        "median_ms": 50.355,
+        "max_ms": 55.066,
+        "p99_ms": 51.143,
+        "telemetry_status": "captured",
+        "artifact_sha256": "474ca9a5355b44aff2700fd71c3770fcd0e0599787e1c9139d1bcb1853ee3aa5",
+        "spikes_over100ms": [],
+        "worker": {
+          "allocated_bytes": 10258743296,
+          "host_page_policy": "no_hugepage_promotion",
+          "host_page_policy_bytes": 17448304640,
+          "switches": 1,
+          "last_transfer_bytes": 8613265408,
+          "last_transfer_seconds": 1.0873464040923864
+        },
+        "protected_mappings": [
+          {
+            "bytes": 268435456,
+            "VmFlags": "rd wr sh mr mw me ms sd nh",
+            "ShmemPmdMapped": "262144 kB"
+          },
+          {
+            "bytes": 17179869184,
+            "VmFlags": "rd wr sh mr mw me ms sd nh",
+            "ShmemPmdMapped": "8142848 kB"
+          }
+        ]
+      }
+    },
+    {
+      "context": "60K",
+      "before_run": "run2-60k",
+      "after_run": "run8-60k-ram-return",
+      "mean_round_change_percent": 0.007294474019725605,
+      "output_exact": true,
+      "before": {
+        "generated_tokens": 8213,
+        "output_sha256": "daa4949f60b8eb336da2e673b0ac35cfdc854fe7ba7e28ef22e33704c80fe44d",
+        "cached_prompt_tokens": 0,
+        "first_token_seconds": 56.6700594589347,
+        "post_first_tokens_per_second": 103.9671513119853,
+        "acceptance_rate": 0.4899830482354754,
+        "rounds": 1854,
+        "mean_ms": 42.63545738942826,
+        "median_ms": 42.605,
+        "max_ms": 53.145,
+        "p99_ms": 43.494,
+        "telemetry_status": "captured",
+        "artifact_sha256": "b6b1849de5e2d19b92da9ecc635e10cd4d344adec260bef8a756a3a90058da01",
+        "spikes_over100ms": []
+      },
+      "after": {
+        "generated_tokens": 8213,
+        "output_sha256": "daa4949f60b8eb336da2e673b0ac35cfdc854fe7ba7e28ef22e33704c80fe44d",
+        "cached_prompt_tokens": 57680,
+        "first_token_seconds": 3.1363236911129206,
+        "post_first_tokens_per_second": 103.95300036838088,
+        "acceptance_rate": 0.4899830482354754,
+        "rounds": 1854,
+        "mean_ms": 42.638567421790725,
+        "median_ms": 42.594,
+        "max_ms": 54.15,
+        "p99_ms": 43.546,
+        "telemetry_status": "captured",
+        "artifact_sha256": "c983857f30e8d677712c0f6338782e904dbf304d9f71ea6ee588b04cf408529e",
+        "spikes_over100ms": [],
+        "worker": {
+          "allocated_bytes": 10258743296,
+          "host_page_policy": "no_hugepage_promotion",
+          "host_page_policy_bytes": 17448304640,
+          "switches": 2,
+          "last_transfer_bytes": 18360565760,
+          "last_transfer_seconds": 1.4466580799780786
+        },
+        "protected_mappings": [
+          {
+            "bytes": 268435456,
+            "VmFlags": "rd wr sh mr mw me ms sd nh",
+            "ShmemPmdMapped": "262144 kB"
+          },
+          {
+            "bytes": 17179869184,
+            "VmFlags": "rd wr sh mr mw me ms sd nh",
+            "ShmemPmdMapped": "8142848 kB"
+          }
+        ]
+      }
+    },
+    {
+      "context": "200K",
+      "before_run": "run4-200k-control",
+      "after_run": "run9-200k-ram-return",
+      "mean_round_change_percent": -0.8252312038247611,
+      "output_exact": true,
+      "before": {
+        "generated_tokens": 4233,
+        "output_sha256": "cb2ca8c79dcc605a03aa4f47847f11e3f088344e40115b1b7b9f1eceaba190cd",
+        "cached_prompt_tokens": 197760,
+        "first_token_seconds": 3.248505603056401,
+        "post_first_tokens_per_second": 95.15283199245087,
+        "acceptance_rate": 0.5474559686888454,
+        "rounds": 876,
+        "mean_ms": 50.845028538812784,
+        "median_ms": 50.147,
+        "max_ms": 206.051,
+        "p99_ms": 51.842,
+        "telemetry_status": "captured",
+        "artifact_sha256": "8d3a60c17d96a01b9a5981da0bbd0aab4d370523c95cd9828933469ec55622fe",
+        "spikes_over100ms": [
+          {
+            "round": 153,
+            "ms": 206.051
+          },
+          {
+            "round": 354,
+            "ms": 200.551
+          },
+          {
+            "round": 555,
+            "ms": 189.549
+          },
+          {
+            "round": 756,
+            "ms": 193.123
+          }
+        ]
+      },
+      "after": {
+        "generated_tokens": 4233,
+        "output_sha256": "cb2ca8c79dcc605a03aa4f47847f11e3f088344e40115b1b7b9f1eceaba190cd",
+        "cached_prompt_tokens": 197760,
+        "first_token_seconds": 5.033118654042482,
+        "post_first_tokens_per_second": 95.86572863803987,
+        "acceptance_rate": 0.5474559686888454,
+        "rounds": 876,
+        "mean_ms": 50.425439497716894,
+        "median_ms": 50.377,
+        "max_ms": 58.628,
+        "p99_ms": 51.21,
+        "telemetry_status": "captured",
+        "artifact_sha256": "89cc41d0d87d14854b10b936da7bda5dbd432bc85947969cad88241d88abe384",
+        "spikes_over100ms": [],
+        "worker": {
+          "allocated_bytes": 10258743296,
+          "host_page_policy": "no_hugepage_promotion",
+          "host_page_policy_bytes": 17448304640,
+          "switches": 3,
+          "last_transfer_bytes": 18198560768,
+          "last_transfer_seconds": 1.4205535289365798
+        },
+        "protected_mappings": [
+          {
+            "bytes": 268435456,
+            "VmFlags": "rd wr sh mr mw me ms sd nh",
+            "ShmemPmdMapped": "262144 kB"
+          },
+          {
+            "bytes": 17179869184,
+            "VmFlags": "rd wr sh mr mw me ms sd nh",
+            "ShmemPmdMapped": "8142848 kB"
+          }
+        ]
+      }
+    }
+  ],
+  "rerun": {
+    "contexts": {
+      "0K": {
+        "generated_tokens": 4981,
+        "timed_rounds": 1006,
+        "mean_ms": 38.6555944333996,
+        "median_ms": 38.8545,
+        "max_ms": 48.6,
+        "spikes_over100ms": 0,
+        "post_first_tokens_per_second": 128.06291836950726,
+        "same_output_as_previous": true,
+        "output_sha256": "d0703d3f0e898dbe5cd247d38e26929eafdb2b1bfac6124bd6d41ee4cf1112b5",
+        "acceptance_rate": 0.5644703209315536,
+        "previous_mean_ms": 40.080076753565486
+      },
+      "60K": {
+        "generated_tokens": 8213,
+        "timed_rounds": 1854,
+        "mean_ms": 42.68497033441208,
+        "median_ms": 42.6305,
+        "max_ms": 52.974,
+        "spikes_over100ms": 0,
+        "post_first_tokens_per_second": 103.80315171924141,
+        "same_output_as_previous": true,
+        "output_sha256": "daa4949f60b8eb336da2e673b0ac35cfdc854fe7ba7e28ef22e33704c80fe44d",
+        "acceptance_rate": 0.4899830482354754,
+        "previous_mean_ms": 43.99519555285491
+      },
+      "200K": {
+        "generated_tokens": 4233,
+        "timed_rounds": 876,
+        "mean_ms": 50.366977168949774,
+        "median_ms": 50.315,
+        "max_ms": 62.057,
+        "spikes_over100ms": 0,
+        "post_first_tokens_per_second": 96.1208459809418,
+        "same_output_as_previous": true,
+        "output_sha256": "cb2ca8c79dcc605a03aa4f47847f11e3f088344e40115b1b7b9f1eceaba190cd",
+        "acceptance_rate": 0.5474559686888454,
+        "previous_mean_ms": 51.74780252855271
+      }
+    },
+    "chained": [
+      {
+        "stage": "coding",
+        "generated_tokens": 8213,
+        "mean_generation_round_ms": 42.69382207444191,
+        "post_first_tokens_per_second": 103.77798713149188,
+        "acceptance_rate": 0.4899830482354754,
+        "output_sha256": "daa4949f60b8eb336da2e673b0ac35cfdc854fe7ba7e28ef22e33704c80fe44d",
+        "same_output_as_previous": true
+      },
+      {
+        "stage": "prose_code",
+        "generated_tokens": 5071,
+        "mean_generation_round_ms": 43.04456837174931,
+        "post_first_tokens_per_second": 89.95568580319058,
+        "acceptance_rate": 0.41014176663031626,
+        "output_sha256": "dc8e4ee5f9bb9146243c7dda59954fe2ecbabcd07bd030b51a1380a2bcb0fbf4",
+        "same_output_as_previous": true
+      },
+      {
+        "stage": "json",
+        "generated_tokens": 3245,
+        "mean_generation_round_ms": 43.33197851465599,
+        "post_first_tokens_per_second": 84.55858111533057,
+        "acceptance_rate": 0.3801999355046759,
+        "output_sha256": "742bbbd4d094d4851095595d72f1b682ce1d4bad52e2fd583e1db20aeea0823c",
+        "same_output_as_previous": true
+      },
+      {
+        "stage": "thinking",
+        "generated_tokens": 6248,
+        "mean_generation_round_ms": 43.60313086859273,
+        "post_first_tokens_per_second": 59.03074313127806,
+        "acceptance_rate": 0.22475876676865145,
+        "output_sha256": "10b74f7321a61e2809322e148aa016e4604b822ace3bb9e6b5ae3c39a3426783",
+        "same_output_as_previous": true
+      },
+      {
+        "stage": "compaction",
+        "generated_tokens": 3045,
+        "mean_generation_round_ms": 43.91135342026772,
+        "post_first_tokens_per_second": 67.8128164766767,
+        "acceptance_rate": 0.28236279849183077,
+        "output_sha256": "44f27e5eb667a7672951ebd0e0e145b35c1877897d93ccb1a74b15df42539d91",
+        "same_output_as_previous": true
+      }
+    ],
+    "source_sha256": {
+      "pi-coding-contexts.json": "daff799c2d1fd8adcf16a2fc3c10e2d330405803e487ebc652442c0ff40d1908",
+      "pi-coding-json-compaction.json": "f52a1a4ecddfe54b3cd45bee9145d5c3714293bef4e5aaaf6550d78c70c7c144"
+    },
+    "validation_failures": {
+      "contexts": [
+        {
+          "context": "0K",
+          "failure": "natural completion produced 4,981 tokens; minimum is 5,000"
+        },
+        {
+          "context": "200K",
+          "failure": "natural completion produced 4,233 tokens; minimum is 5,000"
+        }
+      ],
+      "chained": [
+        "checkpoint headings or completion contract did not validate"
+      ]
+    }
+  },
+  "limitations": [
+    "The intervention includes a backend restart; repeated warm RAM-return runs support the diagnosis but are not universal proof.",
+    "Arithmetic equality is sampled output-token hash equality, not a new all-input numerical proof.",
+    "First-use allocation and cold/warm prefill differ between runs; no allocation-speed or prefill-speed causal claim is made.",
+    "No controlled pre-repair RAM-transfer bandwidth baseline was retained.",
+    "This addresses periodic huge-page invalidation stalls, not every possible scheduler/driver latency anomaly.",
+    "Benchmark validation failures are retained: natural completions may be shorter than requested; checkpoint formatting is independently validated."
+  ],
+  "gpu_settings": {
+    "recorded_at": 1790183077.0420942,
+    "bdf": "0000:0d:00.0",
+    "performance_level": "manual",
+    "overdrive": "OD_SCLK_OFFSET:\n0Mhz\nOD_MCLK:\n0: 97Mhz\n1: 1259MHz\nOD_RANGE:\nSCLK_OFFSET:    -500Mhz       1000Mhz\nMCLK:      97Mhz       1500Mhz\nVDDGFX_OFFSET:    -200mv          0mv\nOD_VDDGFX_OFFSET:\n-50mV",
+    "changed_by_this_rerun": false
+  },
+  "stage_capture_diagnostics": {
+    "0K": {
+      "source_sha256": "e3ed5cddeb37b005f6ceaf639693b6d89dc359c5e2c6743e6aae94eda29fab09",
+      "arms": {
+        "warmup": {
+          "timed_rounds": 1006,
+          "mean_ms": 38.68997713717694,
+          "max_ms": 90.836,
+          "spikes_over100ms": []
+        },
+        "control_before": {
+          "timed_rounds": 1006,
+          "mean_ms": 38.84812922465209,
+          "max_ms": 76.231,
+          "spikes_over100ms": []
+        },
+        "control_after": {
+          "timed_rounds": 1006,
+          "mean_ms": 38.68832007952286,
+          "max_ms": 57.393,
+          "spikes_over100ms": []
+        }
+      }
+    },
+    "60K": {
+      "source_sha256": "513f8f8b5f5aa25135ed8a2e11cc9d70a1f723b7d9fa0e7a094dbbe3ad9b5f54",
+      "arms": {
+        "warmup": {
+          "timed_rounds": 1854,
+          "mean_ms": 46.500118662351674,
+          "max_ms": 6072.966,
+          "spikes_over100ms": [
+            {
+              "round": 80,
+              "ms": 6072.966
+            },
+            {
+              "round": 81,
+              "ms": 134.964
+            },
+            {
+              "round": 375,
+              "ms": 372.769
+            },
+            {
+              "round": 843,
+              "ms": 867.339
+            }
+          ]
+        },
+        "control_before": {
+          "timed_rounds": 1854,
+          "mean_ms": 42.97761326860841,
+          "max_ms": 660.499,
+          "spikes_over100ms": [
+            {
+              "round": 286,
+              "ms": 660.499
+            }
+          ]
+        },
+        "control_after": {
+          "timed_rounds": 1854,
+          "mean_ms": 42.62750755124056,
+          "max_ms": 46.526,
+          "spikes_over100ms": []
+        }
+      }
+    },
+    "200K": {
+      "source_sha256": "a8d00d4f72e4abee1ba9fad1be2b1336f2681be116062414a8eab7d03c9ec086",
+      "arms": {
+        "warmup": {
+          "timed_rounds": 876,
+          "mean_ms": 51.443173515981734,
+          "max_ms": 1024.718,
+          "spikes_over100ms": [
+            {
+              "round": 630,
+              "ms": 1024.718
+            }
+          ]
+        },
+        "control_before": {
+          "timed_rounds": 876,
+          "mean_ms": 50.31126712328767,
+          "max_ms": 52.671,
+          "spikes_over100ms": []
+        },
+        "control_after": {
+          "timed_rounds": 876,
+          "mean_ms": 50.27339840182649,
+          "max_ms": 52.965,
+          "spikes_over100ms": []
+        }
+      }
+    }
+  },
+  "stage_capture_first_handover": {
+    "recorded_at": 1790183175.2332945,
+    "pid": 598,
+    "allocated_bytes": 10258743296,
+    "host_page_policy": "no_hugepage_promotion",
+    "host_page_policy_bytes": 17448304640,
+    "allocation_events": 1,
+    "allocation_seconds": 68.08791229105555,
+    "last_allocation_seconds": 68.08791229105555,
+    "switches": 1
+  },
+  "production_restored": {
+    "recorded_at": 1790184063.7610807,
+    "health": 200,
+    "container_id": "0ff06c42cb69a11d397da2771a9a5a6f6c00a8d6de670b29b1ac6c0d3534c074",
+    "state": "running",
+    "worker": "optimized_d7_worker.OptimizedWorker",
+    "scheduler_sha256": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6",
+    "environment": {
+      "VLLM_SERVER_DEV_MODE": null,
+      "QWEN_OUTER_STAGE_TIMING": null,
+      "QWEN_ROUND_EVENT_TELEMETRY": null,
+      "QWEN_STAGE_TIMING": null,
+      "RADIANCE_VERIFY_HEAD": "1",
+      "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"
+    }
+  },
+  "matched_stage_sources_sha256": {
+    "compiled-global256-stage-profile-20260923.json": "a942cb67483f09f0eede3f282ebce8b1533d28446a7221a3509459d484ff9ba7",
+    "stage26-control-20260923.json": "1dcac1866f8de33c94f8d0fe09caf890bbe418a9a1bcf6e43b0ee09da1902f32",
+    "matched-stage-residual-20260923.json": "679ba621244f87e8c79238c9ca07b1169c32fb6aa0e52ac387e32f490b247a70"
+  }
+}

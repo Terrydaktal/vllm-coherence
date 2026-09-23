@@ -152,8 +152,9 @@ def current_stage_profile(data):
         outputs = " / ".join(f"{raw['contexts'][c]['generated_tokens_per_arm']:,}" for c in raw["context_order"])
         deltas = " / ".join(f"{raw['observer_comparison']['contexts'][c]['mean_delta_ms']:.3f}" for c in raw["context_order"])
         grouped["scope"] = (
-            "Measured on 2026-09-23 using the current compiled, optimized Global-256 serving backend, "
-            "with temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: "
+            "Measured on 2026-09-23 using the current compiled, optimized Global-256 serving backend"
+            + (" with the pinned-RAM huge-page promotion repair" if raw["binding"].get("host_runtime") else "")
+            + "; sampling is temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: "
             "0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran "
             "a natural warmup followed by clean control, trace, and clean control; each arm generated "
             + outputs + " tokens respectively. Generated-token hashes and accepted-token schedules matched. "
@@ -505,7 +506,8 @@ def render_chained_workload_results(report=None):
         "",
         (
             "This benchmark uses the retained 60,000-input-token Pi prefix and the compiled "
-            "Coherence backend with Global-256 and the attention-page-boundary repair. Five "
+            "Coherence backend with Global-256, the attention-page-boundary repair and the "
+            "pinned-RAM huge-page promotion repair. Five "
             "requests are chained in one context: code, prose about code measurement, JSON, "
             "thinking/prose and checkpoint generation. Code and JSON disable thinking; both "
             "prose requests enable it. All requests stop naturally. "
@@ -584,6 +586,8 @@ def render_coding_json_compaction_benchmark():
         *render_round_histogram(),
         "",
         "### Known remaining symptoms and likely causes",
+        "",
+        *render_hugepage_comparison(),
         "",
         *render_attention_boundary_comparison(),
         "",
@@ -674,6 +678,49 @@ def render_coding_json_compaction_benchmark():
         ),
     ]
     return lines
+
+
+def render_hugepage_comparison():
+    data = json.loads((ROOT / "benchmarks/results/huge-page-promotion-20260923.json").read_text())
+    before = next(row["before"] for row in data["intervention_comparisons"] if row["context"] == "200K")
+    protected = data["repair"]["worker_status"]["host_page_policy_bytes"] / 2**30
+    rerun = data["rerun"]["contexts"]
+    rounds = sum(row["timed_rounds"] for row in rerun.values())
+    spikes = sum(row["spikes_over100ms"] for row in rerun.values())
+    tokens = sum(row["generated_tokens"] for row in rerun.values())
+    diagnostic = data["stage_capture_diagnostics"]
+    warmup_maxima = " / ".join(f"{diagnostic[c]['arms']['warmup']['max_ms']:,.0f}" for c in ("60K", "200K"))
+    control_spikes = [spike for context in diagnostic.values()
+                      for arm in ("control_before", "control_after")
+                      for spike in context["arms"][arm]["spikes_over100ms"]]
+    return [
+        "**2026-09-23: the separate periodic huge-page stalls are repaired.** Kernel tracing "
+        "caught `khugepaged` collapsing the registered host-memory arena and invoking "
+        "`amdgpu_hmm_invalidate_hsa`. At 200K this produced 189–206 ms rounds about every "
+        "10.24 seconds. Pinned chat-handover buffers now apply `MADV_NOHUGEPAGE` to their "
+        "whole anonymous backing mappings, including unused allocator space, before any "
+        f"cache transfer. The live worker reported {protected:g} GiB protected. This runs "
+        "once during allocation; it adds no per-round scan or syscall and changes neither "
+        "the global huge-page policy nor model arithmetic or snapshot contents.",
+        "",
+        f"The targeted 200K control had {len(before['spikes_over100ms'])} rounds over 100 ms "
+        f"among {before['rounds']:,}; both repaired 200K replays had none, including a return "
+        "from RAM. The full rerun above preserved all three coding output-token hashes "
+        f"({tokens:,} tokens) and all five chained-task hashes. Across its {rounds:,} timed "
+        f"coding rounds, {spikes} exceeded 100 ms; maximum rounds were "
+        + " / ".join(f"{rerun[c]['max_ms']:.3f}" for c in ("0K", "60K", "200K"))
+        + " ms. These are sampled intervention results, not a proof that every possible "
+        "driver or scheduler pause is eliminated. First-use allocation/prefill costs were "
+        "not a controlled comparison. [Diagnosis, mapping policy, RAM-return checks and "
+        "rerun evidence](benchmarks/results/huge-page-promotion-20260923.json).",
+        "",
+        "The separate stage-capture restart/warmup sequence still recorded isolated "
+        + warmup_maxima + " ms warmup pauses at 60K / 200K, and "
+        + str(len(control_spikes)) + " clean-control round over 100 ms ("
+        + ", ".join(f"{spike['ms']:.3f}" for spike in control_spikes) + " ms). "
+        "These remain in the evidence. Their cause is unresolved; this repair does not "
+        "claim to eliminate those isolated pauses or the initial pinned-allocation cost.",
+    ]
 
 
 def render_attention_boundary_comparison():

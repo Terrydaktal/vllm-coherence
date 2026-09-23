@@ -195,6 +195,14 @@ def test_native_matched_evidence_keeps_tracing_slowdown_out_of_runtime_gaps():
     assert result["zero_observer_effect_proven"] is False
     for path, expected in profile_data["binding"]["source_sha256"].items():
         assert hashlib.sha256((root / path).read_bytes()).hexdigest() == expected
+    host = profile_data["binding"]["host_runtime"]
+    for name, expected in host["source_sha256"].items():
+        assert hashlib.sha256((root / "experiments/radiance-public" / name).read_bytes()).hexdigest() == expected
+    assert host["worker_page_policy"]["host_page_policy"] == "no_hugepage_promotion"
+    for context, observation in profile_data["binding"]["host_page_policy_observations"].items():
+        if observation["allocated_bytes"]:
+            assert observation["host_page_policy"] == "no_hugepage_promotion", context
+            assert observation["host_page_policy_bytes"] >= observation["allocated_bytes"]
     for context in CONTEXTS:
         profiled = profile_data["contexts"][context]
         control_row = control_data["contexts"][context]

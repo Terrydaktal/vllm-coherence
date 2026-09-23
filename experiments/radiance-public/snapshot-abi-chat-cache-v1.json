@@ -168,7 +168,7 @@
         "radiance_cache.py": "04adc11af696ab006570ee481b9e0b04d673e4bc6282469ea03061e6567abe03",
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
         "radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
-        "radiance_fair_scheduler.py": "02fd9e48beddb017e41a232e996ad93a6130993b6b7d6435cf8ecbdf98bb62da",
+        "radiance_fair_scheduler.py": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6",
         "patch_chat_snapshot.py": "edabd083e5bbeebf76a02c45cee040e58b8af6a61990308e2dd0a90ef3026ce6"
       }
     },
@@ -226,7 +226,8 @@
         "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
         "retention": "last numeric response timings plus cumulative generation-round and draft/accepted counters per generation; at most 16 generations",
         "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
-      }
+      },
+      "pinned_host_page_policy": "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership and existing snapshot data ABI"
     }
   },
   "serving": {

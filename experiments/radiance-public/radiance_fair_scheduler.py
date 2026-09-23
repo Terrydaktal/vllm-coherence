@@ -10,10 +10,12 @@ Explicit higher priority can reserve an answer or park a response at a safe step
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import hashlib
 import json
 import logging
 import math
+import mmap
 import os
 import re
 import statistics
@@ -1506,6 +1508,45 @@ class FairScheduler(Scheduler):
         self._last_phase_signature = signature
 
 
+def protect_pinned_host_mapping(tensor):
+    """Stop khugepaged from invalidating this pinned allocation's GPU mapping.
+
+    hipHostMalloc's backing arena can exceed the requested tensor size (e.g.
+    a 10 GiB tensor inside a 16 GiB shared anonymous mapping). Promotion of its
+    unused tail still invokes AMDGPU's HSA MMU notifier and can evict every GPU
+    queue in the process. Advise the entire containing anonymous mapping, not
+    just the tensor's pages. Existing data, pinning and tensor ownership stay
+    with PyTorch. Call only during allocation, before publishing the buffers.
+    """
+    address = tensor.data_ptr()
+    stop = address + tensor.numel() * tensor.element_size()
+    if address <= 0 or stop <= address:
+        raise ValueError("pinned chat buffer has no addressable storage")
+    mappings = []
+    covered = address
+    for line in Path("/proc/self/maps").read_text().splitlines():
+        fields = line.split(maxsplit=5)
+        begin, end = (int(part, 16) for part in fields[0].split("-"))
+        if end <= address or begin >= stop:
+            continue
+        name = fields[5] if len(fields) == 6 else ""
+        if begin > covered or fields[1][:2] != "rw" or name not in ("", "/dev/zero (deleted)"):
+            raise RuntimeError("pinned chat buffer is not in a dedicated writable anonymous mapping")
+        mappings.append((begin, end))
+        covered = end
+    if covered < stop:
+        raise RuntimeError("pinned chat buffer backing mapping could not be identified")
+    libc = ctypes.CDLL(None, use_errno=True)
+    advise = libc.madvise
+    advise.argtypes = (ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
+    advise.restype = ctypes.c_int
+    for begin, end in mappings:
+        if advise(begin, end - begin, mmap.MADV_NOHUGEPAGE) != 0:
+            error = ctypes.get_errno()
+            raise OSError(error, "cannot disable huge-page promotion for pinned chat RAM: " + os.strerror(error))
+    return mappings
+
+
 class WorkerBanks:
     def __init__(self, runner, metadata):
         import torch
@@ -1516,6 +1557,7 @@ class WorkerBanks:
         self.images = {}
         self.free_buffers = []
         self.stage = None
+        self.host_page_mappings = set()
         self.transferred_bytes = 0
         self.transfer_seconds = 0.0
         self.allocation_events = 0
@@ -1575,20 +1617,21 @@ class WorkerBanks:
                 f"(available={available} bytes, allocation={self.reserved_capacity_bytes} bytes)"
             )
         started = time.monotonic()
-        buffers = [
-            self.torch.empty(self.capacity, dtype=self.torch.uint8, device="cpu", pin_memory=True)
-            for _ in range(self.max_banks - 1)
-        ]
-        stage = self.torch.empty(
-            self.stage_capacity,
-            dtype=self.torch.uint8,
-            device="cpu",
-            pin_memory=True,
-        )
+        buffers = []
+        mappings = set()
+        for size in [self.capacity] * (self.max_banks - 1) + [self.stage_capacity]:
+            buffer = self.torch.empty(size, dtype=self.torch.uint8, device="cpu", pin_memory=True)
+            # This happens after host registration and before any DMA uses the
+            # buffer. Protect the backing arena, including allocator slack, so
+            # background THP promotion cannot pause unrelated decode rounds.
+            mappings.update(protect_pinned_host_mapping(buffer))
+            buffers.append(buffer)
+        stage = buffers.pop()
         # Publish the arena only after every allocation succeeds. A failed stage
         # allocation must not leave partial buffers that a retry duplicates.
         self.free_buffers = buffers
         self.stage = stage
+        self.host_page_mappings = mappings
         self.allocated_bytes = self.reserved_capacity_bytes
         elapsed = time.monotonic() - started
         self.allocation_events += 1
@@ -1645,6 +1688,8 @@ class WorkerBanks:
                 "pid": os.getpid(),
                 "updated_at": time.time(),
                 "allocated_bytes": self.allocated_bytes,
+                "host_page_policy": "no_hugepage_promotion" if self.stage is not None else "unallocated",
+                "host_page_policy_bytes": sum(end - begin for begin, end in getattr(self, "host_page_mappings", ())),
                 "reserved_capacity_bytes": self.reserved_capacity_bytes,
                 "cached_chats": len(self.images) + int(self.active is not None),
                 "switches": self.switches,

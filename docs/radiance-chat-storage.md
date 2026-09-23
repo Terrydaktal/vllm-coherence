@@ -110,6 +110,15 @@ packed GPU-cache image is held in pinned RAM. A zero-token barrier drains outsta
 before each swap. The pinned image is allocated only when a second chat actually
 contends for the GPU, so a single chat does not pay its allocation cost.
 
+Pinned handover buffers apply `MADV_NOHUGEPAGE` to their complete anonymous
+backing mappings before any cache transfer, including space reserved beyond the
+tensor by the allocator. This prevents background huge-page promotion from
+invalidating the HSA registration and pausing the process's GPU queues. PyTorch
+still owns and pins the buffers; model arithmetic, cache bytes and disk-snapshot
+compatibility are unchanged. Worker status reports `host_page_policy` and
+`host_page_policy_bytes`. This policy is set during allocation, with no per-round
+scan or syscall, and does not change the machine's global huge-page settings.
+
 Zstd level 1 compresses complete blocks without changing any cache values.
 Incompressible blocks use a raw representation. Every object has its original
 length and a SHA256 checksum, and decoding verifies the entire block before
