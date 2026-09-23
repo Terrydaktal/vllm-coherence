@@ -18,6 +18,7 @@ PATCHES = [
     "radiance_fair_scheduler.py",
     "radiance_request_guard.py",
     "patch_dflash_sampling_rng.py",
+    "patch_draft_head_initialization.py",
     "patch_verify_head_memory.py",
     "radiance_verifyhead_global.py",
     "patch_gdn_extreme_decay.py",

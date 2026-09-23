@@ -103,7 +103,12 @@ and [Dockerfile](Dockerfile) document its base stack.
   explicitly scoped machine-checked obligations.
 
 Existing upstream fixes, including DFlash RNG separation and the Triton RoPE
-rounding repair, are integrated and credited as backports. The original model,
+rounding repair, are integrated and credited as backports. The drafter head also
+[defers INT2 initialization until its real shared weights are available](https://github.com/GGZ14/vllm-mxfp4/commit/1d76c82699c24ffe537e543dc4da575500d4e639):
+nonzero allocator leftovers must not be mistaken for loaded weights. This startup
+repair preserves the existing quantizer and adds no work to subsequent rounds.
+CPU regressions cover dirty placeholders, weight sharing, one-time packing and
+the hash-checked release installer. The original model,
 agent and kernel foundations retain their upstream authorship.
 
 ## What changes in Pi

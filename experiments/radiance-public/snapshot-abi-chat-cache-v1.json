@@ -72,8 +72,8 @@
       "sha256": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd"
     },
     "release_files": {
-      "bootstrap_radiance_release.py": "52de5de07f97ba70e3d880d3913ae491b9299934944bca2e2663cab4123ba63d",
-      "runtime-radiance-1.0.16.json": "c4bdec893401a66d49704b38f45a0f9c449b79b5314e17950f1e0e7b85c61226",
+      "bootstrap_radiance_release.py": "e08bed11fabee61c744a04b2c42450f99097bd7d0716a61ac1e2fc1423965e6f",
+      "runtime-radiance-1.0.16.json": "27bd4de2bb547beb8f5f03f346ab64bb2fa9a1574230a968fbc7b89f106edd38",
       "radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
@@ -83,7 +83,8 @@
       "optimized-release.json": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
       "optimized_pi_release.py": "c97a35d1d613a7bbfd7a17b49d956cab6480580ce9c44a58657a5d7f3998d6f8",
       "radiance_verifyhead_global.py": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
-      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
+      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138",
+      "patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5"
     },
     "optimized_d7": {
       "manifest_sha256": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
@@ -228,6 +229,14 @@
         "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
       },
       "pinned_host_page_policy": "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership and existing snapshot data ABI"
+    },
+    "draft_head_initialization": {
+      "installer": "patch_draft_head_initialization.py",
+      "upstream_commit": "https://github.com/GGZ14/vllm-mxfp4/commit/1d76c82699c24ffe537e543dc4da575500d4e639",
+      "source_preimage_sha256": "0de6f82cbf22d7ef6ac254748df60c72b329834fbc839cdb7d8f3cbf337bba92",
+      "source_postimage_sha256": "33ac79c763df528a28674c7f9d2bf0b8e1a3645757e6182210b09137be69adb3",
+      "contract": "Always defer INT2 draft-head packing until the real shared lm_head is passed to first use; unchanged quantizer, target arithmetic and snapshot data layout.",
+      "verification": "CPU lifecycle and installed-source regressions; no new GPU throughput or full-model numerical qualification claimed."
     }
   },
   "serving": {

@@ -11,6 +11,20 @@
     {"id":"OBS-01","contract":"Cache residency, shared probes and useful failure evidence","sources":["src/qwen_r9700_lab/radiance_cache_residency.py","src/qwen_r9700_lab/radiance_error_report.py"],"tests":["tests/test_radiance_cache_residency.py","tests/test_radiance_error_report.py","tests/test_radiance_memory.py"],"native":"Telemetry correlation under load"},
     {"id":"HEAD-01","contract":"Global-256 selection and unsupported-mode fallback","sources":["radiance_verifyhead.py"],"tests":["tests/test_verify_head_global_topk.py","tests/test_verify_head_sampling_capacity.py"],"native":"Recall and score fidelity; approximation remains explicit"},
     {"id":"D7-01","contract":"M1/M8 and eager/compiled arithmetic alignment","sources":["experiments/radiance-public/stock_gdn_runtime.py","experiments/radiance-public/stock_target_arithmetic.py"],"tests":["tests/test_stock_gdn_runtime.py","tests/test_stock_target_arithmetic.py"],"native":"Pinned full-head 10K corpus and isolated 320-row comparisons"},
-    {"id":"PERF-01","contract":"Qualified GEMM and norm/FP8/prefill replacements","sources":["experiments/radiance-public/mxfp4_dispatch.py","experiments/radiance-public/stock_gdn_norm_quant.py"],"tests":["tests/test_mxfp4_dispatch.py","tests/test_pi_prefill_admission.py","tests/test_prefill_tiles_admission.py"],"native":"Stage comparisons, 320-row full-model replay and release timings"}
+    {"id":"PERF-01","contract":"Qualified GEMM and norm/FP8/prefill replacements","sources":["experiments/radiance-public/mxfp4_dispatch.py","experiments/radiance-public/stock_gdn_norm_quant.py"],"tests":["tests/test_mxfp4_dispatch.py","tests/test_pi_prefill_admission.py","tests/test_prefill_tiles_admission.py"],"native":"Stage comparisons, 320-row full-model replay and release timings"},
+    {
+      "id": "DRAFT-INIT-01",
+      "contract": "Quantize only the real shared draft head at first use, never load-time placeholder data; preserve one-time packing, target processor and stock empty-head fallback.",
+      "sources": [
+        "radiance_drafthead.py",
+        "experiments/radiance-public/patch_draft_head_initialization.py",
+        "experiments/radiance-public/bootstrap_radiance_release.py"
+      ],
+      "tests": [
+        "tests/test_draft_head_initialization.py",
+        "tests/test_coherence_release.py"
+      ],
+      "native": "Model startup verifies the deferred first-use path; CPU tests do not establish full-model GPU equivalence or throughput."
+    }
   ]
 }

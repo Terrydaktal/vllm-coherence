@@ -273,15 +273,13 @@ def _quantize_draft_head(mtp, lp_attr="logits_processor"):
     if w.dim() != 2 or w.dtype not in (torch.bfloat16, torch.float16, torch.float32):
         return f"unsupported draft-head weight {tuple(w.shape)} {w.dtype}"
     lp._radiance_topk_only = lp_attr == "candidate_logits_processor"
-    # A drafter whose checkpoint carries no lm_head (DFlash2) gets the target's tensor shared in
-    # AFTER load_weights returns, so at this point the parameter is still allocated-but-empty.
-    # Quantising that yields an all-zero head, and the failure is silent and total: the serve comes
-    # up, text stays coherent because the TARGET is fine, and only acceptance collapses to ~1.0 --
-    # which reads as a plausible accuracy verdict on the quantisation. Defer instead.
-    if float(w.data.abs().max()) == 0.0:
-        lp._apply_head = types.MethodType(_apply_head_lazy, lp)
-        return "lm_head empty at load_weights (shared in later); quantising on first use"
-    return _quantize_head_now(lp, lm_head)
+    # DFlash shares the target's head AFTER load_weights. torch.empty can contain nonzero
+    # allocator leftovers, so checking for zeros cannot tell whether weights were loaded.
+    # Always defer: the first invocation supplies the actual shared head. Packing and
+    # the existing empty-head fallback stay unchanged; later calls use the fast path directly.
+    # Backport: GGZ14/vllm-mxfp4 commit 1d76c82699c24ffe537e543dc4da575500d4e639.
+    lp._apply_head = types.MethodType(_apply_head_lazy, lp)
+    return "deferred to first use (the weight a drafter scores against is shared in later)"
 
 
 # int2 buffers keyed by the bf16 weight they were derived from. DFlash2 shares ONE lm_head between

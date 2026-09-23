@@ -14,6 +14,7 @@ from pathlib import Path
 
 from patch_chat_snapshot import install
 from patch_dflash_sampling_rng import install as install_dflash_sampling_rng
+from patch_draft_head_initialization import install as install_draft_head_initialization
 from patch_gdn_extreme_decay import (
     LIBRARY_SHA256 as GDN_LIBRARY_SHA256,
 )
@@ -55,6 +56,9 @@ def main():
             source / "radiance_verifyhead_global.py", package / "radiance_verifyhead.py"
         )
     install_verify_head_memory(package)
+    # DFlash shares its real head after load_weights; allocated placeholder data
+    # must never be mistaken for loaded weights or packed into the INT2 head.
+    install_draft_head_initialization(package)
     # A rejected draft must not share its Gumbel draw with the target's
     # replacement. Backport the independently qualified upstream stream salt.
     install_dflash_sampling_rng(package)
