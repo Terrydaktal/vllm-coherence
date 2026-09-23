@@ -278,6 +278,9 @@ def _request(
     result = {
         "stage": stage,
         "thinking_enabled": thinking,
+        "sampling": {
+            name: body[name] for name in ("temperature", "top_p", "top_k", "seed")
+        },
         "prompt_tokens": len(prompt_tokens),
         "suffix_tokens": len(suffix_tokens),
         "generated_tokens": generated,
@@ -369,6 +372,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "fixture_sha256": _sha256_bytes(fixture_bytes),
         "benchmark_sha256": _sha256_bytes(Path(__file__).read_bytes()),
         "tokenizer_sha256": _sha256_bytes(args.tokenizer_json.read_bytes()),
+        "runtime": json.loads(args.runtime_manifest.read_text())
+        if args.runtime_manifest
+        else None,
         "prefix_tokens": len(sequence),
         "privacy": "No prompt, response or token arrays are saved; only hashes and metrics are retained.",
         "sampling": {

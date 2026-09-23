@@ -72,7 +72,7 @@
     "launcher_root": "/home/lewis/projects/r9700-public-clean-20260906/qwen3.6-vllm-gfx1201-launchers"
   },
   "optimized_d7": {
-    "manifest_sha256": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
+    "manifest_sha256": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
     "state_layout": "existing-nine-slot",
     "worker": "optimized_d7_worker.OptimizedWorker",
     "arithmetic": {
@@ -104,6 +104,11 @@
       "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",
       "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
       "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
+    },
+    "attention_boundary_qualification": {
+      "path": "/qualification/diagnostics/attention-page-boundary-v1/pi-comparison.json",
+      "sha256": "afeed5c1f6216dbe45a273bce72e4a5b707d23133322b71d32779fabc9114dd2",
+      "scope": "Exact sampled M1 attention outputs and natural Pi output agreement at 0K/60K/200K; no full-vocabulary or universal equivalence claim."
     }
   }
 }

@@ -1,0 +1,85 @@
+{
+  "schema": "urn:coherence:stage-timing-audit:v1",
+  "status": "diagnostic_only",
+  "qualification_issues": [
+    "stage profile is not qualified for production timing",
+    "a compilation-free measurement window has not been established",
+    "control timing must exclude forced_replay_hooks",
+    "control timing must exclude added_synchronization",
+    "independently recorded round_boundary does not match",
+    "independently recorded workload_schedule_sha256 does not match",
+    "independently recorded runtime_artifact_sha256 does not match",
+    "matched profiler-on/off observer effect has not been measured"
+  ],
+  "real_gap_ms": null,
+  "zero_observer_effect_proven": false,
+  "context_order": [
+    "0K",
+    "60K",
+    "200K"
+  ],
+  "contexts": {
+    "0K": {
+      "full_uninstrumented_round_ms": 44.43349500551381,
+      "instrumented_stage_sum_ms": 36.3736335480116,
+      "residual_ms": 8.059861457502215,
+      "gpu_busy_union_ms": 36.37206649688177,
+      "union_corrected_difference_ms": 8.06142850863204,
+      "control_sample_count": 242
+    },
+    "60K": {
+      "full_uninstrumented_round_ms": 58.95563386585602,
+      "instrumented_stage_sum_ms": 41.562553651943446,
+      "residual_ms": 17.393080213912576,
+      "gpu_busy_union_ms": 41.51131028265787,
+      "union_corrected_difference_ms": 17.444323583198155,
+      "control_sample_count": 242
+    },
+    "200K": {
+      "full_uninstrumented_round_ms": 94.04168253372931,
+      "instrumented_stage_sum_ms": 52.02897057811126,
+      "residual_ms": 42.01271195561805,
+      "gpu_busy_union_ms": 52.0086470962392,
+      "union_corrected_difference_ms": 42.03303543749011,
+      "control_sample_count": 242
+    }
+  },
+  "definition": "Historical arithmetic difference: control round minus stage-duration sum. Only union_corrected_difference_ms accounts for concurrent GPU work. Neither difference proves profiler-free production gaps; matched_estimate is an empirical estimate.",
+  "private_chat_text_read": false,
+  "date": "2026-09-23",
+  "sources": {
+    "benchmarks/results/compiled-global256-stage-profile-1200.json": "f2b99bcaf2bdd166e058ab0f277ec86ab333787eb2c45608b6772c61ac4cf736",
+    "benchmarks/results/stage26-control-20260921.json": "8da3b3e855e3f4f7a7ecfced0e7b2d01e957645e8f595c9de3bc18a94997f1bd",
+    "tools/compute_stage26_residual.py": "fae7fdf3618fbe36168361f78eec595f87c6e011e3e4bb04ce39609f7c0c1bd6",
+    "tools/analyze_release_timings.py": "1e2f4dde29168bc4eea144d30e1d71645d7a96ca2c218865eda358a8ca185696",
+    "experiments/radiance-public/profile_d7_stages.py": "819b12468604a672c7ee5b61b4d57aba612d96122e970823b8797185df8fe400"
+  },
+  "finding": "Direct CPU instrumentation is excluded from the archived GPU kernel sums. Neither their indirect observer effect nor the control residual is qualified as current production time.",
+  "histogram": {
+    "source": "benchmarks/results/pi-coding-contexts.json",
+    "source_sha256": "65fa23d1082437b09d2fad36f0ea55461ce06b1dc8a5869ab92eb23269b7305f",
+    "contexts": {
+      "0K": {
+        "record_count": 1007,
+        "measured_round_count": 1006,
+        "unmeasured_round_count": 1,
+        "missing_round_numbers": [],
+        "duplicate_round_numbers": []
+      },
+      "60K": {
+        "record_count": 1855,
+        "measured_round_count": 1854,
+        "unmeasured_round_count": 1,
+        "missing_round_numbers": [],
+        "duplicate_round_numbers": []
+      },
+      "200K": {
+        "record_count": 877,
+        "measured_round_count": 876,
+        "unmeasured_round_count": 1,
+        "missing_round_numbers": [],
+        "duplicate_round_numbers": []
+      }
+    }
+  }
+}

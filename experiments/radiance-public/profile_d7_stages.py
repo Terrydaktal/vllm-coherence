@@ -1,8 +1,8 @@
 """Profile old/repaired M8 on private fixed-context prefixes without decoding them.
 
-Separate clean wall-time passes from a short ROCm kernel-attribution pass.
+Separate clean wall-time passes from a low-observer-overhead GPU stage pass.
 All seven proposals are forced accepted: rates describe fixed work, not natural
-Pi throughput. Raw tokens, logits and profiler traces stay in owned tmpfs.
+Pi throughput. Raw tokens, logits and numeric event records stay in owned tmpfs.
 """
 
 from __future__ import annotations
@@ -24,7 +24,8 @@ from benchmark_d7_equivalence import (
     EquivalenceWorkerExtension,
     private_root,
 )
-from d7_stage_attribution import PREFIX, attribute_trace, module_stage
+from d7_stage_attribution import module_stage
+from low_overhead_stage_events import DEFAULT_EVENT_PAIRS, LowOverheadStageTimer
 
 from qwen_r9700_lab.conformance_instrumentation import HookSet
 from qwen_r9700_lab.conformance_topk import require
@@ -81,7 +82,11 @@ class StageScopes:
 class StageProbe(EquivalenceProbe):
     def __init__(self, runner, task):
         super().__init__(runner, task)
-        self.profiler = None
+        self.stage_timer = LowOverheadStageTimer(
+            max_event_pairs=int(
+                os.environ.get("QWEN_LOW_OVERHEAD_EVENT_PAIRS", str(DEFAULT_EVENT_PAIRS))
+            )
+        )
         self.profile_active = False
         self.scopes = None
         self.in_target = False
@@ -91,9 +96,7 @@ class StageProbe(EquivalenceProbe):
     def scope(self, name):
         if not self.profile_active:
             return contextlib.nullcontext()
-        import torch
-
-        return torch.profiler.record_function(PREFIX + name)
+        return self.stage_timer.scope(name)
 
     @staticmethod
     def validate_execution(runner):
@@ -118,11 +121,8 @@ class StageProbe(EquivalenceProbe):
 
     def stop_profile(self):
         if self.profile_active:
-            import torch
-
-            torch.cuda.synchronize()
             self.profile_active = False
-            self.profiler.stop()
+            self.stage_timer.stop()
 
     def attach(self):
         import torch
@@ -147,25 +147,12 @@ class StageProbe(EquivalenceProbe):
                 start = self.task["warmup_steps"] * 8
                 stop = start + self.task["profile_steps"] * 8
                 if self.schedule.cursor == start:
-                    torch.cuda.synchronize()
-                    require(
-                        torch.profiler.ProfilerActivity.CUDA
-                        in torch.profiler.supported_activities(),
-                        "ROCm GPU activity profiling is unavailable",
-                    )
-                    self.profiler = torch.profiler.profile(
-                        activities=[
-                            torch.profiler.ProfilerActivity.CPU,
-                            torch.profiler.ProfilerActivity.CUDA,
-                        ],
-                        record_shapes=False,
-                        profile_memory=False,
-                        with_stack=False,
-                    )
-                    self.profiler.start()
+                    self.stage_timer.start()
                     self.profile_active = True
                 elif self.schedule.cursor == stop:
                     self.stop_profile()
+            if self.profile_active:
+                self.stage_timer.begin_round()
             with self.scope("input_preparation"):
                 batch = original_prepare(*args, **kwargs)
             with self.scope("forced_replay_control"):
@@ -173,6 +160,11 @@ class StageProbe(EquivalenceProbe):
                 positions = batch.positions[: batch.num_tokens].detach().cpu().tolist()
                 inputs = batch.input_ids[: batch.num_tokens].detach().cpu().tolist()
                 self.schedule.check_inputs(positions, inputs)
+                if self.profile_active:
+                    self.stage_timer.annotate_round(
+                        input_tokens=int(batch.num_tokens),
+                        num_reqs=int(batch.num_reqs),
+                    )
                 self.input_hash.update(
                     bytes.fromhex(digest({"positions": positions, "inputs": inputs}))
                 )
@@ -194,20 +186,30 @@ class StageProbe(EquivalenceProbe):
 
         def sample(hidden_states, batch, grammar_output):
             require(grammar_output is None, "grammar transformations are not admitted")
-            with self.scope("target_sampling"):
-                result, ns, nr = original_sample(hidden_states, batch, grammar_output)
-            with self.scope("forced_replay_control"):
-                if not int(ns[0].item()):
-                    return result, ns, nr
-                step = self.schedule.commit(int(batch.num_draft_tokens))
-                begin = 0 if step["prefill"] else step["start"] + 1
-                result.sampled_token_ids.fill_(-1)
-                result.sampled_token_ids[0, : step["count"]].copy_(
-                    output_gpu[begin : begin + step["count"]]
-                )
-                ns.fill_(step["count"])
-                nr.fill_(step["reject"])
-            return result, ns, nr
+            try:
+                with self.scope("target_sampling"):
+                    result, ns, nr = original_sample(hidden_states, batch, grammar_output)
+                with self.scope("forced_replay_control"):
+                    if not int(ns[0].item()):
+                        return result, ns, nr
+                    step = self.schedule.commit(int(batch.num_draft_tokens))
+                    if self.profile_active:
+                        self.stage_timer.annotate_round(
+                            draft_tokens=int(batch.num_draft_tokens),
+                            accepted_tokens=int(step["count"]),
+                            rejected_tokens=int(step["reject"]),
+                        )
+                    begin = 0 if step["prefill"] else step["start"] + 1
+                    result.sampled_token_ids.fill_(-1)
+                    result.sampled_token_ids[0, : step["count"]].copy_(
+                        output_gpu[begin : begin + step["count"]]
+                    )
+                    ns.fill_(step["count"])
+                    nr.fill_(step["reject"])
+                return result, ns, nr
+            finally:
+                if self.profile_active and self.stage_timer.round_active:
+                    self.stage_timer.finish_round()
 
         def propose(*args, **kwargs):
             with self.scope("drafter"):
@@ -229,11 +231,8 @@ class StageProbe(EquivalenceProbe):
             self.scopes = StageScopes(self)
 
     def finish(self):
-        import torch
-
         require(self.schedule.done, "incomplete forced replay")
         self.stop_profile()
-        torch.cuda.synchronize()
         require(
             self.final_logits is not None and self.final_logits.shape == (8, 248320),
             "missing final M8 logits",
@@ -249,19 +248,13 @@ class StageProbe(EquivalenceProbe):
             "positions": self.schedule.cursor,
             "repair_receipt": self.repairs.receipt() if self.repairs else None,
         }
-        if self.profiler is not None:
+        if self.task["mode"] == "profile":
             require(
                 self.profile_steps == self.task["profile_steps"], "profile window was shortened"
             )
-            # Retain raw evidence even when attribution coverage fails below.
-            trace_path = self.root / "profile-trace.json"
-            self.profiler.export_chrome_trace(str(trace_path))
-            result["profile"] = attribute_trace(json.loads(trace_path.read_text())["traceEvents"])
-            result["profile"]["trace_sha256"] = hashlib.sha256(trace_path.read_bytes()).hexdigest()
+            result["profile"] = self.stage_timer.finish()
             result["profile"]["steps"] = self.profile_steps
             result["profile"]["module_inventory"] = self.scopes.inventory
-            for row in result["profile"]["stages"].values():
-                row["ms_per_step"] = row["kernel_us"] / (1000 * self.profile_steps)
             required = {
                 "gdn_convolution",
                 "gdn_recurrence_gates_state",
@@ -271,12 +264,13 @@ class StageProbe(EquivalenceProbe):
                 "drafter",
             }
             result["profile"]["missing_stages"] = sorted(
-                k for k in required if not result["profile"]["stages"].get(k, {}).get("kernels", 0)
+                k
+                for k in required
+                if result["profile"]["stages"].get(k, {}).get("intervals", 0)
+                < self.profile_steps
             )
             result["profile"]["coverage"] = (
-                "INCOMPLETE"
-                if result["profile"]["missing_stages"] or result["profile"]["unlinked_kernels"]
-                else "COMPLETE"
+                "INCOMPLETE" if result["profile"]["missing_stages"] else "COMPLETE"
             )
         result = seal(result)
         write_private(self.root / "result.json", result)
@@ -331,7 +325,7 @@ def run_worker(args):
                 "cudagraph_capture_sizes": [1, 2, 4, 8],
             },
             worker_cls="optimized_d7_worker.OptimizedWorker",
-            max_num_seqs=1,
+            max_num_seqs=args.max_num_seqs,
             async_scheduling=False,
             enable_prefix_caching=True,
             disable_log_stats=True,
@@ -340,7 +334,7 @@ def run_worker(args):
     else:
         config.update(
             enforce_eager=True,
-            max_num_seqs=1,
+            max_num_seqs=args.max_num_seqs,
             async_scheduling=False,
             enable_prefix_caching=True,
             disable_log_stats=True,
@@ -357,7 +351,15 @@ def run_worker(args):
             {"workers": llm.collective_rpc("qwen_equivalence_runtime")},
         )
     records = []
-    if args.arm == "old" and args.old_reuse:
+    if args.control_only:
+        # A control run uses this exact forced fixture without any stage
+        # scopes or GPU event probes.  The first warmup window is discarded
+        # inside the single clean pass; running a separate warmup pass would
+        # repeat a 60K/200K prefill and would no longer be a useful control.
+        modes = ["clean"] * args.repeats
+    elif args.profile_only:
+        modes = ["warmup", "profile"]
+    elif args.arm == "old" and args.old_reuse:
         measurement = private_json(args.old_reuse / "measurement.json")
         authenticate(measurement)
         require(
@@ -404,6 +406,7 @@ def run_worker(args):
                 "mode": mode,
                 "warmup_steps": args.warmup_steps,
                 "profile_steps": args.profile_steps,
+                "control_only": args.control_only,
             }
         )
         task_path = args.output / f"{args.arm}-task-{index:02d}.json"
@@ -495,24 +498,42 @@ def run_worker(args):
     # an otherwise valid timing profile; the aggregate records it explicitly.
     same_final_logits = len(hashes) == 1
     clean = [r for r in records if r["mode"] == "clean"]
-    result = seal(
-        {
-            "arm": args.arm,
-            "fixture": fixture["sha256"],
-            "same_final_logits_all_passes": same_final_logits,
-            "passes": [r["sha256"] for r in records],
-            "clean_median_step_ms": statistics.median([r["median_step_ms"] for r in clean]),
-            "clean_total_step_seconds": sum(sum(r["step_seconds"]) for r in clean),
-            "clean_steps": sum(r["timed_steps"] for r in clean),
-            "prefill_seconds": [r["prefill_seconds"] for r in clean],
-            "profile": records[-1]["worker"]["profile"],
-            "scope": (
-                f"{args.execution_mode} TP1, {len(fixture['prefix']):,}-token private prefix, "
-                f"forced D7 acceptance with verify head {args.verify_head}. Clean timings "
-                "include minimal replay control; GPU profile is separate. Not natural Pi throughput."
-            ),
-        }
+    scope = (
+        f"{args.execution_mode} TP1, {len(fixture['prefix']):,}-token private prefix, "
+        f"forced D7 acceptance with verify head {args.verify_head}. Clean timings "
+        "include minimal replay control; GPU profile is separate. Not natural Pi throughput."
     )
+    if args.control_only:
+        scope = (
+            f"{args.execution_mode} TP1, {len(fixture['prefix']):,}-token private prefix, "
+            "forced D7 fixture control with stage scopes and GPU event probes disabled. "
+            "The first warmup window inside the single clean pass is excluded; this is "
+            "not natural Pi throughput."
+        )
+    elif args.profile_only:
+        scope = (
+            f"{args.execution_mode} TP1, {len(fixture['prefix']):,}-token private prefix, "
+            "forced D7 fixture profile with preallocated HIP events and asynchronous "
+            "resolution. The profile window is diagnostic and not natural Pi throughput."
+        )
+    result_payload = {
+        "arm": args.arm,
+        "fixture": fixture["sha256"],
+        "same_final_logits_all_passes": same_final_logits,
+        "passes": [r["sha256"] for r in records],
+        "clean_median_step_ms": (
+            statistics.median([r["median_step_ms"] for r in clean])
+            if clean
+            else None
+        ),
+        "clean_total_step_seconds": sum(sum(r["step_seconds"]) for r in clean),
+        "clean_steps": sum(r["timed_steps"] for r in clean),
+        "prefill_seconds": [r["prefill_seconds"] for r in clean],
+        "scope": scope,
+    }
+    if not args.control_only:
+        result_payload["profile"] = records[-1]["worker"]["profile"]
+    result = seal(result_payload)
     write_private(args.output / f"{args.arm}-summary.json", result)
 
 
@@ -582,10 +603,19 @@ def run(args):
                 "attribution_sha256": hashlib.sha256(
                     Path(__file__).with_name("d7_stage_attribution.py").read_bytes()
                 ).hexdigest(),
+                "stage_observer_sha256": hashlib.sha256(
+                    Path(__file__).with_name("low_overhead_stage_events.py").read_bytes()
+                ).hexdigest(),
                 "warmup_steps": args.warmup_steps,
                 "timed_steps": args.steps,
                 "profile_steps": args.profile_steps,
                 "clean_repeats": args.repeats,
+                "stage_observer": "preallocated-hip-events-v1",
+                "stage_event_pool_pairs": int(
+                    os.environ.get(
+                        "QWEN_LOW_OVERHEAD_EVENT_PAIRS", str(DEFAULT_EVENT_PAIRS)
+                    )
+                ),
             }
         ),
     )
@@ -614,7 +644,8 @@ def run(args):
     env.pop("QWEN_CONFORMANCE_NATIVE_EXPERIMENT", None)
     env["PYTHONPATH"] = str(Path(__file__).resolve().parent) + os.pathsep + env["PYTHONPATH"]
     with gpu_lease(args.output / "gpu-lease"):
-        for arm in ("old", "fixed"):
+        arms = ("fixed",) if (args.control_only or args.profile_only) else ("old", "fixed")
+        for arm in arms:
             arm_env = dict(env)
             arm_env["QWEN_OPTIMIZED_STARTUP_RECEIPT"] = str(
                 args.output / f"{arm}-optimized-startup.json"
@@ -635,6 +666,7 @@ def run(args):
                 "repeats",
                 "execution_mode",
                 "verify_head",
+                "max_num_seqs",
             ):
                 argv += ["--" + key.replace("_", "-"), str(getattr(args, key))]
             # The worker reads the authenticated fixture copied into the run
@@ -645,6 +677,10 @@ def run(args):
                 argv += ["--performance-manifest", str(args.performance_manifest)]
             if args.old_reuse:
                 argv += ["--old-reuse", str(args.old_reuse)]
+            if args.control_only:
+                argv += ["--control-only"]
+            if args.profile_only:
+                argv += ["--profile-only"]
             with OwnedProcess(
                 argv, args.private / f"{arm}-process", env=arm_env, timeout=7200
             ) as process:
@@ -654,10 +690,15 @@ def run(args):
                 code == 0,
                 "stage worker failed; private log retained without printing chat contents",
             )
-    reports = {arm: private_json(args.output / f"{arm}-summary.json") for arm in ("old", "fixed")}
+    arms = ("fixed",) if (args.control_only or args.profile_only) else ("old", "fixed")
+    reports = {arm: private_json(args.output / f"{arm}-summary.json") for arm in arms}
     for report in reports.values():
         authenticate(report)
-    complete = all(r["profile"]["coverage"] == "COMPLETE" for r in reports.values())
+    complete = (
+        True
+        if args.control_only
+        else all(r["profile"]["coverage"] == "COMPLETE" for r in reports.values())
+    )
     write_private(
         args.output / "summary.json",
         seal({"status": "MEASURED" if complete else "PROFILE_INCOMPLETE", **reports}),
@@ -682,16 +723,28 @@ def main():
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--execution-mode", choices=("eager", "compiled"), default="eager")
     parser.add_argument("--verify-head", choices=("0", "1"), default="0")
+    parser.add_argument("--max-num-seqs", type=int, default=1)
+    parser.add_argument(
+        "--control-only",
+        action="store_true",
+        help="Run one fixed-lane forced-fixture control with stage profiling disabled.",
+    )
+    parser.add_argument(
+        "--profile-only",
+        action="store_true",
+        help="Run only the fixed-lane warmup/profile passes; omit the old arm and clean control.",
+    )
     parser.add_argument("--allow-gpu", action="store_true")
     args = parser.parse_args()
     require(
-        args.steps >= args.profile_steps > 0 and args.warmup_steps > 0 and args.repeats > 0,
+        args.steps >= args.profile_steps > 0 and args.warmup_steps > 0 and args.repeats > 0 and args.max_num_seqs > 0,
         "invalid measurement window",
     )
     require(
         (args.corpus is None) != (args.fixture is None),
         "provide exactly one of --corpus or --fixture",
     )
+    require(not (args.control_only and args.profile_only), "control-only and profile-only are exclusive")
     os.umask(0o077)
     (run if args.command == "run" else run_worker)(args)
 

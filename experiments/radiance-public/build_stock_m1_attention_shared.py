@@ -29,7 +29,9 @@ __device__ __forceinline__ uint32_t r4d_qcvt(uint32_t w, float s) {
                  __builtin_bit_cast(float, w & 0xffff0000u) * s);
 }
 """
-    require(source.count("#define O_F16") == 1, "attention helper insertion anchor changed")
+    require(
+        source.count("#define O_F16") == 1, "attention helper insertion anchor changed"
+    )
     source = source.replace("#define O_F16", helper + "\n#define O_F16")
     replacements = [
         (
@@ -39,11 +41,26 @@ __device__ __forceinline__ uint32_t r4d_qcvt(uint32_t w, float s) {
     const int total_ctx = a.seqused_k[0];
     if (total_ctx < a.q_len) return;
     const int first_ctx = total_ctx - a.q_len + 1;
-    const int first_rows = min(a.q_len, ((first_ctx + 15) / 16) * 16 - first_ctx + 1);
-    const int group_start = blockIdx.z == 0 ? 0 : first_rows;
-    const int group_rows = blockIdx.z == 0 ? first_rows : a.q_len - first_rows;
-    if (!group_rows) return;
-    const int ctx = first_ctx + group_start + group_rows - 1;""",
+    const int group_start = 0;
+    const int group_rows = a.q_len;
+    const int ctx = total_ctx;""",
+        ),
+        (
+            "const int tps  = r4d_attn_tps(ctx, TILE, splits);\n"
+            "    const int t_lo = sp * tps;\n"
+            "    if (t_lo >= ntl) return;\n"
+            "    const int t_hi = min(t_lo + tps, ntl);",
+            """const int first_tps = r4d_attn_tps(first_ctx, TILE, splits);
+    const int last_tps = r4d_attn_tps(ctx, TILE, splits);
+    // Traverse the union once. Each query retains its own serial-M1 split
+    // boundaries below, including when tiles-per-split increases. Splitting
+    // the eight queries into two CTAs at every page boundary reread the full
+    // context and created a second, context-dependent round-latency mode.
+    const int t_lo = sp * first_tps;
+    if (t_lo >= ntl) return;
+    const int t_hi = min((sp + 1) * last_tps, ntl);
+    const int first_t_hi = min((sp + 1) * first_tps, r4d_attn_tiles(first_ctx, TILE));
+    const int last_t_lo = sp * last_tps;""",
         ),
         (
             "const int row = warp * 16 + c;\n"
@@ -54,6 +71,11 @@ __device__ __forceinline__ uint32_t r4d_qcvt(uint32_t w, float s) {
     const int qi = warp * 2 + pair, hi = c % GQA;
     const bool live = (c < 2 * GQA && qi < group_rows);
     const int qrow = min(qi, group_rows - 1);
+    const int query_ctx = first_ctx + qrow;
+    const int query_ntl = r4d_attn_tiles(query_ctx, TILE);
+    const int query_tps = r4d_attn_tps(query_ctx, TILE, splits);
+    const int query_t_lo = sp * query_tps;
+    const int query_t_hi = min(query_t_lo + query_tps, query_ntl);
     // Both halves of the fragment, all six heads, exactly one query.
     auto query_any = [&](bool predicate) {
         const unsigned mask = 0x003f003fu << (pair * GQA);
@@ -64,10 +86,30 @@ __device__ __forceinline__ uint32_t r4d_qcvt(uint32_t w, float s) {
             "((size_t)(seq * a.q_len + qrow) * a.q_heads + qhead)",
             "((size_t)(group_start + qrow) * a.q_heads + qhead)",
         ),
-        ("const int klimit = ctx - a.q_len + qrow;", "const int klimit = ctx - group_rows + qrow;"),
+        (
+            "const int klimit = ctx - a.q_len + qrow;",
+            "const int klimit = ctx - group_rows + qrow;",
+        ),
+        (
+            "const int k0 = ti * TILE;",
+            """const int k0 = ti * TILE;
+        // A split-size boundary can give queries different start tiles.
+        // Discard any earlier union work before this query's first M1 tile.
+        if (last_t_lo != t_lo && ti == last_t_lo && query_t_lo == last_t_lo) {
+            m_ref = -3.0e38f;
+            off = PSHIFT + 3.0e38f;
+            l_i = 0.0f;
+            #pragma unroll
+            for (int dt = 0; dt < NKS; ++dt)
+                acc[dt] = (v8f){0,0,0,0,0,0,0,0};
+        }""",
+        ),
         ("wave_any(kbase + 7 > klimit)", "query_any(kbase + 7 > klimit)"),
         ("wave_any(smax > m_ref + PGROW)", "query_any(smax > m_ref + PGROW)"),
-        ("const int tok = seq * a.q_len + qrow;", "const int tok = group_start + qrow;"),
+        (
+            "const int tok = seq * a.q_len + qrow;",
+            "const int tok = group_start + qrow;",
+        ),
         (
             "const int ctx = a.seqused_k[seq];",
             "const int ctx = a.seqused_k[seq] - a.q_len + (tok % a.q_len) + 1;",
@@ -76,15 +118,53 @@ __device__ __forceinline__ uint32_t r4d_qcvt(uint32_t w, float s) {
     for before, after in replacements:
         require(source.count(before) == 1, "attention source patch anchor changed")
         source = source.replace(before, after)
+    # Publish each query immediately after its last M1 tile. Later union tiles
+    # cannot change this partial. This keeps the original WMMA accumulation
+    # instructions, avoiding per-element selects on every tile. The two halves
+    # of each query always enter this branch together; no CTA exits before the
+    # remaining shared-memory barriers.
+    begin = source.index("    if (!live) return;")
+    end = source.index("\n}\n\n// Merge.", begin)
+    partial = source[begin:end].replace("    if (!live) return;\n", "", 1)
+    source = (
+        source[:begin]
+        + "    if (live && query_t_hi == t_hi && query_t_lo < query_t_hi)\n        write_partial();\n"
+        + source[end:]
+    )
+    require(
+        source.count("    int blk[NB];") == 1,
+        "attention partial insertion anchor changed",
+    )
+    source = source.replace(
+        "    int blk[NB];",
+        "    auto write_partial = [&]() {\n" + partial + "\n    };\n\n    int blk[NB];",
+    )
+    tail = """        if (BTS) {
+            #pragma unroll
+            for (int i = 0; i < NB; ++i) blk[i] = blkn[i];
+        }
+    }"""
+    require(source.count(tail) == 1, "attention tile completion anchor changed")
+    source = source.replace(
+        tail,
+        tail[:-5]
+        + """        if (first_t_hi != t_hi && ti + 1 == first_t_hi) {
+            if (live && query_t_hi == first_t_hi && query_t_lo < query_t_hi)
+                write_partial();
+        }
+    }""",
+    )
     source = source.replace("r4d_attn_decode_kernel", "qwen_stock_m1_shared_decode")
-    source = source.replace("r4d_attn_splitkv_combine_kernel", "qwen_stock_m1_shared_merge")
+    source = source.replace(
+        "r4d_attn_splitkv_combine_kernel", "qwen_stock_m1_shared_merge"
+    )
     return source
 
 
 EXPORT = r"""
 template<int KVP> void launch_shared(const R4DArgs& a, hipStream_t stream) {
   qwen_stock_m1_shared_decode<4,16,256,6,16,KVP,3430971>
-      <<<dim3(a.splits, 4, 2), dim3(128), 0, stream>>>(a, a.splits);
+      <<<dim3(a.splits, 4, 1), dim3(128), 0, stream>>>(a, a.splits);
   qwen_stock_m1_shared_merge<256,4,1>
       <<<dim3(8 * 24), dim3(256), a.splits * sizeof(float), stream>>>(a, a.splits, 16);
 }
@@ -104,7 +184,10 @@ def build(source_dir, output):
     output.mkdir(mode=0o700)
     for name, expected in SOURCES.items():
         raw = (source_dir / name).read_bytes()
-        require(hashlib.sha256(raw).hexdigest() == expected, "upstream source binding mismatch")
+        require(
+            hashlib.sha256(raw).hexdigest() == expected,
+            "upstream source binding mismatch",
+        )
         if name.endswith(".hip"):
             raw = (transform(raw.decode()) + EXPORT).encode()
         (output / name).write_bytes(raw)
@@ -135,7 +218,9 @@ def build(source_dir, output):
             "upstream_sources": SOURCES,
             "kernel_abi": "qwen-stock-m1-shared-attention-v1",
             "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-            "binary_sha256": hashlib.sha256((output / "candidate.so").read_bytes()).hexdigest()
+            "binary_sha256": hashlib.sha256(
+                (output / "candidate.so").read_bytes()
+            ).hexdigest()
             if done.returncode == 0
             else None,
         }

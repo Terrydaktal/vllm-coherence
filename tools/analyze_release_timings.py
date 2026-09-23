@@ -53,7 +53,7 @@ def phase(layer, region, name):
     return resolved
 
 
-def measure_round_windows(events, starts, selected):
+def measure_round_windows(events, starts, selected, *, allow_transfers=False):
     """Measure complete GPU start-to-next-start cycles on one device.
 
     Kernel durations are summed for stage accounting; interval union measures
@@ -93,7 +93,7 @@ def measure_round_windows(events, starts, selected):
                 continue
             if relative < 0 or end > elapsed:
                 raise ValueError("GPU activity crosses a round boundary")
-            if event["cat"] != "kernel":
+            if event["cat"] != "kernel" and not allow_transfers:
                 raise ValueError("GPU copy activity needs explicit stage accounting")
             devices.add(event["args"]["device"])
             streams.add(event["args"]["stream"])
@@ -138,7 +138,105 @@ def measure_round_windows(events, starts, selected):
     }
 
 
-def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
+def measure_worker_windows(events, targets, selected, stages_by_event, groups):
+    """Use CPU entry markers also timed by the clean control, clipping GPU work.
+
+    Markers are only boundaries. Their CPU duration is never added to a stage.
+    In-flight work straddling a boundary is split there rather than discarded.
+    """
+    markers = sorted(
+        (float(e["ts"]), float(e["dur"]), int(e["name"].split("/")[-1]))
+        for e in events
+        if e.get("ph") == "X" and e.get("cat") == "user_annotation"
+        and e.get("name", "").startswith("qwen_timing_round/")
+    )
+    if not markers:
+        raise ValueError("worker boundary markers missing")
+    marker_starts = [m[0] for m in markers]
+    # Include the previous round's asynchronous draft/bookkeeping tail when it
+    # extends beyond the next worker entry. Target stages require full mapping.
+    for (scope, _), group in groups.items():
+        if scope != "target_body":
+            stage = {"drafter": "Drafter", "target_vocabulary_head": "Target head (global256)"}.get(scope, "Other GPU bookkeeping")
+            for event in group:
+                stages_by_event.setdefault(id(event), stage)
+    activity = [e for e in events if e.get("ph") == "X"
+                and e.get("cat") in {"kernel", "gpu_memcpy", "gpu_memset"}]
+    rows, omissions = [], []
+    for index in selected:
+        # Omit the first two cycles after trace activation, independently of
+        # their duration. They can reflect profiler startup / clock recovery.
+        if index < 2:
+            omissions.append({"target_index": index, "reason": "trace activation boundary"})
+            continue
+        cpu_start = float(targets[index][0][1])
+        marker_index = bisect.bisect_right(marker_starts, cpu_start) - 1
+        if marker_index < 0 or marker_index + 1 >= len(markers):
+            raise ValueError("target scope has no matching worker-entry interval")
+        start, duration, decode_index = markers[marker_index]
+        stop, _, next_index = markers[marker_index + 1]
+        if not start <= cpu_start < start + duration or next_index != decode_index + 1:
+            raise ValueError("worker marker does not contain target scope or misses a round")
+        intervals, stages, count, clipped, devices = [], defaultdict(float), 0, 0.0, set()
+        for event in activity:
+            begin, end = float(event["ts"]), float(event["ts"]) + float(event["dur"])
+            lo, hi = max(start, begin), min(stop, end)
+            if hi <= lo:
+                continue
+            stage = stages_by_event.get(id(event))
+            if event["cat"] != "kernel":
+                stage = "Other GPU bookkeeping"
+            if stage is None:
+                raise ValueError("unclassified GPU work crosses a worker-entry window")
+            stages[stage] += (hi - lo) / 1000
+            intervals.append((lo - start, hi - start))
+            devices.add(event["args"]["device"])
+            clipped += max(0, hi - lo) if lo != begin or hi != end else 0
+            count += 1
+        if len(devices) != 1:
+            raise ValueError("worker interval must contain exactly one GPU")
+        occupied, last = 0.0, 0.0
+        for lo, hi in sorted(intervals):
+            occupied += max(0, hi - max(lo, last))
+            last = max(last, hi)
+        total = math.fsum(stages.values())
+        rows.append({"decode_index": decode_index, "target_index": index,
+                     "elapsed_ms": (stop - start) / 1000,
+                     "gpu_busy_ms": occupied / 1000, "kernel_sum_ms": total,
+                     "gpu_overlap_ms": max(0, total - occupied / 1000),
+                     "overhead_ms": (stop - start - occupied) / 1000,
+                     "clipped_boundary_activity_ms": clipped / 1000,
+                     "kernel_count": count, "stages_ms": dict(stages)})
+    if not rows:
+        raise ValueError("no matched worker intervals retained")
+    return {"boundary": "worker_execute_entry_to_next_worker_execute_entry",
+            "rounds": rows, "omissions": omissions}
+
+
+def target_inventory_issue(events):
+    """Admit complete M8 inventories, including both short-context page groups."""
+    points = [(i, projection(e["name"])) for i, e in enumerate(events) if projection(e["name"])]
+    if [p for _, p in points] != ["split1", "split4", "split1", "split4"] * 64:
+        return f"incomplete projection inventory ({len(points)}/256)"
+    for layer in range(64):
+        a, b, c, d = [points[layer * 4 + j][0] for j in range(4)]
+        names = [e["name"] for e in events[a + 1:b]]
+        if layer % 4 != 3:
+            if (sum("conv" in n for n in names) != 1 or
+                    sum("recurrent" in n or "stock_gdn_scan" in n for n in names) != 1):
+                return f"incomplete GDN inventory (layer {layer})"
+        else:
+            decodes = sum("attn_decode" in n or "shared_decode" in n for n in names)
+            merges = sum("splitkv_combine" in n or "shared_merge" in n for n in names)
+            if decodes not in {1, 2} or merges != decodes:
+                return f"incomplete attention inventory (layer {layer})"
+        if sum("silu" in e["name"] for e in events[c + 1:d]) != 1:
+            return f"incomplete activation inventory (layer {layer})"
+    return None
+
+
+def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
+            worker_boundaries=False, admitted_decode_indices=None):
     trace = json.loads(raw)
     groups, graph_launches = launch_groups(trace["traceEvents"])
     targets = sorted((k, v) for k, v in groups.items() if k[0] == "target_body")
@@ -152,7 +250,26 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
         tuple(sorted(Counter(e["name"] for e in v).items())) for _, v in targets
     ]
     inventory = Counter(inventories).most_common(1)[0][0]
-    complete = [i for i, value in enumerate(inventories) if value == inventory]
+    # A natural 0K completion legitimately switches from the short-context R4D
+    # attention path to shared attention. A modal-inventory filter would discard
+    # one real execution path and bias its mean. Both still have to pass the
+    # per-layer projection, attention and recurrence checks below.
+    complete = (list(range(len(targets))) if worker_boundaries else
+                [i for i, value in enumerate(inventories) if value == inventory])
+    incomplete = {}
+    if worker_boundaries:
+        incomplete = {i: issue for i, (_, events) in enumerate(targets)
+                      if (issue := target_inventory_issue(events)) is not None}
+        complete = [i for i in complete if i not in incomplete]
+    if worker_boundaries and admitted_decode_indices is not None:
+        markers = sorted((float(e["ts"]), int(e["name"].split("/")[-1]))
+                         for e in trace["traceEvents"]
+                         if e.get("ph") == "X" and e.get("cat") == "user_annotation"
+                         and e.get("name", "").startswith("qwen_timing_round/"))
+        marker_starts = [m[0] for m in markers]
+        complete = [i for i in complete
+                    if markers[bisect.bisect_right(marker_starts, float(targets[i][0][1])) - 1][1]
+                    in admitted_decode_indices]
     # The last target has no following start. Keep it out of *both* the kernel
     # averages and the elapsed averages; never invent its closing boundary.
     selected = [i for i in complete if i + 1 < len(targets)]
@@ -178,8 +295,9 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
     ]
     if len(selected) < min(6, len(targets) - 1):
         raise ValueError("insufficient complete target inventories")
-    timing = measure_round_windows(trace["traceEvents"], starts, selected)
-    records, assigned = [], set()
+    timing = measure_round_windows(trace["traceEvents"], starts, selected,
+                                   allow_transfers=worker_boundaries)
+    records, assigned, stages_by_event = [], set(), {}
 
     def append(e, scope, index, layer, stage):
         relative = e["ts"] - starts[index]
@@ -188,6 +306,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
         if id(e) in assigned:
             raise ValueError("duplicate kernel accounting")
         assigned.add(id(e))
+        stages_by_event[id(e)] = stage
         records.append((scope, index, layer, stage, e["name"], float(e["dur"])))
 
     for index in selected:
@@ -200,7 +319,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
             if projection(e["name"])
         ]
         if [p for _, p in points] != ["split1", "split4", "split1", "split4"] * 64:
-            raise ValueError("backported four-projection layer inventory differs")
+            raise ValueError(f"backported four-projection layer inventory differs: round={index}, count={len(points)}, kinds={dict(Counter(p for _,p in points))}")
         for layer in range(64):
             a, b, c, d = [points[layer * 4 + j][0] for j in range(4)]
             kind = "Attention" if layer % 4 == 3 else "GDN"
@@ -212,12 +331,15 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
                     != 1
                 ):
                     raise ValueError("incomplete GDN layer inventory")
-            elif (
-                sum("attn_decode" in n or "shared_decode" in n for n in middle) != 1
-                or sum("splitkv_combine" in n or "shared_merge" in n for n in middle)
-                != 1
-            ):
-                raise ValueError("incomplete attention layer inventory")
+            else:
+                decodes = sum("attn_decode" in n or "shared_decode" in n for n in middle)
+                merges = sum("splitkv_combine" in n or "shared_merge" in n for n in middle)
+                # The native short-context fallback may process two query-page
+                # groups. Both real decode/merge pairs belong in the measured
+                # stage; dropping these rounds would hide the slow branch.
+                allowed = {1, 2} if worker_boundaries else {1}
+                if decodes not in allowed or merges != decodes:
+                    raise ValueError(f"incomplete attention layer inventory: round={index}, layer={layer}, decode={decodes}, merge={merges}")
             if sum("silu" in e["name"] for e in events[c + 1 : d]) != 1:
                 raise ValueError("MLP activation inventory differs")
             start = 0 if layer == 0 else points[layer * 4 - 1][0] + 1
@@ -266,6 +388,13 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
                     "target_vocabulary_head": f"Target head ({head})",
                 }.get(scope, "Other GPU bookkeeping")
                 append(event, scope, index, None, stage)
+    if worker_boundaries:
+        for event in trace["traceEvents"]:
+            if event.get("ph") != "X" or event.get("cat") not in {"gpu_memcpy", "gpu_memset"}:
+                continue
+            index = bisect.bisect_right(starts, event["ts"]) - 1
+            if index in selected:
+                append(event, "transfer", index, None, "Other GPU bookkeeping")
     stages, layers, kernels, per_round = (
         defaultdict(float),
         defaultdict(lambda: defaultdict(float)),
@@ -289,15 +418,33 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
             per_round[row["round"]], row["kernel_sum_ms"], rel_tol=0, abs_tol=1e-8
         ):
             raise ValueError("stage and elapsed timing cover different GPU work")
-    return {
+    result = {
         "schema": "urn:coherence:compiled-stage-timings:v2",
         "trace_sha256": hashlib.sha256(raw).hexdigest(),
+        "production_timing_eligible": False,
+        "timing_contract": {
+            "stage_metric": "gpu_activity_duration",
+            "cpu_scope_time_included": False,
+            "round_boundary": "first_target_gpu_kernel_start_to_next_first_target_gpu_kernel_start",
+            "zero_observer_effect_proven": False,
+            "limitation": (
+                "GPU activity durations exclude CPU annotation and export time. "
+                "The trace alone does not bound indirect profiler effects or establish production gaps."
+            ),
+        },
         "scope": "Saved compiled Global-256 Pi decode trace. GPU dispatch sums and elapsed GPU cycles from the same bounded rounds; profiled, not uninstrumented serving latency.",
         "profile_rounds": len(targets),
         "included_rounds": selected,
         "selection": "Complete modal kernel inventory and an observed next-target start; no duration-based exclusions. Work before the first target is excluded.",
         "graph_launches_per_round": [graph_launches[k] for k, _ in targets],
         "target_head": head,
+        "compilation_events": dict(Counter(
+            e.get("name", "") for e in trace["traceEvents"]
+            if e.get("ph") == "X" and e.get("cat") != "kernel"
+            and any(marker in e.get("name", "").lower() for marker in (
+                "compile_inner", "compile_fx", "graphlowering", "triton.compile", "hipmoduleload"
+            ))
+        )),
         "stages_ms": dict(stages),
         "layers_ms": dict(layers),
         "all_gpu_ms": sum(stages.values()),
@@ -314,8 +461,14 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None):
             for (scope, stage, name), values in sorted(kernels.items())
         ],
         "omitted_inventory_rounds": [i for i in range(len(targets)) if i not in complete],
+        "incomplete_inventory_reasons": incomplete,
         "omitted_unbounded_rounds": [i for i in complete if i + 1 == len(targets)],
     }
+    if worker_boundaries:
+        result["worker_timing"] = measure_worker_windows(
+            trace["traceEvents"], targets, selected, stages_by_event, groups
+        )
+    return result
 
 
 def main():

@@ -7,7 +7,10 @@ import argparse
 import copy
 import json
 import math
+from datetime import UTC, datetime
 from pathlib import Path
+
+from compute_stage26_residual import compute as audit_stage26
 
 ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- COHERENCE_CURRENT_RESULTS -->"
@@ -110,11 +113,12 @@ def current_stage_profile(data):
     rendered with an explicit inclusion or measurement-status label rather than
     being presented as measured zero milliseconds.
     """
-    evidence = ROOT / "benchmarks/results/compiled-global256-stage-profile-1200.json"
+    evidence = ROOT / data.get("matched_stage_profile", "benchmarks/results/compiled-global256-stage-profile-1200.json")
     base = data.get("stage_profile_2k")
     if not evidence.exists() or not isinstance(base, dict):
         return base
     raw = json.loads(evidence.read_text())
+    matched = raw.get("status") == "matched_estimate"
 
     # This is the commit that packages the retained capture and the renderer;
     # the artifact itself records the older source checkout used to take the
@@ -123,34 +127,86 @@ def current_stage_profile(data):
     # source change.
     evidence_commit = "b8d681001cc726089c387eeddfc7c78e2e74ac3c"
     grouped = copy.deepcopy(base)
+    if matched:
+        evidence_commit = raw["stage26_execution"]["measurement_commit"]
     grouped["measurement_commit"] = evidence_commit
+    grouped["matched"] = matched
     grouped["scope"] = (
-        "Original compiled Global-256 profiler in the fixed-BF16 lane. The "
-        "single timing column shows 0K / 60K / 200K in that order; each value "
-        "is the mean of complete retained cycles from one long capture, after "
-        "the asynchronous profiler-window boundary cycles were removed. "
-        "Requested profiler rounds were 2,183 / 1,191 / 1,191, with 2,062 / "
-        "1,132 / 1,133 complete retained cycles. This restores the historical "
-        "grouped table layout without reusing its old eager/full-BF16 timings. "
-        "Row 26 carries the measured profile-cycle residual previously shown as "
-        "Cycle overhead after stage sum: elapsed cycle boundary minus the 25 "
-        "named stage sums. A separately controlled uninstrumented full-round "
-        "measurement remains distinct and is not claimed here. The total row "
-        "sums the displayed rows 1–26 and excludes detail-only ↳ rows. These are "
-        "diagnostic timings, not production throughput."
+        "Archived diagnostic compiled Global-256 stage attribution, with BF16 attention arithmetic. "
+        "The 0K / 60K / 200K cells sum **GPU kernel activity durations**, excluding CPU annotations, "
+        "Python hooks and trace-export time. They do not certify that profiling left kernel execution "
+        "unchanged: tracing can alter clocks, dispatch and overlap. Requested rounds were "
+        "2,183 / 1,191 / 1,191; 2,062 / 1,132 / 1,133 complete cycles were retained. "
+        "The capture remains stage attribution only: first-use Triton JIT compilation was observed "
+        "in its preserved slow window, so its wall timings are not steady-state measurements. "
+        "The old profiler result is retired from the production metric set. "
+        "**Row 26 is not qualified as real runtime gaps.** The old control retained forced-replay "
+        "copies, scalar reads and sample writes; its host-step boundary and accepted-token schedule "
+        "were not independently matched to the profiled GPU cycles. Subtracting those captures "
+        "cannot remove their observer effects. [Timing audit](benchmarks/results/"
+        "stage-timing-audit-20260923.json); [measurement contract](docs/STAGE_TIMING.md)."
     )
     grouped["context_order"] = list(raw["context_order"])
+    if matched:
+        counts = " / ".join(str(raw["contexts"][c]["included_rounds"]) for c in raw["context_order"])
+        outputs = " / ".join(f"{raw['contexts'][c]['generated_tokens_per_arm']:,}" for c in raw["context_order"])
+        deltas = " / ".join(f"{raw['observer_comparison']['contexts'][c]['mean_delta_ms']:.3f}" for c in raw["context_order"])
+        grouped["scope"] = (
+            "Measured on 2026-09-23 using the current compiled, optimized Global-256 serving backend, "
+            "with temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: "
+            "0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran "
+            "a natural warmup followed by clean control, trace, and clean control; each arm generated "
+            + outputs + " tokens respectively. Generated-token hashes and accepted-token schedules matched. "
+            "The stage means retain " + counts + " complete M8 cycles (0K / 60K / 200K), and controls "
+            "use exactly those same decode indices. Trace setup/export boundaries and incomplete trace "
+            "inventories are excluded by structure, never by duration; complete native round logs retain "
+            "all rounds and stalls. GPU activity timestamps supply the stage times; CPU annotations, "
+            "Python hooks and export time are excluded. No per-stage event probes or forced-token replay "
+            "are used. The measured tracing slowdown was " + deltas + " ms per retained round; it is "
+            "reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus "
+            "the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect "
+            "clocks and scheduling. Overlap is counted once in the total. "
+            "[Capture and source identities](benchmarks/results/compiled-global256-stage-profile-20260923.json) "
+            "· [controls](benchmarks/results/stage26-control-20260923.json) · [method and uncertainty](docs/STAGE_TIMING.md)."
+        )
     context_tokens = {"0K": 0, "60K": 60_000, "200K": 200_000}
     grouped["stage26"] = copy.deepcopy(base["stage26"])
-    # Keep the historical row name from cbbf495; the definition below records
-    # that its current value is the retained uninstrumented-round residual.
+    control_ref = (data["matched_stage_control"] if matched else
+                   grouped.get("stage26_benchmark", {}).get("artifact"))
+    if control_ref:
+        control_path = ROOT / control_ref
+        if not control_path.exists():
+            raise ValueError(f"stage-26 control artifact is missing: {control_ref}")
+        grouped["stage26_benchmark"] = json.loads(control_path.read_text())
+        control = grouped["stage26_benchmark"]
+        grouped["stage26_audit"] = audit_stage26(raw, control)
+        if control.get("status") == "complete" and not matched:
+            control_contexts = control.get("contexts", {})
+            counts = [
+                len(control_contexts[context].get("round_samples", []))
+                for context in grouped["context_order"]
+            ]
+            means = [
+                control_contexts[context]["full_uninstrumented_round_ms"]
+                for context in grouped["context_order"]
+            ]
+            grouped["scope"] += (
+                " The historical harness control retained "
+                + " / ".join(f"{count:,}" for count in counts)
+                + " complete unprofiled rounds (0K / 60K / 200K) and its host-step "
+                + "mean was "
+                + " / ".join(f"{mean:.3f}" for mean in means)
+                + " ms before the 25-stage subtraction."
+            )
+    # Preserve the row taxonomy, but never promote archival arithmetic to a
+    # qualified production-gap measurement merely because a control completed.
     grouped["stage26"]["label"] = "Estimated runtime overhead"
     grouped["stage26"]["definition"] = (
-        "the displayed value is the measured profile-cycle residual; the "
-        "separate uninstrumented full-round mean minus the sum of the 25 named "
-        "instrumented-stage means remains the definitive control and must use "
-        "the same build, mode, fixture and round window"
+        "Requires a matched natural-serving control and GPU activity union, with observer "
+        "effect assessed separately. Historical subtraction is not a measurement of real gaps."
     )
+    if matched:
+        grouped["stage26"]["definition"] = "Matched clean-control mean minus GPU occupied time; CPU tracing/export cost is excluded. Indirect observer effects remain an uncertainty."
 
     # Keep the exact historical row structure from cbbf495.  The current
     # profiler emits these as separate disjoint scopes; the renderer changes
@@ -299,9 +355,7 @@ def current_stage_profile(data):
             "context_tokens": context_tokens[context],
             "output_positions": source["profile_rounds"],
             "profile_steps": source["included_rounds"],
-            "profile_wall_ms_per_cycle": source["round_timing_ms"]["elapsed_ms"],
             "kernel_subtotal_ms": source["stage_sum_ms"],
-            "profile_cycle_residual_ms": source["round_timing_ms"]["overhead_ms"],
             "profile_coverage": (
                 f"{source['included_rounds']:,}/{source['profile_rounds']:,} "
                 "complete retained cycles"
@@ -316,16 +370,14 @@ def current_stage_profile(data):
 
 
 def render_stage_profile_table(data):
-    """Render the historical 26-stage profile as one 0K/60K/200K column.
+    """Render the archived 26-stage attribution as one 0K/60K/200K column.
 
     The older aggregate ``stages`` table is retained in the JSON for the
     compiled-trace/layer evidence below. This table is deliberately sourced
     from the current three-context compiled profiler and rendered as one
     slash-separated timing column. Stage 26 is deliberately sourced from a
-    separate uninstrumented-round control when that control has been retained;
-    the existing profile-cycle residual is shown when that is the only retained
-    measurement, and is labelled as such rather than being presented as an
-    independent uninstrumented control.
+    separate unprofiled-round control. Rendering fails if that control is not
+    complete; a profiler-cycle remainder is never substituted for it.
     """
     profile = current_stage_profile(data)
     if not isinstance(profile, dict):
@@ -335,8 +387,12 @@ def render_stage_profile_table(data):
     contexts = profile["contexts"]
     commit = commit_marker(profile["measurement_commit"])
     old_rows = {row["stage"]: row for row in data["stages"] if row["ms"] is not None}
+    heading = ("Current GPU activity per retained compiled M8 cycle" if profile.get("matched") else
+               "Archived diagnostic interval per retained compiled profile cycle")
+    run_label = ("2026-09-23; exact source hashes in capture" if profile.get("matched") else
+                 f"evidence run {commit}")
     lines = [
-        f"| Stage | Current timing per retained compiled profile cycle ({' / '.join(context_order)}; milliseconds unless explicitly marked; evidence run {commit}) | Current correctness evidence | Last relevant code commit / change | What this stage does |",
+        f"| Stage | {heading} ({' / '.join(context_order)}; milliseconds unless explicitly marked; {run_label}) | Current correctness evidence | Last relevant code commit / change | What this stage does |",
         "| --- | ---: | --- | --- | --- |",
     ]
     timing_labels = {
@@ -358,7 +414,11 @@ def render_stage_profile_table(data):
             provenance = provenance_marker(data, evidence_source)
         else:
             evidence = f"Timing-only diagnostic profile; no isolated correctness claim · {commit}"
-            provenance = f"{commit}: 2K forced-output stage profile; no backend code change"
+            provenance = ("2026-09-23: native serving timing capture" if profile.get("matched") else
+                          f"{commit}: 2K forced-output stage profile; no backend code change")
+        if profile.get("matched") and stage == "Attention decode":
+            evidence = "Paired natural outputs match at 0K/60K/200K · [attention repair evidence](benchmarks/results/attention-page-boundary-20260923.json); earlier isolated alignment evidence remains in the report."
+            provenance = "[September 23 attention-page repair](experiments/radiance-public/build_stock_m1_attention_shared.py): reuse the context traversal when M8 queries cross a 16-token attention-page boundary; source/binary hashes are in the capture."
         lines.append(
             f"| **{number}. {profile['stage_labels'][stage]}** | {timing} | {evidence} | {provenance} | {profile['stage_notes'][stage]} |"
         )
@@ -399,105 +459,124 @@ def render_stage_profile_table(data):
                     f"Exact fused FP8 bytes/scales; see stage {number} · "
                     f"{detail_marker} | {provenance} | {detail_note} |"
                 )
-    benchmark = profile.get("stage26_benchmark", {})
-    if benchmark.get("status") == "complete":
-        benchmark_contexts = benchmark.get("contexts", {})
-        residual = [benchmark_contexts[key]["residual_ms"] for key in context_order]
-        timing = " / ".join(f"{value:.3f}" for value in residual)
-        evidence = (
-            "Separate uninstrumented-round residual; no isolated correctness claim "
-            f"· {commit}"
-        )
-        provenance = f"{commit}: separate uninstrumented-round residual; no backend code change"
+    audit = profile.get("stage26_audit")
+    if not isinstance(audit, dict):
+        raise ValueError("stage-26 evidence has not been audited")
+    if audit["status"] == "diagnostic_only":
+        lines.extend([
+            f"| **26. {profile['stage26']['label']}** | **Not qualified** | "
+            f"[Timing audit](benchmarks/results/stage-timing-audit-20260923.json) | "
+            f"{commit}: archived control; not a runtime-gap measurement | {profile['stage26']['definition']} |",
+            "| **Total reconstructed round (stages 1–26)** | **Not qualified** | "
+            "No valid production-gap value to add to these archived stages | "
+            "— | Current natural-serving full-round means are in Benchmarks below. |",
+        ])
     else:
-        residual = [contexts[key].get("profile_cycle_residual_ms") for key in context_order]
-        if all(value is not None for value in residual):
-            timing = " / ".join(f"{value:.3f}" for value in residual)
-            evidence = (
-                "Measured profile-cycle residual (elapsed boundary minus the 25 "
-                "named stage sums); a separate uninstrumented control is not "
-                f"claimed · {commit}"
-            )
-            provenance = (
-                f"{commit}: restored the existing Cycle overhead after stage sum; "
-                "no separate uninstrumented control"
-            )
-        else:
-            timing = "— (separate benchmark pending)"
-            evidence = (
-                "Timing-only diagnostic profile; the required matching uninstrumented control "
-                f"has not been retained · {commit}"
-            )
-            provenance = f"{commit}: separate uninstrumented-round benchmark is pending"
-    lines.append(
-        f"| **26. {profile['stage26']['label']}** | {timing} | {evidence} | {provenance} | {profile['stage26']['definition']}. |"
-    )
-    total = [
-        sum(
-            [
-                float(f"{contexts[key]['stages'][stage]:.3f}")
-                for stage in order
-            ]
-            + [float(f"{residual[index]:.3f}")]
-        )
-        for index, key in enumerate(context_order)
+        # Even a matched difference is an estimate. No per-stage correction
+        # can be inferred merely from an aggregate profiler-on/off delta.
+        estimates = [audit["contexts"][key]["union_corrected_difference_ms"] for key in context_order]
+        timing = " / ".join(f"{value:.3f}" for value in estimates)
+        totals = " / ".join(f"{audit['contexts'][key]['full_uninstrumented_round_ms']:.3f}" for key in context_order)
+        lines.extend([
+            f"| **26. {profile['stage26']['label']}** | {timing} (estimate) | "
+            "[Matched control minus GPU activity union](benchmarks/results/matched-stage-residual-20260923.json) | "
+            "2026-09-23: matched natural-serving measurement; source hashes in capture | Indirect observer effects are not proved zero. |",
+            f"| **Total reconstructed round (stages 1–26)** | **{totals}** | "
+            "GPU activity union plus the estimated remainder | "
+            "— | Overlapping stages are counted once in the total. |",
+        ])
+    return lines
+
+
+CHAINED_RESULTS = ROOT / "benchmarks/results/pi-coding-json-compaction.json"
+
+
+def render_chained_workload_results(report=None):
+    if report is None:
+        report = json.loads(CHAINED_RESULTS.read_text())
+    sampling = report["sampling"]
+    run_date = datetime.fromtimestamp(report["started_at"], tz=UTC).date().isoformat()
+    stages = {row["stage"]: row for row in report["stages"]}
+    compaction = stages.get("compaction", {})
+    checkpoint = compaction.get("checkpoint_validation", {})
+    compaction_temperature = compaction.get("sampling", {}).get("temperature", 0.3)
+    lines = [
+        "## Benchmarks",
+        "",
+        (
+            "This benchmark uses the retained 60,000-input-token Pi prefix and the compiled "
+            "Coherence backend with Global-256 and the attention-page-boundary repair. Five "
+            "requests are chained in one context: code, prose about code measurement, JSON, "
+            "thinking/prose and checkpoint generation. Code and JSON disable thinking; both "
+            "prose requests enable it. All requests stop naturally. "
+            f"Generation uses temperature {sampling['temperature']:g}, top-p {sampling['top_p']:g}, "
+            f"top-k {sampling['top_k']} and seed {sampling['seed']}; compaction uses temperature "
+            f"{compaction_temperature:g}. The checkpoint request forces a snapshot-tail flush. "
+            "Private fixture text was not decoded or inspected, and no generated text or token "
+            "arrays were saved. Runner: [benchmark_pi_coding_json_compaction.py]"
+            "(experiments/radiance-public/benchmark_pi_coding_json_compaction.py)."
+        ),
+        "",
+        "| Stage | Thinking | Prompt tokens | Generated tokens | Classified output | First data | Mean round | Post-first | Peak 3s | Acceptance |",
+        "| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
-    total_timing = " / ".join(f"{value:.3f}" for value in total)
+    labels = [("coding", "Coding task"), ("prose_code", "Prose about code measurement"),
+              ("json", "JSON task"), ("thinking", "Thinking/prose task"),
+              ("compaction", "Compaction checkpoint")]
+    for key, label in labels:
+        row = stages.get(key)
+        if row is None:
+            lines.append(f"| {label} | — | — | — | pending run | — | — | — | — | — |")
+            continue
+        phase = row["phase_blocks"]
+        if key == "coding":
+            classified = (f"{phase['file_edit_code_tokens']:,} code; {phase['prose_tokens']:,} prose; "
+                          f"{phase['reasoning_tokens']:,} separately observed reasoning")
+        elif key == "json":
+            classified = f"{phase['file_edit_json_tokens']:,} JSON; " + ("valid JSON" if phase['json_valid'] else "invalid JSON")
+        elif key == "compaction":
+            classified = f"{phase['checkpoint_tokens']:,} checkpoint tokens; "
+            classified += "completion marker valid" if checkpoint.get("marker_valid") else "completion marker invalid"
+            classified += "; required headings valid" if checkpoint.get("headings_valid") else "; required headings missing or duplicated"
+        else:
+            classified = f"{phase['prose_tokens']:,} prose; {phase['reasoning_tokens']:,} separately observed reasoning"
+        values = [label, "on" if row["thinking_enabled"] else "off",
+                  f"{row['prompt_tokens']:,}", f"{row['generated_tokens']:,}", classified,
+                  _coding_context_value(row.get("first_token_seconds"), " s"),
+                  _coding_context_value(row.get("mean_generation_round_ms"), " ms"),
+                  _coding_context_value(row.get("post_first_tokens_per_second"), " tok/s"),
+                  _coding_context_value(row.get("peak_3s_tokens_per_second"), " tok/s"),
+                  f"{100 * row['acceptance_rate']:.2f}%" if row.get("acceptance_rate") is not None else "—"]
+        lines.append("| " + " | ".join(values) + " |")
+    cache = ", ".join(f"{label}: {stages[key]['cached_prompt_tokens']:,}/{stages[key]['prompt_tokens']:,}"
+                      for key, label in labels if key in stages)
+    lines.extend(["", f"Cached/total prompt tokens: {cache}.", ""])
+    unclassified = [label for key, label in labels if key in stages and not stages[key].get("phase_token_counts_cover_output")]
+    missing_reasoning = [label for key, label in labels if key in stages and stages[key]["thinking_enabled"] and not stages[key].get("reasoning_channel_observed")]
     lines.append(
-        f"| **Total profile cycle (stages 1–26)** | **{total_timing}** | "
-        f"Sum of displayed rows 1–26; detail-only ↳ rows are excluded · {commit} | "
-        f"{commit}: profile-cycle evidence run | "
-        "Adds no work; sums the 25 named stage timings and row 26's measured residual. |"
+        "The phase counters retokenize classified text, so their totals can differ from the backend's emitted-token count. "
+        + ("`phase_token_counts_cover_output=false` for " + ", ".join(unclassified) + ". " if unclassified else "All streams report complete phase-token coverage. ")
+        + ("No separate reasoning channel was exposed for " + ", ".join(missing_reasoning) + "; those streams are reported as prose, not relabelled as reasoning. " if missing_reasoning else "")
+        + "The compaction row measures checkpoint generation with a requested cache flush, not a full Pi transcript commit or old-snapshot retirement. "
+        + ("The checkpoint format passed its heading and completion checks. " if checkpoint.get("passed") else "The checkpoint format failed validation and must not be treated as a committed compaction. ")
+        + "`peak_3s_tokens_per_second` is the maximum completed three-second sliding-window rate after first data, never a single-frame burst."
     )
+    lines.extend([
+        "",
+        (
+            f"{run_date} rerun status: `{report['status']}`. [Numeric results and release identity]"
+            f"(benchmarks/results/pi-coding-json-compaction.json). These results use top-k {sampling['top_k']}, "
+            "while the older September 20 table used top-k 20, so the output "
+            "and acceptance changes are not a controlled before/after comparison."
+        ),
+        "",
+    ])
     return lines
 
 
 def render_coding_json_compaction_benchmark():
     lines = [
-        "## Benchmarks",
-        "",
-        (
-            "This content-free benchmark uses one retained 60,000-input-token Pi prefix and "
-            "the compiled Coherence backend with the repaired arithmetic paths, Global-256 "
-            "target head and qualified performance backports. The five requests are chained "
-            "in one context, so only the first request pays the fresh-prefix preparation. All "
-            "requests use temperature 1, top-p 0.95 and top-k 20 with natural stopping. The "
-            "coding request disables thinking and treats fenced file edits as code; the short "
-            "code-measurement prose request enables thinking but forbids code and JSON; the JSON "
-            "request disables thinking and treats file-edit content as JSON; the fourth request "
-            "enables thinking and asks for engineering prose; the last request generates a "
-            "checkpoint after a forced cache flush. Prompt, response and token arrays were "
-            "not read or saved; the run retained only hashes and numeric measurements. The "
-            "runner is [benchmark_pi_coding_json_compaction.py](experiments/radiance-public/"
-            "benchmark_pi_coding_json_compaction.py). The coding request began with 0 cached "
-            "of 60,208 prompt tokens; later stages reused 64,272, 69,216, 70,864 and 77,456 "
-            "cached tokens respectively, so this run did not reproduce a repeated full cold prefill."
-        ),
-        "",
-        "| Stage | Thinking | Prompt tokens | Generated tokens | Classified output | First data | Mean round | Post-first | Peak 3s | Acceptance |",
-        "| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
-        "| Coding task | off | 60,208 | 6,994 | 6,382 code; 605 prose; 0 reasoning | 30.58 s | 44.80 ms | 101.61 tok/s | 138.45 tok/s | 50.72% |",
-        "| Prose about code measurement | on | 67,343 | 3,753 | 3,752 prose; 0 separately observed reasoning; 0 code | 2.23 s | 45.43 ms | 82.63 tok/s | 153.49 tok/s | 39.33% |",
-        "| JSON task | off | 71,215 | 2,690 | 2,684 JSON; 0 prose; 0 reasoning | 2.14 s | 46.30 ms | 78.03 tok/s | 102.43 tok/s | 37.30% |",
-        "| Thinking/prose task | on | 74,052 | 5,754 | 5,753 prose; 0 separately observed reasoning | 2.70 s | 45.18 ms | 65.09 tok/s | 154.11 tok/s | 27.72% |",
-        "| Compaction checkpoint | off | 79,958 | 3,389 | 3,389 checkpoint tokens; completion marker valid, required headings missing | 2.10 s | 45.68 ms | 71.64 tok/s | 116.18 tok/s | 32.45% |",
-        "",
-        (
-            "The phase counters are content classifications, not a proof-level partition of "
-            "backend token IDs: the coding, prose, JSON and thinking streams each retain one "
-            "protocol-boundary token outside the classified content and report "
-            "`phase_token_counts_cover_output=false`. Thinking was enabled for both prose "
-            "stages, but this provider stream exposed no separate reasoning channel, so their "
-            "3,752 and 5,753 observed tokens are reported as prose rather than being relabelled "
-            "as reasoning. The compaction row "
-            "measures checkpoint generation and cache flushing; it is not a claim that a full "
-            "Pi transcript commit and old-snapshot retirement succeeded. The completion marker "
-            "passed, but the required checkpoint headings did not, so that checkpoint must be "
-            "treated as validation failure rather than a committed compaction. Each new run "
-            "also records `peak_3s_tokens_per_second`: the maximum completed three-second "
-            "sliding-window rate after first data, never a single-frame burst."
-        ),
-        "",
+        *render_chained_workload_results(),
         *render_coding_context_benchmark(),
         "",
         *render_round_capture_summary(),
@@ -506,18 +585,20 @@ def render_coding_json_compaction_benchmark():
         "",
         "### Known remaining symptoms and likely causes",
         "",
+        *render_attention_boundary_comparison(),
+        "",
         (
             "The situation recorded in `cbbf495` had warm rounds around 43.6--43.8 ms but a "
             "repeatable fresh-cache state around 53.5--53.9 ms. A stream or device "
-            "synchronization recovered roughly 6.4 ms, which narrowed the evidence to residual "
-            "HIP/ROCr queue or dependency state but did not identify a permanent repair."
+            "synchronization recovered roughly 6.4 ms, which narrowed the evidence to a residual "
+            "HIP/ROCr stream or queue dependency but did not identify a permanent repair."
         ),
         "",
         (
             "Since that diagnosis, [`abb7668`](https://github.com/Terrydaktal/vllm-coherence/commit/"
             "abb76682e96e1600e9b28ff404c36fa294244c54) made the runtime behavior and observation "
             "path explicit. It now drains pending device work after cache/mamba preparation, "
-            "periodically re-arms the long-response recovery fence, records each decode round "
+            "records each decode round "
             "without charging another chat's GPU time to it, and gives Pi one shared snapshot "
             "for scheduler, cache, temperature, round and acceptance telemetry. Its scheduler "
             "also preserves response ownership through generation, makes tool-call handover "
@@ -536,15 +617,51 @@ def render_coding_json_compaction_benchmark():
         ),
         "",
         (
-            "The old 53--54 ms state was not reproduced by this chained run: the measured "
-            "generation intervals were 44.60--47.01 ms. That is evidence that the recovery and "
-            "scheduling changes are helping, not proof that the slow state is impossible. The "
-            "remaining latency risk is still the same class of defect: an asynchronous HIP/ROCr "
-            "stream or queue dependency left behind by cache restore, handover or a long response. "
-            "The new event-gap feed can distinguish a GPU queue gap from host dispatch, cache "
-            "transfer and telemetry wait; further live evidence is required before calling that "
-            "root cause fixed. Round means also depend on workload and speculative acceptance, so "
-            "the 47.01 ms thinking row alone is not a new kernel regression."
+            "The event collector now reclaims completed asynchronous HIP-event pairs and uses "
+            "a separately managed marker pool. The previous monotonic ring and an unclosed "
+            "sample-boundary marker could exhaust after about 64 rounds, causing later gap "
+            "records to disappear; the repair is covered by an 80-round CPU telemetry test. "
+            "Asynchronous rows are now held until their already-recorded HIP end events complete, "
+            "then written with a round span and all available stage gaps; this adds no device "
+            "synchronization to the serving path. The scheduler's recovery fence is adaptive: "
+            "after the transition fence it triggers only when a previous round exceeds the recent "
+            "baseline by at least 4 ms and 8%, so it does not manufacture a fixed-cadence spike. "
+            "The generic and Radiance launchers both bound JIT checks to the current warmup log "
+            "tail and repeat a warmup that compiled a new shape. Even `--reuse-existing` now "
+            "performs that non-session warmup before Pi attaches, because a restarted backend "
+            "must not expose first-use compilation to a chat; `QWEN_PI_SKIP_WARMUP=1` is an "
+            "explicit diagnostic opt-out. Native-runtime validation of the repaired collector "
+            "is still required for these paths."
+        ),
+        "",
+        (
+            "The September 20 chained run did not reproduce the old 53--54 ms state: its measured "
+            "generation intervals were 44.60--47.01 ms. That is evidence that the transition and "
+            "adaptive recovery changes help, not proof that the slow state is impossible. The "
+            "archived cbbf495 latency mode remains historical evidence; the current per-round "
+            "results and the later page-boundary diagnosis are reported above. The completed "
+            "event feed can now distinguish a GPU queue gap from host dispatch, cache transfer and "
+            "telemetry wait; the new analyzer rejects dropped or incomplete rows. Round means also "
+            "depend on workload and speculative acceptance, so the 47.01 ms thinking row alone is "
+            "not a new kernel regression."
+        ),
+        "",
+        (
+            "A September 21 content-free synthetic token-ID capture after the non-session warm-up is "
+            "recorded in [round-steady-state-20260921.json](benchmarks/results/"
+            "round-steady-state-20260921.json). Excluding the first verification row after each "
+            "request boundary, the GPU round spans were 53.52 ms at 0K, 58.88 ms at 60K and "
+            "67.20 ms at 200K; the corresponding target-forward means were 44.39, 48.09 and "
+            "56.44 ms. The 200K rows ranged only from 67.15 to 67.25 ms, all three captures used "
+            "the same PIECEWISE eight-token runtime descriptor, and no new inference-time JIT or "
+            "dropped telemetry record occurred after warm-up. This capture excluded new first-use "
+            "compilation during its measured window. It did not establish that natural Pi requests "
+            "cannot alternate between fast and slow modes; the later page-boundary comparison above "
+            "reproduces and repairs one such cause. In this synthetic capture, the event "
+            "feed measured every named inter-stage GPU gap below 0.02 ms. This is a separate "
+            "historical diagnostic, not a replacement for the matched stage-26 control: "
+            "its disposable runtime and synthetic token-ID fixture are intentionally different "
+            "from the authenticated stage-profile execution identity."
         ),
         "",
         (
@@ -556,6 +673,57 @@ def render_coding_json_compaction_benchmark():
             "should remain explicit failures in qualification."
         ),
     ]
+    return lines
+
+
+def render_attention_boundary_comparison():
+    path = ROOT / "benchmarks/results/attention-page-boundary-20260923.json"
+    data = json.loads(path.read_text())
+    lines = [
+        "**2026-09-23: a repeating attention-page-boundary slowdown is diagnosed and repaired.** "
+        "The shared M8 attention kernel used two independent GPU work groups whenever its eight "
+        "verification queries crossed a 16-token KV page. Both groups reread the full context. "
+        "This added about 3 ms per round at 60K and 10 ms at 200K. The repair shares one traversal "
+        "while preserving each query's original split range, softmax accumulation and rounding. "
+        "Results below use compiled Global-256 natural Pi coding completions with temperature 1, "
+        "top-p 0.95, top-k 40 and seed 0. The event profiler is disabled; ordinary numeric round "
+        "telemetry remains enabled. All timed rounds, including outliers, contribute to the means.",
+        "",
+        "| Starting history | Before, mean round ms | Fixed, mean round ms | Timed rounds per run | Output tokens per run | Same generated output |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for context in ("0K", "60K", "200K"):
+        row = data["contexts"][context]
+        before, after = row["before"], row["after"]
+        lines.append(
+            f"| {context} | {before['mean_ms']:.3f} | {after['mean_ms']:.3f} | "
+            f"{after['timed_rounds']:,} | {row['generated_tokens']:,} | "
+            f"{'Yes' if row['output_exact'] else 'No'} |"
+        )
+    lines.extend([
+        "",
+        "The 0K task starts at 203 prompt tokens; the longer tasks start at 60,208 and 200,208. "
+        "Each run also retains its first, untimed prefill event. Across all three pairs, all "
+        "16,632 generated tokens match. Separately, 264 native operator cases check 2,112 query "
+        "rows against serial M1 with no differing output bytes, covering every page offset, "
+        "split boundaries, FP8/BF16/padded-byte KV layouts, graph replay and corruption controls. "
+        "These are sampled checks, not a universal arithmetic proof or full-vocabulary comparison.",
+        "",
+        "Fixed per-offset round medians span 42.511–42.594 ms at 60K and 50.350–50.418 ms at 200K. "
+        "A few isolated spikes remain. The old 200K control also entered an additional persistent "
+        "slow state near an adaptive recovery fence; that state was absent from the fixed run, "
+        "but its separate queue mechanism is not independently proved. The repair establishes "
+        "the cause of the repeating page-boundary mode, not that all possible scheduling or "
+        "driver jitter has been eliminated. [Complete numeric comparison and histograms]"
+        "(benchmarks/results/attention-page-boundary-20260923.json).",
+        "",
+        "The normal release worker was then restarted with the frozen repair and repeated the "
+        "60K task: all 5,686 output tokens still matched, with 1,320 timed rounds, a 42.560 ms "
+        "median and a 42.996 ms mean. All page-offset medians were within 42.528–42.591 ms. "
+        "The mean includes the first verification round's 566.892 ms startup spike; it is not "
+        "removed from the record or mistaken for a recurring latency mode. "
+        "[Post-deployment verification](benchmarks/results/attention-page-boundary-deployment-20260923.json).",
+    ])
     return lines
 
 
@@ -594,8 +762,9 @@ def render_coding_context_benchmark():
         if isinstance(capture, dict):
             capture_status = capture.get("status", "unknown")
             capture_text = (
-                f"{capture.get('record_count', 0):,}/{capture.get('expected_rounds', '—')} "
-                f"events; {capture.get('measured_round_count', 0):,} timed; {capture_status}"
+                f"{capture.get('record_count', 0):,} total; "
+                f"{capture.get('speculative_round_count', '—')}/{capture.get('expected_rounds', '—')} "
+                f"speculative; {capture.get('measured_round_count', 0):,} timed; {capture_status}"
             )
         else:
             capture_text = "pending rerun with complete round capture"
@@ -623,6 +792,7 @@ def render_coding_context_benchmark():
             )
         )
     report_state = report.get("status") if report else "not_run"
+    sampling = report.get("sampling", {})
     provenance = report.get("fixture_provenance") if isinstance(report, dict) else None
     provenance_line = None
     if isinstance(provenance, dict):
@@ -639,24 +809,26 @@ def render_coding_context_benchmark():
         (
             "This is the same natural-stop coding task run independently at empty, 60K and "
             "200K input context. Thinking is disabled, EOS remains enabled, and each arm uses "
-            "temperature 1, top-p 0.95 and top-k 20. The non-empty arms use operator-supplied "
+            f"temperature {sampling.get('temperature', 1):g}, top-p {sampling.get('top_p', 0.95):g} "
+            f"and top-k {sampling.get('top_k', 20)}. The non-empty arms use operator-supplied "
             "token-prefix fixtures; only their hashes are retained. The three-second peak is "
             "the maximum completed sliding-window rate, not a single-frame burst. Runner: "
             "[benchmark_pi_coding_contexts.py](experiments/radiance-public/"
             "benchmark_pi_coding_contexts.py)."
         ),
         "",
-        "| Context | Prompt tokens | Generated tokens | Mean round | Post-first | Peak 3s | Acceptance | Round events (logged/expected; timed) | Validation |",
+        "| Context | Prompt tokens | Generated tokens | Mean round | Post-first | Peak 3s | Acceptance | Round events (total; speculative/expected; timed) | Validation |",
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         *rows,
         "",
-        f"Report status: `{report_state}`. A pending row has not been measured and carries no fabricated performance value. Each completed row stores every content-free scheduler event under `contexts.<context>.round_capture.records`; a count mismatch is a validation failure.",
+        f"Report status: `{report_state}`. [Numeric results and every round](benchmarks/results/pi-coding-contexts.json). Each completed row stores every scheduler event under `contexts.<context>.round_capture.records`; a count mismatch is a validation failure. The target is {report.get('coding_min_tokens', 5000):,} output tokens, with shorter natural completions reported explicitly.",
+        "",
         *( [provenance_line, ""] if provenance_line else [] ),
         (
             "Run all three arms against an active backend with `uv run python "
             "experiments/radiance-public/benchmark_pi_coding_contexts.py --fixture-60k "
             "PATH_TO_60K_FIXTURE --fixture-200k PATH_TO_200K_FIXTURE "
-            "--tokenizer-json PATH_TO_TOKENIZER --abi SNAPSHOT_ABI`."
+            f"--tokenizer-json PATH_TO_TOKENIZER --abi SNAPSHOT_ABI --top-k {sampling.get('top_k', 20)}`."
         ),
     ]
 
@@ -678,11 +850,12 @@ def render_round_capture_summary():
         row = contexts.get(context)
         capture = row.get("round_capture") if isinstance(row, dict) else None
         if not isinstance(capture, dict):
-            rows.append(f"| {context} | — | — | — | — | — | pending rerun |")
+            rows.append(f"| {context} | — | — | — | — | — | — | pending rerun |")
             continue
         missing = ", ".join(str(value) for value in capture.get("missing_round_numbers", [])) or "none"
         rows.append(
             f"| {context} | {capture.get('record_count', 0):,} | "
+            f"{capture.get('speculative_round_count', '—')} | "
             f"{capture.get('expected_rounds', '—')} | "
             f"{capture.get('measured_round_count', 0):,} | "
             f"{capture.get('unmeasured_round_count', 0):,} | {missing} | "
@@ -696,11 +869,12 @@ def render_round_capture_summary():
             "including an unmeasured first event. The full numeric records are stored under "
             "`contexts.<context>.round_capture.records` in the result JSON; this table is a "
             "coverage check rather than another latency aggregate. A count mismatch is a "
-            "validation failure."
+            "validation failure. Expected rounds come from the speculative-round counter; "
+            "the first prefill event is retained in logged events but excluded from that counter."
         ),
         "",
-        "| Context | Logged events | Expected rounds | Timed round values | Untimed events | Missing round numbers | Capture status |",
-        "| ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| Context | Logged events | Speculative rounds | Expected speculative rounds | Timed round values | Untimed events | Missing round numbers | Capture status |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         *rows,
         "",
     ]
@@ -892,27 +1066,22 @@ def render(data):
         "",
         (
             "The table restores the historical grouped 26 measured-row layout and "
-            "adds a total row. Each timing "
-            "cell is ordered **0K / 60K / 200K** and comes from the retained "
-            "compiled profiler cycles in the evidence run named in the header. "
-            "The original profiler recorded 2,183 / 1,191 / 1,191 requested "
-            "rounds and retained 2,062 / 1,132 / 1,133 complete cycles. Fused "
-            "scopes are charged to one historical row and called out in its note; "
+            "adds a total row. Each timing cell is ordered **0K / 60K / 200K**. "
+            "Fused kernels are charged once to their containing stage; "
             "the ↳ rows are detail-only inclusion records and add no timing; "
             "rows without a separate profiler scope are labelled in the timing "
-            "cell rather than displayed as 0.000. Row 26 includes the "
-            "measured profile-cycle residual; the definitive uninstrumented "
-            "control remains separate."
+            "cell rather than displayed as 0.000. The total counts overlapping GPU "
+            "activity once. The old forced-replay subtraction is superseded; "
+            "[its audit](benchmarks/results/stage-timing-audit-20260923.json) remains available."
         ),
         "",
         (
             "**Set/order** in the numerical section means the same top-20 token set, "
-            "followed by the same ranking. The timing-table header and each "
-            "correctness result link to the commit that produced or packaged that "
-            "evidence. The correctness column refers to the corresponding "
-            "production stage; the profile itself is timing-only. The provenance "
-            "column links the last relevant implementation commit and describes "
-            "its change."
+            "followed by the same ranking. Historical correctness results link to their "
+            "evidence commits; the current timing capture records exact source hashes "
+            "and is archived with this repair. The profile checks repeatability, not new reference "
+            "equality. The provenance column links the last relevant implementation commit "
+            "or links the attention-page repair source."
         ),
     ]
     lines += [

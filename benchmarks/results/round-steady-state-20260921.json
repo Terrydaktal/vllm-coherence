@@ -1,0 +1,533 @@
+{
+  "schema": "urn:coherence:round-steady-state-20260921-v1",
+  "status": "complete",
+  "scope": "Content-free synthetic token-ID requests against the diagnostic production-flags backend after a session-free startup warm-up. No private chat transcript or generated text was read or retained.",
+  "private_chat_text_read": false,
+  "execution": {
+    "container": "qwen38-coherence-prodflags",
+    "runtime_abi": "df78d938df4dc138b057e6b902362346bbbad0e691cc47a87a8fa2cee3f5b412",
+    "sampling": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "top_k": 1,
+      "ignore_eos": true
+    },
+    "output_tokens": {
+      "0K": 64,
+      "60K": 128,
+      "200K": 64
+    },
+    "warmup": "same 64-word, 96-token non-session request used by the launcher; no new JIT warning appeared afterwards",
+    "jit_monitor": "no new 'JIT compilation during inference' records after warm-up",
+    "event_schema": "urn:qwen-r9700:decode-round-gpu:v2",
+    "dropped_records": 0
+  },
+  "cases": {
+    "0K": {
+      "prompt_tokens": 1,
+      "verification_rows": 11,
+      "round_gpu_ms": {
+        "count": 11,
+        "mean_ms": 53.96245921741832,
+        "median_ms": 53.43842697143555,
+        "min_ms": 52.23635482788086,
+        "max_ms": 58.3841438293457
+      },
+      "round_span_ms": {
+        "count": 11,
+        "mean_ms": 53.96245921741832,
+        "median_ms": 53.43842697143555,
+        "min_ms": 52.23635482788086,
+        "max_ms": 58.3841438293457
+      },
+      "stages_ms": {
+        "target.forward M=8": {
+          "count": 11,
+          "mean_ms": 44.824722636829726,
+          "median_ms": 44.30354309082031,
+          "min_ms": 43.156349182128906,
+          "max_ms": 49.12241744995117
+        },
+        "target.logits": {
+          "count": 11,
+          "mean_ms": 4.032045971263539,
+          "median_ms": 4.031580924987793,
+          "min_ms": 4.030379772186279,
+          "max_ms": 4.037261009216309
+        },
+        "draft.propose": {
+          "count": 11,
+          "mean_ms": 4.955952167510986,
+          "median_ms": 4.951465129852295,
+          "min_ms": 4.899425983428955,
+          "max_ms": 5.077506065368652
+        }
+      },
+      "gap_ms": {
+        "draft.propose.end -> round.gpu.end": {
+          "count": 11,
+          "mean_ms": 0.013171090744435787,
+          "median_ms": 0.013039999641478062,
+          "min_ms": 0.012799999676644802,
+          "max_ms": 0.013679999858140945
+        },
+        "draft.propose.start -> draft.propose.end": {
+          "count": 11,
+          "mean_ms": 4.955952167510986,
+          "median_ms": 4.951465129852295,
+          "min_ms": 4.899425983428955,
+          "max_ms": 5.077506065368652
+        },
+        "rejection.verify.end -> state.commit.start": {
+          "count": 11,
+          "mean_ms": 0.00843281823803078,
+          "median_ms": 0.008321000263094902,
+          "min_ms": 0.007960000075399876,
+          "max_ms": 0.009039999917149544
+        },
+        "rejection.verify.start -> rejection.verify.end": {
+          "count": 11,
+          "mean_ms": 0.07562199912287972,
+          "median_ms": 0.07583999633789062,
+          "min_ms": 0.07344000041484833,
+          "max_ms": 0.07784000039100647
+        },
+        "round.gpu.start -> target.forward M=8.start": {
+          "count": 11,
+          "mean_ms": 0.004138272721320391,
+          "median_ms": 0.004000000189989805,
+          "min_ms": 0.00395999988541007,
+          "max_ms": 0.005241000093519688
+        },
+        "sample_tokens.start.start -> target.logits.start": {
+          "count": 11,
+          "mean_ms": 0.012545545416122133,
+          "median_ms": 0.012559999711811543,
+          "min_ms": 0.012079999782145023,
+          "max_ms": 0.012959999963641167
+        },
+        "state.commit.end -> draft.propose.start": {
+          "count": 11,
+          "mean_ms": 0.004225545478138057,
+          "median_ms": 0.00419999985024333,
+          "min_ms": 0.004040000028908253,
+          "max_ms": 0.004641000181436539
+        },
+        "state.commit.start -> state.commit.end": {
+          "count": 11,
+          "mean_ms": 0.023371090773831715,
+          "median_ms": 0.023439999669790268,
+          "min_ms": 0.022679999470710754,
+          "max_ms": 0.024159999564290047
+        },
+        "target.forward M=8.end -> sample_tokens.start.start": {
+          "count": 11,
+          "mean_ms": 0.004185545469888232,
+          "median_ms": 0.0041600000113248825,
+          "min_ms": 0.00395999988541007,
+          "max_ms": 0.004360000137239695
+        },
+        "target.forward M=8.start -> target.forward M=8.end": {
+          "count": 11,
+          "mean_ms": 44.824722636829726,
+          "median_ms": 44.30354309082031,
+          "min_ms": 43.156349182128906,
+          "max_ms": 49.12241744995117
+        },
+        "target.logits.end -> rejection.verify.start": {
+          "count": 11,
+          "mean_ms": 0.004047272748059847,
+          "median_ms": 0.004000000189989805,
+          "min_ms": 0.0038799999747425318,
+          "max_ms": 0.00419999985024333
+        },
+        "target.logits.start -> target.logits.end": {
+          "count": 11,
+          "mean_ms": 4.032045971263539,
+          "median_ms": 4.031580924987793,
+          "min_ms": 4.030379772186279,
+          "max_ms": 4.037261009216309
+        }
+      },
+      "runtime_shapes": [
+        "{\"computed_tokens\":[13],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[21]}",
+        "{\"computed_tokens\":[19],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[27]}",
+        "{\"computed_tokens\":[1],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[9]}",
+        "{\"computed_tokens\":[27],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[35]}",
+        "{\"computed_tokens\":[2],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[10]}",
+        "{\"computed_tokens\":[35],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[43]}",
+        "{\"computed_tokens\":[3],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[11]}",
+        "{\"computed_tokens\":[43],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[51]}",
+        "{\"computed_tokens\":[51],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[59]}",
+        "{\"computed_tokens\":[59],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[67]}",
+        "{\"computed_tokens\":[7],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[1],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[15]}"
+      ],
+      "dropped_records": 0,
+      "steady_state_excluding_first_verification": {
+        "round_gpu_ms": {
+          "count": 10,
+          "mean_ms": 53.520290756225585,
+          "median_ms": 53.21302795410156,
+          "min_ms": 52.23635482788086,
+          "max_ms": 55.70795822143555
+        },
+        "round_span_ms": {
+          "count": 10,
+          "mean_ms": 53.520290756225585,
+          "median_ms": 53.21302795410156,
+          "min_ms": 52.23635482788086,
+          "max_ms": 55.70795822143555
+        },
+        "target.forward M=8": {
+          "count": 10,
+          "mean_ms": 44.39495315551758,
+          "median_ms": 44.08486366271973,
+          "min_ms": 43.156349182128906,
+          "max_ms": 46.518917083740234
+        },
+        "dropped_records": 0
+      }
+    },
+    "60K": {
+      "prompt_tokens": 60000,
+      "verification_rows": 16,
+      "round_gpu_ms": {
+        "count": 16,
+        "mean_ms": 58.28635573387146,
+        "median_ms": 58.769216537475586,
+        "min_ms": 49.41144943237305,
+        "max_ms": 60.19194412231445
+      },
+      "round_span_ms": {
+        "count": 16,
+        "mean_ms": 58.28635573387146,
+        "median_ms": 58.769216537475586,
+        "min_ms": 49.41144943237305,
+        "max_ms": 60.19194412231445
+      },
+      "stages_ms": {
+        "target.forward M=8": {
+          "count": 16,
+          "mean_ms": 47.761610984802246,
+          "median_ms": 47.99457931518555,
+          "min_ms": 42.87421417236328,
+          "max_ms": 49.40836715698242
+        },
+        "target.logits": {
+          "count": 16,
+          "mean_ms": 3.846389412879944,
+          "median_ms": 4.029680013656616,
+          "min_ms": 1.085886001586914,
+          "max_ms": 4.036180019378662
+        },
+        "draft.propose": {
+          "count": 16,
+          "mean_ms": 6.510550171136856,
+          "median_ms": 6.610573053359985,
+          "min_ms": 5.035464763641357,
+          "max_ms": 6.668033123016357
+        }
+      },
+      "gap_ms": {
+        "draft.propose.end -> round.gpu.end": {
+          "count": 16,
+          "mean_ms": 0.013207499985583127,
+          "median_ms": 0.012880000285804272,
+          "min_ms": 0.012760000303387642,
+          "max_ms": 0.016759999096393585
+        },
+        "draft.propose.start -> draft.propose.end": {
+          "count": 16,
+          "mean_ms": 6.510550171136856,
+          "median_ms": 6.610573053359985,
+          "min_ms": 5.035464763641357,
+          "max_ms": 6.668033123016357
+        },
+        "rejection.verify.end -> state.commit.start": {
+          "count": 16,
+          "mean_ms": 0.00821256247581914,
+          "median_ms": 0.008239999879151583,
+          "min_ms": 0.007960000075399876,
+          "max_ms": 0.00848000030964613
+        },
+        "rejection.verify.start -> rejection.verify.end": {
+          "count": 16,
+          "mean_ms": 0.0940553741529584,
+          "median_ms": 0.07733999937772751,
+          "min_ms": 0.07660000026226044,
+          "max_ms": 0.34316200017929077
+        },
+        "round.gpu.start -> target.forward M=8.start": {
+          "count": 16,
+          "mean_ms": 0.004135062510613352,
+          "median_ms": 0.004000000189989805,
+          "min_ms": 0.003920000046491623,
+          "max_ms": 0.004559999797493219
+        },
+        "sample_tokens.start.start -> target.logits.start": {
+          "count": 16,
+          "mean_ms": 0.012362500128801912,
+          "median_ms": 0.012400000356137753,
+          "min_ms": 0.012079999782145023,
+          "max_ms": 0.012640000320971012
+        },
+        "state.commit.end -> draft.propose.start": {
+          "count": 16,
+          "mean_ms": 0.0041575000213924795,
+          "median_ms": 0.004120000172406435,
+          "min_ms": 0.004040000028908253,
+          "max_ms": 0.004600000102072954
+        },
+        "state.commit.start -> state.commit.end": {
+          "count": 16,
+          "mean_ms": 0.02341006265487522,
+          "median_ms": 0.02326000016182661,
+          "min_ms": 0.02295999974012375,
+          "max_ms": 0.024480000138282776
+        },
+        "target.forward M=8.end -> sample_tokens.start.start": {
+          "count": 16,
+          "mean_ms": 0.004192500025965273,
+          "median_ms": 0.004140000091865659,
+          "min_ms": 0.004000000189989805,
+          "max_ms": 0.004639999940991402
+        },
+        "target.forward M=8.start -> target.forward M=8.end": {
+          "count": 16,
+          "mean_ms": 47.761610984802246,
+          "median_ms": 47.99457931518555,
+          "min_ms": 42.87421417236328,
+          "max_ms": 49.40836715698242
+        },
+        "target.logits.end -> rejection.verify.start": {
+          "count": 16,
+          "mean_ms": 0.004070125083671883,
+          "median_ms": 0.004040000028908253,
+          "min_ms": 0.0039610001258552074,
+          "max_ms": 0.004480000119656324
+        },
+        "target.logits.start -> target.logits.end": {
+          "count": 16,
+          "mean_ms": 3.846389412879944,
+          "median_ms": 4.029680013656616,
+          "min_ms": 1.085886001586914,
+          "max_ms": 4.036180019378662
+        }
+      },
+      "runtime_shapes": [
+        "{\"computed_tokens\":[181],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[99],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[189]}",
+        "{\"computed_tokens\":[60000],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60008]}",
+        "{\"computed_tokens\":[60008],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60016]}",
+        "{\"computed_tokens\":[60016],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60024]}",
+        "{\"computed_tokens\":[60024],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60032]}",
+        "{\"computed_tokens\":[60032],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60040]}",
+        "{\"computed_tokens\":[60040],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60048]}",
+        "{\"computed_tokens\":[60048],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60056]}",
+        "{\"computed_tokens\":[60056],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60064]}",
+        "{\"computed_tokens\":[60064],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60072]}",
+        "{\"computed_tokens\":[60072],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60080]}",
+        "{\"computed_tokens\":[60080],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60088]}",
+        "{\"computed_tokens\":[60088],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60096]}",
+        "{\"computed_tokens\":[60096],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60104]}",
+        "{\"computed_tokens\":[60104],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60112]}",
+        "{\"computed_tokens\":[60112],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[60000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[60120]}"
+      ],
+      "dropped_records": 0,
+      "steady_state_excluding_first_verification": {
+        "round_gpu_ms": {
+          "count": 15,
+          "mean_ms": 58.87801615397135,
+          "median_ms": 58.82061767578125,
+          "min_ms": 58.60597610473633,
+          "max_ms": 60.19194412231445
+        },
+        "round_span_ms": {
+          "count": 15,
+          "mean_ms": 58.87801615397135,
+          "median_ms": 58.82061767578125,
+          "min_ms": 58.60597610473633,
+          "max_ms": 60.19194412231445
+        },
+        "target.forward M=8": {
+          "count": 15,
+          "mean_ms": 48.08743743896484,
+          "median_ms": 48.01047897338867,
+          "min_ms": 47.79996109008789,
+          "max_ms": 49.40836715698242
+        },
+        "dropped_records": 0
+      }
+    },
+    "200K": {
+      "prompt_tokens": 200000,
+      "verification_rows": 7,
+      "round_gpu_ms": {
+        "count": 7,
+        "mean_ms": 67.27563585553851,
+        "median_ms": 67.22539520263672,
+        "min_ms": 67.15010833740234,
+        "max_ms": 67.70845031738281
+      },
+      "round_span_ms": {
+        "count": 7,
+        "mean_ms": 67.27563585553851,
+        "median_ms": 67.22539520263672,
+        "min_ms": 67.15010833740234,
+        "max_ms": 67.70845031738281
+      },
+      "stages_ms": {
+        "target.forward M=8": {
+          "count": 7,
+          "mean_ms": 56.51065008980887,
+          "median_ms": 56.44078063964844,
+          "min_ms": 56.404579162597656,
+          "max_ms": 56.94175338745117
+        },
+        "target.logits": {
+          "count": 7,
+          "mean_ms": 4.030284609113421,
+          "median_ms": 4.03046178817749,
+          "min_ms": 4.028901100158691,
+          "max_ms": 4.031861782073975
+        },
+        "draft.propose": {
+          "count": 7,
+          "mean_ms": 6.583497864859445,
+          "median_ms": 6.573955059051514,
+          "min_ms": 6.564235210418701,
+          "max_ms": 6.632154941558838
+        }
+      },
+      "gap_ms": {
+        "draft.propose.end -> round.gpu.end": {
+          "count": 7,
+          "mean_ms": 0.013651428611150809,
+          "median_ms": 0.012799999676644802,
+          "min_ms": 0.012760000303387642,
+          "max_ms": 0.018360000103712082
+        },
+        "draft.propose.start -> draft.propose.end": {
+          "count": 7,
+          "mean_ms": 6.583497864859445,
+          "median_ms": 6.573955059051514,
+          "min_ms": 6.564235210418701,
+          "max_ms": 6.632154941558838
+        },
+        "rejection.verify.end -> state.commit.start": {
+          "count": 7,
+          "mean_ms": 0.008057142873959882,
+          "median_ms": 0.00803999975323677,
+          "min_ms": 0.007799999788403511,
+          "max_ms": 0.0083600003272295
+        },
+        "rejection.verify.start -> rejection.verify.end": {
+          "count": 7,
+          "mean_ms": 0.07741171228034156,
+          "median_ms": 0.07711999863386154,
+          "min_ms": 0.07655999809503555,
+          "max_ms": 0.07920099794864655
+        },
+        "round.gpu.start -> target.forward M=8.start": {
+          "count": 7,
+          "mean_ms": 0.003971428543861423,
+          "median_ms": 0.00395999988541007,
+          "min_ms": 0.00395999988541007,
+          "max_ms": 0.004000000189989805
+        },
+        "sample_tokens.start.start -> target.logits.start": {
+          "count": 7,
+          "mean_ms": 0.012331428538475717,
+          "median_ms": 0.012319999746978283,
+          "min_ms": 0.012079999782145023,
+          "max_ms": 0.012679999694228172
+        },
+        "state.commit.end -> draft.propose.start": {
+          "count": 7,
+          "mean_ms": 0.004131571323211704,
+          "median_ms": 0.004120999947190285,
+          "min_ms": 0.0040799998678267,
+          "max_ms": 0.00419999985024333
+        },
+        "state.commit.start -> state.commit.end": {
+          "count": 7,
+          "mean_ms": 0.023211428629500524,
+          "median_ms": 0.023240000009536743,
+          "min_ms": 0.0225600004196167,
+          "max_ms": 0.023719999939203262
+        },
+        "target.forward M=8.end -> sample_tokens.start.start": {
+          "count": 7,
+          "mean_ms": 0.004240000088300023,
+          "median_ms": 0.004120000172406435,
+          "min_ms": 0.004000000189989805,
+          "max_ms": 0.004720000084489584
+        },
+        "target.forward M=8.start -> target.forward M=8.end": {
+          "count": 7,
+          "mean_ms": 56.51065008980887,
+          "median_ms": 56.44078063964844,
+          "min_ms": 56.404579162597656,
+          "max_ms": 56.94175338745117
+        },
+        "target.logits.end -> rejection.verify.start": {
+          "count": 7,
+          "mean_ms": 0.004200000049812453,
+          "median_ms": 0.00419999985024333,
+          "min_ms": 0.004000000189989805,
+          "max_ms": 0.004480000119656324
+        },
+        "target.logits.start -> target.logits.end": {
+          "count": 7,
+          "mean_ms": 4.030284609113421,
+          "median_ms": 4.03046178817749,
+          "min_ms": 4.028901100158691,
+          "max_ms": 4.031861782073975
+        }
+      },
+      "runtime_shapes": [
+        "{\"computed_tokens\":[200000],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200008]}",
+        "{\"computed_tokens\":[200008],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200016]}",
+        "{\"computed_tokens\":[200016],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200024]}",
+        "{\"computed_tokens\":[200024],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200032]}",
+        "{\"computed_tokens\":[200032],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200040]}",
+        "{\"computed_tokens\":[200040],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200048]}",
+        "{\"computed_tokens\":[200048],\"cudagraph_mode\":\"PIECEWISE\",\"descriptor_tokens\":8,\"has_prefill\":false,\"input_requests\":1,\"input_requests_after_padding\":1,\"input_tokens\":8,\"input_tokens_after_padding\":8,\"prompt_tokens\":[200000],\"request_count\":1,\"scheduled_tokens_per_request\":[8],\"sequence_lengths\":[200056]}"
+      ],
+      "dropped_records": 0,
+      "steady_state_excluding_first_verification": {
+        "round_gpu_ms": {
+          "count": 6,
+          "mean_ms": 67.20350011189778,
+          "median_ms": 67.20883178710938,
+          "min_ms": 67.15010833740234,
+          "max_ms": 67.24479675292969
+        },
+        "round_span_ms": {
+          "count": 6,
+          "mean_ms": 67.20350011189778,
+          "median_ms": 67.20883178710938,
+          "min_ms": 67.15010833740234,
+          "max_ms": 67.24479675292969
+        },
+        "target.forward M=8": {
+          "count": 6,
+          "mean_ms": 56.43879954020182,
+          "median_ms": 56.43383979797363,
+          "min_ms": 56.404579162597656,
+          "max_ms": 56.46989822387695
+        },
+        "dropped_records": 0
+      }
+    }
+  },
+  "limits": [
+    "The 0K request was issued after the 60K request in the same process and includes one nonverification prefill row outside the reported verification statistics.",
+    "These are steady-state diagnostic spans for synthetic token IDs, not a claim about task quality or private-chat output."
+  ],
+  "event_feed_sha256": "766ff9fa26b3339f30bd29c7b352a5bcb888819e5d9d5b5e20be0a7ed508cdf6",
+  "comparison_contract": {
+    "stage26_control_substitution_allowed": false,
+    "reason": "This diagnostic used a disposable runtime ABI and synthetic token-ID prompts; the authenticated stage-profile control has a separate execution identity and fixture identity.",
+    "stage26_control_artifact": "benchmarks/results/stage26-control-20260921.json"
+  }
+}

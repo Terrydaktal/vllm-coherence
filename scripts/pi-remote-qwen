@@ -4427,26 +4427,59 @@ else
 	printf 'backend ready; launching Pi %s (logs: %s)\n' "$PI_MODEL" "$backend_log" >&2
 fi
 
-# The first DFlash request otherwise JIT-compiles the fixed rejection/resample
-# kernels in the request's critical path.  A one-token probe is insufficient:
-# it does not exercise the full eight-draft rejection envelope.  Pay that cost
-# once with exactly one proposal plus bonus token before Pi opens; the result is
-# discarded and does not alter the user's conversation or prefix-cache history.
+# The first DFlash request otherwise JIT-compiles the model, target-head and
+# fixed rejection/resample kernels in the request's critical path.  A one-token
+# probe is insufficient: it can take the ordinary single-token path and leave
+# the first real M8 shape cold.  Use a content-free, multi-token request that
+# keeps the backend in the DFlash path before Pi opens; the result is discarded
+# and does not alter the user's conversation or prefix-cache history.
 if [[ ($backend_profile == agent262) && $lane == dflash && $reuse_existing == 0 &&
 	$snapshot_resume == 0 && $live62_requested == 0 && ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then
 	if ((coding_turbo_quest96 == 1)); then
 		warmup_payload=$(printf '%s' \
-			'{"model":"qwen3.8-27b-frozenlock","prompt":"Return one token:","max_tokens":9,"temperature":1.0,"top_p":0.95,"top_k":20,"stream":false}')
+			'{"model":"qwen3.8-27b-frozenlock","prompt":"Output exactly sixteen short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":24,"temperature":1.0,"top_p":0.95,"top_k":20,"stream":false}')
 	else
 		warmup_payload=$(printf '%s' \
-			'{"model":"qwen3.8-27b-frozenlock","prompt":"Return one token:","max_tokens":9,"temperature":0.0,"stream":false}')
+			'{"model":"qwen3.8-27b-frozenlock","prompt":"Output exactly sixteen short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":24,"temperature":0.0,"stream":false}')
 	fi
-	curl --fail --silent --show-error --max-time 300 \
-		-H 'Content-Type: application/json' \
-		-H 'X-Request-ID: pi-remote-startup-warmup' \
-		-d "$warmup_payload" \
-		"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
-		die 'backend warmup failed; refusing to start Pi on a cold or unhealthy lane'
+	# jit_monitor emits this exact diagnostic only when a Triton kernel compiles
+	# after inference has already begun.  Check only bytes written by this
+	# warmup: a historical warning must not poison a later healthy launch. If
+	# this request really compiles a shape, repeat it so the persistent cache is
+	# populated before Pi is admitted.
+	jit_log_offset=$(stat -c '%s' -- "$backend_log")
+	[[ $jit_log_offset =~ ^[0-9]+$ ]] || die 'backend warmup received an invalid local log size'
+	for warmup_attempt in 1 2 3; do
+		curl --fail --silent --show-error --max-time 300 \
+			-H 'Content-Type: application/json' \
+			-H "X-Request-ID: pi-remote-startup-warmup-$warmup_attempt" \
+			-d "$warmup_payload" \
+			"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
+			die 'backend warmup failed; refusing to start Pi on a cold or unhealthy lane'
+		jit_seen=0
+		for ((poll_attempt = 1; poll_attempt <= 20; poll_attempt++)); do
+			current_size=$(stat -c '%s' -- "$backend_log")
+			[[ $current_size =~ ^[0-9]+$ && $current_size -ge $jit_log_offset ]] ||
+				die 'backend warmup could not inspect the local backend log'
+			if tail -c +$((jit_log_offset + 1)) -- "$backend_log" |
+				grep -Fq 'JIT compilation during inference'; then
+				jit_seen=1
+				break
+			fi
+			sleep 0.1
+		done
+		if ((jit_seen == 0)); then
+			break
+		fi
+		if ((warmup_attempt < 3)); then
+			printf 'backend warmup compiled new inference shapes; repeating warmup (%s/3)\n' \
+				"$warmup_attempt" >&2
+			jit_log_offset=$current_size
+			continue
+		fi
+		tail -n 80 -- "$backend_log" >&2 || true
+		die 'backend warmup still observed inference-time Triton JIT after three attempts'
+	done
 	printf 'backend warmup complete; launching Pi\n' >&2
 elif [[ $backend_profile == agent262 && $lane == dflash && $reuse_existing == 1 ]]; then
 	# --reuse-existing is an attachment operation.  Health/model/process checks

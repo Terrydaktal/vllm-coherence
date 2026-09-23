@@ -10,7 +10,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from analyze_release_timings import analyze, measure_round_windows, phase
-from render_current_tables import current_stage_profile, update
+from render_current_tables import (
+    current_stage_profile,
+    render_chained_workload_results,
+    update,
+)
 
 
 def test_readme_is_current_only_and_matches_committed_measurements():
@@ -32,6 +36,24 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         assert entry["commit"] in readme
         assert entry["change"]
     evidence = json.loads((ROOT / data["sources"]["profile"]).read_text())
+    diagnostic_profile = json.loads(
+        (ROOT / "benchmarks/results/compiled-global256-stage-profile-1200.json").read_text()
+    )
+    assert data["stage_profile_2k"]["measurement_kind"] == (
+        "archived_diagnostic_stage_attribution_only"
+    )
+    assert data["stage_profile_2k"]["status"] == "archived_not_production_metric"
+    assert diagnostic_profile["measurement_kind"] == "archived_diagnostic_stage_attribution_only"
+    assert diagnostic_profile["status"] == "archived_not_production_metric"
+    assert diagnostic_profile["production_timing_eligible"] is False
+    assert diagnostic_profile["observer_effect"]["first_use_triton_jit_observed"] is True
+    assert diagnostic_profile["observer_effect"]["diagnosis_artifact"].endswith(
+        "round-jit-diagnosis-20260921.json"
+    )
+    matched = json.loads((ROOT / data["matched_stage_profile"]).read_text())
+    assert matched["status"] == "matched_estimate"
+    assert matched["observer_effect"]["zero_observer_effect_proven"] is False
+    assert "No per-stage event probes or forced-token replay" in readme
     assert data["round_timing"] == evidence["round_timing"]
     assert data["gpu_ms"] == evidence["all_gpu_ms"]
     assert "26. Estimated runtime overhead" in readme
@@ -55,13 +77,10 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     for commit in expected_links:
         commit_url = f"https://github.com/Terrydaktal/vllm-coherence/commit/{commit}"
         assert readme.count(commit_url) >= 1
-    profile_url = (
-        f"https://github.com/Terrydaktal/vllm-coherence/commit/{profile_commit}"
-    )
-    assert readme.count(profile_url) >= 1
-    assert "The timing-table header and each correctness result link to the commit" in readme
+    assert matched["stage26_execution"]["measurement_commit"] == profile_commit
+    assert "Historical correctness results link to their evidence commits" in readme
     assert (
-        f"Current timing per retained compiled profile cycle (0K / 60K / 200K; milliseconds unless explicitly marked; evidence run [`{profile_commit[:7]}`]"
+        "Current GPU activity per retained compiled M8 cycle (0K / 60K / 200K; milliseconds unless explicitly marked; 2026-09-23"
         in readme
     )
     compiled_table = readme.split("## Compiled backend stages\n\n", 1)[1].split(
@@ -103,7 +122,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         "**24. Global-256 target head**",
         "**25. Other GPU bookkeeping**",
         "**26. Estimated runtime overhead**",
-        "**Total profile cycle (stages 1–26)**",
+        "**Total reconstructed round (stages 1–26)**",
     ]
     assert "| **3. Input preparation and cache metadata** |" not in readme
     assert "| **12. RoPE and layout** |" not in readme
@@ -113,15 +132,22 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "zero rows have no separately emitted scope" not in readme
     assert "Last relevant code commit / change" in readme
     assert "The provenance column links the last relevant implementation commit" in readme
-    assert "2,183 / 1,191 / 1,191 requested rounds" in readme
-    assert "2,062 / 1,132 / 1,133 complete cycles" in readme
+    counts = " / ".join(str(matched["contexts"][c]["included_rounds"]) for c in matched["context_order"])
+    assert counts + " complete M8 cycles" in readme
     assert "0K / 60K / 200K" in readme
-    assert "separate uninstrumented full-round mean minus the sum of the 25 named instrumented-stage means" in readme
+    from compute_stage26_residual import compute
+    control = json.loads((ROOT / data["matched_stage_control"]).read_text())
+    audit = compute(matched, control)
+    residuals = " / ".join(f"{audit['contexts'][c]['union_corrected_difference_ms']:.3f}" for c in matched["context_order"])
+    totals = " / ".join(f"{audit['contexts'][c]['full_uninstrumented_round_ms']:.3f}" for c in matched["context_order"])
+    assert f"| **26. Estimated runtime overhead** | {residuals} (estimate)" in readme
+    assert f"| **Total reconstructed round (stages 1–26)** | **{totals}**" in readme
+    assert "old forced-replay subtraction is superseded" in readme
     assert "profile-cycle wall time minus the 25 named stage kernel totals" not in readme
-    assert data["stage_profile_2k"]["stage26_benchmark"]["status"] == "pending"
-    for context in data["stage_profile_2k"]["contexts"].values():
-        assert "profile_residual_ms" not in context
-        assert "profile_stage26_ms" not in context
+    assert data["stage_profile_2k"]["stage26_benchmark"]["status"] == "unqualified_as_runtime_gap"
+    assert data["stage_profile_2k"]["stage26_benchmark"]["artifact"].endswith(
+        "stage26-control-20260921.json"
+    )
     assert "Calls in 6 retained cycles" in readme
     assert readme.index("## Global-256 target-head") < readme.index("## Benchmarks")
     assert readme.count("## Global-256 target-head") == 1
@@ -142,17 +168,24 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "benchmark_pi_coding_contexts.py" in readme
     assert "| 0K |" in readme and "| 60K |" in readme and "| 200K |" in readme
     assert "Peak 3s" in readme
-    assert "completion marker valid, required headings missing" in readme
+    chained = json.loads(
+        (ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text()
+    )
+    assert f"rerun status: `{chained['status']}`" in readme
+    checkpoint = chained["stages"][-1]["checkpoint_validation"]
+    assert ("The checkpoint format failed validation" in readme) is not checkpoint["passed"]
     assert "phase_token_counts_cover_output=false" in readme
     assert "peak_3s_tokens_per_second" in readme
     assert "### Known remaining symptoms and likely causes" in readme
     assert readme.index("### Known remaining symptoms and likely causes") > readme.index(
-        "The earlier retained round log gives this historical partial latency histogram"
+        "The histogram below is generated from the complete per-round records"
     )
     assert "#### Changes since `cbbf495`" not in readme
     assert "### Remaining symptoms and likely causes" not in readme
     assert "Status: pending fix" not in readme
     assert "HIP/ROCr stream or queue dependency" in readme
+    assert "reclaims completed asynchronous HIP-event pairs" in readme
+    assert "Native-runtime validation of the repaired collector is still required" in readme
     assert "After all 64 layers: finish target verification" not in readme
     assert "Draft proposals" not in readme
     assert "Total elapsed GPU cycle" not in readme
@@ -163,6 +196,63 @@ def test_readme_is_current_only_and_matches_committed_measurements():
             layer["total"],
             abs_tol=1e-8,
         )
+
+
+def test_workload_table_uses_result_values_and_validation_status():
+    report = json.loads(
+        (ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text()
+    )
+    report["sampling"]["top_k"] = 41
+    report["status"] = "complete"
+    for row in report["stages"]:
+        row["phase_token_counts_cover_output"] = True
+        if row["thinking_enabled"]:
+            row["reasoning_channel_observed"] = True
+    coding = report["stages"][0]
+    coding.update(
+        generated_tokens=12345,
+        mean_generation_round_ms=12.345,
+        post_first_tokens_per_second=321.234,
+        peak_3s_tokens_per_second=456.789,
+        acceptance_rate=0.45678,
+    )
+    checkpoint = report["stages"][-1]
+    checkpoint["sampling"]["temperature"] = 0.25
+    checkpoint["checkpoint_validation"].update(
+        marker_valid=True, headings_valid=True, passed=True
+    )
+
+    rendered = "\n".join(render_chained_workload_results(report))
+    coding_line = next(line for line in rendered.splitlines() if line.startswith("| Coding task |"))
+    assert "12,345" in coding_line
+    assert "12.35 ms | 321.23 tok/s | 456.79 tok/s | 45.68%" in coding_line
+    assert "top-k 41" in rendered
+    assert "compaction uses temperature 0.25" in rendered
+    assert "rerun status: `complete`" in rendered
+    assert "The checkpoint format passed" in rendered
+    assert "format failed" not in rendered
+    assert "No separate reasoning channel" not in rendered
+    assert "phase_token_counts_cover_output=false" not in rendered
+
+
+def test_current_context_results_account_for_every_round():
+    report = json.loads(
+        (ROOT / "benchmarks/results/pi-coding-contexts.json").read_text()
+    )
+    for context in ("0K", "60K", "200K"):
+        capture = report["contexts"][context]["round_capture"]
+        records = capture["records"]
+        assert capture["status"] == "captured"
+        assert capture["missing_round_numbers"] == []
+        assert capture["duplicate_round_numbers"] == []
+        assert len(records) == capture["record_count"]
+        assert [row["round"] for row in records] == list(range(1, len(records) + 1))
+        assert sum((row["draft_tokens"] or 0) > 0 for row in records) == capture["expected_rounds"]
+        values = [row["round_ms"] for row in records if row["round_ms"] is not None]
+        histogram = capture["histogram"]
+        assert len(values) == histogram["measured_round_count"] == capture["measured_round_count"]
+        assert sum(row["count"] for row in histogram["bins"]) == len(values)
+        assert math.isclose(histogram["mean_ms"], sum(values) / len(values), abs_tol=1e-8)
 
 
 def test_latest_profile_selects_complete_inventory_not_fast_rounds():

@@ -27,16 +27,39 @@ def qualify(args):
         "native attention binding changed",
     )
     candidate = SharedM1Attention(args.build)
-    prefixes = (0, 9, 15, 505, 60000, 60009, 60015, 60409)
+    previous = SharedM1Attention(args.previous_build) if args.previous_build else None
+    # Every page offset, plus the points where the 32-split M1 tile allocation
+    # changes. Testing/timing only offset zero hid the duplicate KV traversal.
+    prefixes = tuple(
+        sorted(
+            {
+                *(
+                    base + offset
+                    for base in (0, 1024, 60000, 200000)
+                    for offset in range(16)
+                ),
+                *(
+                    boundary + offset
+                    for boundary in (512, 59904, 200192)
+                    for offset in range(-7, 1)
+                ),
+            }
+        )
+    )
     blocks = (max(prefixes) + 8 + 15) // 16
     table = torch.zeros((1, (253792 + 15) // 16), device="cuda", dtype=torch.int32)
     table[0, :blocks] = torch.randperm(blocks, device="cuda", dtype=torch.int32)
     repeated = table.expand(8, -1).contiguous()
-    guarded = torch.full((8 * 24 * 32 * 520 + 1024,), 0xA5, device="cuda", dtype=torch.uint8)
+    guarded = torch.full(
+        (8 * 24 * 32 * 520 + 1024,), 0xA5, device="cuda", dtype=torch.uint8
+    )
     scratch = guarded[512:-512]
     lengths = torch.empty((1,), device="cuda", dtype=torch.int32)
     row_lengths = torch.empty((8,), device="cuda", dtype=torch.int32)
-    scales = [torch.full((4,), value, device="cuda", dtype=torch.float32) for value in (0.5, 1.5)]
+    scales = [
+        torch.full((4,), value, device="cuda", dtype=torch.float32)
+        for value in (0.5, 1.5)
+    ]
     repeated_scales = [s.repeat(8) for s in scales]
     checks, timings = [], {}
 
@@ -48,7 +71,11 @@ def qualify(args):
         if dtype == torch.uint8:
             # vLLM stores FP8 as bytes; hybrid allocations can pad between pages.
             kv = torch.empty((blocks, 5, 16, 512), device="cuda", dtype=dtype)[:, :4]
-            kv.copy_(torch.randn(kv.shape, device="cuda").to(torch.float8_e4m3fn).view(torch.uint8))
+            kv.copy_(
+                torch.randn(kv.shape, device="cuda")
+                .to(torch.float8_e4m3fn)
+                .view(torch.uint8)
+            )
         else:
             kv = torch.randn((blocks, 4, 16, 512), device="cuda").to(dtype)
         saved_kv = kv.clone()
@@ -109,9 +136,17 @@ def qualify(args):
                     scales,
                 )
             old = launch(
-                query, repeated, row_lengths, torch.empty_like(query), 8, 1, repeated_scales
+                query,
+                repeated,
+                row_lengths,
+                torch.empty_like(query),
+                8,
+                1,
+                repeated_scales,
             )
-            out = candidate(query, kv, table, lengths, scratch, ks=scales[0], vs=scales[1])
+            out = candidate(
+                query, kv, table, lengths, scratch, ks=scales[0], vs=scales[1]
+            )
             record = {
                 "dtype": str(dtype),
                 "prefix": prefix,
@@ -123,28 +158,47 @@ def qualify(args):
             checks.append(record)
             write_private(args.output / f"check-{dtype}-{prefix}.json", seal(record))
             require(
-                record["baseline_mismatches"] == 0, "independent-query baseline differs from M1"
+                record["baseline_mismatches"] == 0,
+                "independent-query baseline differs from M1",
             )
-            require(record["candidate_mismatches"] == 0, "shared-query attention differs from M1")
+            require(
+                record["candidate_mismatches"] == 0,
+                "shared-query attention differs from M1",
+            )
             changed = query.clone()
             changed[1:].zero_()
-            shifted = candidate(changed, kv, table, lengths, scratch, ks=scales[0], vs=scales[1])
-            require(mismatches(shifted[:1], out[:1]) == 0, "future query changed the first row")
+            shifted = candidate(
+                changed, kv, table, lengths, scratch, ks=scales[0], vs=scales[1]
+            )
+            require(
+                mismatches(shifted[:1], out[:1]) == 0,
+                "future query changed the first row",
+            )
             require(
                 bool((guarded[:512] == 0xA5).all() and (guarded[-512:] == 0xA5).all()),
                 "scratch canary changed",
             )
 
-            if prefix != 60000:
-                continue
             functions = {
                 "independent_m1_queries": lambda query=query, launch=launch: launch(
-                    query, repeated, row_lengths, torch.empty_like(query), 8, 1, repeated_scales
+                    query,
+                    repeated,
+                    row_lengths,
+                    torch.empty_like(query),
+                    8,
+                    1,
+                    repeated_scales,
                 ),
                 "shared_kv_queries": lambda query=query, kv=kv: candidate(
                     query, kv, table, lengths, scratch, ks=scales[0], vs=scales[1]
                 ),
             }
+            if previous is not None:
+                functions["previous_shared_kv_queries"] = lambda query=query, kv=kv: (
+                    previous(
+                        query, kv, table, lengths, scratch, ks=scales[0], vs=scales[1]
+                    )
+                )
             graphs, samples = {}, {name: [] for name in functions}
             for name, function in functions.items():
                 stream = torch.cuda.Stream()
@@ -157,7 +211,10 @@ def qualify(args):
                 with torch.cuda.graph(graph):
                     result = function()
                 graph.replay()
-                require(mismatches(result, oracle) == 0, "captured attention differs from M1")
+                require(
+                    mismatches(result, oracle) == 0,
+                    "captured attention differs from M1",
+                )
                 graphs[name] = (graph, result)
             rng = random.Random(3901)
             for _ in range(30):
@@ -171,12 +228,15 @@ def qualify(args):
                     end.record()
                     end.synchronize()
                     samples[name].append(begin.elapsed_time(end))
-            timings[str(dtype)] = {
+            timings[f"{dtype}:{prefix}"] = {
                 name: {"median_ms": statistics.median(values), "samples_ms": values}
                 for name, values in samples.items()
             }
             del graphs
-        require(torch.equal(kv.view(torch.uint8), saved_kv.view(torch.uint8)), "shared KV mutated")
+        require(
+            torch.equal(kv.view(torch.uint8), saved_kv.view(torch.uint8)),
+            "shared KV mutated",
+        )
         del kv, saved_kv
     broken = out.clone()
     broken.view(torch.int16)[0, 0, 0] ^= 1
@@ -186,6 +246,7 @@ def qualify(args):
         "timings": timings,
         "negative_control_detected": True,
         "build": candidate.manifest["sha256"],
+        "previous_build": previous.manifest["sha256"] if previous is not None else None,
         "graph_checks": True,
         "reference": "eight native M1 queries with the pinned 32-split graph contract",
     }
@@ -195,10 +256,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("spec", "build", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--previous-build", type=Path)
     parser.add_argument("--allow-gpu", action="store_true")
     args = parser.parse_args()
     require(
-        args.allow_gpu and os.environ.get("QWEN_CONFORMANCE_GPU_LOCK"), "GPU admission required"
+        args.allow_gpu and os.environ.get("QWEN_CONFORMANCE_GPU_LOCK"),
+        "GPU admission required",
     )
     from qwen_r9700_lab.conformance_gpu_lease import gpu_lease
 
@@ -210,14 +273,21 @@ def main():
         {
             "status": "SAMPLE_CHECKED",
             **result,
-            "scope": "192 synthetic positions, 8 contexts, 3 KV layouts; not full-model proof",
+            "scope": f"{sum(c['rows'] for c in result['checks'])} synthetic query rows, "
+            "every page offset at short/60K/200K contexts and split-size boundaries, "
+            "3 KV layouts; not full-model proof",
             "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         }
     )
     write_private(args.output / "result.json", report)
     print(
         json.dumps(
-            {"status": report["status"], "timings": report["timings"], "sha256": report["sha256"]}
+            {
+                "status": report["status"],
+                "checks": len(report["checks"]),
+                "scope": report["scope"],
+                "sha256": report["sha256"],
+            }
         ),
         flush=True,
     )

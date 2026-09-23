@@ -152,7 +152,9 @@ def _read_round_log(path: Path) -> tuple[list[dict[str, Any]], str | None]:
                 continue
             seen.add(key)
             records.append(event)
-    records.sort(key=lambda event: (event.get("observed_at_ms", 0), event.get("round", 0)))
+    records.sort(
+        key=lambda event: (event.get("observed_at_ms", 0), event.get("round", 0))
+    )
     return records, None if found else "round log is not present"
 
 
@@ -166,7 +168,9 @@ def _public_round_record(event: dict[str, Any]) -> dict[str, Any]:
     accepted_tokens = event.get("accepted_tokens")
     acceptance_rate = event.get("acceptance_rate")
     return {
-        "round": round_number if type(round_number) is int and round_number > 0 else None,
+        "round": round_number
+        if type(round_number) is int and round_number > 0
+        else None,
         "observed_at_ms": (
             observed_at_ms
             if type(observed_at_ms) is int and observed_at_ms > 0
@@ -174,7 +178,9 @@ def _public_round_record(event: dict[str, Any]) -> dict[str, Any]:
         ),
         "round_ms": (
             float(round_ms)
-            if type(round_ms) in (int, float) and math.isfinite(round_ms) and round_ms >= 0
+            if type(round_ms) in (int, float)
+            and math.isfinite(round_ms)
+            and round_ms >= 0
             else None
         ),
         "draft_tokens": (
@@ -208,8 +214,7 @@ def _round_histogram(records: list[dict[str, Any]]) -> dict[str, Any]:
     counts = []
     for _label, lower, upper in ROUND_HISTOGRAM_BINS:
         count = sum(
-            (lower is None or value >= lower)
-            and (upper is None or value < upper)
+            (lower is None or value >= lower) and (upper is None or value < upper)
             for value in values
         )
         counts.append(count)
@@ -256,14 +261,23 @@ def _round_capture(
         if event.get("generation") != identity["generation"]:
             continue
         observed_at_ms = event.get("observed_at_ms")
-        if type(observed_at_ms) is not int or not started_at_ms <= observed_at_ms <= ended_at_ms:
+        if (
+            type(observed_at_ms) is not int
+            or not started_at_ms <= observed_at_ms <= ended_at_ms
+        ):
             continue
         selected.append(_public_round_record(event))
 
-    round_numbers = [record["round"] for record in selected if record["round"] is not None]
+    round_numbers = [
+        record["round"] for record in selected if record["round"] is not None
+    ]
     unique_rounds = sorted(set(round_numbers))
     missing_rounds = (
-        [number for number in range(unique_rounds[0], unique_rounds[-1] + 1) if number not in unique_rounds]
+        [
+            number
+            for number in range(1, unique_rounds[-1] + 1)
+            if number not in unique_rounds
+        ]
         if unique_rounds
         else []
     )
@@ -272,11 +286,19 @@ def _round_capture(
     )
     measured = sum(record["round_ms"] is not None for record in selected)
     unmeasured = len(selected) - measured
-    count_matches = expected_rounds is not None and len(selected) == expected_rounds
+    # generation_rounds comes from spec_decode_num_drafts_total. The first
+    # prefill/first-token record has no draft and is intentionally retained,
+    # but must not be charged against that speculative-round counter.
+    speculative = sum((record.get("draft_tokens") or 0) > 0 for record in selected)
+    count_matches = expected_rounds is not None and speculative == expected_rounds
     status = "unavailable" if read_error and not selected else "captured"
     if read_error and selected:
         status = "partial_read"
-    if not read_error and expected_rounds is not None and not count_matches:
+    if not read_error and (
+        (expected_rounds is not None and not count_matches)
+        or missing_rounds
+        or duplicate_rounds
+    ):
         status = "incomplete"
     return {
         "schema": "urn:coherence:decode-round-capture:v1",
@@ -286,6 +308,8 @@ def _round_capture(
         "started_at_ms": started_at_ms,
         "ended_at_ms": ended_at_ms,
         "expected_rounds": expected_rounds,
+        "expected_rounds_metric": "vllm:spec_decode_num_drafts_total",
+        "speculative_round_count": speculative,
         "record_count": len(selected),
         "measured_round_count": measured,
         "unmeasured_round_count": unmeasured,
@@ -316,10 +340,7 @@ def _capture_rounds_until_complete(
         ended_at_ms=int(time.time() * 1000),
         expected_rounds=expected_rounds,
     )
-    while (
-        capture["status"] != "captured"
-        and time.monotonic() < deadline
-    ):
+    while capture["status"] != "captured" and time.monotonic() < deadline:
         time.sleep(0.05)
         capture = _round_capture(
             path=path,
@@ -342,7 +363,9 @@ def _round_log_snapshot(path: Path, identity: dict[str, str]) -> set[tuple[Any, 
     }
 
 
-def _load_prefix(path: Path | None, expected_tokens: int) -> tuple[list[int], str | None]:
+def _load_prefix(
+    path: Path | None, expected_tokens: int
+) -> tuple[list[int], str | None]:
     """Load and validate a token fixture without decoding or exposing its content."""
 
     if expected_tokens == 0:
@@ -382,7 +405,9 @@ def _requested_contexts(args: argparse.Namespace) -> tuple[str, ...]:
     return (args.contexts,)
 
 
-def _report_row(result: dict[str, Any], context: str, prefix: list[int]) -> dict[str, Any]:
+def _report_row(
+    result: dict[str, Any], context: str, prefix: list[int]
+) -> dict[str, Any]:
     """Keep the reusable request result while making the context explicit."""
 
     return {
@@ -456,17 +481,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         report["prefix_token_ids_sha256"][context] = _prefix_digest(prefix)
         suffix = _turn_suffix(tokenizer, prefix, rendered_coding, first=True)
         prompt_tokens = prefix + suffix
-        if (
-            len(prompt_tokens) + args.coding_max_tokens
-            > args.model_context_tokens
-        ):
+        if len(prompt_tokens) + args.coding_max_tokens > args.model_context_tokens:
             raise ValueError(
                 f"{context} prompt plus coding safety ceiling exceeds the model context"
             )
         identity_seed = f"{args.identity}:{context}:{_prefix_digest(prefix)}"
         identity = {
             "id": hashlib.sha256(identity_seed.encode()).hexdigest(),
-            "generation": hashlib.sha256(f"{identity_seed}:initial".encode()).hexdigest(),
+            "generation": hashlib.sha256(
+                f"{identity_seed}:initial".encode()
+            ).hexdigest(),
             "title": f"coding context benchmark {context}",
             "cwd": "/qualification/coding-contexts",
             "session_file": "",
@@ -539,9 +563,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     "post_first_tokens_per_second": result[
                         "post_first_tokens_per_second"
                     ],
-                    "peak_3s_tokens_per_second": result[
-                        "peak_3s_tokens_per_second"
-                    ],
+                    "peak_3s_tokens_per_second": result["peak_3s_tokens_per_second"],
                     "acceptance_rate": result["acceptance_rate"],
                     "round_capture_status": result["round_capture"]["status"],
                     "round_records": result["round_capture"]["record_count"],

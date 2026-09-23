@@ -34,7 +34,7 @@
     }
   ],
   "correctness_limits": "All 320 full-vocabulary hashes and the prefill prediction matched. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.",
-  "timing_scope": "Latest retained **compiled, piecewise-graph** decode profile from a saved **60,000-input-token Pi prefix**, with the global-256 head, both alignment repairs and the GGZ14-derived backports. The trace contains **8 observed profile rounds**; the displayed stage and layer values are arithmetic means over **6 complete retained rounds** (rounds 0–4 and 6), with one sample per stage per round. Each sample is one compiled decode/profile cycle containing drafting and target verification. This is a kernel profile, not six natural completions or a 60K-output run; the trace has no natural-completion output-token total. Round 5 lacks a complete kernel inventory; round 7 has no following target start to close its interval. Selection uses inventory and observed boundaries, never duration. Work preceding the first target is excluded. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Each fused kernel has one combined duration.",
+  "timing_scope": "Latest retained **compiled, piecewise-graph** decode profile from a saved **60,000-input-token Pi prefix**, with the global-256 head, both alignment repairs and the GGZ14-derived backports. The trace contains **8 observed profile rounds**; the displayed stage and layer values are arithmetic means over **6 complete retained rounds** (rounds 0\u20134 and 6), with one sample per stage per round. Each sample is one compiled decode/profile cycle containing drafting and target verification. This is a kernel profile, not six natural completions or a 60K-output run; the trace has no natural-completion output-token total. Round 5 lacks a complete kernel inventory; round 7 has no following target start to close its interval. Selection uses inventory and observed boundaries, never duration. Work preceding the first target is excluded. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Each fused kernel has one combined duration.",
   "stage_provenance": {
     "Drafter": {
       "commit": "2a2175a2cfe64e666b32df0db3c39f562ca96082",
@@ -256,14 +256,14 @@
       "stage": "GDN output gated normalization + FP8 production",
       "ms": 0.16019933333333305,
       "included_in": "",
-      "evidence": "1,000 rows × 48 sites × M1/M8: exact bytes and scales",
+      "evidence": "1,000 rows \u00d7 48 sites \u00d7 M1/M8: exact bytes and scales",
       "note": "Normalizes and gates GDN output, then produces FP8 inputs in one kernel; intermediate BF16 rounding is preserved."
     },
     {
       "stage": "GDN output activation FP8 quantization",
       "ms": null,
       "included_in": "GDN output gated normalization + FP8 production",
-      "evidence": "1,000 rows × 48 sites × M1/M8: exact bytes and scales",
+      "evidence": "1,000 rows \u00d7 48 sites \u00d7 M1/M8: exact bytes and scales",
       "note": "Uses the FP8 output produced by the same gated-normalization kernel."
     },
     {
@@ -2133,8 +2133,22 @@
   },
   "stage_profile_2k": {
     "schema": "urn:qwen:stage-profile-2k-v1",
+    "measurement_kind": "archived_diagnostic_stage_attribution_only",
+    "status": "archived_not_production_metric",
+    "production_timing_eligible": false,
+    "observer_effect": {
+      "profiler": "torch.profiler CPU/CUDA trace",
+      "first_use_triton_jit_observed": true,
+      "diagnosis_artifact": "benchmarks/results/round-jit-diagnosis-20260921.json",
+      "reason": "The preserved slow window included first-use Triton compilation for speculative decode shapes; its wall time is not a steady-state production measurement."
+    },
     "measurement_commit": "97674d714c48e508ddf2d7949ad130abfb674c24",
-    "scope": "Dedicated eager, full-BF16 target-head diagnostic profile with the repaired stock GDN path. Each synthetic context ran 2,000 forced output positions; the displayed named-stage values are means over 8 profiled M8 cycles after an 8-cycle warm-up. The 0K, 60K and 200K contexts are shown in that order. Stage 26 is a separate benchmark: it must use a matching uninstrumented full-round control and subtract the sum of the 25 named instrumented stages. It is never computed from the instrumented profile wall time. Profile timing is diagnostic and not production throughput. Profile coverage was complete at all three contexts; the 0K pass retained timing evidence but its harness cross-pass final-logit hash check was non-qualifying, so this table makes no correctness claim.",
+    "stage26_execution": {
+      "measurement_commit": "b8d681001cc726089c387eeddfc7c78e2e74ac3c",
+      "execution_identity": "a985520a1f50c8c23b18a1e90bb64bd2baa247dfc0ca749dd3200d927a3d0e88",
+      "fixture_identity": "405df89920e084edf5a665d9710e9f24780e53ff66eed9739cc389a08a27f003"
+    },
+    "scope": "Dedicated compiled Global-256 target-head diagnostic profile with the repaired stock GDN path. Each synthetic context ran 2,000 forced output positions; the displayed named-stage values are means over the retained compiled M8 cycles after the warm-up window. The 0K, 60K and 200K contexts are shown in that order. Stage 26 is a separate benchmark: it must use a matching uninstrumented full-round control and subtract the sum of the 25 named instrumented stages. It is never computed from the instrumented profile wall time. Profile timing is diagnostic and not production throughput. Profile coverage was complete at all three contexts; the 0K pass retained timing evidence but its harness cross-pass final-logit hash check was non-qualifying, so this table makes no correctness claim.",
     "context_order": [
       "0K",
       "60K",
@@ -2343,7 +2357,7 @@
     },
     "stage26": {
       "label": "Uninstrumented-round residual",
-      "definition": "separate uninstrumented full-round mean minus the sum of the 25 named instrumented-stage means; the two runs must share the same build, mode, fixture and round window"
+      "definition": "separate unprofiled full-round mean minus the sum of the 25 named instrumented-stage means; the two runs share build, mode, fixture and forced-replay schedule but retain independent measurement windows"
     },
     "private_chat_text_read": false,
     "synthetic_fixture": true,
@@ -2376,15 +2390,41 @@
     },
     "stage26_benchmark": {
       "schema": "urn:qwen:stage26-uninstrumented-residual-v1",
-      "status": "pending",
-      "definition": "Measure the full round with the stage hooks/profiler disabled, then subtract the sum of the 25 named stage means from the matching instrumented run. Reject mismatched execution identity or a negative residual; do not substitute profile wall time.",
+      "status": "unqualified_as_runtime_gap",
+      "artifact": "benchmarks/results/stage26-control-20260921.json",
+      "measurement_commit": "b8d681001cc726089c387eeddfc7c78e2e74ac3c",
+      "execution_identity": "a985520a1f50c8c23b18a1e90bb64bd2baa247dfc0ca749dd3200d927a3d0e88",
+      "fixture_identity": "405df89920e084edf5a665d9710e9f24780e53ff66eed9739cc389a08a27f003",
+      "definition": "Historical control minus stage sums; rejected as a production-gap measurement by the timing audit. Matching configuration labels do not establish matched schedules, boundaries or observer-free stage durations.",
       "context_order": [
         "0K",
         "60K",
         "200K"
       ],
-      "contexts": {},
-      "private_chat_text_read": false
+      "contexts": {
+        "0K": {
+          "full_uninstrumented_round_ms": 44.43349500551381,
+          "instrumented_stage_sum_ms": 36.3736335480116,
+          "residual_ms": 8.059861457502215,
+          "round_samples": 242
+        },
+        "60K": {
+          "full_uninstrumented_round_ms": 58.95563386585602,
+          "instrumented_stage_sum_ms": 41.562553651943446,
+          "residual_ms": 17.393080213912576,
+          "round_samples": 242
+        },
+        "200K": {
+          "full_uninstrumented_round_ms": 94.04168253372931,
+          "instrumented_stage_sum_ms": 52.02897057811126,
+          "residual_ms": 42.01271195561805,
+          "round_samples": 242
+        }
+      },
+      "private_chat_text_read": false,
+      "audit_artifact": "benchmarks/results/stage-timing-audit-20260923.json"
     }
-  }
+  },
+  "matched_stage_profile": "benchmarks/results/compiled-global256-stage-profile-20260923.json",
+  "matched_stage_control": "benchmarks/results/stage26-control-20260923.json"
 }

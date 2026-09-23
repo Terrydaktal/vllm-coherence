@@ -1,13 +1,13 @@
 {
   "schema": "urn:qwen:optimized-pi-release:v1",
-  "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260918-prefill-tiled-v1",
+  "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260923-attention-page-boundary-v1",
   "container_root": "/qualification",
   "state_layout": "existing-nine-slot",
   "target_head": "global256",
   "repair": "/qualification/preflight/d7-stock-repair-bundle-003.json",
   "repair_sha256": "693de5c443c8c05f693c8d42f06044911689b669c22448477192b4e858188719",
   "performance": "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json",
-  "performance_sha256": "3b1dead1d3d12391cd97c7b6f8e91b2a1e823dcd5a664a0cf17a11aeacc57757",
+  "performance_sha256": "aa30a9504cfcf642fa0b505e543ed40545d107e424901adbd6b64e4a27aa0b62",
   "pythonpath": [
     "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime",
     "/qualification/preflight/d7-rotary-intervention-v1/src",
@@ -37,6 +37,14 @@
     }
   ],
   "files": {
+    "diagnostics/attention-page-boundary-v1/build/build.json": "9372552a41a3d5c77f4d606411c0e44ff36fd3c2a3c37da3c9d1405cf67cec59",
+    "diagnostics/attention-page-boundary-v1/build/candidate.so": "f30986d1fb9182a6393b3e65701f1cd80add4a4e366b1e65297380005ca83c32",
+    "diagnostics/attention-page-boundary-v1/build/r4d.h": "c71bb6946f912d85afeab7fdd1410a368a87aa0e6479ac9641d68905d810bb1c",
+    "diagnostics/attention-page-boundary-v1/build/r4d_attn_decode_h256_gqa6.hip": "969542c3d7f9d8da05ec2c70375389582e1bfc24c71f6bd07ff82adce86c449e",
+    "diagnostics/attention-page-boundary-v1/build/r4d_common.h": "16db14fa42e7377c39641a3abea6d2ca524bb3a33e2a8afc55e9ccd3f5c0bacd",
+    "diagnostics/attention-page-boundary-v1/build/r4d_dt16.h": "b61525f1dbb6b272642e0e1410a3d753d1136ed87eb07cefca512843096c4c24",
+    "diagnostics/attention-page-boundary-v1/operator/result.json": "26023a059c89144110d8b038880818228c121abc7da78cb060bc773c10c70d9e",
+    "diagnostics/attention-page-boundary-v1/pi-comparison.json": "0fbdf21dcee5305714421fd597557afe9248b7ec87fd4d1bdbf6f450f58b56ad",
     "diagnostics/attention-shared-build-002/build.json": "e25463533a2e7433f8516010dfdae2ad263b8747c5f7222ef1f56fa06ef1bc5b",
     "diagnostics/attention-shared-build-002/candidate.so": "a67dd7ade9fdcf274b27ee082bf49e4b33fa2509dbd5738b20696c86b62766a1",
     "diagnostics/attention-shared-build-002/r4d.h": "c71bb6946f912d85afeab7fdd1410a368a87aa0e6479ac9641d68905d810bb1c",
@@ -540,7 +548,7 @@
     "preflight/stock-gdn-model-v22/runtime/qwen_radiance_fair_scheduler.py": "31cc3b73c7f69d15da7062768522c94d59e7c45fc4a26e7b2046312826bcfe1c",
     "preflight/stock-gdn-model-v22/runtime/sitecustomize.py": "6bced60b9e460f91a19b5ef97578cbe098bbc66bf850c3e2e33647f8716eed7c",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/launch.json": "47347a1315fcc9f5a94e11695459e08722385887509b03c4b9bbf53d9752be1d",
-    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json": "3b1dead1d3d12391cd97c7b6f8e91b2a1e823dcd5a664a0cf17a11aeacc57757",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json": "aa30a9504cfcf642fa0b505e543ed40545d107e424901adbd6b64e4a27aa0b62",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/analyze_attention_decode_transition.py": "2489a3de238c06afd7c2aedd3885375ac62c73573d66c48fd5e28e186306de12",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/analyze_d7_stage_profile.py": "4e91f78cccb34f23ca2aaed3e9e6cafd13fbfa1877fef7b4297143458e5874cf",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/analyze_gdn_decode_transition.py": "421eebf3094d5b1bf0301c942eb4ae0f37a2a3d9be5431c03ed1c2491b12f9f8",
@@ -719,5 +727,11 @@
     "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",
     "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
     "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
+  },
+  "parent_manifest_sha256": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
+  "attention_boundary_qualification": {
+    "path": "/qualification/diagnostics/attention-page-boundary-v1/pi-comparison.json",
+    "sha256": "afeed5c1f6216dbe45a273bce72e4a5b707d23133322b71d32779fabc9114dd2",
+    "scope": "Exact sampled M1 attention outputs and natural Pi output agreement at 0K/60K/200K; no full-vocabulary or universal equivalence claim."
   }
 }

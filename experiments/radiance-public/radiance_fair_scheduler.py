@@ -13,8 +13,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import re
+import statistics
 import time
 import weakref
 from pathlib import Path
@@ -37,12 +39,14 @@ ROUND_LOG_MAX_BYTES = 8 * 1024 * 1024
 # execution. A larger batch is a prompt-prefill execution and must not be
 # treated as the first decode boundary.
 DECODE_SYNC_MAX_SCHEDULED_TOKENS = 8
-# The release diagnosis reproduced the slow queue state after roughly thirty
-# decode launches, while a host pause and HIP GPU timing events did not repair it.
-# Retire that state before the following launch and re-arm the same bounded
-# recovery every interval.  A single fence per request was insufficient: the
-# live 60K capture returned to the slow state later in the same answer.
-DECODE_SYNC_RECOVERY_AFTER_ROUNDS = 30
+# A fixed fence cadence created its own periodic long samples even when the
+# queue was healthy.  Keep the transition fence, then arm recovery only after a
+# measured round is materially slower than this chat's recent fast baseline.
+# The threshold is deliberately above the small 2 ms jitter seen in the 0K
+# control while still catching the historic 10 ms mode switch.
+DECODE_SYNC_SLOW_DELTA_MS = 4.0
+DECODE_SYNC_SLOW_RATIO = 0.08
+DECODE_SYNC_LATENCY_WARMUP_ROUNDS = 4
 
 
 class RequestPhases:
@@ -297,8 +301,10 @@ def _sync_decode_transition(runner, scheduler_output, metadata):
     prefill or cache restore. A device-wide synchronization clears that state,
     but doing it for every decode round would turn the workaround into a
     permanent throughput penalty. The scheduler supplies a content-free
-    request/transition key, so a later request in the same chat bank is armed
-    again without fencing every decode round.
+    request/transition key and the previous round's numeric latency. Recovery
+    is therefore armed only when a round leaves the recent fast baseline by a
+    material margin; a fixed periodic fence would manufacture its own latency
+    spikes.
 
     This hook runs before the connector's final preparation. It only arms the
     transition and counts the round; the actual fence is deferred to
@@ -322,6 +328,8 @@ def _sync_decode_transition(runner, scheduler_output, metadata):
             runner._qwen_decode_round_key = None
             runner._qwen_decode_rounds = 0
             runner._qwen_decode_recovery_pending = None
+            runner._qwen_decode_latency_history = []
+            runner._qwen_decode_recovery_armed = True
         return False
     bank = metadata.get("bank")
     if bank is None:
@@ -334,21 +342,51 @@ def _sync_decode_transition(runner, scheduler_output, metadata):
     if previous_key != key:
         runner._qwen_decode_round_key = key
         runner._qwen_decode_rounds = 0
+        runner._qwen_decode_latency_history = []
+        runner._qwen_decode_recovery_armed = True
     runner._qwen_decode_rounds = int(getattr(runner, "_qwen_decode_rounds", 0)) + 1
 
     # The first fence is performed by ``after_forward_prepare``. That hook is
     # placed after mamba/cache preparation and immediately before the model
     # forward; the old before-forward location was too early to drain those
-    # asynchronous copies. The deferred fence below remains the recovery path
-    # for residual queue state that accumulates during a long response.
-    should_sync = (
-        runner._qwen_decode_rounds > DECODE_SYNC_RECOVERY_AFTER_ROUNDS
-        and (runner._qwen_decode_rounds - 1) % DECODE_SYNC_RECOVERY_AFTER_ROUNDS == 0
-    )
-    if not should_sync:
+    # asynchronous copies. The adaptive fence below is the recovery path for
+    # residual queue state that appears during a long response.
+    observed = metadata.get("last_round_ms")
+    try:
+        observed = float(observed)
+    except (TypeError, ValueError):
+        observed = None
+    if observed is None or not math.isfinite(observed) or observed < 0:
         return False
-    runner._qwen_decode_recovery_pending = (key, total)
-    return True
+
+    history = list(getattr(runner, "_qwen_decode_latency_history", []))
+    baseline = (
+        statistics.median(history)
+        if len(history) >= DECODE_SYNC_LATENCY_WARMUP_ROUNDS
+        else None
+    )
+    threshold = (
+        max(DECODE_SYNC_SLOW_DELTA_MS, baseline * DECODE_SYNC_SLOW_RATIO)
+        if baseline is not None
+        else None
+    )
+    slow = threshold is not None and observed > baseline + threshold
+    armed = bool(getattr(runner, "_qwen_decode_recovery_armed", True))
+    if slow and armed:
+        runner._qwen_decode_recovery_pending = (key, total)
+        runner._qwen_decode_recovery_armed = False
+        return True
+
+    # Do not let a slow-mode sample raise the baseline and hide the transition.
+    # Once a normal sample arrives after a recovery, re-arm from the restored
+    # mode. This gives one recovery fence per slow episode rather than one per
+    # round while the episode persists.
+    if not slow:
+        history.append(observed)
+        runner._qwen_decode_latency_history = history[-16:]
+        if not armed and len(runner._qwen_decode_latency_history) >= 1:
+            runner._qwen_decode_recovery_armed = True
+    return False
 
 
 def after_forward_prepare(runner, scheduler_output):
@@ -1268,6 +1306,15 @@ class FairScheduler(Scheduler):
             "max_banks": self.max_banks,
             "status_path": self.status_path,
         }
+        # Carry only the previous completed round's numeric latency into the
+        # worker boundary. The adaptive queue recovery uses this to detect a
+        # mode switch without reading prompts, tokens or model output.
+        candidate = self.running[0] if self.running else getattr(self, "response_request", None)
+        candidate_id = getattr(candidate, "request_id", None)
+        if candidate_id is not None and hasattr(self, "request_phases"):
+            phase_row = self.request_phases.live.get(candidate_id)
+            if phase_row is not None:
+                value["last_round_ms"] = phase_row.get("last_round_ms")
         self.drop_banks = []
         return value
 

@@ -44,7 +44,7 @@ def main():
 
 
 # Filled from the reviewed driver; intentional changes require a new binding.
-BASE_DRIVER_SHA256 = "45afe12e4bffadad2e39c94b2b0955bea547269646c45f0bb6a181ec7f6037b6"
+BASE_DRIVER_SHA256 = "f43594823dfe3a34be199059bf045232f7e397020889851b9b2d206a7875af71"
 
 
 if __name__ == "__main__":

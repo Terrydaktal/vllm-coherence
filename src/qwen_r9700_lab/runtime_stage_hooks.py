@@ -20,13 +20,16 @@ contains the scheduled shape, stream identity, ordered HIP GPU-event markers,
 event durations, and the gaps between adjacent markers.  Set
 ``QWEN_ROUND_EVENT_TELEMETRY_SYNC=1`` for a complete record immediately after
 each round; this waits for the round-end event and reports the wait separately.
-The default is asynchronous collection, which leaves unavailable event
-values explicitly null rather than adding an unreported synchronization to a
-serving run.
+The default is asynchronous collection: it defers each row until its already-
+recorded current-round end events complete, then writes the measured durations
+and gaps without adding an unreported synchronization to a serving run. Values
+remain explicitly null only when an event or cross-stream gap cannot be resolved.
 
 The hook is diagnostic only.  It never changes tensors or scheduling decisions
-and it is safe to leave installed for a short warm profiling run.  The process
-exit line is consumed by ``scripts/summarize_stage_timing.py``.
+and it is safe to leave installed for a short warm profiling run.  Completed
+asynchronous event pairs are reclaimed before the bounded ring is reused, so
+long responses do not silently lose round records after the first ringful. The
+process-exit line is consumed by ``scripts/summarize_stage_timing.py``.
 """
 
 from __future__ import annotations
@@ -46,8 +49,33 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-_LEGACY_ENABLED = os.environ.get("QWEN_STAGE_TIMING", "0") == "1"
-_OUTER_ONLY = os.environ.get("QWEN_OUTER_STAGE_TIMING", "0") == "1"
+# Python imports ``sitecustomize`` in every child process.  Optional ROCm/TVM
+# startup helpers inherit the serving process environment; letting them import
+# vLLM and install worker hooks recursively starts another helper before the
+# first one has finished.  Keep the diagnostic environment visible to the
+# serving process, but make these helpers pure build/probe processes.  This is
+# content-free process identity, not a request or model-data filter.
+_RUNTIME_HELPER_BASENAMES = frozenset(
+    {
+        "rocm_agent_enumerator",
+        "build_optional_torch_c_dlpack.py",
+    }
+)
+_IS_TVM_DLPACK_BUILDER = any(
+    "build_optional_torch_c_dlpack.py" in str(argument) for argument in sys.argv
+)
+_IS_RUNTIME_HELPER = any(
+    Path(str(argument)).name in _RUNTIME_HELPER_BASENAMES
+    for argument in sys.argv
+)
+_LEGACY_ENABLED = (
+    os.environ.get("QWEN_STAGE_TIMING", "0") == "1"
+    and not _IS_RUNTIME_HELPER
+)
+_OUTER_ONLY = (
+    os.environ.get("QWEN_OUTER_STAGE_TIMING", "0") == "1"
+    and not _IS_RUNTIME_HELPER
+)
 _ENABLED = _LEGACY_ENABLED or _OUTER_ONLY
 _MODE_CONFLICT = _LEGACY_ENABLED and _OUTER_ONLY
 _MODEL_HOOKS_INSTALLED = False
@@ -69,8 +97,17 @@ _TOTALS: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
 _PENDING_EVENTS: list[tuple[str, Any, Any]] = []
 _EVENT_RING_SIZE = 1_024
 _EVENT_PAIRS_PER_ROUND_RESERVE = 16
+_DYNAMIC_EVENT_PAIR_LIMIT = 65_536
 _EVENT_RING: list[tuple[Any, Any]] | None = None
-_EVENT_RING_CURSOR = 0
+# The old implementation used a monotonic cursor and never reclaimed an
+# asynchronous event pair.  That silently stopped telemetry after roughly 64
+# decode rounds (1024 pairs / 16 pairs per round).  Keep an explicit free list
+# and reclaim only pairs whose end event has completed; no device
+# synchronization is introduced on the serving path.
+_EVENT_RING_FREE_SLOTS: list[int] = []
+_EVENT_SLOT_BY_START: dict[int, int | None] = {}
+_DYNAMIC_EVENT_PAIRS: set[int] = set()
+_EVENT_RING_CURSOR = 0  # compatibility/debug count; not the allocator
 _EVENT_RING_CAPPED_LOGGED = False
 _OUTER_ROUND_ACTIVE = False
 _OUTER_COMMIT_PENDING = False
@@ -78,15 +115,28 @@ _OUTER_COMMIT_LABEL = "scheduler.commit"
 _OUTER_REJECTION_SEEN = False
 _OUTER_CURRENT_EVENTS: list[tuple[str, Any, Any]] = []
 _OUTER_EVENT_ORDER: list[tuple[str, Any, str]] = []
+_OUTER_MARKER_PAIRS: list[tuple[Any, Any]] = []
+_PENDING_RING_PAIRS: list[tuple[Any, Any]] = []
+# Asynchronous telemetry cannot serialize a round until the already-recorded
+# HIP end events complete. Keep these immutable event references and write the
+# row from the reclaim poller; emitting it early with null timings made the
+# low-overhead feed unable to diagnose queue gaps.
+_PENDING_TELEMETRY: list[dict[str, Any]] = []
 _PREVIOUS_ROUND_END: Any | None = None
 _PREVIOUS_ROUND_STREAM: str | None = None
 _INTER_ROUND_MARKERS: list[Any] | None = None
 _INTER_ROUND_MARKER_CURSOR = 0
+_INTER_ROUND_MARKER_IN_USE: list[bool] = []
 _ROUND_EVENT_DROPS = 0
 _ROUND_EVENT_TELEMETRY = os.environ.get("QWEN_ROUND_EVENT_TELEMETRY", "0") == "1"
 _ROUND_EVENT_TELEMETRY_SYNC = (
     os.environ.get("QWEN_ROUND_EVENT_TELEMETRY_SYNC", "0") == "1"
 )
+# ``SchedulerOutput`` is intentionally a compact vLLM object and does not carry
+# the scheduler's private status-path configuration into the worker process.
+# Keep the event feed bound explicitly at process startup instead of silently
+# dropping every GPU row when ``qwen_fair`` is absent from that object.
+_ROUND_EVENT_STATUS_PATH = os.environ.get("QWEN_ROUND_EVENT_STATUS_PATH")
 # v2 names the event section by its hardware-neutral role and declares that
 # this deployment records ROCm/HIP events rather than NVIDIA CUDA events.
 ROUND_EVENT_LOG_SCHEMA = "urn:qwen-r9700:decode-round-gpu:v2"
@@ -144,8 +194,118 @@ def _scheduled_shape(scheduler_output: Any) -> dict[str, Any]:
     }
 
 
+def _bounded_cpu_ints(value: Any, *, limit: int = 16) -> list[int] | None:
+    """Copy a small CPU-side integer vector without touching token payloads.
+
+    The vLLM input batch keeps scheduler geometry in NumPy arrays or pinned CPU
+    tensors.  This helper intentionally accepts only values that can be copied
+    through ``tolist``/iteration; it never calls ``.cpu()`` or reads an input
+    token buffer, so adding the diagnostic cannot introduce a device wait.
+    """
+    if value is None:
+        return None
+    try:
+        candidate = value[:limit]
+    except (IndexError, KeyError, TypeError):
+        candidate = value
+    try:
+        values = candidate.tolist()
+    except (AttributeError, TypeError, ValueError):
+        try:
+            values = list(candidate)
+        except (TypeError, ValueError):
+            values = [candidate]
+    if not isinstance(values, list):
+        values = [values]
+    result: list[int] = []
+    for item in values[:limit]:
+        if isinstance(item, (list, tuple)):
+            # The expected fields are one-dimensional.  Refuse nested data
+            # rather than accidentally serializing an unbounded object.
+            return None
+        try:
+            result.append(int(item))
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return result
+
+
+def _enum_label(value: Any) -> str | None:
+    """Return a stable enum label without retaining a runtime object."""
+    if value is None:
+        return None
+    name = getattr(value, "name", None)
+    if isinstance(name, str):
+        return name
+    text = str(value)
+    return text if text and len(text) <= 64 else None
+
+
+def _runtime_batch_shape(runner: Any, args: tuple[Any, ...], result: Any) -> dict[str, Any]:
+    """Capture the dispatch shape which is hidden by ``execute_model`` locals.
+
+    The target forward can take different CUDA-graph/padding paths while the
+    scheduler still reports the same eight scheduled rows.  vLLM computes that
+    choice in ``_determine_batch_execution_and_padding``; this record is filled
+    by the small wrapper around that method.  Values are bounded integer
+    geometry and enum labels only.  No request id, token id, text, logits, or
+    tensor payload is retained.
+    """
+    input_batch = getattr(runner, "input_batch", None)
+    shape: dict[str, Any] = {}
+    if args:
+        names = (
+            "num_tokens_unpadded",
+            "num_reqs",
+            "num_scheduled_tokens_max",
+            "use_cascade_attention",
+            "allow_microbatching",
+        )
+        for name, value in zip(names, args):
+            if isinstance(value, bool):
+                shape[name] = bool(value)
+            elif isinstance(value, (int, float)) and math.isfinite(float(value)):
+                shape[name] = int(value)
+
+    if input_batch is not None:
+        for output_name, candidates in (
+            ("computed_tokens", ("num_computed_tokens_cpu", "num_computed_tokens")),
+            ("prompt_tokens", ("num_prompt_tokens_cpu", "num_prompt_tokens")),
+        ):
+            for field in candidates:
+                values = _bounded_cpu_ints(getattr(input_batch, field, None))
+                if values is not None:
+                    shape[output_name] = values
+                    break
+
+    for field in ("optimistic_seq_lens_cpu", "seq_lens_cpu"):
+        values = _bounded_cpu_ints(getattr(runner, field, None))
+        if values is not None:
+            shape["sequence_lengths"] = values
+            break
+
+    if isinstance(result, tuple) and len(result) >= 2:
+        shape["cudagraph_mode"] = _enum_label(result[0])
+        descriptor = result[1]
+        for output_name, field in (
+            ("padded_tokens", "num_tokens"),
+            ("padded_requests", "num_reqs"),
+            ("max_query_len", "max_query_len"),
+            ("max_sequence_len", "max_seq_len"),
+        ):
+            value = getattr(descriptor, field, None)
+            if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                shape[output_name] = int(value)
+        shape["descriptor_graph_mode"] = _enum_label(
+            getattr(descriptor, "cg_mode", None)
+        )
+
+    return {key: value for key, value in shape.items() if value is not None}
+
+
 def _prepare_event_ring() -> None:
-    global _EVENT_RING, _INTER_ROUND_MARKERS
+    global _EVENT_RING, _EVENT_RING_FREE_SLOTS
+    global _INTER_ROUND_MARKERS, _INTER_ROUND_MARKER_IN_USE
     if not _ENABLED or not _OUTER_ONLY or _EVENT_RING is not None:
         return
     import torch
@@ -154,14 +314,82 @@ def _prepare_event_ring() -> None:
         (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
         for _ in range(_EVENT_RING_SIZE)
     ]
+    _EVENT_RING_FREE_SLOTS = list(range(_EVENT_RING_SIZE - 1, -1, -1))
     if _ROUND_EVENT_TELEMETRY:
-        # Two dedicated end markers ping-pong across rounds. They keep the
-        # previous round's HIP event alive while the next round's fixed event
-        # ring is reused, which makes the inter-round queue gap measurable.
+        # Dedicated end markers keep the previous round's HIP event alive while
+        # the next round's fixed event ring is reused, which makes the
+        # inter-round queue gap measurable.  A marker is reused only after its
+        # event query reports completion.
         _INTER_ROUND_MARKERS = [
-            torch.cuda.Event(enable_timing=True),
-            torch.cuda.Event(enable_timing=True),
+            torch.cuda.Event(enable_timing=True) for _ in range(64)
         ]
+        _INTER_ROUND_MARKER_IN_USE = [False] * len(_INTER_ROUND_MARKERS)
+
+
+def _event_complete(event: Any) -> bool:
+    query = getattr(event, "query", None)
+    if not callable(query):
+        return False
+    try:
+        return bool(query())
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def _release_ring_pair(pair: tuple[Any, Any]) -> None:
+    """Return one preallocated pair to the free list exactly once."""
+    global _EVENT_RING_CURSOR
+    start, _ = pair
+    start_id = id(start)
+    if start_id not in _EVENT_SLOT_BY_START:
+        return
+    slot = _EVENT_SLOT_BY_START.pop(start_id)
+    if slot is None:
+        # Dynamic pairs are allocated only while the GPU is ahead of the
+        # observer.  Once their end event is complete, dropping the references
+        # lets Python/ROCm reclaim them without growing the serving process.
+        _DYNAMIC_EVENT_PAIRS.discard(start_id)
+        return
+    if slot not in _EVENT_RING_FREE_SLOTS:
+        _EVENT_RING_FREE_SLOTS.append(slot)
+    if _EVENT_RING is not None and len(_EVENT_RING_FREE_SLOTS) == len(_EVENT_RING):
+        _EVENT_RING_CURSOR = 0
+
+
+def _reclaim_completed_ring_pairs() -> None:
+    """Reclaim completed asynchronous pairs without synchronizing the device."""
+    _reclaim_completed_telemetry()
+    if not _PENDING_EVENTS and not _PENDING_RING_PAIRS:
+        return
+    held_by_pending_record = _telemetry_held_event_starts()
+    remaining_events: list[tuple[str, Any, Any]] = []
+    for label, start, end in _PENDING_EVENTS:
+        # A stage can finish before the enclosing round-end event.  Keep its
+        # pair alive until the row that references it has been written; early
+        # reuse changes the event timestamps under the pending record.
+        if id(start) in held_by_pending_record:
+            remaining_events.append((label, start, end))
+            continue
+        slot = _EVENT_SLOT_BY_START.get(id(start))
+        if slot is None or not _event_complete(end):
+            remaining_events.append((label, start, end))
+            continue
+        elapsed = _event_elapsed(start, end)
+        if elapsed is not None:
+            total, count = _TOTALS[label]
+            _TOTALS[label] = [total + elapsed, count + 1.0]
+        _release_ring_pair((start, end))
+    _PENDING_EVENTS[:] = remaining_events
+    remaining_pairs: list[tuple[Any, Any]] = []
+    for pair in _PENDING_RING_PAIRS:
+        if id(pair[0]) in held_by_pending_record:
+            remaining_pairs.append(pair)
+            continue
+        if not _event_complete(pair[1]):
+            remaining_pairs.append(pair)
+            continue
+        _release_ring_pair(pair)
+    _PENDING_RING_PAIRS[:] = remaining_pairs
 
 
 def _event_pair(event_label: str | None = None):
@@ -174,12 +402,39 @@ def _event_pair(event_label: str | None = None):
         global _EVENT_RING_CURSOR
         _prepare_event_ring()
         assert _EVENT_RING is not None
-        if len(_EVENT_RING) <= _EVENT_RING_CURSOR:
-            raise RuntimeError(
-                "outer stage-timing event ring exhausted; refuse to reuse pending events"
-            )
-        start, end = _EVENT_RING[_EVENT_RING_CURSOR]
-        _EVENT_RING_CURSOR += 1
+        _reclaim_completed_ring_pairs()
+        if _EVENT_RING_FREE_SLOTS:
+            slot = _EVENT_RING_FREE_SLOTS.pop()
+            start, end = _EVENT_RING[slot]
+            _EVENT_SLOT_BY_START[id(start)] = slot
+            _EVENT_RING_CURSOR = len(_EVENT_RING) - len(_EVENT_RING_FREE_SLOTS)
+        else:
+            # Event queries can legitimately lag a busy ROCm stream for more
+            # than one round.  Do not silently stop telemetry at the fixed
+            # ring boundary: allocate a bounded overflow pair and reclaim it
+            # when its end event completes.  Only an extreme sustained backlog
+            # reaches this limit; then wait for the oldest event explicitly so
+            # the record remains complete rather than dropping a round.
+            if len(_DYNAMIC_EVENT_PAIRS) >= _DYNAMIC_EVENT_PAIR_LIMIT:
+                oldest_end = None
+                if _PENDING_RING_PAIRS:
+                    oldest_end = _PENDING_RING_PAIRS[0][1]
+                if oldest_end is not None:
+                    try:
+                        oldest_end.synchronize()
+                    except (AttributeError, RuntimeError, TypeError, ValueError):
+                        pass
+                _reclaim_completed_ring_pairs()
+            if _EVENT_RING_FREE_SLOTS:
+                slot = _EVENT_RING_FREE_SLOTS.pop()
+                start, end = _EVENT_RING[slot]
+                _EVENT_SLOT_BY_START[id(start)] = slot
+                _EVENT_RING_CURSOR = len(_EVENT_RING) - len(_EVENT_RING_FREE_SLOTS)
+            else:
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+                _EVENT_SLOT_BY_START[id(start)] = None
+                _DYNAMIC_EVENT_PAIRS.add(id(start))
     else:
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
@@ -216,9 +471,19 @@ def _finish(label: str, interval) -> None:
 
 
 def _record_event_marker(label: str):
-    """Record one ordered marker using the preallocated event ring."""
+    """Record one ordered marker using a pair that can be reclaimed safely."""
     interval = _event_pair(label)
-    return None if interval is None else interval[0]
+    if interval is None:
+        return None
+    import torch
+
+    # ``_event_pair`` records the start and adds it to the ordered event list.
+    # Record the end immediately so the allocator can eventually query and
+    # release the pair.  The marker's start event remains the timestamp used by
+    # the gap calculation; the short start/end interval is not a named stage.
+    interval[1].record(torch.cuda.current_stream())
+    _OUTER_MARKER_PAIRS.append(interval)
+    return interval[0]
 
 
 def _record_inter_round_end() -> tuple[Any | None, str | None]:
@@ -228,10 +493,20 @@ def _record_inter_round_end() -> tuple[Any | None, str | None]:
     import torch
 
     stream = torch.cuda.current_stream()
-    marker = _INTER_ROUND_MARKERS[_INTER_ROUND_MARKER_CURSOR]
-    _INTER_ROUND_MARKER_CURSOR = (_INTER_ROUND_MARKER_CURSOR + 1) % len(_INTER_ROUND_MARKERS)
-    marker.record(stream)
-    return marker, _stream_id(stream)
+    count = len(_INTER_ROUND_MARKERS)
+    for _ in range(count):
+        index = _INTER_ROUND_MARKER_CURSOR
+        _INTER_ROUND_MARKER_CURSOR = (_INTER_ROUND_MARKER_CURSOR + 1) % count
+        marker = _INTER_ROUND_MARKERS[index]
+        if _INTER_ROUND_MARKER_IN_USE[index] and not _event_complete(marker):
+            continue
+        marker.record(stream)
+        _INTER_ROUND_MARKER_IN_USE[index] = True
+        return marker, _stream_id(stream)
+    # A heavily backlogged stream can outlive the marker pool.  Leave the
+    # inter-round field explicitly unavailable rather than reusing an event
+    # whose timestamp is still live.
+    return None, None
 
 
 def _append_round_event_log(path: str, record: dict[str, Any]) -> None:
@@ -266,13 +541,21 @@ def _event_elapsed(start: Any, end: Any) -> float | None:
     return value if value >= 0 and math.isfinite(value) else None
 
 
-def _round_event_record(context: dict[str, Any], prefix: str) -> dict[str, Any]:
+def _round_event_record(
+    context: dict[str, Any],
+    prefix: str,
+    *,
+    events: list[tuple[str, Any, Any]] | None = None,
+    event_order: list[tuple[str, Any, str]] | None = None,
+) -> dict[str, Any]:
     """Build a content-free per-round record from ordered HIP GPU events."""
+    events = _OUTER_CURRENT_EVENTS if events is None else events
+    event_order = _OUTER_EVENT_ORDER if event_order is None else event_order
     durations = []
-    for label, start, end in _OUTER_CURRENT_EVENTS:
+    for label, start, end in events:
         durations.append({"label": label, "ms": _event_elapsed(start, end)})
     gaps = []
-    for previous, current in pairwise(_OUTER_EVENT_ORDER):
+    for previous, current in pairwise(event_order):
         previous_label, previous_event, previous_stream = previous
         current_label, current_event, current_stream = current
         same_stream = previous_stream == current_stream
@@ -299,6 +582,9 @@ def _round_event_record(context: dict[str, Any], prefix: str) -> dict[str, Any]:
     )
     sync_count = context.get("runner_sync_count")
     sync_after = context.get("runner_sync_count_after")
+    round_span = _event_elapsed(
+        context.get("round_start_event"), context.get("round_end_event")
+    )
     return {
         "schema": ROUND_EVENT_LOG_SCHEMA,
         "pid": os.getpid(),
@@ -306,12 +592,15 @@ def _round_event_record(context: dict[str, Any], prefix: str) -> dict[str, Any]:
         "round": context["round"],
         "phase": prefix[:-1] if prefix.endswith(".") else (prefix or "verification"),
         "scheduled_shape": context["scheduled_shape"],
+        "runtime_shape": context.get("runtime_shape"),
+        "batch_dispatches": context.get("batch_dispatches", []),
         "gpu_events": {
             "backend": "rocm-hip",
             "device": context.get("device"),
             "stream": context.get("stream"),
             "event_status": context.get("event_status", "unknown"),
-            "event_order": [label for label, _, _ in _OUTER_EVENT_ORDER],
+            "event_order": [label for label, _, _ in event_order],
+            "round_span_ms": round_span,
             "durations_ms": durations,
             "gaps_ms": gaps,
         },
@@ -335,32 +624,53 @@ def _round_event_record(context: dict[str, Any], prefix: str) -> dict[str, Any]:
     }
 
 
-def _write_round_event_telemetry(context: dict[str, Any], prefix: str) -> str | None:
+def _telemetry_events_complete(
+    context: dict[str, Any], events: list[tuple[str, Any, Any]], *, force: bool = False
+) -> bool:
+    if force:
+        return True
+    event_objects = [end for _, _, end in events]
+    round_end = context.get("round_end_event")
+    if round_end is not None:
+        event_objects.append(round_end)
+    # The previous-round marker is only needed for the optional inter-round
+    # gap. It belongs to an older record and may already have been recycled;
+    # do not hold this round's event slots hostage to it. The gap is null when
+    # that marker is unavailable, while all current-round stage timings remain
+    # complete and safe to publish.
+    return all(_event_complete(event) for event in event_objects)
+
+
+def _write_round_event_telemetry(
+    context: dict[str, Any],
+    prefix: str,
+    *,
+    events: list[tuple[str, Any, Any]] | None = None,
+    event_order: list[tuple[str, Any, str]] | None = None,
+    force: bool = False,
+) -> str | None:
     global _ROUND_EVENT_DROPS
     if not _ROUND_EVENT_TELEMETRY or not context.get("status_path"):
         return None
+    events = _OUTER_CURRENT_EVENTS if events is None else events
+    event_order = _OUTER_EVENT_ORDER if event_order is None else event_order
     event_status = "complete"
     waited = 0.0
     round_end = context.get("round_end_event")
-    if _ROUND_EVENT_TELEMETRY_SYNC and round_end is not None:
+    if _ROUND_EVENT_TELEMETRY_SYNC and round_end is not None and not force:
         started = time.perf_counter()
         try:
             round_end.synchronize()
         except (AttributeError, RuntimeError, TypeError, ValueError):
             event_status = "unavailable"
         waited = (time.perf_counter() - started) * 1000.0
-    elif round_end is not None:
-        query = getattr(round_end, "query", None)
-        if callable(query):
-            try:
-                event_status = "complete" if query() else "pending"
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                event_status = "unavailable"
-        else:
-            event_status = "pending"
+    elif not _telemetry_events_complete(context, events, force=force):
+        return None
     context["event_status"] = event_status
     context["telemetry_wait_ms"] = round(waited, 3)
-    record = _round_event_record(context, prefix)
+    record = _round_event_record(
+        context, prefix, events=events, event_order=event_order
+    )
     record["dropped_records_before"] = _ROUND_EVENT_DROPS
     try:
         _append_round_event_log(
@@ -378,6 +688,45 @@ def _write_round_event_telemetry(context: dict[str, Any], prefix: str) -> str | 
     return event_status
 
 
+def _reclaim_completed_telemetry() -> None:
+    """Write deferred rows once HIP events complete, without a device wait."""
+    if not _PENDING_TELEMETRY:
+        return
+    remaining: list[dict[str, Any]] = []
+    for pending in _PENDING_TELEMETRY:
+        context = pending["context"]
+        events = pending["events"]
+        if not _telemetry_events_complete(context, events):
+            remaining.append(pending)
+            continue
+        _write_round_event_telemetry(
+            context,
+            pending["prefix"],
+            events=events,
+            event_order=pending["event_order"],
+        )
+    _PENDING_TELEMETRY[:] = remaining
+
+
+def _telemetry_held_event_starts() -> set[int]:
+    """Return event identities still needed by unpublished round records.
+
+    Individual stage events are also kept in ``_PENDING_EVENTS`` so their
+    running totals can be updated.  A stage's end event can complete before
+    the enclosing round-end event, but releasing that pair at that point lets
+    the ring reuse the object while the pending record still points at it.
+    Keep both stage events and ordered marker events reserved until the
+    complete row has been written.
+    """
+    held: set[int] = set()
+    for pending in _PENDING_TELEMETRY:
+        for _, start, _ in pending.get("events", ()):
+            held.add(id(start))
+        for _, event, _ in pending.get("event_order", ()):
+            held.add(id(event))
+    return held
+
+
 def _account_closed_round_events(prefix: str) -> None:
     """Account a synchronized round before its fixed event slots are reused."""
     for label, start, end in _OUTER_CURRENT_EVENTS:
@@ -390,26 +739,55 @@ def _account_closed_round_events(prefix: str) -> None:
 
 def _publish_outer_round(*, prefix: str = "", context: dict[str, Any] | None = None) -> None:
     """Publish one closed outer round, classifying non-verification calls."""
-    event_status = (
-        _write_round_event_telemetry(context, prefix) if context is not None else None
-    )
+    event_status = None
+    telemetry_events = list(_OUTER_CURRENT_EVENTS)
+    telemetry_order = list(_OUTER_EVENT_ORDER)
+    if context is not None and _ROUND_EVENT_TELEMETRY:
+        if _ROUND_EVENT_TELEMETRY_SYNC:
+            event_status = _write_round_event_telemetry(
+                context,
+                prefix,
+                events=telemetry_events,
+                event_order=telemetry_order,
+            )
+        elif _telemetry_events_complete(context, telemetry_events):
+            event_status = _write_round_event_telemetry(
+                context,
+                prefix,
+                events=telemetry_events,
+                event_order=telemetry_order,
+            )
+        else:
+            _PENDING_TELEMETRY.append(
+                {
+                    "context": context,
+                    "prefix": prefix,
+                    "events": telemetry_events,
+                    "event_order": telemetry_order,
+                }
+            )
     global _PREVIOUS_ROUND_END, _PREVIOUS_ROUND_STREAM
     with _LOCK:
+        ring_pairs = [
+            (start, end) for _, start, end in _OUTER_CURRENT_EVENTS
+        ] + list(_OUTER_MARKER_PAIRS)
         # A synchronized diagnostic round has complete event values. Account it
         # now and recycle the fixed event slots so a long capture does not stop
         # after the first 64 rounds. Without the explicit sync, retain events
         # until the normal bounded process-exit flush instead of guessing.
         if _ROUND_EVENT_TELEMETRY_SYNC and event_status == "complete":
             _account_closed_round_events(prefix)
-            global _EVENT_RING_CURSOR
-            _EVENT_RING_CURSOR = 0
+            for pair in ring_pairs:
+                _release_ring_pair(pair)
         else:
             _PENDING_EVENTS.extend(
                 (prefix + label, start, end)
                 for label, start, end in _OUTER_CURRENT_EVENTS
             )
+            _PENDING_RING_PAIRS.extend(ring_pairs)
         _OUTER_CURRENT_EVENTS.clear()
         _OUTER_EVENT_ORDER.clear()
+        _OUTER_MARKER_PAIRS.clear()
         if context is not None:
             _PREVIOUS_ROUND_END = context.get("round_end_marker")
             _PREVIOUS_ROUND_STREAM = context.get("round_end_marker_stream")
@@ -543,15 +921,7 @@ def _wrap_outer_target_and_round(owner: type) -> bool:
         # Keep observer state strictly bounded during long qualification
         # responses. Stop measuring only at a round boundary; serving itself
         # must continue after the fixed event pool has enough complete rounds.
-        if _EVENT_RING_CURSOR + _EVENT_PAIRS_PER_ROUND_RESERVE > _EVENT_RING_SIZE:
-            if not _EVENT_RING_CAPPED_LOGGED:
-                print(
-                    "[qwen-runtime] outer GPU-event measurement capped at complete rounds "
-                    f"ring_pairs={_EVENT_RING_SIZE}",
-                    flush=True,
-                )
-                _EVENT_RING_CAPPED_LOGGED = True
-            return original(self, *args, **kwargs)
+        _reclaim_completed_ring_pairs()
         previous = getattr(self, "_qwen_outer_round_interval", None)
         if previous is not None or _OUTER_ROUND_ACTIVE:
             raise RuntimeError("outer stage-timing round was not closed by sample_tokens")
@@ -559,6 +929,8 @@ def _wrap_outer_target_and_round(owner: type) -> bool:
             raise RuntimeError("outer stage-timing found unpublished events before a new round")
         if _OUTER_EVENT_ORDER:
             raise RuntimeError("outer stage-timing found unpublished event markers before a new round")
+        if _OUTER_MARKER_PAIRS:
+            raise RuntimeError("outer stage-timing found unreleased marker pairs before a new round")
         _OUTER_ROUND_ACTIVE = True
         round_label = "round.gpu"
         target_label = "target.forward " + _shape_label(scheduler_output)
@@ -580,7 +952,7 @@ def _wrap_outer_target_and_round(owner: type) -> bool:
             device = None
         self._qwen_outer_round_context = {
             "round": int(getattr(self, "_qwen_outer_round_count", 0)) + 1,
-            "status_path": fair.get("status_path"),
+            "status_path": fair.get("status_path") or _ROUND_EVENT_STATUS_PATH,
             "scheduled_shape": _scheduled_shape(scheduler_output),
             "stream": stream,
             "device": device,
@@ -621,6 +993,124 @@ def _wrap_outer_target_and_round(owner: type) -> bool:
     wrapped._qwen_stage_hook = True  # type: ignore[attr-defined]
     wrapped._qwen_outer_stage_hook = True  # type: ignore[attr-defined]
     owner.execute_model = wrapped
+    return True
+
+
+def _wrap_outer_batch_dispatch(owner: type) -> bool:
+    """Capture the actual padding/graph decision made inside execute_model."""
+
+    original = getattr(owner, "_determine_batch_execution_and_padding", None)
+    if original is None:
+        return False
+    if getattr(original, "_qwen_outer_batch_shape_hook", False):
+        return True
+
+    @functools.wraps(original)
+    def wrapped(self, *args, **kwargs):
+        result = original(self, *args, **kwargs)
+        if _OUTER_ONLY and _OUTER_ROUND_ACTIVE and _ROUND_EVENT_TELEMETRY:
+            shape_args = args
+            if not shape_args:
+                shape_args = tuple(
+                    kwargs.get(name)
+                    for name in (
+                        "num_tokens",
+                        "num_reqs",
+                        "num_scheduled_tokens_np",
+                        "max_num_scheduled_tokens",
+                        "use_cascade_attn",
+                        "allow_microbatching",
+                    )
+                    if name in kwargs
+                )
+            shape = _runtime_batch_shape(self, shape_args, result)
+            context = getattr(self, "_qwen_outer_round_context", None)
+            if context is not None:
+                dispatches = context.setdefault("batch_dispatches", [])
+                if len(dispatches) < 4:
+                    dispatches.append(shape)
+                context["runtime_shape"] = shape
+        return result
+
+    wrapped._qwen_stage_hook = True  # type: ignore[attr-defined]
+    wrapped._qwen_outer_batch_shape_hook = True  # type: ignore[attr-defined]
+    owner._determine_batch_execution_and_padding = wrapped
+    return True
+
+
+def _wrap_outer_prepare_inputs(owner: type) -> bool:
+    """Capture the actual descriptor used by the current vLLM runner.
+
+    Recent vLLM releases select the graph/padding descriptor through the
+    module-level ``dispatch_cg_and_sync_dp`` helper, so there is no
+    ``_determine_batch_execution_and_padding`` method to wrap.  ``prepare_inputs``
+    receives the resulting descriptor and returns the concrete padded input
+    batch; record those bounded shapes at that boundary instead.
+    """
+    original = getattr(owner, "prepare_inputs", None)
+    if original is None:
+        return False
+    if getattr(original, "_qwen_outer_prepare_inputs_hook", False):
+        return True
+
+    @functools.wraps(original)
+    def wrapped(self, *args, **kwargs):
+        result = original(self, *args, **kwargs)
+        if _OUTER_ONLY and _OUTER_ROUND_ACTIVE and _ROUND_EVENT_TELEMETRY:
+            scheduler_output = args[0] if args else kwargs.get("scheduler_output")
+            batch_req_state = args[1] if len(args) > 1 else kwargs.get("batch_req_state")
+            batch_desc = args[2] if len(args) > 2 else kwargs.get("batch_desc")
+            shape: dict[str, Any] = {}
+            if batch_desc is not None:
+                shape.update(
+                    {
+                        "cudagraph_mode": _enum_label(
+                            getattr(batch_desc, "cg_mode", None)
+                        ),
+                        "descriptor_tokens": getattr(batch_desc, "num_tokens", None),
+                        "descriptor_requests": getattr(batch_desc, "num_reqs", None),
+                        "descriptor_max_query_len": getattr(
+                            batch_desc, "max_query_len", None
+                        ),
+                    }
+                )
+            if batch_req_state is not None:
+                shape["scheduled_tokens_per_request"] = _bounded_cpu_ints(
+                    getattr(batch_req_state, "num_scheduled_tokens", None)
+                )
+                shape["request_count"] = len(
+                    getattr(batch_req_state, "req_ids", ()) or ()
+                )
+                shape["has_prefill"] = bool(
+                    getattr(batch_req_state, "has_prefill", False)
+                )
+            for output_name, field in (
+                ("input_tokens", "num_tokens"),
+                ("input_tokens_after_padding", "num_tokens_after_padding"),
+                ("input_requests", "num_reqs"),
+                ("input_requests_after_padding", "num_reqs_after_padding"),
+            ):
+                value = getattr(result, field, None)
+                if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                    shape[output_name] = int(value)
+            for output_name, field in (
+                ("computed_tokens", "num_computed_tokens_np"),
+                ("prompt_tokens", "prefill_len_np"),
+                ("sequence_lengths", "seq_lens_cpu_upper_bound"),
+            ):
+                values = _bounded_cpu_ints(getattr(result, field, None))
+                if values is not None:
+                    shape[output_name] = values
+            context = getattr(self, "_qwen_outer_round_context", None)
+            if context is not None:
+                context["runtime_shape"] = {
+                    key: value for key, value in shape.items() if value is not None
+                }
+        return result
+
+    wrapped._qwen_stage_hook = True  # type: ignore[attr-defined]
+    wrapped._qwen_outer_prepare_inputs_hook = True  # type: ignore[attr-defined]
+    owner.prepare_inputs = wrapped
     return True
 
 
@@ -725,6 +1215,12 @@ def install_runtime_stage_hooks() -> bool:
         for owner in runner_classes:
             if _OUTER_ONLY:
                 target_ready |= _wrap_outer_target_and_round(owner)
+                # This method runs inside execute_model after vLLM has chosen
+                # padding, CUDA-graph mode and the batch descriptor.  It is
+                # the only reliable place to distinguish two M=8 calls whose
+                # scheduler shape looks identical.
+                _wrap_outer_batch_dispatch(owner)
+                _wrap_outer_prepare_inputs(owner)
                 round_ready |= _wrap_outer_round_close(owner)
                 state_commit_ready |= _wrap_method(
                     owner, "postprocess_sampled", lambda *_: "state.commit"
@@ -940,14 +1436,26 @@ def install_runtime_stage_hooks() -> bool:
 def _flush_events() -> None:
     global _EVENT_RING_CURSOR
     with _LOCK:
-        if not _PENDING_EVENTS:
+        if not _PENDING_EVENTS and not _PENDING_RING_PAIRS and not _PENDING_TELEMETRY:
             return
         pending = list(_PENDING_EVENTS)
+        pending_ring_pairs = list(_PENDING_RING_PAIRS)
+        pending_telemetry = list(_PENDING_TELEMETRY)
         _PENDING_EVENTS.clear()
+        _PENDING_RING_PAIRS.clear()
+        _PENDING_TELEMETRY.clear()
 
     import torch
 
     torch.cuda.synchronize()
+    for item in pending_telemetry:
+        _write_round_event_telemetry(
+            item["context"],
+            item["prefix"],
+            events=item["events"],
+            event_order=item["event_order"],
+            force=True,
+        )
     for label, start, end in pending:
         try:
             elapsed = float(start.elapsed_time(end))
@@ -955,6 +1463,9 @@ def _flush_events() -> None:
             _TOTALS[label] = [total + elapsed, count + 1.0]
         except Exception:
             pass
+        _release_ring_pair((start, end))
+    for pair in pending_ring_pairs:
+        _release_ring_pair(pair)
     if _OUTER_ONLY:
         _EVENT_RING_CURSOR = 0
 

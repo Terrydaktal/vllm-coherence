@@ -1422,7 +1422,7 @@ def test_scheduled_shape_is_content_free_and_preserves_batch_widths(tmp_path, mo
     }
     assert "private-a" not in json.dumps(shape)
 
-def test_decode_transition_retires_residual_queue_state_after_thirty_rounds(monkeypatch):
+def test_decode_transition_retires_only_observed_slow_queue_episodes(monkeypatch):
     module = load_module(monkeypatch)
     calls = []
 
@@ -1447,32 +1447,47 @@ def test_decode_transition_retires_residual_queue_state_after_thirty_rounds(monk
         "barrier": False,
         "drop_banks": [],
         "decode_sync_key": "bank-a-long-response",
+        "last_round_ms": None,
     }
 
     first = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
     module.before_forward(runner, first)
     assert module.after_forward_prepare(runner, first)
-    for _ in range(29):
+    # A stable fast run does not receive a periodic fence. The old fixed
+    # thirty-round policy created a visible latency spike even in this case.
+    for _ in range(8):
+        metadata["last_round_ms"] = 44.0
         step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
         module.before_forward(runner, step)
         assert not module.after_forward_prepare(runner, step)
     assert calls == ["sync"]
 
-    # The recovery fence is deferred until after connector preparation on
-    # launch 31, after the thirty slow-state reproductions captured by the
-    # live diagnostic.
+    # A material jump is detected before the next forward and the recovery
+    # fence is deferred until after connector preparation.
+    metadata["last_round_ms"] = 53.5
     step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
     module.before_forward(runner, step)
     assert calls == ["sync"]
     assert module.after_forward_prepare(runner, step)
     assert calls == ["sync", "sync"]
-    for _ in range(29):
+
+    # A persistent slow episode is not fenced on every round. One recovered
+    # fast sample re-arms the detector for a later slow episode.
+    metadata["last_round_ms"] = 53.5
+    step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+    module.before_forward(runner, step)
+    assert not module.after_forward_prepare(runner, step)
+    metadata["last_round_ms"] = 44.0
+    step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
+    module.before_forward(runner, step)
+    assert not module.after_forward_prepare(runner, step)
+    for _ in range(4):
+        metadata["last_round_ms"] = 44.0
         step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
         module.before_forward(runner, step)
         assert not module.after_forward_prepare(runner, step)
     assert calls == ["sync", "sync"]
-    # It is re-armed before launch 61, so a queue state that reaccumulates in
-    # a long answer is retired without waiting for a context-size boundary.
+    metadata["last_round_ms"] = 53.5
     step = SimpleNamespace(total_num_scheduled_tokens=8, qwen_fair=metadata)
     module.before_forward(runner, step)
     assert calls == ["sync", "sync"]

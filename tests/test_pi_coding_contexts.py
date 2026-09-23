@@ -66,11 +66,15 @@ def _round_event(identity, round_number, observed_at_ms, round_ms):
     }
 
 
-def test_round_capture_retains_every_new_event_including_unmeasured_first_round(tmp_path):
+def test_round_capture_retains_every_new_event_including_unmeasured_first_round(
+    tmp_path,
+):
     path = tmp_path / "rounds.jsonl"
     identity = {"id": "a" * 64, "generation": "b" * 64}
     old = _round_event(identity, 99, 900, 40.0)
     first = _round_event(identity, 1, 1_000, None)
+    first["draft_tokens"] = 0
+    first["accepted_tokens"] = 0
     second = _round_event(identity, 2, 1_050, 41.25)
     third = _round_event(identity, 3, 1_100, 41.5)
     path.with_name("rounds.jsonl.1").write_text(json.dumps(old) + "\n")
@@ -82,11 +86,13 @@ def test_round_capture_retains_every_new_event_including_unmeasured_first_round(
         baseline_keys={MODULE._round_event_key(old)},
         started_at_ms=1_000,
         ended_at_ms=1_200,
-        expected_rounds=3,
+        expected_rounds=2,
     )
 
     assert capture["status"] == "captured"
     assert capture["record_count"] == 3
+    assert capture["speculative_round_count"] == 2
+    assert capture["expected_rounds_metric"] == "vllm:spec_decode_num_drafts_total"
     assert capture["measured_round_count"] == 2
     assert capture["unmeasured_round_count"] == 1
     assert capture["round_numbers"] == [1, 2, 3]
@@ -98,7 +104,10 @@ def test_round_capture_retains_every_new_event_including_unmeasured_first_round(
 def test_round_capture_reports_missing_rows_instead_of_hiding_them(tmp_path):
     path = tmp_path / "rounds.jsonl"
     identity = {"id": "a" * 64, "generation": "b" * 64}
-    rows = [_round_event(identity, 1, 1_000, 40.0), _round_event(identity, 3, 1_100, 42.0)]
+    rows = [
+        _round_event(identity, 1, 1_000, 40.0),
+        _round_event(identity, 3, 1_100, 42.0),
+    ]
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
 
     capture = MODULE._round_capture(
@@ -127,6 +136,29 @@ def test_round_capture_marks_missing_feed_as_unavailable(tmp_path):
     )
     assert capture["status"] == "unavailable"
     assert capture["read_error"] == "round log is not present"
+
+
+def test_missing_first_event_fails_even_when_all_speculative_events_are_present(
+    tmp_path,
+):
+    path = tmp_path / "rounds.jsonl"
+    identity = {"id": "a" * 64, "generation": "b" * 64}
+    rows = [
+        _round_event(identity, 2, 1_050, 41.0),
+        _round_event(identity, 3, 1_100, 41.5),
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    capture = MODULE._round_capture(
+        path=path,
+        identity=identity,
+        baseline_keys=set(),
+        started_at_ms=1_000,
+        ended_at_ms=1_200,
+        expected_rounds=2,
+    )
+    assert capture["speculative_round_count"] == 2
+    assert capture["status"] == "incomplete"
+    assert capture["missing_round_numbers"] == [1]
 
 
 def test_round_histogram_accounts_for_every_measured_and_unmeasured_record():

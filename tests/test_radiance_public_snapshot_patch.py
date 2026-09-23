@@ -352,6 +352,10 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     assert 'QWEN_RADIANCE_CACHE_ABI="$SNAPSHOT_DATA_ABI"' in frontend
     assert 'for candidate in "$runtime_abi"' in frontend
     assert "qwen-radiance-public-clean-${candidate:0:16}" in frontend
+    assert '"max_tokens":96' in frontend
+    assert "Output exactly sixty-four short words separated by spaces" in frontend
+    assert "JIT compilation during inference" in frontend
+    assert "refusing to start Pi" in frontend
     assert (
         f"readonly REMOTE_LAUNCHER_SHA256={hashlib.sha256(launcher.read_bytes()).hexdigest()}"
         in frontend

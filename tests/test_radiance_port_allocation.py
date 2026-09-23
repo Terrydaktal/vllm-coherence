@@ -98,7 +98,18 @@ if [[ -n $forward ]]; then
     port=${port%%:*}
     exec python3 "$FAKE_RADIANCE_SERVER" "$port"
 fi
-cat >/dev/null
+remote_script=$(cat)
+if [[ $remote_script == *"podman inspect --format '{{.Id}}'"* ]]; then
+    printf '%064d\\n' 1
+    exit 0
+fi
+if [[ $remote_script == *'podman logs --tail 0'* ]]; then
+    date -u +'%Y-%m-%dT%H:%M:%S.%NZ'
+    exit 0
+fi
+if [[ $remote_script == *'podman logs --since'* ]]; then
+    exit 1
+fi
 if [[ $arguments == *" qwen38-27b-uncensored-mxfp4-public-snapshot-candidate "* ]]; then
     printf 'existing\\n'
 fi

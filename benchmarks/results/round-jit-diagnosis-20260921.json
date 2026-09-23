@@ -1,0 +1,48 @@
+{
+  "schema": "urn:coherence:round-jit-diagnosis-v1",
+  "status": "diagnosed",
+  "private_chat_text_read": false,
+  "scope": "Content-free comparison of preserved 60K Pi-prefix round metadata and kernel/JIT diagnostics. Prompt and response text were not read or published.",
+  "comparison": {
+    "same_private_fixture": true,
+    "same_prompt_token_count": 60077,
+    "same_completion_token_count": 530,
+    "same_generation_round_count": 196,
+    "same_sampling": {
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20,
+      "seed": 0
+    },
+    "fast_generation_mean_ms": 45.157,
+    "slow_generation_mean_ms": 46.69,
+    "slow_initial_rounds_before_normal_shape": 39,
+    "first_normal_shape_round_index": 40,
+    "slow_initial_round_range_ms": [50.0, 55.0]
+  },
+  "jit_diagnostics": {
+    "source": "preserved backend startup log",
+    "event": "Triton kernel JIT compilation during inference",
+    "kernels": [
+      "_causal_conv1d_update_kernel",
+      "stock_gdn_scan_kernel",
+      "_pack",
+      "_draft_head_int2",
+      "_rerank_exact",
+      "_gemm_a8w8_blockscale_preshuffle_kernel",
+      "_prepare_dflash_inputs_kernel"
+    ]
+  },
+  "conclusion": {
+    "root_cause": "first_use_triton_jit_on_unwarmed_speculative_shapes",
+    "explanation": "The slow-to-normal transition is a one-time compilation event on the real request path, not evidence that the steady-state kernel permanently changed speed. The heavyweight profiler also perturbs the observed run.",
+    "production_profile_valid": false,
+    "authoritative_round_measurement": "benchmarks/results/stage26-control-20260921.json",
+    "required_fix": "Warm every admitted speculative decode shape before readiness, or fail readiness when JIT compilation is observed during the readiness request."
+  },
+  "limits": [
+    "This diagnoses the preserved slow-to-normal transition; it does not prove that every remaining HIP/ROCr queue issue is fixed.",
+    "The raw profile remains useful for attribution but must not be used as production throughput or as the source of row 26.",
+    "No live backend was modified or restarted by this content-free diagnosis."
+  ]
+}

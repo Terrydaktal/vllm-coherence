@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=df78d938df4dc138b057e6b902362346bbbad0e691cc47a87a8fa2cee3f5b412
+readonly abi_id=5ce8c2291e3343c4591eb612e75683e12e1b8c864959361311cf303355e72b76
 readonly data_abi=36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
@@ -14,7 +14,7 @@ readonly port=${QWEN_QUALIFICATION_PORT:-8080}
 readonly image=docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc
 readonly required_shm_bytes=19327352832
 readonly required_snapshot_free_bytes=12884901888
-readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260918-prefill-tiled-v1
+readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260923-attention-page-boundary-v1
 
 cd "$launcher_root"
 
@@ -199,6 +199,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	--security-opt seccomp=unconfined --cap-add SYS_PTRACE \
 	-e PYTHONHASHSEED=0 -e ROCR_VISIBLE_DEVICES=0 -e HIP_VISIBLE_DEVICES=0 -e HF_HUB_OFFLINE=1 \
 	-e QWEN_RADIANCE_CACHE_ABI="$data_abi" \
+	-e QWEN_ROUND_EVENT_STATUS_PATH=/dev/shm/qwen-radiance-fair-public \
 	-e VLLM_ROCM_USE_AITER=1 -e VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=1 \
 	-e VLLM_ROCM_USE_AITER_MHA=0 -e VLLM_ROCM_USE_AITER_MLA=0 -e VLLM_ROCM_USE_AITER_MOE=0 \
 	-e VLLM_ROCM_USE_AITER_LINEAR=0 -e VLLM_ROCM_USE_AITER_FP8BMM=0 \

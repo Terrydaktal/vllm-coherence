@@ -58,10 +58,10 @@ readonly PROGRAM=pi-remote-qwen-radiance
 readonly PI_VERSION=0.84.2
 readonly MODEL_ID=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
 readonly PI_MODEL="qwen-r9700/$MODEL_ID"
-readonly SNAPSHOT_ABI=df78d938df4dc138b057e6b902362346bbbad0e691cc47a87a8fa2cee3f5b412
+readonly SNAPSHOT_ABI=5ce8c2291e3343c4591eb612e75683e12e1b8c864959361311cf303355e72b76
 readonly SNAPSHOT_DATA_ABI=36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5
 readonly SNAPSHOT_PATCH_SHA256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
-readonly REMOTE_LAUNCHER_SHA256=b8535bd50f841599da99a013d280d9d46dd217edf0f617eafecb347ec07a99a5
+readonly REMOTE_LAUNCHER_SHA256=6487cc0621f59144560ed0f08cf315a73ae151eaaaafab64c6d82d139bc1b538
 readonly IMAGE_ID=4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf
 readonly DEFAULT_REMOTE=lewis@ai
 readonly AUTO_LOCAL_PORT_FIRST=8012
@@ -737,6 +737,92 @@ done
 models=$(curl -fsS --max-time 5 "http://127.0.0.1:$local_port/v1/models") || die 'local Radiance endpoint is unavailable'
 jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$models" >/dev/null ||
 	die 'local endpoint advertises the wrong model'
+
+# A health check only proves that the HTTP server is listening.  The first real
+# DFlash request can still compile the model, Global-256 head and rejection
+# kernels for the multi-token speculative shape, which creates the misleading
+# slow-to-normal round transition seen in the preserved diagnosis.  Warm a
+# content-free multi-token request before Pi opens; it is not attached to a
+# session and cannot alter a user's snapshot.  This also runs for
+# --reuse-existing: attaching to a restarted backend must not expose Pi to a
+# first-use compilation spike.  The request only populates the backend's
+# compiled-kernel cache; it does not change model weights, chat state or
+# snapshot data.  Set QWEN_PI_SKIP_WARMUP=1 only for an explicit diagnostic
+# attach that accepts the risk of an inference-time JIT.
+#
+# Read the container journal, regardless of how the server was started. On
+# reuse, backend_log is the display label "existing", not a filename. Pin the
+# container ID and use a fresh remote timestamp for each attempt so historical
+# JIT warnings cannot poison a later warmup or a replacement server pass it.
+if [[ ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then
+	jit_container_id=$(
+		ssh -T "$remote_host" /usr/bin/bash -s -- "$CONTAINER" <<'REMOTE_JIT_CONTAINER'
+set -euo pipefail
+podman inspect --format '{{.Id}}' "$1"
+REMOTE_JIT_CONTAINER
+	) || die 'Radiance startup warmup could not identify the remote backend container'
+	[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]] || die 'Radiance startup warmup received an invalid container identity'
+	warmup_payload=$(printf '%s' \
+		'{"model":"qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate","prompt":"Output exactly sixty-four short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":96,"temperature":1.0,"top_p":0.95,"top_k":20,"stream":false}')
+	for warmup_attempt in 1 2 3; do
+		jit_log_since=$(
+			ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" <<'REMOTE_JIT_BEGIN'
+set -euo pipefail
+container=$1
+[[ $(podman inspect --format '{{.State.Running}}' "$container") == true ]] || exit 2
+podman logs --tail 0 "$container" >/dev/null 2>&1 || exit 2
+date -u +'%Y-%m-%dT%H:%M:%S.%NZ'
+REMOTE_JIT_BEGIN
+		) || die 'Radiance startup warmup could not read the remote backend log'
+		[[ $jit_log_since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$ ]] ||
+			die 'Radiance startup warmup received an invalid remote log timestamp'
+		curl --fail --silent --show-error --max-time 300 \
+			-H 'Content-Type: application/json' \
+			-H "X-Request-ID: pi-radiance-startup-warmup-$warmup_attempt" \
+			-d "$warmup_payload" \
+			"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
+			die 'Radiance startup warmup failed; refusing to start Pi on a cold or unhealthy backend'
+		if ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_CHECK'; then
+set -euo pipefail
+container=$1
+since=$2
+for poll_attempt in {1..20}; do
+	[[ $(podman inspect --format '{{.State.Running}}' "$container") == true ]] || exit 2
+	recent=$(podman logs --since "$since" "$container" 2>&1) || exit 2
+	if [[ $recent == *'JIT compilation during inference'* ]]; then
+		exit 0
+	fi
+	sleep 0.1
+done
+exit 1
+REMOTE_JIT_CHECK
+			jit_status=0
+		else
+			jit_status=$?
+		fi
+		case $jit_status in
+		0)
+			if ((warmup_attempt < 3)); then
+				printf 'Radiance startup warmup compiled new inference shapes; repeating warmup (%s/3)\n' \
+					"$warmup_attempt" >&2
+				continue
+			fi
+			ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_TAIL' >&2 || true
+set -euo pipefail
+podman logs --since "$2" "$1" 2>&1 | grep -F 'JIT compilation during inference'
+REMOTE_JIT_TAIL
+			die 'Radiance startup warmup still observed inference-time Triton JIT after three attempts'
+			;;
+		1) break ;;
+		*) die 'Radiance startup warmup could not inspect the remote backend log' ;;
+		esac
+	done
+	if ((reuse_existing == 1)); then
+		printf 'reused Radiance backend validated; non-session startup warmup complete\n' >&2
+	else
+		printf 'Radiance startup warmup complete; launching Pi\n' >&2
+	fi
+fi
 
 printf 'Radiance unrestricted backend ready; local API 127.0.0.1:%s; snapshot ABI %s; backend log %s\n' \
 	"$local_port" "$SNAPSHOT_DATA_ABI" "$backend_log" >&2

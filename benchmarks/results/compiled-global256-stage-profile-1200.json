@@ -2,6 +2,20 @@
   "schema": "urn:coherence:compiled-global256-stage-profile-v1",
   "measurement_code_commit": "f948539f9e1e21f8d4c0a7238b80ee869700eb98",
   "measurement_code_state": "working tree contained the bounded-window profiler/analyzer changes; commit hash above is the base revision, not a claim that those uncommitted changes are in that commit",
+  "measurement_kind": "archived_diagnostic_stage_attribution_only",
+  "status": "archived_not_production_metric",
+  "production_timing_eligible": false,
+  "observer_effect": {
+    "profiler": "torch.profiler CPU/CUDA trace",
+    "first_use_triton_jit_observed": true,
+    "diagnosis_artifact": "benchmarks/results/round-jit-diagnosis-20260921.json",
+    "reason": "The preserved slow window included first-use Triton compilation for speculative decode shapes; its wall time is not a steady-state production measurement."
+  },
+  "stage26_execution": {
+    "measurement_commit": "b8d681001cc726089c387eeddfc7c78e2e74ac3c",
+    "execution_identity": "a985520a1f50c8c23b18a1e90bb64bd2baa247dfc0ca749dd3200d927a3d0e88",
+    "fixture_identity": "405df89920e084edf5a665d9710e9f24780e53ff66eed9739cc389a08a27f003"
+  },
   "scope": "Original compiled Global-256 profiler, fixed-bf16 lane, one long capture per context, 8 warm-up rounds and at least 1,000 requested profiler rounds. Means use complete retained cycles after excluding only asynchronous profiler-window boundary contamination.",
   "stage_count": 25,
   "stage_order": [
@@ -211,5 +225,15 @@
     "results/compiled-global256-stage-profile-1200/60k.json",
     "results/compiled-global256-stage-profile-1200/200k.json",
     "results/compiled-global256-stage-profile-1200/0k.json"
-  ]
+  ],
+  "timing_contract": {
+    "stage_metric": "gpu_activity_duration",
+    "cpu_scope_time_included": false,
+    "per_stage_event_probes": false,
+    "added_synchronization": false,
+    "round_boundary": "first_target_gpu_kernel_start_to_next_first_target_gpu_kernel_start",
+    "zero_observer_effect_proven": false,
+    "limitation": "Stage sums include only GPU kernel activity durations. CPU profiling and export time are not added; changes to GPU clocks, overlap or scheduling caused by tracing are not ruled out."
+  },
+  "timing_audit": "benchmarks/results/stage-timing-audit-20260923.json"
 }
