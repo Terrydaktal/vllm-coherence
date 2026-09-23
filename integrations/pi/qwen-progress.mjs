@@ -27,6 +27,33 @@ function monotonicNow() {
 	return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
 }
 
+function samplingValues(value) {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const result = {};
+	for (const key of ["temperature", "top_p", "top_k"]) {
+		if (Object.prototype.hasOwnProperty.call(value, key)) result[key] = value[key];
+	}
+	return Object.keys(result).length === 0 ? undefined : result;
+}
+
+function samplingValue(value) {
+	if (value === undefined || value === null) return "not set";
+	if (typeof value === "number" && Number.isFinite(value)) return String(value);
+	return String(value);
+}
+
+function samplingMode(values) {
+	if (!values) return "mode unavailable";
+	const temperature = Number(values.temperature);
+	const topK = Number(values.top_k);
+	return temperature === 0 || topK === 1 ? "greedy" : "stochastic";
+}
+
+function describeSampling(values) {
+	if (!values) return "temperature not observed · top_p not observed · top_k not observed";
+	return `temperature ${samplingValue(values.temperature)} · top_p ${samplingValue(values.top_p)} · top_k ${samplingValue(values.top_k)} (${samplingMode(values)})`;
+}
+
 function enableContinuousUsage(event, ctx) {
 	if (ctx?.model?.provider !== TARGET_PROVIDER || ctx.model.api !== TARGET_API) return undefined;
 
@@ -102,6 +129,8 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 	let requestTiming;
 	let lastTiming;
 	let nextRequestFromToolsAt;
+	let activeSampling;
+	let lastSampling;
 	const unsubscribe = scheduler.subscribe?.(() => render());
 
 	pi.registerCommand?.("qwen-timing", {
@@ -127,6 +156,22 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 			lines.push("These are elapsed times, not GPU kernel timings. Escape closes this view.");
 			if (ctx.ui.select) await ctx.ui.select("Qwen response timing", lines);
 			else ctx.ui.notify(lines.join("\n"), "info");
+		},
+	});
+
+	pi.registerCommand?.("sampling", {
+		description: "Show configured and last observed temperature, top_p and top_k",
+		handler: (args, ctx) => {
+			if (args.trim()) {
+				ctx.ui.notify?.("Usage: /sampling", "warning");
+				return;
+			}
+			const configured = samplingValues(ctx.model?.samplingParams);
+			const lines = [`Configured defaults: ${describeSampling(configured)}`];
+			if (activeSampling) lines.push(`Current provider request: ${describeSampling(activeSampling)}`);
+			else if (lastSampling) lines.push(`Last provider request: ${describeSampling(lastSampling)}`);
+			else lines.push("Last provider request: not observed in this Pi process");
+			ctx.ui.notify?.(lines.join("\n"), "info");
 		},
 	});
 
@@ -554,8 +599,9 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		lastOutputRateAt = 0;
 		scheduler.clear?.();
 			resetSchedulerObservation();
-			if (requestTiming) lastTiming = requestTiming;
-			requestTiming = undefined;
+		if (requestTiming) lastTiming = requestTiming;
+		requestTiming = undefined;
+		activeSampling = undefined;
 		if (activeMode === "tui") activeUi?.setWorkingMessage();
 		startedAt = 0;
 		activeMode = undefined;
@@ -574,9 +620,12 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 	});
 	pi.on("agent_start", (_event, ctx) => begin(ctx));
 
-	pi.on("before_provider_request", (event, ctx) => {
-		const replacementPayload = enableContinuousUsage(event, ctx);
-		// One agent turn may contain several independent model requests separated by
+		pi.on("before_provider_request", (event, ctx) => {
+			const replacementPayload = enableContinuousUsage(event, ctx);
+			const observedSampling = samplingValues(replacementPayload ?? event?.payload);
+			activeSampling = observedSampling;
+			if (observedSampling) lastSampling = observedSampling;
+			// One agent turn may contain several independent model requests separated by
 		// tool execution.  Restart the rate/TTFT clock for every provider request so
 		// tool runtime and the next request's KV restore/prefill are never reported as
 		// decode time for the previous response.
@@ -684,7 +733,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		render();
 	});
 
-	pi.on("turn_end", () => finish());
+		pi.on("turn_end", () => finish());
 	pi.on("agent_end", () => finish());
 	pi.on("agent_settled", () => finish());
 	pi.on("session_shutdown", () => {

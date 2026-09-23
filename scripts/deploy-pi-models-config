@@ -38,7 +38,7 @@ OPTIONS
     --qualification-greedy-sampling
         Render the qwen3.8-27b-frozenlock model with the controlled A/B sampling
         tuple temperature=0, top_p=1, and top_k=1. The source must contain exactly
-        one matching model with the tracked 1.0/0.95/20 tuple or deployment fails.
+        one matching model with the tracked 1.0/0.95/40 tuple or deployment fails.
         This does not alter thinking, reasoning, tool, or compatibility settings.
 
     -h, --help
@@ -161,9 +161,9 @@ if ((qualification_greedy_sampling == 1)); then
           elif $models[0].samplingParams != {
               "temperature": 1.0,
               "top_p": 0.95,
-              "top_k": 20
+              "top_k": 40
           } then
-            error("qualification sampling baseline is not the tracked 1.0/0.95/20 tuple")
+            error("qualification sampling baseline is not the tracked 1.0/0.95/40 tuple")
           else
             .models |= map(
                 if .id == $model then

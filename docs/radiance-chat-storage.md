@@ -25,6 +25,12 @@ also uses backend phase durations, including steps shorter than a display tick.
 Diagnostics retain only hashes, counts and durations in memory/tmpfs: at most the
 latest response for each of 16 generations, without prompts or tool contents.
 
+Use `/sampling` to inspect the model's configured `temperature`, `top_p` and
+`top_k`, together with the active provider request while a response is running or
+the last request observed after it ends. The command labels the tuple as greedy
+when temperature is zero or `top_k` is one; otherwise it labels it stochastic.
+It is read-only and does not change sampling settings.
+
 The listing shows the chat name or working directory, its identifier, compressed
 file size, original cache size, cached request token count, and publication state.
 `qwen-radiance-cache list --json` also includes the session file, generation,

@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXTENSION = ROOT / "integrations" / "pi" / "qwen-tool-call-integrity.mjs"
 MAIN_LAUNCHER = ROOT / "scripts" / "pi-remote-qwen"
 AGGRESSIVE_LAUNCHER = ROOT / "scripts" / "pi-remote-qwen-aggressive"
+RADIANCE_LAUNCHER = ROOT / "scripts" / "pi-remote-qwen-radiance"
 
 
 def run_harness(source: str) -> subprocess.CompletedProcess[str]:
@@ -29,7 +30,7 @@ const payload = {{
   stream: true,
   temperature: 1,
   top_p: 0.95,
-  top_k: 20,
+  top_k: 40,
   messages: [{{ role: "user", content: "perform the action" }}],
 }};
 function message(content, stopReason = "toolUse") {{
@@ -102,6 +103,34 @@ if (accepted !== undefined) process.exit(10);
     assert result.returncode == 0, result.stderr
 
 
+def test_dflash_startup_warmup_covers_multi_token_shape_and_fails_on_inference_jit() -> None:
+    source = MAIN_LAUNCHER.read_text(encoding="utf-8")
+    assert '"max_tokens":24' in source
+    assert "Output exactly sixteen short words separated by spaces" in source
+    assert "JIT compilation during inference" in source
+    assert "refusing to start Pi" in source
+    assert "tail -c +$((jit_log_offset + 1))" in source
+    assert "repeating warmup" in source
+    assert "poll_attempt <= 20" in source
+
+
+def test_radiance_warmup_fails_closed_if_remote_jit_log_cannot_be_checked() -> None:
+    source = RADIANCE_LAUNCHER.read_text(encoding="utf-8")
+    assert '"max_tokens":96' in source
+    assert "Output exactly sixty-four short words separated by spaces" in source
+    assert "JIT compilation during inference" in source
+    assert "case $jit_status in" in source
+    assert "Radiance startup warmup could not inspect the remote backend log" in source
+    assert 'podman logs --since "$since" "$container"' in source
+    assert '[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]]' in source
+    assert "repeating warmup" in source
+    assert "for poll_attempt in {1..20}" in source
+    assert "sleep 0.1" in source
+    assert 'if [[ ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then' in source
+    assert "reused Radiance backend validated; non-session startup warmup complete" in source
+    assert "skipping mutating startup warmup" not in source
+
+
 def test_partial_json_is_rejected_before_execution_and_retry_is_bounded() -> None:
     result = run_harness(
         r"""
@@ -121,7 +150,7 @@ if (rejected.message[internalRetry] !== true) process.exit(30);
 
 const recovery = await handlers.get("before_provider_request")({ payload }, ctx);
 if (
-  recovery.temperature !== 1 || recovery.top_p !== 0.95 || recovery.top_k !== 20
+  recovery.temperature !== 1 || recovery.top_p !== 0.95 || recovery.top_k !== 40
 ) process.exit(23);
 const recoveryMarker = Symbol.for("qwen-r9700:ephemeral-recovery-request:v1");
 if (recovery[recoveryMarker] !== true) process.exit(28);

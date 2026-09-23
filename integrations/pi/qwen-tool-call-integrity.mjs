@@ -18,7 +18,7 @@ const TARGET_MODELS = new Set([
 const STOCHASTIC_RECOVERY = Object.freeze({
 	temperature: 1,
 	top_p: 0.95,
-	top_k: 20,
+	top_k: 40,
 });
 const RECOVERY_INSTRUCTION =
 	"The preceding assistant attempt was rejected because its structured tool arguments or shell syntax ended incomplete. Re-emit the complete tool call from scratch. Do not infer a transport or command-size limit. Ensure every required argument, JSON object, shell quote, and heredoc terminator is complete before ending the response.";

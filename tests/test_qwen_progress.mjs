@@ -9,10 +9,12 @@ function fixture(t, schedulerOverride) {
     tick = callback; intervalMs = milliseconds; stopped = false; return 1;
   });
   t.mock.method(globalThis, "clearInterval", () => { stopped = true; });
-  const handlers = new Map(), commands = new Map(), working = [], statuses = [];
-  const ctx = { mode: "tui", model: { provider: "qwen-r9700", api: "openai-completions" },
+  const handlers = new Map(), commands = new Map(), working = [], statuses = [], notices = [];
+  const ctx = { mode: "tui", model: { provider: "qwen-r9700", api: "openai-completions",
+      samplingParams: { temperature: 1.0, top_p: 0.95, top_k: 40 } },
     getContextUsage: () => ({ tokens: 60000 }), ui: {
       setWorkingMessage: (value) => working.push(value), setStatus: (_key, value) => statuses.push(value),
+      notify: (text, kind) => notices.push({ text, kind }),
     } };
   const scheduler = schedulerOverride ?? {
     start() {}, bind() {}, clear() {}, stop() {},
@@ -25,7 +27,7 @@ function fixture(t, schedulerOverride) {
     emit("session_shutdown");
     assert.ok(statuses.every((value) => value === undefined), "progress never pins a footer message");
   });
-  return { working, statuses, emit, commands, ctx,
+  return { working, statuses, notices, emit, commands, ctx,
     intervalMs() { return intervalMs; },
     advance(ms) { now += ms; if (!stopped) tick(); },
     update(type, output, delta = "", reasoning = 0) { emit("message_update", { assistantMessageEvent: {
@@ -34,6 +36,29 @@ function fixture(t, schedulerOverride) {
     end(output) { emit("message_end", { message: { role: "assistant", usage: { output, reasoning: 0 } } }); },
   };
 }
+
+test("/sampling reports model defaults and the last observed provider request", (t) => {
+  const f = fixture(t);
+  f.commands.get("sampling").handler("", f.ctx);
+  assert.match(f.notices.at(-1).text, /Configured defaults: temperature 1 · top_p 0.95 · top_k 40 \(stochastic\)/);
+  assert.match(f.notices.at(-1).text, /Last provider request: not observed/);
+
+  f.emit("before_provider_request", { payload: {
+    stream: true, temperature: 0, top_p: 1, top_k: 1,
+  } });
+  f.commands.get("sampling").handler("", f.ctx);
+  assert.match(f.notices.at(-1).text, /Current provider request: temperature 0 · top_p 1 · top_k 1 \(greedy\)/);
+  f.emit("turn_end");
+  f.commands.get("sampling").handler("", f.ctx);
+  assert.match(f.notices.at(-1).text, /Last provider request: temperature 0 · top_p 1 · top_k 1 \(greedy\)/);
+});
+
+test("/sampling rejects arguments instead of changing request settings", (t) => {
+  const f = fixture(t);
+  f.commands.get("sampling").handler("40", f.ctx);
+  assert.equal(f.notices.at(-1).kind, "warning");
+  assert.match(f.notices.at(-1).text, /Usage: \/sampling/);
+});
 
 test("progress redraws telemetry at 100 ms", (t) => {
   const f = fixture(t);

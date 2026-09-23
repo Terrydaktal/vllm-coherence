@@ -515,7 +515,7 @@ jq -e --arg model "$MODEL_ID" '
   | ($models | length) == 1
   and $models[0].contextWindow == 253792
   and $models[0].maxTokens == $models[0].contextWindow
-	  and $models[0].samplingParams == {temperature: 1, top_p: 0.95, top_k: 20}
+	  and $models[0].samplingParams == {temperature: 1, top_p: 0.95, top_k: 40}
 ' "$models_source" >/dev/null || die 'local Pi model contract is invalid'
 
 if ((dry_run)); then
@@ -531,7 +531,7 @@ if ((dry_run)); then
 	printf 'snapshot ABI: %s\n' "$SNAPSHOT_DATA_ABI"
 	printf 'context:      253792\n'
 	printf 'generation:   all remaining context; no separate output or thinking cap\n'
-	printf 'sampling:     public stochastic 1/0.95/20\n'
+	printf 'sampling:     public stochastic 1/0.95/40\n'
 	printf 'default tools: %s\n' "$(jq -r '.defaultTools | join(", ")' "$settings_source")"
 	printf 'preferences:  %s\n' "$operating_prompt"
 	printf 'context files: disabled\n'
@@ -763,7 +763,7 @@ REMOTE_JIT_CONTAINER
 	) || die 'Radiance startup warmup could not identify the remote backend container'
 	[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]] || die 'Radiance startup warmup received an invalid container identity'
 	warmup_payload=$(printf '%s' \
-		'{"model":"qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate","prompt":"Output exactly sixty-four short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":96,"temperature":1.0,"top_p":0.95,"top_k":20,"stream":false}')
+		'{"model":"qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate","prompt":"Output exactly sixty-four short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":96,"temperature":1.0,"top_p":0.95,"top_k":40,"stream":false}')
 	for warmup_attempt in 1 2 3; do
 		jit_log_since=$(
 			ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" <<'REMOTE_JIT_BEGIN'

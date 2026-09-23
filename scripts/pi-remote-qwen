@@ -205,7 +205,7 @@ DESCRIPTION
 	    Ordinary live62 turns restore the pinned replay boundary without publishing
 	    a new cache head. Only the explicit staged checkpoint transaction publishes.
     The separately named coding-turbo-quest96 profile selects that 262K DFlash
-    stack with Quest96, the stock Qwen thinking sampler (1.0/0.95/20), and a
+    stack with Quest96, the stock Qwen thinking sampler (1.0/0.95/40), and a
     server-side 64-token provisional holdback. Normal launch remains locked
     until its backend parity and independent AA >=51 promotion record passes.
     The separately named unique profile attaches to a prevalidated 262K
@@ -955,7 +955,7 @@ fi
 if ((coding_turbo_quest96 == 1)); then
 	((qualification_greedy_sampling == 0)) ||
 		die 'coding-turbo-quest96 requires stock stochastic sampling, not greedy'
-	qualification_sampling_label='coding-turbo-quest96 stock sampled (1.0/0.95/20)'
+	qualification_sampling_label='coding-turbo-quest96 stock sampled (1.0/0.95/40)'
 elif ((qualification_greedy_explicit == 0)) &&
 	[[ ($profile == agent262 || $profile == live47 || $profile == live47-dense) && $lane == dflash && $experimental_262k == 1 ]]; then
 	# Both speed lanes use the measured greedy contract by default. live47 keeps
@@ -971,7 +971,7 @@ elif ((qualification_greedy_explicit == 0)) &&
 elif ((qualification_greedy_sampling == 1)); then
 	qualification_sampling_label='explicit greedy (0/1/1)'
 else
-	qualification_sampling_label='tracked stochastic (1.0/0.95/20)'
+	qualification_sampling_label='tracked stochastic (1.0/0.95/40)'
 fi
 if ((qualification_greedy_sampling == 1)); then
 	[[ ($profile == agent262 || $profile == live47 || $profile == live47-dense) && $lane == dflash && $experimental_262k == 1 ]] ||
@@ -2259,7 +2259,7 @@ fi
 if ((qualification_greedy_sampling == 1)); then
 	expected_sampling='{"temperature":0,"top_p":1,"top_k":1}'
 else
-	expected_sampling='{"temperature":1.0,"top_p":0.95,"top_k":20}'
+	expected_sampling='{"temperature":1.0,"top_p":0.95,"top_k":40}'
 fi
 jq -e --arg model "$SERVED_MODEL" --argjson expected "$expected_sampling" '
     [.providers["qwen-r9700"].models[]? | select(.id == $model)] as $models
@@ -4437,7 +4437,7 @@ if [[ ($backend_profile == agent262) && $lane == dflash && $reuse_existing == 0 
 	$snapshot_resume == 0 && $live62_requested == 0 && ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then
 	if ((coding_turbo_quest96 == 1)); then
 		warmup_payload=$(printf '%s' \
-			'{"model":"qwen3.8-27b-frozenlock","prompt":"Output exactly sixteen short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":24,"temperature":1.0,"top_p":0.95,"top_k":20,"stream":false}')
+			'{"model":"qwen3.8-27b-frozenlock","prompt":"Output exactly sixteen short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":24,"temperature":1.0,"top_p":0.95,"top_k":40,"stream":false}')
 	else
 		warmup_payload=$(printf '%s' \
 			'{"model":"qwen3.8-27b-frozenlock","prompt":"Output exactly sixteen short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":24,"temperature":0.0,"stream":false}')

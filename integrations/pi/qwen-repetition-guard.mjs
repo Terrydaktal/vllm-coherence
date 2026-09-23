@@ -19,7 +19,7 @@ export const REPETITION_DETECTION = Object.freeze({
 const STOCHASTIC_FALLBACK = Object.freeze({
 	temperature: 1,
 	top_p: 0.95,
-	top_k: 20,
+	top_k: 40,
 });
 
 const RETRYABLE_REPETITION_ERROR =
