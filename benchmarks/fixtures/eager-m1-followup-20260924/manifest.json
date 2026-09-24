@@ -1,0 +1,7 @@
+{
+  "source_sha256": "cf367195e14880a17d3a06e0b34cfb9f67a96c46a08438b9e91e1459029473b4",
+  "source_path": "vllm/third_party/flash_linear_attention/ops/fused_recurrent.py",
+  "function": "fused_recurrent_gated_delta_rule_packed_decode",
+  "extracted_sha256": "79314e97ca47e018a3704dac66ef612f0c45ebf127245754913adb9ca201e317",
+  "scope": "Exact actual wrapper, with original notices; GPU launch intercepted by CPU audit"
+}

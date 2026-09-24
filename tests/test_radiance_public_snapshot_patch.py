@@ -333,7 +333,10 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
     assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == [
-        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832"
+        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
+        # The current arithmetic remains deployed while the M1 candidate is
+        # qualified separately. Its later deployment must also change data_abi.
+        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
     ]
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (

@@ -1,0 +1,240 @@
+{
+  "schema": "m1-attention-precision-v1",
+  "complete": true,
+  "scope": "synthetic independent operator witnesses; no model-quality or universal-equivalence claim",
+  "script_sha256": "1140a0ab72a3019a2cd67283750efebd088224802d4f02c1592e8cce4e1b9ca0",
+  "backend_mode": "stopped",
+  "cpu_oracles": [
+    {
+      "case": "uniform_mean_16",
+      "cache_dtype": "fp8",
+      "context_tokens": 16,
+      "expected_bf16": 1.0
+    },
+    {
+      "case": "uniform_mean_31",
+      "cache_dtype": "fp8",
+      "context_tokens": 31,
+      "expected_bf16": 1.0078125
+    },
+    {
+      "case": "uniform_mean_32",
+      "cache_dtype": "fp8",
+      "context_tokens": 32,
+      "expected_bf16": 1.0
+    },
+    {
+      "case": "uniform_mean_511",
+      "cache_dtype": "fp8",
+      "context_tokens": 511,
+      "expected_bf16": 1.0078125
+    },
+    {
+      "case": "uniform_mean_512",
+      "cache_dtype": "fp8",
+      "context_tokens": 512,
+      "expected_bf16": 1.0
+    },
+    {
+      "case": "uniform_mean_1023",
+      "cache_dtype": "fp8",
+      "context_tokens": 1023,
+      "expected_bf16": 1.0078125
+    },
+    {
+      "case": "uniform_mean_4095",
+      "cache_dtype": "fp8",
+      "context_tokens": 4095,
+      "expected_bf16": 1.0078125
+    },
+    {
+      "case": "folded_query_underflow",
+      "cache_dtype": "fp8",
+      "context_tokens": 2,
+      "expected_bf16": 0.0008544921875
+    },
+    {
+      "case": "bf16_single_value_1",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "expected_bf16": 1.0
+    },
+    {
+      "case": "bf16_single_value_9.31323e-10",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "expected_bf16": 9.313225746154785e-10
+    },
+    {
+      "case": "bf16_single_value_1.04858e+06",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "expected_bf16": 1048576.0
+    }
+  ],
+  "library_sha256": "daa7a3bf79d2a1e0a7909a6ed9ddac2f0f3ac74b878569f4eabc2ccae839aecc",
+  "backend_before": {
+    "status": "connection_refused"
+  },
+  "free_vram_after_context_bytes": 33986445312,
+  "native": [
+    {
+      "case": "uniform_mean_16",
+      "cache_dtype": "fp8",
+      "context_tokens": 16,
+      "mathematical_expectation": 1.0,
+      "expected_bf16": 1.0,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 0,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 72904
+    },
+    {
+      "case": "uniform_mean_31",
+      "cache_dtype": "fp8",
+      "context_tokens": 31,
+      "mathematical_expectation": 1.0040322580645162,
+      "expected_bf16": 1.0078125,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 118156
+    },
+    {
+      "case": "uniform_mean_32",
+      "cache_dtype": "fp8",
+      "context_tokens": 32,
+      "mathematical_expectation": 1.00390625,
+      "expected_bf16": 1.0,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 0,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 118156
+    },
+    {
+      "case": "uniform_mean_511",
+      "cache_dtype": "fp8",
+      "context_tokens": 511,
+      "mathematical_expectation": 1.0039138943248533,
+      "expected_bf16": 1.0078125,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 1276036
+    },
+    {
+      "case": "uniform_mean_512",
+      "cache_dtype": "fp8",
+      "context_tokens": 512,
+      "mathematical_expectation": 1.00390625,
+      "expected_bf16": 1.0,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 0,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 1276036
+    },
+    {
+      "case": "uniform_mean_1023",
+      "cache_dtype": "fp8",
+      "context_tokens": 1023,
+      "mathematical_expectation": 1.0039100684261975,
+      "expected_bf16": 1.0078125,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 2524420
+    },
+    {
+      "case": "uniform_mean_4095",
+      "cache_dtype": "fp8",
+      "context_tokens": 4095,
+      "mathematical_expectation": 1.003907203907204,
+      "expected_bf16": 1.0078125,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 8816644
+    },
+    {
+      "case": "folded_query_underflow",
+      "cache_dtype": "fp8",
+      "context_tokens": 2,
+      "mathematical_expectation": 0.000854491979528939,
+      "expected_bf16": 0.0008544921875,
+      "actual_unique": [
+        0.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 72904
+    },
+    {
+      "case": "bf16_single_value_1",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "mathematical_expectation": 1.0,
+      "expected_bf16": 1.0,
+      "actual_unique": [
+        1.0
+      ],
+      "different_elements": 0,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 105672
+    },
+    {
+      "case": "bf16_single_value_9.31323e-10",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "mathematical_expectation": 9.313225746154785e-10,
+      "expected_bf16": 9.313225746154785e-10,
+      "actual_unique": [
+        0.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 105672
+    },
+    {
+      "case": "bf16_single_value_1.04858e+06",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "mathematical_expectation": 1048576.0,
+      "expected_bf16": 1048576.0,
+      "actual_unique": [
+        65536.0
+      ],
+      "different_elements": 6144,
+      "elements": 6144,
+      "guard_regions_intact": true,
+      "maximum_explicit_device_bytes": 105672
+    }
+  ],
+  "backend_after": {
+    "status": "connection_refused"
+  },
+  "elapsed_seconds": 0.3587750130100176
+}

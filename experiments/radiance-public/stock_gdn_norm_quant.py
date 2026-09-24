@@ -26,8 +26,8 @@ def gdn_norm_quant_kernel(
 ):
     row = tl.program_id(0)
     # Native M1 uses four adjacent elements per lane, 32 lanes per head.
-    # Native large-prefill uses eight elements, 16 lanes per head. Letting
-    # Triton choose this layout changes reduction rounding at BF16 ties.
+    # The alternate historical prefill layout is retained for diagnostic
+    # controls. The serving wrapper preserves the M1 layout at every row count.
     if prefill:
         layout: tl.constexpr = BlockedLayout([1, 8], [2, 16], [warps, 1], [1, 0])
     else:
@@ -82,7 +82,7 @@ def fused(x, z, weight, eps):
         x.stride(0),
         z.stride(0),
         eps,
-        prefill=x.shape[0] > 8,
+        prefill=False,
         warps=warps,
         num_warps=warps,
     )

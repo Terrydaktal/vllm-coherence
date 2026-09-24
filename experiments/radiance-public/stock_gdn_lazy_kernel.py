@@ -19,7 +19,7 @@ def transition(h, q, k, v, a, b, alog, bias, scale):
     k = k / tl.sqrt(tl.sum(k * k) + 1e-6)
     q = q * scale
     x = a + bias
-    softplus = tl.where(x <= 20.0, tl.log(1.0 + tl.exp(x)), x)
+    softplus = tl.where(x <= 20.0, tl.extra.libdevice.log1p(tl.exp(x)), x)
     g = -tl.exp(alog) * softplus
     beta = tl.sigmoid(b).to(tl.bfloat16).to(tl.float32)
     h *= exp(g)

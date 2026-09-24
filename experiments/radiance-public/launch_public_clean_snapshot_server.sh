@@ -4,8 +4,8 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=cdaadbf769734f559852863e338e85ec388bac96e29ea6555d57825a542e9365
-readonly data_abi=36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5
+readonly abi_id=39ba7b315d31edeb05c2fe31f05989920ffd22d6b25c325d3d276ae244a680ab
+readonly data_abi=d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
 readonly model_id=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
@@ -14,7 +14,7 @@ readonly port=${QWEN_QUALIFICATION_PORT:-8080}
 readonly image=docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc
 readonly required_shm_bytes=19327352832
 readonly required_snapshot_free_bytes=12884901888
-readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-global512-base-v1
+readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-norm-consistency-v2
 
 cd "$launcher_root"
 

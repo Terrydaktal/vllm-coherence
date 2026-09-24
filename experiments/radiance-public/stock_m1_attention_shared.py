@@ -16,7 +16,15 @@ class R4DArgs(c.Structure):
         ]
         + [
             (n, c.c_int)
-            for n in ["sequences", "width", "heads", "kv_heads", "dim", "block", "max_blocks"]
+            for n in [
+                "sequences",
+                "width",
+                "heads",
+                "kv_heads",
+                "dim",
+                "block",
+                "max_blocks",
+            ]
         ]
         + [
             ("block_stride", c.c_long),
@@ -36,8 +44,10 @@ class SharedM1Attention:
         binary = build / "candidate.so"
         require(
             self.manifest["status"] == "BUILT_UNTESTED"
-            and self.manifest.get("kernel_abi") == "qwen-stock-m1-shared-attention-v1"
-            and hashlib.sha256(binary.read_bytes()).hexdigest() == self.manifest["binary_sha256"],
+            and self.manifest.get("kernel_abi")
+            in ("qwen-stock-m1-shared-attention-v1", "coherence-attention-precision-v1")
+            and hashlib.sha256(binary.read_bytes()).hexdigest()
+            == self.manifest["binary_sha256"],
             "shared attention binary binding mismatch",
         )
         require(c.sizeof(R4DArgs) == 136, "R4D host ABI size changed")
@@ -45,9 +55,24 @@ class SharedM1Attention:
         self.launch = self.library.qwen_stock_m1_attention_shared
         self.launch.argtypes = [c.POINTER(R4DArgs), c.c_int, c.c_void_p]
         self.launch.restype = c.c_int
+        self.partial_bytes = (
+            1032
+            if self.manifest["kernel_abi"] == "coherence-attention-precision-v1"
+            else 520
+        )
 
     def __call__(
-        self, query, kv, table, lengths, scratch, *, out=None, ks=None, vs=None, max_ctx=253792
+        self,
+        query,
+        kv,
+        table,
+        lengths,
+        scratch,
+        *,
+        out=None,
+        ks=None,
+        vs=None,
+        max_ctx=253792,
     ):
         import torch
 
@@ -69,7 +94,7 @@ class SharedM1Attention:
             and lengths.shape == (1,)
             and scratch.dtype == torch.uint8
             and scratch.is_contiguous()
-            and scratch.numel() >= 8 * 24 * 32 * 520
+            and scratch.numel() >= 8 * 24 * 32 * self.partial_bytes
             and max_ctx >= 1024
             and all(t.device == query.device for t in tensors)
         )

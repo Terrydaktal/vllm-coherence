@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import statistics
+from datetime import date
 from pathlib import Path
 
 from compute_stage26_residual import compute
@@ -32,7 +33,11 @@ def runtime(metadata):
 def package(args):
     private = args.captures
     analyses = read(private / "analysis.json")["contexts"]
-    analyses.update(read(private / "analysis-200K.json")["contexts"])
+    if "200K" not in analyses and (private / "analysis-200K.json").exists():
+        supplemental = read(private / "analysis-200K.json")["contexts"]
+        if set(supplemental) != {"200K"}:
+            raise ValueError("supplemental analysis must contain only the missing 200K context")
+        analyses.update(supplemental)
     if list(analyses) != ["0K", "60K", "200K"]:
         raise ValueError("all three contexts are required")
     original = read(private / "production-inspect.json")
@@ -58,7 +63,7 @@ def package(args):
         "recorded_runtime": runtimes["profile"]["0K"],
         "environment": {k: env[k] for k in ("RADIANCE_VERIFY_HEAD", "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", "RADIANCE_DRAFT_RERANK")},
         "source_sha256": hashes,
-        "measurement_source_state": f"{args.source_commit} plus recorded working-tree source; pinned September 23 numerical backend",
+        "measurement_source_state": f"{args.source_commit} plus recorded working-tree source; pinned numerical payload identified by manifest SHA256",
         "privacy": "No chat text or token arrays included.",
     }
     # A host-memory policy can change round stalls without changing the
@@ -86,8 +91,11 @@ def package(args):
                 if observation["host_page_policy_bytes"] < observation["allocated_bytes"]:
                     raise ValueError(f"{context}: page policy does not cover the pinned allocation")
             binding["host_page_policy_observations"][context] = observation
-    if binding["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] != "256":
-        raise ValueError("Global-256 is required")
+    depth = binding["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"]
+    if depth not in ("256", "512"):
+        raise ValueError("A configured Global-256/512 serving head is required")
+    measured_date = date.fromisoformat(args.measurement_date).isoformat()
+    stamp = measured_date.replace("-", "")
     identity = {"measurement_commit": args.source_commit, "execution_identity": digest(binding),
                 "fixture_identity": digest({c: v["prompt_sha256"] for c, v in analyses.items()})}
     common = {"round_boundary": "worker_execute_entry_to_next_worker_execute_entry",
@@ -95,8 +103,8 @@ def package(args):
               "runtime_artifact_sha256": digest(runtimes["profile"]), "added_synchronization": False}
     profile = {
         "schema": "urn:coherence:matched-compiled-stage-profile:v1", "status": "matched_estimate",
-        "measurement_date": "2026-09-23", "context_order": list(analyses), "stage_count": 25,
-        "stage_order": read(ROOT / "benchmarks/results/compiled-global256-stage-profile-1200.json")["stage_order"],
+        "measurement_date": measured_date, "target_head": f"global{depth}", "context_order": list(analyses), "stage_count": 25,
+        "stage_order": [stage.replace("Target head (global256)", f"Target head (global{depth})") for stage in read(ROOT / "benchmarks/results/compiled-global256-stage-profile-1200.json")["stage_order"]],
         "production_timing_eligible": True, "binding": binding, "stage26_execution": identity,
         "observer_effect": {"first_use_triton_jit_observed": False, "zero_observer_effect_proven": False,
                             "note": "No recorded compilation/module-load events. CPU recording/export cost excluded; indirect clock/scheduling effects are not proved absent."},
@@ -128,6 +136,7 @@ def package(args):
             "included_rounds": result["retained_rounds"], "trace_chunks": result["trace_chunks"],
             "source_traces": sources, "incomplete_inventories": incomplete, "decode_indices": result["decode_indices"],
             "generated_tokens_per_arm": result["generated_tokens_per_arm"],
+            "layers_ms": result["layers_ms"], "kernel_groups": result["kernel_groups"],
             **{k: result[k] for k in ("fixture_sha256", "prompt_sha256", "schedule_sha256")},
             "same_output_and_accepted_schedule": True,
             "marker_clock_mean_difference_ms": result["marker_clock_difference_mean_ms"],
@@ -152,8 +161,8 @@ def package(args):
     if audit["status"] != "matched_estimate":
         raise ValueError(audit)
     args.output.mkdir(parents=True, exist_ok=True)
-    for name, data in (("compiled-global256-stage-profile-20260923.json", profile),
-                       ("stage26-control-20260923.json", control), ("matched-stage-residual-20260923.json", audit)):
+    for name, data in ((f"compiled-global{depth}-stage-profile-{stamp}.json", profile),
+                       (f"stage26-control-{stamp}.json", control), (f"matched-stage-residual-{stamp}.json", audit)):
         (args.output / name).write_text(json.dumps(data, indent=2) + "\n")
 
 
@@ -163,4 +172,5 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--manifest-sha256", required=True)
+    parser.add_argument("--measurement-date", required=True, help="ISO date of this capture")
     package(parser.parse_args())

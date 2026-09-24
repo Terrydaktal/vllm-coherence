@@ -62,6 +62,7 @@ def install_consumer(kernel, shapes, rows):
             or not q.is_contiguous()
             or scale.numel() != m
             or not scale.is_contiguous()
+            or weight_ref.numel() != n
         ):
             calls["fallback"] += 1
             return original(q, scale, weight, weight_scale, weight_ref)

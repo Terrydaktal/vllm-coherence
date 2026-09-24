@@ -52,8 +52,9 @@ class AttentionStages:
             if call.cut is None:
                 continue
             args, kwargs = tape.thaw(call.cut[0])
-            if call.name == "radiance.mxfp4_linear.default":
-                owners = parameters.get(args[1].untyped_storage().data_ptr(), [])
+            if call.name.startswith("radiance.mxfp4_linear"):
+                weight = args[2] if "linear_pq" in call.name else args[1]
+                owners = parameters.get(weight.untyped_storage().data_ptr(), [])
                 if len(owners) == 1 and owners[0].endswith("self_attn.qkv_proj.weight"):
                     after = tape.thaw(call.cut[1])
                     latest = {"raw": after[2], "rotations": [], "norms": []}

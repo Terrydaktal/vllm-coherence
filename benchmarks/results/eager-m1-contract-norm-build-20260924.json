@@ -1,0 +1,23 @@
+{
+  "status": "BUILT_UNTESTED",
+  "source_sha256": "12123cc8c1e5b837551782ba4affb8238f65969df6531bbceb7139d79a728ec0",
+  "command": [
+    "/opt/rocm/bin/hipcc",
+    "-O3",
+    "-std=c++17",
+    "--offload-arch=gfx1201",
+    "-shared",
+    "-fPIC",
+    "-Wall",
+    "-Wextra",
+    "-ffp-contract=off",
+    "-mcumode",
+    "-cuid=stock_fp8_12123cc8c1e5b837551782ba4affb8238f65969df6531bbceb7139d79a728ec0",
+    "/tmp/coherence-m1-contract-nnkdstke/final-build/stock_fp8_epilogue.hip",
+    "-o",
+    "/tmp/coherence-m1-contract-nnkdstke/final-build/candidate.so"
+  ],
+  "gpu_used": false,
+  "binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
+  "abi": "qwen-stock-fp8-epilogue-v1"
+}

@@ -1,0 +1,538 @@
+{
+  "status": "OPERATOR_SAMPLE_CHECKED_NOT_FULL_MODEL_QUALIFIED",
+  "probe_sha256": "66612c98a67feb089781c094a3a146f2985a56f977ca419573cf9b0c8dd4c708",
+  "source_sha256": {
+    "mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
+    "patch_gdn_stable_softplus.py": "2fa5c75d4ea177d83295aafcc4801308f5bd53bdd3e4ec25c58368188034e94b",
+    "stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b"
+  },
+  "torch": "2.12.0+rocm7.14",
+  "hip": "7.14.60850",
+  "checks": {
+    "gemm": {
+      "build_sha256": "0bd820287579a1ee29d4dc5654baf098a158abb8b7abff2e92a8bb73be326a72",
+      "changed_reference_rows": 4,
+      "checks": [
+        {
+          "case": "one_hot",
+          "rows": 800,
+          "control": {
+            "different": 298,
+            "elements": 4800,
+            "max_abs": 3.0517578125e-05,
+            "relative_l2": 0.0008373695355622067
+          },
+          "control_gates": {
+            "different": 0,
+            "elements": 3200,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "candidate": {
+            "different": 0,
+            "elements": 4800,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "candidate_gates": {
+            "different": 0,
+            "elements": 3200,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "unaffected_vs_control": {
+            "different": 0,
+            "elements": 11465600,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          }
+        },
+        {
+          "case": "normal320",
+          "rows": 320,
+          "control": {
+            "different": 496,
+            "elements": 1920,
+            "max_abs": 0.001953125,
+            "relative_l2": 0.0003795584001129785
+          },
+          "control_gates": {
+            "different": 20,
+            "elements": 1280,
+            "max_abs": 0.00390625,
+            "relative_l2": 0.0005867504943430871
+          },
+          "candidate": {
+            "different": 0,
+            "elements": 1920,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "candidate_gates": {
+            "different": 0,
+            "elements": 1280,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "unaffected_vs_control": {
+            "different": 0,
+            "elements": 4586240,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "M8_vs_M1": {
+            "different": 0,
+            "elements": 4587520,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "M32_vs_M1": {
+            "different": 0,
+            "elements": 4587520,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "M65_vs_M1": {
+            "different": 0,
+            "elements": 4587520,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          },
+          "tiled_prefill_vs_M1": {
+            "different": 0,
+            "elements": 4587520,
+            "max_abs": 0.0,
+            "relative_l2": 0.0
+          }
+        }
+      ],
+      "timing": {
+        "1": {
+          "control": [
+            {
+              "median_us": 61.568379402160645,
+              "samples_us": [
+                61.998914927244186,
+                61.7726631462574,
+                61.614539474248886,
+                61.568379402160645,
+                61.5304671227932,
+                61.521098017692566,
+                61.50851398706436
+              ],
+              "invocations_per_sample": 512,
+              "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+            },
+            {
+              "median_us": 61.49766221642494,
+              "samples_us": [
+                61.81000545620918,
+                61.52797490358353,
+                61.50985136628151,
+                61.49766221642494,
+                61.480555683374405,
+                61.486877501010895,
+                61.460237950086594
+              ],
+              "invocations_per_sample": 512,
+              "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+            }
+          ],
+          "candidate": [
+            {
+              "median_us": 61.65524199604988,
+              "samples_us": [
+                61.94750592112541,
+                61.68774142861366,
+                61.675701290369034,
+                61.65039539337158,
+                61.63046881556511,
+                61.65274232625961,
+                61.65524199604988
+              ],
+              "invocations_per_sample": 512,
+              "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+            }
+          ]
+        },
+        "8": {
+          "control": [
+            {
+              "median_us": 62.19266727566719,
+              "samples_us": [
+                62.50414997339249,
+                62.24789842963219,
+                62.19266727566719,
+                62.178052961826324,
+                62.17531859874725,
+                62.21906840801239,
+                62.17016279697418
+              ],
+              "invocations_per_sample": 512,
+              "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+            },
+            {
+              "median_us": 62.18156963586807,
+              "samples_us": [
+                62.56578862667084,
+                62.23438307642937,
+                62.18156963586807,
+                62.176257371902466,
+                62.16094642877579,
+                62.1858686208725,
+                62.17789649963379
+              ],
+              "invocations_per_sample": 512,
+              "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+            }
+          ],
+          "candidate": [
+            {
+              "median_us": 62.37352266907692,
+              "samples_us": [
+                62.66883760690689,
+                62.385089695453644,
+                62.37352266907692,
+                62.36141547560692,
+                62.3769611120224,
+                62.36008554697037,
+                62.32945993542671
+              ],
+              "invocations_per_sample": 512,
+              "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+            }
+          ]
+        }
+      },
+      "fallback": {
+        "M1": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "M8": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "M65": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "M128": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "tiled": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "fold_window": {
+        "0": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "8": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "9": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "14": {
+          "different": 0,
+          "elements": 6144,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        }
+      }
+    },
+    "gdn": {
+      "matched_state_and_output_rows": 320,
+      "state_elements_compared": 251658240,
+      "prefill_final_state_equal": true,
+      "prefill_rows": 2048,
+      "prefill_spatial_tiles": [
+        8,
+        16,
+        32
+      ],
+      "prefill_checks": [
+        {
+          "tokens": 1,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 1,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 1,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 1,
+          "tile": "selected",
+          "exact": true
+        },
+        {
+          "tokens": 8,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 8,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 8,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 8,
+          "tile": "selected",
+          "exact": true
+        },
+        {
+          "tokens": 64,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 64,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 64,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 64,
+          "tile": "selected",
+          "exact": true
+        },
+        {
+          "tokens": 320,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 320,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 320,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 320,
+          "tile": "selected",
+          "exact": true
+        },
+        {
+          "tokens": 1000,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 1000,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 1000,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 1000,
+          "tile": "selected",
+          "exact": true
+        },
+        {
+          "tokens": 1648,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 1648,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 1648,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 1648,
+          "tile": "selected",
+          "exact": true
+        },
+        {
+          "tokens": 2048,
+          "tile": 8,
+          "exact": true
+        },
+        {
+          "tokens": 2048,
+          "tile": 16,
+          "exact": true
+        },
+        {
+          "tokens": 2048,
+          "tile": 32,
+          "exact": true
+        },
+        {
+          "tokens": 2048,
+          "tile": "selected",
+          "exact": true
+        }
+      ],
+      "prefill_gate_max_relative_error": 1.7384817484200096e-06,
+      "native_source_sha256": "cf367195e14880a17d3a06e0b34cfb9f67a96c46a08438b9e91e1459029473b4",
+      "scan_sha256": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b",
+      "cancellation_witness": {
+        "old": 1.0,
+        "fixed": 0.9999979138374329,
+        "expected": 0.9999979138374329
+      },
+      "negative_control_detected": true,
+      "timing": {
+        "old": {
+          "median_us": 7.497199345380068,
+          "samples_us": [
+            7.573214825242758,
+            7.511886768043041,
+            7.497199345380068,
+            7.491495925933123,
+            7.486808579415083,
+            7.493212819099426,
+            7.50180846080184
+          ],
+          "invocations_per_sample": 512,
+          "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+        },
+        "fixed": {
+          "median_us": 7.788449060171843,
+          "samples_us": [
+            7.688605226576328,
+            7.679855450987816,
+            8.187590166926384,
+            7.788449060171843,
+            7.816728204488754,
+            8.523058146238327,
+            7.785792928189039
+          ],
+          "invocations_per_sample": 512,
+          "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+        }
+      },
+      "M8_timing": {
+        "old": {
+          "median_us": 32.45957940816879,
+          "samples_us": [
+            34.458644688129425,
+            32.44004771113396,
+            32.45957940816879,
+            32.48411417007446,
+            32.51458331942558,
+            32.104890793561935,
+            30.125435441732407
+          ],
+          "invocations_per_sample": 512,
+          "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+        },
+        "fixed": {
+          "median_us": 31.39863908290863,
+          "samples_us": [
+            33.84653851389885,
+            33.827394247055054,
+            32.67708048224449,
+            31.226765364408493,
+            31.28403052687645,
+            31.39863908290863,
+            31.14168718457222
+          ],
+          "invocations_per_sample": 512,
+          "mode": "uninstrumented kernels in HIP graph; device events around replay batch"
+        }
+      }
+    }
+  },
+  "elapsed_seconds": 10.818345537991263,
+  "peak_allocator_MiB": 189.23193359375,
+  "private_chat_read": false,
+  "input": "Public model tensors and deterministic synthetic inputs; no session content",
+  "native_build": {
+    "schema": "coherence-mxfp4-fold-precision-v1",
+    "status": "BUILT_UNTESTED",
+    "patch_sha256": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
+    "variants": {
+      "control": {
+        "command": [
+          "/opt/rocm/bin/hipcc",
+          "-O3",
+          "-std=c++17",
+          "-fPIC",
+          "-shared",
+          "--offload-arch=gfx1201",
+          "-Wno-unused-result",
+          "-I/usr/include/python3.12",
+          "-I/opt/vllm/lib/python3.12/site-packages/pybind11/include",
+          "/tmp/coherence-m1-repairs-20260924/build-v2/control/radiance_mxfp4_fp8.hip",
+          "-o",
+          "/tmp/coherence-m1-repairs-20260924/build-v2/control/radiance_mxfp4_fp8.so"
+        ],
+        "source_sha256": "0507fbdfef3c348266b011069bd55222f5cd3a8adeea4e1f272c154dd45a5f79",
+        "python_sha256": "e1c6333cce1d880e9bd0993dd63634c84b02557e06dd299aa137f6bd2f1dc9a9",
+        "binary_sha256": "792b30e03c944353a4cf97cbbd6b977d836026a9aa6561c446f881abd953ea1a"
+      },
+      "candidate": {
+        "command": [
+          "/opt/rocm/bin/hipcc",
+          "-O3",
+          "-std=c++17",
+          "-fPIC",
+          "-shared",
+          "--offload-arch=gfx1201",
+          "-Wno-unused-result",
+          "-I/usr/include/python3.12",
+          "-I/opt/vllm/lib/python3.12/site-packages/pybind11/include",
+          "/tmp/coherence-m1-repairs-20260924/build-v2/candidate/radiance_mxfp4_fp8.hip",
+          "-o",
+          "/tmp/coherence-m1-repairs-20260924/build-v2/candidate/radiance_mxfp4_fp8.so"
+        ],
+        "source_sha256": "33287165102bb31be88be42ff3f150f2fd40fa2b6464dcda1268fcb7dd52c29c",
+        "python_sha256": "aa803855534f5e8328684d65efb95a0d0672e5723694e34a9a1f369ccb8535b9",
+        "binary_sha256": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676"
+      }
+    }
+  }
+}

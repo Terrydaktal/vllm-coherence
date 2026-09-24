@@ -10,8 +10,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from analyze_release_timings import analyze, measure_round_windows, phase
+from analyze_release_timings import analyze, measure_round_windows, measure_worker_windows, phase, target_inventory_issue
 from render_current_tables import (
+    commit_marker,
     current_stage_profile,
     render_chained_workload_results,
     update,
@@ -32,9 +33,13 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     )
     measured_stages = {row["stage"] for row in data["stages"] if row["ms"] is not None}
     assert set(data["stage_provenance"]) == measured_stages
-    for entry in data["stage_provenance"].values():
+    matched = json.loads((ROOT / data["matched_stage_profile"]).read_text())
+    for stage, entry in data["stage_provenance"].items():
         assert len(entry["commit"]) == 40
-        assert entry["commit"] in readme
+        if stage == "Global-256 target head" and matched.get("target_head") == "global512":
+            assert commit_marker(matched["stage26_execution"]["measurement_commit"]) in readme
+        else:
+            assert entry["commit"] in readme
         assert entry["change"]
     evidence = json.loads((ROOT / data["sources"]["profile"]).read_text())
     diagnostic_profile = json.loads(
@@ -51,7 +56,6 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert diagnostic_profile["observer_effect"]["diagnosis_artifact"].endswith(
         "round-jit-diagnosis-20260921.json"
     )
-    matched = json.loads((ROOT / data["matched_stage_profile"]).read_text())
     assert matched["status"] == "matched_estimate"
     assert matched["observer_effect"]["zero_observer_effect_proven"] is False
     assert "No per-stage event probes or forced-token replay" in readme
@@ -79,9 +83,23 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         commit_url = f"https://github.com/Terrydaktal/vllm-coherence/commit/{commit}"
         assert readme.count(commit_url) >= 1
     assert matched["stage26_execution"]["measurement_commit"] == profile_commit
-    assert "Historical correctness results link to their evidence commits" in readme
+    assert "Current stage confirmations identify M1/M8 and eager/compiled M8 separately" in readme
+    confirmations = json.loads((ROOT / data["current_confirmations"]).read_text())
+    assert confirmations["optimized_manifest_sha256"] == matched["binding"]["optimized_manifest_sha256"]
+    assert confirmations["decode_tokens_per_arm"] == 320
+    assert len(confirmations["comparisons"]) == 4
+    stages = json.loads((ROOT / data["current_stage_confirmations"]).read_text())
+    assert stages["optimized_manifest_sha256"] == confirmations["optimized_manifest_sha256"]
+    assert stages["fixture_sha256"] == confirmations["fixture_sha256"]
+    assert len(stages["inventory"]) == 22
+    assert sum(len(s["instances"]) for s in stages["inventory"].values()) == 770
+    assert stages["compiled_graph_bridge"]["decode"]["full_logits_exact"] == 320
+    assert stages["negative_controls_passed_groups"] == stages["cache_restored_groups"] == 40
+    assert all(v["positions"] == v["full_logits_exact"] == v["top20_set_exact"] == v["top20_order_exact"] == 320
+               for s in stages["stages"].values() for v in s.values())
     assert (
-        "Current GPU activity per retained compiled M8 cycle (0K / 60K / 200K; milliseconds unless explicitly marked; 2026-09-23"
+        f"Current GPU activity per retained compiled M8 cycle (0K / 60K / 200K; milliseconds unless explicitly marked; {matched['measurement_date']}"
+        f"; run {commit_marker(profile_commit)})"
         in readme
     )
     compiled_table = readme.split("## Compiled backend stages\n\n", 1)[1].split(
@@ -120,7 +138,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         "**21. MLP down input FP8 quantization**",
         "**22. MLP down projection**",
         "**23. Final normalization/layout**",
-        "**24. Global-256 target head**",
+        f"**24. Global-{matched.get('target_head', 'global256').removeprefix('global')} target head**",
         "**25. Other GPU bookkeeping**",
         "**26. Estimated runtime overhead**",
         "**Total reconstructed round (stages 1–26)**",
@@ -132,7 +150,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "the ↳ rows are detail-only inclusion records and add no timing" in readme
     assert "zero rows have no separately emitted scope" not in readme
     assert "Last relevant code commit / change" in readme
-    assert "The provenance column links the last relevant implementation commit" in readme
+    assert "The provenance column identifies the last relevant code change" in readme
     counts = " / ".join(str(matched["contexts"][c]["included_rounds"]) for c in matched["context_order"])
     assert counts + " complete M8 cycles" in readme
     assert "0K / 60K / 200K" in readme
@@ -149,7 +167,12 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert data["stage_profile_2k"]["stage26_benchmark"]["artifact"].endswith(
         "stage26-control-20260921.json"
     )
-    assert "Calls in 6 retained cycles" in readme
+    if "kernel_groups" in matched["contexts"]["60K"]:
+        count = matched["contexts"]["60K"]["included_rounds"]
+        assert f"Activity records in {count:,} retained cycles" in readme
+        assert "same " + f"{count:,} retained 60K cycles" in readme
+    else:
+        assert "Calls in 6 retained cycles" in readme
     assert readme.index("## Global-512 target-head") < readme.index("## Benchmarks")
     assert readme.count("## Global-512 target-head") == 1
     assert readme.count("## Benchmarks") == 1
@@ -184,9 +207,14 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "#### Changes since `cbbf495`" not in readme
     assert "### Remaining symptoms and likely causes" not in readme
     assert "Status: pending fix" not in readme
-    assert "HIP/ROCr stream or queue dependency" in readme
-    assert "reclaims completed asynchronous HIP-event pairs" in readme
-    assert "Native-runtime validation of the repaired collector is still required" in readme
+    remaining = readme.split("### Known remaining symptoms and likely causes", 1)[1].split("\n## ", 1)[0]
+    assert "Occasional long-context pauses remain" in remaining
+    assert "trace limitation" in remaining
+    assert "lacks a separate reasoning channel" in remaining
+    assert "stage26-control-20260924.json" in remaining
+    for obsolete in ("cbbf495", "abb7668", "b8d6810", "September 20 chained run", "September 21"):
+        assert obsolete not in remaining
+    assert "Native-runtime validation of the repaired collector is still required" not in remaining
     assert "After all 64 layers: finish target verification" not in readme
     assert "Draft proposals" not in readme
     assert "Total elapsed GPU cycle" not in readme
@@ -261,7 +289,7 @@ def test_hugepage_repair_evidence_matches_the_full_rerun():
     evidence = json.loads((directory / "huge-page-promotion-20260923.json").read_text())
     for name, expected in evidence["rerun"]["source_sha256"].items():
         assert hashlib.sha256((directory / name).read_bytes()).hexdigest() == expected
-    results = json.loads((directory / "pi-coding-contexts.json").read_text())
+    results = json.loads((directory / evidence["rerun"]["context_result"]).read_text())
     for context, row in evidence["rerun"]["contexts"].items():
         observed = results["contexts"][context]
         values = [r["round_ms"] for r in observed["round_capture"]["records"] if r["round_ms"] is not None]
@@ -281,7 +309,7 @@ def test_hugepage_repair_evidence_matches_the_full_rerun():
         assert comparison["before"]["generated_tokens"] == comparison["after"]["generated_tokens"]
     failures = evidence["rerun"]["validation_failures"]
     assert failures["contexts"] == results["validation_failures"]
-    assert failures["chained"] == json.loads((directory / "pi-coding-json-compaction.json").read_text())["validation_failures"]
+    assert failures["chained"] == json.loads((directory / evidence["rerun"]["chained_result"]).read_text())["validation_failures"]
 
 
 def test_latest_profile_selects_complete_inventory_not_fast_rounds():
@@ -386,6 +414,42 @@ def test_overhead_counts_gaps_once_and_subtracts_concurrent_gpu_work():
     assert timing["rounds"][0]["streams"] == [1, 2]
 
 
+def test_worker_details_use_the_same_clipped_activity_as_stage_totals():
+    tail = {**kernel(950, 100), "name": "draft"}
+    projection = {**kernel(1100, 300), "name": "projection"}
+    head = {**kernel(1500, 200), "name": "head"}
+    cpu = {"ph": "X", "cat": "cpu_op", "ts": 1100, "dur": 800, "name": "observer"}
+    markers = [{"ph": "X", "cat": "user_annotation", "name": f"qwen_timing_round/{i}",
+                "ts": t, "dur": 900} for i, t in enumerate((1000, 2000))]
+    stages = {id(tail): "Drafter", id(projection): "MLP down projection", id(head): "Target head (global512)"}
+    targets = [(('target_body', 0), []), (('target_body', 0), []), (('target_body', 1100), [])]
+    result = measure_worker_windows([tail, projection, head, cpu, *markers], targets, [2],
+                                    stages, {}, "global512", {id(projection): 7})
+    row = result['rounds'][0]
+    assert row['kernel_sum_ms'] == pytest.approx(.55)
+    assert row['clipped_boundary_activity_ms'] == pytest.approx(.05)
+    assert result['layers_ms'] == {7: {'MLP down projection': .3}}
+    assert sum(k['activity_records'] for k in result['kernel_groups']) == 3
+    assert sum(k['ms_per_round'] for k in result['kernel_groups']) == pytest.approx(.55)
+
+
+@pytest.mark.parametrize("duration", [1, 1000000])
+def test_trace_stage_order_rejection_is_independent_of_round_duration(duration):
+    events = []
+    for layer in range(64):
+        mix = (["shared_decode", "shared_merge"] * 2 if layer % 4 == 3 else
+               ["causal_conv_update", "stock_gdn_scan", "gdn_norm_quant_kernel"])
+        names = ["norm_quant<true, 512>", "radiance_mxfp4_fp8_gemm_decode<8, 128, 1>",
+                 *mix, "radiance_mxfp4_fp8_gemm_decode<8, 128, 4>", "norm_quant<true, 512>",
+                 "radiance_mxfp4_fp8_gemm_decode<8, 128, 1>", "silu_kernel",
+                 "radiance_mxfp4_fp8_gemm_decode<8, 128, 4>"]
+        events.extend({"name": name, "dur": duration} for name in names)
+    assert target_inventory_issue(events) is None
+    # Reproduce the observed inverted input-normalization/projection timestamp order.
+    events[0], events[1] = events[1], events[0]
+    assert "inconsistent stage order (layer 0, mix)" in target_inventory_issue(events)
+
+
 @pytest.mark.parametrize(
     "starts, selected",
     [
@@ -448,3 +512,16 @@ def test_runtime_overhead_estimate_reconciles_to_unprofiled_round_time():
     estimate["status"] = "measured"
     with pytest.raises(ValueError, match="labelled as an estimate"):
         update((ROOT / "README.md").read_text(), data)
+
+
+def test_independent_m1_evidence_survives_timing_regeneration():
+    from render_current_tables import render_stage_profile_table
+
+    data = json.loads((ROOT / 'benchmarks/results/coherence-current.json').read_text())
+    evidence = json.loads((ROOT / 'benchmarks/results/eager-m1-readme-evidence.json').read_text())
+    rendered = '\n'.join(render_stage_profile_table(data))
+    assert len(evidence['rows']) == 31
+    for cell in evidence['rows'].values():
+        assert cell in rendered
+    assert 'not probabilities of being bug-free' in rendered
+    assert 'arbitrary inputs' in rendered

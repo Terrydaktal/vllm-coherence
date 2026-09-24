@@ -1,0 +1,249 @@
+{
+  "status": "SAMPLE_CHECKED",
+  "binary_sha256": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676",
+  "probe_sha256": "741bf389d51fa2df818e21ac0b7fd6b7121f8e24e6b49403925d88aabca007df",
+  "pack_sha256": "956c2aed38eb03ac8be45553dae682d497ce623cc32ea421ad523b44e0abd38d",
+  "wrapper_sha256": "aa803855534f5e8328684d65efb95a0d0672e5723694e34a9a1f369ccb8535b9",
+  "private_chat_read": false,
+  "cases": [
+    {
+      "modules": [
+        "mlp.gate_proj",
+        "mlp.up_proj"
+      ],
+      "M": 1000,
+      "N": 34816,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 34816000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 2.110058069229126,
+      "tiled_including_reorder_ms": 1.7057774066925049,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.gate_proj",
+        "mlp.up_proj"
+      ],
+      "M": 1648,
+      "N": 34816,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 57376768,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 3.5962252616882324,
+      "tiled_including_reorder_ms": 2.863114356994629,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.gate_proj",
+        "mlp.up_proj"
+      ],
+      "M": 2048,
+      "N": 34816,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 71303168,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 4.2652411460876465,
+      "tiled_including_reorder_ms": 3.042384386062622,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.down_proj"
+      ],
+      "M": 1000,
+      "N": 5120,
+      "K": 17408,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 5120000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.9906265139579773,
+      "tiled_including_reorder_ms": 0.906191349029541,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.down_proj"
+      ],
+      "M": 1648,
+      "N": 5120,
+      "K": 17408,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 8437760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 1.8279175758361816,
+      "tiled_including_reorder_ms": 1.534487247467041,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.down_proj"
+      ],
+      "M": 2048,
+      "N": 5120,
+      "K": 17408,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 10485760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 2.1815779209136963,
+      "tiled_including_reorder_ms": 1.617397427558899,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z"
+      ],
+      "M": 1000,
+      "N": 16384,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 16384000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.9036563634872437,
+      "tiled_including_reorder_ms": 0.8294561505317688,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z"
+      ],
+      "M": 1648,
+      "N": 16384,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 27000832,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 1.6928974390029907,
+      "tiled_including_reorder_ms": 1.4269870519638062,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z"
+      ],
+      "M": 2048,
+      "N": 16384,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 33554432,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 2.028742790222168,
+      "tiled_including_reorder_ms": 1.5041921138763428,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.out_proj"
+      ],
+      "M": 1000,
+      "N": 5120,
+      "K": 6144,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 5120000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.3319005072116852,
+      "tiled_including_reorder_ms": 0.29583048820495605,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.out_proj"
+      ],
+      "M": 1648,
+      "N": 5120,
+      "K": 6144,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 8437760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.5898707509040833,
+      "tiled_including_reorder_ms": 0.5620408654212952,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.out_proj"
+      ],
+      "M": 2048,
+      "N": 5120,
+      "K": 6144,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 10485760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.7564460039138794,
+      "tiled_including_reorder_ms": 0.5889058709144592,
+      "adapter_exact": true
+    }
+  ],
+  "negative_control_detected": true,
+  "consumer_calls": {
+    "tiled": 12,
+    "fallback": 0,
+    "rows": [
+      1000,
+      1648,
+      2048
+    ],
+    "shapes": [
+      [
+        5120,
+        6144
+      ],
+      [
+        5120,
+        17408
+      ],
+      [
+        16384,
+        5120
+      ],
+      [
+        34816,
+        5120
+      ]
+    ]
+  },
+  "elapsed_seconds": 6.922606235020794
+}

@@ -27,6 +27,10 @@ def evidence(entry, *, kind):
     if digest(path) != entry["qualification_sha256"]:
         raise ValueError(f"{kind} qualification changed")
     report = json.loads(path.read_text())
+    if kind == "fp8" and bool(report.get("row_invariant")) != bool(
+        entry.get("row_invariant")
+    ):
+        raise ValueError("FP8 qualification uses a different normalization contract")
     if (
         report["status"] != "SAMPLE_CHECKED"
         or not report["checks"]
@@ -37,10 +41,21 @@ def evidence(entry, *, kind):
     ):
         raise ValueError(f"{kind} has no successful exact comparison")
     required_sources = {
-        "lazy": {"stock_gdn_lazy_kernel.py", "stock_gdn_scan_kernel.py", "probe_stock_gdn_lazy.py"},
-        "fp8": {"stock_fp8_epilogue.py", "stock_fp8_epilogue.hip", "probe_stock_fp8_epilogue.py"},
+        "lazy": {
+            "stock_gdn_lazy_kernel.py",
+            "stock_gdn_scan_kernel.py",
+            "probe_stock_gdn_lazy.py",
+        },
+        "fp8": {
+            "stock_fp8_epilogue.py",
+            "stock_fp8_epilogue.hip",
+            "probe_stock_fp8_epilogue.py",
+        },
     }
-    if kind not in required_sources or set(report.get("sources", {})) != required_sources[kind]:
+    if (
+        kind not in required_sources
+        or set(report.get("sources", {})) != required_sources[kind]
+    ):
         raise ValueError(f"{kind} evidence has incomplete source binding")
     for name, expected in report["sources"].items():
         if digest(Path(__file__).with_name(name)) != expected:
@@ -53,9 +68,13 @@ def evidence(entry, *, kind):
             or not report.get("canonical_snapshot_roundtrip")
             or not report.get("negative_controls")
         ):
-            raise ValueError("lazy state acceptance/migration qualification is incomplete")
+            raise ValueError(
+                "lazy state acceptance/migration qualification is incomplete"
+            )
         names = {c["name"] for c in report["checks"]}
-        expected = {f"step-{step}-prefix-{width}" for step in range(40) for width in range(1, 9)}
+        expected = {
+            f"step-{step}-prefix-{width}" for step in range(40) for width in range(1, 9)
+        }
         expected |= {
             f"width-{current}-accepted-{previous}-state"
             for current in range(1, 9)
@@ -89,7 +108,10 @@ def evidence(entry, *, kind):
         if not expected <= {c["name"] for c in report["checks"]}:
             raise ValueError("FP8 comparison cases are missing")
         if entry.get("prefill_enabled"):
-            if report.get("prefill_sites") != 128 or report.get("prefill_rows_per_site") != 1000:
+            if (
+                report.get("prefill_sites") != 128
+                or report.get("prefill_rows_per_site") != 1000
+            ):
                 raise ValueError("prefill FP8 requires all 128 sites and 1000 rows")
             expected = {
                 f"prefill-site{site}-m1000-r{residual}/{part}"

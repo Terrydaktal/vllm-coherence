@@ -71,7 +71,10 @@ class TapeObserver:
         self.groups = int(os.environ.get("QWEN_D7_TAPE_GROUPS", "1"))
         self.matrix = None
         if os.environ.get("QWEN_D7_STAGE_MATRIX") == "1":
-            from native_d7_stage_matrix import StageMatrix
+            if os.environ.get("QWEN_D7_CURRENT_STAGES") == "1":
+                from current_d7_stage_matrix import CurrentStageMatrix as StageMatrix
+            else:
+                from native_d7_stage_matrix import StageMatrix
 
             self.matrix = StageMatrix(runner.model, runner=runner, repairs=repairs)
 
@@ -227,7 +230,7 @@ class TapeObserver:
             early = next(
                 i
                 for i, call in enumerate(self.tape.calls)
-                if call.name == "radiance.mxfp4_linear.default"
+                if call.name.startswith("radiance.mxfp4_linear")
             )
             early_producer = self.tape.calls[early].function
 
@@ -240,6 +243,23 @@ class TapeObserver:
                 raise DiagnosticError("native replay concealed a corrupted first-layer projection")
             if not all(state.unchanged() for state in self.regions.values()):
                 raise DiagnosticError("native tape failed to restore authoritative cache state")
+            if not self.batches:
+                # Source/shape metadata only; retain adapter evidence even if a
+                # newly compiled operator signature stops the stage replay.
+                inventory = []
+                for call in self.tape.calls:
+                    if call.cut is None:
+                        continue
+                    captured_args, _ = self.tape.thaw(call.cut[0])
+                    inventory.append({
+                        "name": call.name,
+                        "arguments": [
+                            {"shape": list(a.shape), "dtype": str(a.dtype)}
+                            if isinstance(a, torch.Tensor) else {"type": type(a).__name__}
+                            for a in captured_args
+                        ],
+                    })
+                write_private(self.root / "native-tape-operator-inventory.json", seal({"operators": inventory}))
             stage_records = self.matrix.run(self.tape, result) if self.matrix is not None else None
             if not all(state.unchanged() for state in self.regions.values()):
                 raise DiagnosticError("isolated stage execution failed to restore cache state")
@@ -254,7 +274,7 @@ class TapeObserver:
                             Path(module.__file__).read_bytes()
                         ).hexdigest()
                         for name, module in list(sys.modules.items())
-                        if name.startswith("native_d7_") and getattr(module, "__file__", None)
+                        if name.startswith(("native_d7_", "current_d7_")) and getattr(module, "__file__", None)
                     },
                     "calls": len(self.tape.calls),
                     "operations": sorted({call.name for call in self.tape.calls}),

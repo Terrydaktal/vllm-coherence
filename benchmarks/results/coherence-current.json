@@ -9,7 +9,7 @@
     "method": "unprofiled_round_ms - gpu_ms",
     "assumption": "Traced GPU kernel durations are representative of normal execution. The measurements come from separate runs; this is not an independently measured gap total."
   },
-  "correctness_scope": "Current backported compiled M8 versus the aligned pre-backport compiled M8 control, using the **full BF16 target head**: 320 forced decode tokens on the same 60K Pi prefix, plus one prefill prediction. The 10K eager-M1/compiled-M8 study belongs to the preceding alignment revision; it was not rerun after these backports.",
+  "correctness_scope": "Current repaired release: **320 forced decode tokens after a fresh 60,000-token Pi prefill**, plus the prefill prediction, in each of four arms. Compiled M1 versus compiled M8, eager M1 versus compiled M1, eager M8 versus compiled M8, and eager M1 versus compiled M8 each produced the results below. Compiled controls use production piecewise graphs; eager controls include the existing RoPE rounding repair. The **full BF16 comparison head** exposes target-body differences; production uses approximate Global-512, measured separately. [Run identities and all four comparisons](benchmarks/results/current-320-confirmations-20260924.json).",
   "predictions": [
     {
       "k": 1,
@@ -33,7 +33,7 @@
       "overlap": 20.0
     }
   ],
-  "correctness_limits": "All 320 full-vocabulary hashes and the prefill prediction matched. These are finite consistency checks, not model task accuracy, an arbitrary-input proof, or certification of approximate global-256 selection.",
+  "correctness_limits": "Each comparison also matched all 320 full-vocabulary logit hashes and the prefill prediction. This is finite execution consistency, not independent model certification, an arbitrary-input proof or a natural-completion quality test. This fresh slice comes from the retained Pi corpus; it is not the deleted historical standalone 320-token fixture. The earlier 10K study remains historical and was not rerun.",
   "timing_scope": "Latest retained **compiled, piecewise-graph** decode profile from a saved **60,000-input-token Pi prefix**, with the global-256 head, both alignment repairs and the GGZ14-derived backports. The trace contains **8 observed profile rounds**; the displayed stage and layer values are arithmetic means over **6 complete retained rounds** (rounds 0\u20134 and 6), with one sample per stage per round. Each sample is one compiled decode/profile cycle containing drafting and target verification. This is a kernel profile, not six natural completions or a 60K-output run; the trace has no natural-completion output-token total. Round 5 lacks a complete kernel inventory; round 7 has no following target start to close its interval. Selection uses inventory and observed boundaries, never duration. Work preceding the first target is excluded. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Each fused kernel has one combined duration.",
   "stage_provenance": {
     "Drafter": {
@@ -2425,6 +2425,11 @@
       "audit_artifact": "benchmarks/results/stage-timing-audit-20260923.json"
     }
   },
-  "matched_stage_profile": "benchmarks/results/compiled-global256-stage-profile-20260923.json",
-  "matched_stage_control": "benchmarks/results/stage26-control-20260923.json"
+  "matched_stage_profile": "benchmarks/results/compiled-global512-stage-profile-20260924.json",
+  "matched_stage_control": "benchmarks/results/stage26-control-20260924.json",
+  "head_candidate_result": "benchmarks/results/head-candidate-depth-normalization-20260924.json",
+  "matched_stage_residual": "benchmarks/results/matched-stage-residual-20260924.json",
+  "current_confirmations": "benchmarks/results/current-320-confirmations-20260924.json",
+  "current_operator_confirmations": "benchmarks/results/current-operator-confirmations-20260924.json",
+  "current_stage_confirmations": "benchmarks/results/current-stage-confirmations-20260924.json"
 }

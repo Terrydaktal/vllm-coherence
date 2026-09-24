@@ -43,7 +43,18 @@ PROSE_CODE_PROMPT = """Explain, in five to eight concise paragraphs, how to meas
 
 THINKING_PROMPT = """Turn thinking on for this turn. Analyse a realistic engineering decision involving the snapshot-cache package: reason through a slow restore, compare at least three possible causes and remedies, identify what measurements would distinguish them, discuss correctness and performance trade-offs, and finish with a concrete recommendation and next-step plan. Use detailed ordinary prose, no code, no JSON, and no tool calls. Produce at least 1,000 generated tokens, then finish naturally at the turn boundary."""
 
-COMPACTION_PROMPT = f"""This is a checkpoint compaction request, not a request to continue the coding, prose or JSON tasks. Summarize the complete preceding conversation into a durable checkpoint for resuming the work. Preserve the architecture, invariants, interfaces, implementation decisions, test plan, generated artifact structure, unresolved risks, and next actions. Use these exact headings, each once: Goal, Current Authoritative State, Constraints & Invariants, Progress, Measurements & Evidence, Key Decisions, Open Risks, Next Actions. Do not call tools or add a reasoning preamble. Aim for 2,500–3,500 generated tokens. Finish with this exact standalone line: {COMPACTION_MARKER}"""
+COMPACTION_PROMPT = f"""This is a checkpoint compaction request, not a request to continue the coding, prose or JSON tasks. Summarize the complete preceding conversation into a durable checkpoint for resuming the work. Preserve the architecture, invariants, interfaces, implementation decisions, test plan, generated artifact structure, unresolved risks, and next actions. Use these exact level-three Markdown headings, each once on its own line:
+### Goal
+### Current Authoritative State
+### Constraints & Invariants
+### Progress
+### Measurements & Evidence
+### Key Decisions
+### Rejected / Failed Approaches
+### Unresolved Questions & Hypotheses
+### Next Steps
+### Critical Context
+Do not call tools or add a reasoning preamble. Aim for 2,500–3,500 generated tokens. Finish with this exact standalone line: {COMPACTION_MARKER}"""
 
 
 def _load_previous() -> Any:
@@ -189,8 +200,10 @@ def _checkpoint_validation(text: str, finish_reason: str | None) -> dict[str, An
         "Progress",
         "Measurements & Evidence",
         "Key Decisions",
-        "Open Risks",
-        "Next Actions",
+        "Rejected / Failed Approaches",
+        "Unresolved Questions & Hypotheses",
+        "Next Steps",
+        "Critical Context",
     ]
     heading_count = {heading: text.count(f"### {heading}") for heading in headings}
     return {

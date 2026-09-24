@@ -1,0 +1,53 @@
+{
+  "schema": "urn:coherence:m1-deployment-smoke:v1",
+  "date": "2026-09-24",
+  "status": "LIVE_SMOKE_TESTED",
+  "runtime_abi": "d42d5241d8b26774e5a0756eb2c32ffd2c8138b7147771f13d54c06b77e49ce4",
+  "data_abi": "f37d6b4b9b01c00452b4fa46235a2862d41fbbe7aa73162cbda3835724386e3e",
+  "manifest_sha256": "8788a25060a8884499a89cff1fc6aaa03f46ed7b9b8b08fc2ad945afeebb219c",
+  "installed_sources": {
+    "fused_recurrent.py": "cf367195e14880a17d3a06e0b34cfb9f67a96c46a08438b9e91e1459029473b4",
+    "fused_gdn_prefill_post_conv.py": "9518c0ab22ca3b6b1b69272c18ae8603f736fe6e83df0458a0626c575784c3c3",
+    "fused_sigmoid_gating.py": "bd9e585b6e641a47b1559af444b6b0524370e667b0e50a8d9aeddaea3bf51d54",
+    "radiance_mxfp4.py": "aa803855534f5e8328684d65efb95a0d0672e5723694e34a9a1f369ccb8535b9",
+    "radiance_mxfp4_fp8.so": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676"
+  },
+  "generation": {
+    "status": "passed",
+    "http_status": 200,
+    "finish_reason": "stop",
+    "python_syntax_valid": true,
+    "wall_seconds": 6.569,
+    "usage": {
+      "prompt_tokens": 65,
+      "total_tokens": 650,
+      "completion_tokens": 585,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "created_cache_tokens": 0,
+        "multimodal_tokens": null
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      }
+    },
+    "response_sha256": "5479cfdaebf0783ddf2be25de46fb928d1caf4a8288db93f6849e648956db82f",
+    "scope": "Synthetic public-prompt generation smoke; not full-model equivalence qualification"
+  },
+  "vm_tool_call": {
+    "status": "passed",
+    "http_status": 200,
+    "finish_reason": "tool_calls",
+    "completion_tokens": 28,
+    "arguments_valid": true,
+    "tool_executed": false
+  },
+  "checks": {
+    "health": true,
+    "pi_file_preflight": true,
+    "pi_running_backend_authentication": true,
+    "vm_guest_cache_abi": true,
+    "worker_receipt_matches_corrected_gemm": true
+  },
+  "scope": "Live synthetic generation and VM tool-parser/transport smoke. Not a new full-model equivalence, chat-quality or performance qualification."
+}

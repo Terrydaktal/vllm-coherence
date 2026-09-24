@@ -13,9 +13,15 @@ def evidence(entry):
     if (
         report.get("status") != "SAMPLE_CHECKED"
         or report.get("negative_control_detected") is not True
-        or report.get("pack_sha256") != entry["sources"].get("prefill_activation_tiles.py")
-        or report.get("probe_sha256") != entry["sources"].get("probe_prefill_activation_tiles.py")
+        or report.get("pack_sha256")
+        != entry["sources"].get("prefill_activation_tiles.py")
+        or report.get("probe_sha256")
+        != entry["sources"].get("probe_prefill_activation_tiles.py")
         or report.get("binary_sha256") != entry.get("binary_sha256")
+        or (
+            entry.get("wrapper_sha256") is not None
+            and report.get("wrapper_sha256") != entry["wrapper_sha256"]
+        )
     ):
         raise ValueError("activation-tile source or native qualification differs")
     actual = {(c["M"], c["N"], c["K"]): c for c in report["cases"]}
@@ -30,18 +36,24 @@ def evidence(entry):
                 and case.get("finite") is True
                 and case.get("adapter_exact") is True
             ):
-                raise ValueError("activation-tile exact native/adapter coverage incomplete")
+                raise ValueError(
+                    "activation-tile exact native/adapter coverage incomplete"
+                )
     return report
 
 
 def install(entry):
-    import radiance_mxfp4 as kernel
     import torch
     from mxfp4_dispatch import PYTHON_SHA256
     from prefill_activation_tiles import install_consumer
 
+    import radiance_mxfp4 as kernel
+
     evidence(entry)
-    if digest(kernel.__file__) != PYTHON_SHA256 or kernel.A_TILED_MIN_M != 0:
+    if (
+        digest(kernel.__file__) != entry.get("wrapper_sha256", PYTHON_SHA256)
+        or kernel.A_TILED_MIN_M != 0
+    ):
         raise ValueError("activation consumer wrapper or layout contract changed")
     if digest(Path(kernel._ext.__file__)) != entry["binary_sha256"]:
         raise ValueError("activation consumer binary differs from qualified GEMM")

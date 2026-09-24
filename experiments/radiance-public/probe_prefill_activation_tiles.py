@@ -5,11 +5,14 @@ private conversation input. A failed or slower experiment is not deployable.
 """
 
 import argparse
+import gc
 import hashlib
 import json
 import os
 import statistics
+import sys
 import time
+from functools import partial
 from pathlib import Path
 
 
@@ -18,6 +21,11 @@ def digest(path):
 
 
 def run(args):
+    build = json.loads((args.build / "build.json").read_text())
+    if build.get("schema") == "coherence-mxfp4-fold-precision-v1":
+        # Exercise the repaired load-time reference selection and its actual
+        # prequantized wrapper, not only a replacement native extension.
+        sys.path.insert(0, str(args.build / "candidate"))
     for k, v in {
         "RADIANCE_MXFP4": "1",
         "RADIANCE_MXFP4_W4A8": "1",
@@ -29,7 +37,6 @@ def run(args):
         "RADIANCE_MXFP4_W4A8_MIN_M": "0",
     }.items():
         os.environ[k] = v
-    import radiance_mxfp4 as kernel
     import torch
     from prefill_activation_tiles import install_consumer, pack
     from prefill_tiles_admission import ROWS, SHAPES
@@ -37,7 +44,19 @@ def run(args):
     from safetensors import safe_open
     from vllm import _custom_ops as ops
 
+    import radiance_mxfp4 as kernel
+
     torch.set_num_threads(4)
+    if getattr(args, "memory_mib", None):
+        from probe_eager_m1_independent import device_memory, idle
+
+        idle(args.api)
+        total, free = device_memory()
+        if free < (args.memory_mib + 128) * 1024**2:
+            raise RuntimeError(
+                "insufficient free VRAM for bounded prefill qualification"
+            )
+        torch.cuda.set_per_process_memory_fraction(args.memory_mib * 1024**2 / total)
     torch.manual_seed(20260918)
     build = json.loads((args.build / "build.json").read_text())
     binary = args.build / "candidate/radiance_mxfp4_fp8.so"
@@ -46,12 +65,15 @@ def run(args):
     ext = load_extension(binary, "prefill_tiles")
     kernel._ext = ext
     calls = install_consumer(kernel, SHAPES, ROWS)
-    index = json.loads((args.model / "model.safetensors.index.json").read_text())["weight_map"]
+    index = json.loads((args.model / "model.safetensors.index.json").read_text())[
+        "weight_map"
+    ]
     report = {
         "status": "RUNNING",
         "binary_sha256": digest(binary),
         "probe_sha256": digest(__file__),
         "pack_sha256": digest(Path(__file__).with_name("prefill_activation_tiles.py")),
+        "wrapper_sha256": digest(Path(kernel.__file__)),
         "private_chat_read": False,
         "cases": [],
     }
@@ -95,24 +117,41 @@ def run(args):
                 report.setdefault("absent_checkpoint_modules", []).append(list(parts))
                 continue
             raw = torch.cat([weight(n + ".weight") for n in names]).cuda()
-            scale = torch.cat([weight(n + ".weight_scale") for n in names]).T.contiguous().cuda()
+            scale = (
+                torch.cat([weight(n + ".weight_scale") for n in names])
+                .T.contiguous()
+                .cuda()
+            )
             n, k = raw.shape[0], raw.shape[1] * 2
             packed = kernel.permute_w(raw, n, k)
             ref = kernel.make_row_ref(scale)
+            del raw
             for m in (1000, 1648, 2048):
+                if getattr(args, "api", None):
+                    from probe_eager_m1_independent import idle
+
+                    idle(args.api)
                 x = torch.randn((m, k), dtype=torch.bfloat16, device="cuda")
-                q, s = ops.scaled_fp8_quant(x, scale=None, use_per_token_if_dynamic=True)
+                q, s = ops.scaled_fp8_quant(
+                    x, scale=None, use_per_token_if_dynamic=True
+                )
+                del x
                 s = s.flatten().contiguous()
                 at = pack(q)
-                padded = torch.zeros(((m + 15) // 16 * 16, k), dtype=torch.uint8, device="cuda")
-                padded[:m].copy_(q.view(torch.uint8))
-                independent = padded.view(-1, 16, k // 16, 2, 8).permute(0, 2, 3, 1, 4).contiguous()
-                layout_equal = torch.equal(at, independent.flatten())
-                slabs = [
-                    torch.full((m * n + 1024,), 42, dtype=torch.bfloat16, device="cuda")
-                    for _ in range(2)
-                ]
-                a, b = [t[512:-512].view(m, n) for t in slabs]
+                padded = torch.zeros(((m + 15) // 16 * 16, k), dtype=torch.uint8)
+                padded[:m].copy_(q.view(torch.uint8).cpu())
+                independent = (
+                    padded.view(-1, 16, k // 16, 2, 8)
+                    .permute(0, 2, 3, 1, 4)
+                    .contiguous()
+                )
+                layout_equal = torch.equal(at.cpu(), independent.flatten())
+                # One GPU output buffer; the reference lives on CPU. This keeps
+                # the real 2048-row shapes testable beside an idle model.
+                slab = torch.full(
+                    (m * n + 1024,), 42, dtype=torch.bfloat16, device="cuda"
+                )
+                a = b = slab[512:-512].view(m, n)
 
                 def launch(
                     tiled,
@@ -144,6 +183,7 @@ def run(args):
                     )
 
                 launch(False)
+                reference = a.cpu()
                 launch(True)
                 graph = torch.cuda.CUDAGraph()
                 with torch.cuda.graph(graph):
@@ -152,10 +192,15 @@ def run(args):
                 at.fill_(255)
                 graph.replay()
                 torch.cuda.synchronize()
-                adapter = kernel.mxfp4_linear_pq(q, s, packed, scale, ref)
-                adapter_exact = torch.equal(adapter.view(torch.int16), a.view(torch.int16))
-                mismatch = int((a.view(torch.int16) != b.view(torch.int16)).sum())
-                row_equal = int((a.view(torch.int16) == b.view(torch.int16)).all(1).sum())
+                actual = b.cpu()
+                mismatch = int(
+                    (reference.view(torch.int16) != actual.view(torch.int16)).sum()
+                )
+                row_equal = int(
+                    (reference.view(torch.int16) == actual.view(torch.int16))
+                    .all(1)
+                    .sum()
+                )
                 case = {
                     "modules": list(parts),
                     "M": m,
@@ -165,14 +210,27 @@ def run(args):
                     "unequal_elements": mismatch,
                     "equal_rows": row_equal,
                     "total_elements": a.numel(),
-                    "finite": bool(torch.isfinite(a).all() and torch.isfinite(b).all()),
-                    "canaries": all(
-                        bool((t[:512] == 42).all() and (t[-512:] == 42).all()) for t in slabs
+                    "finite": bool(
+                        torch.isfinite(reference).all() and torch.isfinite(actual).all()
                     ),
-                    "adapter_exact": adapter_exact,
-                    "ordinary_ms": timing(lambda: launch(False)),
-                    "tiled_including_reorder_ms": timing(lambda: launch(True)),
+                    "canaries": bool(
+                        (slab[:512] == 42).all() and (slab[-512:] == 42).all()
+                    ),
+                    "ordinary_ms": timing(partial(launch, False)),
+                    "tiled_including_reorder_ms": timing(partial(launch, True)),
                 }
+                # Same comparator must detect a one-bit defect.
+                actual.view(torch.int16).flatten()[0] ^= 1
+                if torch.equal(reference.view(torch.int16), actual.view(torch.int16)):
+                    raise AssertionError("negative control missed")
+                del launch, graph, a, b, slab, at
+                gc.collect()
+                torch.cuda.empty_cache()
+                adapter = kernel.mxfp4_linear_pq(q, s, packed, scale, ref).cpu()
+                adapter_exact = torch.equal(
+                    adapter.view(torch.int16), reference.view(torch.int16)
+                )
+                case["adapter_exact"] = adapter_exact
                 report["cases"].append(case)
                 print(json.dumps(case), flush=True)
                 save()
@@ -184,11 +242,10 @@ def run(args):
                     and adapter_exact
                 ):
                     raise AssertionError("tiled prefill is not exact")
-                # Same comparator must detect a one-bit defect.
-                b.view(torch.int16).flatten()[0] ^= 1
-                if torch.equal(a.view(torch.int16), b.view(torch.int16)):
-                    raise AssertionError("negative control missed")
-            del raw, scale, packed, ref
+                del q, s, adapter, reference, actual, padded, independent
+                gc.collect()
+                torch.cuda.empty_cache()
+            del scale, packed, ref
         if not report["cases"]:
             raise AssertionError("empty coverage")
         report["negative_control_detected"] = True
@@ -207,4 +264,6 @@ if __name__ == "__main__":
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--memory-mib", type=int)
+    parser.add_argument("--api")
     run(parser.parse_args())

@@ -37,7 +37,11 @@ def payload(tmp_path):
 def publish(tmp_path, manifest):
     path = tmp_path / "optimized-release.json"
     path.write_text(json.dumps(manifest))
-    return {"optimized_d7": {"manifest_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}}
+    return {
+        "optimized_d7": {
+            "manifest_sha256": hashlib.sha256(path.read_bytes()).hexdigest()
+        }
+    }
 
 
 def test_installs_existing_layout_and_required_precision(tmp_path):
@@ -46,7 +50,10 @@ def test_installs_existing_layout_and_required_precision(tmp_path):
     release.configure(publish(tmp_path, manifest), tmp_path, root=root, environ=env)
     assert env["RADIANCE_GDN_LAZY"] == env["QWEN_STOCK_GDN_LAZY"] == "0"
     assert env["TORCHINDUCTOR_EMULATE_PRECISION_CASTS"] == "1"
-    assert env["PYTHONPATH"] == "/opt/vllm/lib/python3.12/site-packages:/qualification/runtime"
+    assert (
+        env["PYTHONPATH"]
+        == "/opt/vllm/lib/python3.12/site-packages:/qualification/runtime"
+    )
 
 
 def test_modified_payload_fails_before_environment_publication(tmp_path):
@@ -57,6 +64,25 @@ def test_modified_payload_fails_before_environment_publication(tmp_path):
     with pytest.raises(ValueError, match="payload changed"):
         release.configure(profile, tmp_path, root=root, environ=env)
     assert env == {}
+
+
+def test_attention_repair_cannot_reuse_an_old_arithmetic_identity(tmp_path):
+    root, _, manifest = payload(tmp_path)
+    entry = {
+        "build": "/qualification/repaired-attention",
+        "contract": {"partials": "FP32"},
+    }
+    manifest["attention_precision"] = entry
+    profile = publish(tmp_path, manifest)
+    env = {}
+    with pytest.raises(ValueError, match="snapshot arithmetic identity"):
+        release.configure(profile, tmp_path, root=root, environ=env)
+    assert env == {}
+    profile["optimized_d7"].update(
+        attention_precision=entry, arithmetic={"attention_precision": entry["contract"]}
+    )
+    release.configure(profile, tmp_path, root=root, environ=env)
+    assert env["QWEN_ATTENTION_PRECISION_BUILD"] == entry["build"]
 
 
 @pytest.mark.parametrize(
@@ -135,3 +161,44 @@ def test_output_head_change_reuses_only_identical_backbone_state_contract():
     new["kernel_environment"]["PRECISION"] = "different"
     assert release.compatible_output_head_contract(old, new) is new
     assert old["kernel_environment"]["RADIANCE_VERIFY_HEAD"] == "0"
+
+
+def test_m1_repair_cannot_use_parent_snapshot_identity(tmp_path):
+    root, _, manifest = payload(tmp_path)
+    manifest["m1_arithmetic"] = {
+        "contract": {"softplus": "log1p", "fold": "exact-window"}
+    }
+    profile = publish(tmp_path, manifest)
+    with pytest.raises(ValueError, match="snapshot arithmetic identity"):
+        release.configure(profile, tmp_path, root=root, environ={})
+    entry = profile["optimized_d7"]
+    entry["m1_arithmetic"] = manifest["m1_arithmetic"]
+    entry["arithmetic"] = {"m1_arithmetic": manifest["m1_arithmetic"]["contract"]}
+    release.configure(profile, tmp_path, root=root, environ={})
+    old = {"optimized_arithmetic": {"parent": "same"}}
+    new = {"optimized_arithmetic": {"parent": "same", **entry["arithmetic"]}}
+    assert release.compatible_output_head_contract(old, new) is new
+
+
+def test_norm_repair_cannot_reuse_a_parent_snapshot(tmp_path):
+    root, _, manifest = payload(tmp_path)
+    repair = {"contract": {"hidden_norm": "M1-512", "gdn_norm": "M1-layout"}}
+    manifest["normalization_consistency"] = repair
+    profile = publish(tmp_path, manifest)
+    env = {}
+    with pytest.raises(ValueError, match="normalization repair"):
+        release.configure(profile, tmp_path, root=root, environ=env)
+    assert env == {}
+    entry = profile["optimized_d7"]
+    entry.update(
+        normalization_consistency=repair,
+        arithmetic={"normalization_consistency": repair["contract"]},
+    )
+    release.configure(profile, tmp_path, root=root, environ=env)
+    old = {
+        "optimized_arithmetic": {
+            "normalization_consistency": {"hidden_norm": "batch-dependent"}
+        }
+    }
+    new = {"optimized_arithmetic": entry["arithmetic"]}
+    assert release.compatible_output_head_contract(old, new) is new

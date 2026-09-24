@@ -1,0 +1,49 @@
+{
+  "schema": "urn:coherence:m1-normalization-deployment:v1",
+  "deployed_at": 1790285083.2220666,
+  "status": "live_smoke_passed",
+  "runtime_abi": "39ba7b315d31edeb05c2fe31f05989920ffd22d6b25c325d3d276ae244a680ab",
+  "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+  "optimized_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+  "contract": {
+    "profile": "/qualification/diagnostics/norm-consistency-v2/contract.json",
+    "profile_sha256": "cef15a0dc015246129ff54fb4f297c85ced7bd0bc7c5fa9ae0a459a80924356d",
+    "hidden_norm": "M1 512-lane reduction for every admitted row count",
+    "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
+    "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
+    "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+  },
+  "smoke": {
+    "http_status": 200,
+    "finish_reason": "stop",
+    "completion_tokens": 2
+  },
+  "release_gates": {
+    "hidden_norm_sites": 128,
+    "gdn_norm_sites": 48,
+    "rows_per_site": 1000,
+    "row_invariant": true,
+    "cpu_tests_passed": 68
+  },
+  "scope": "Finite operator qualification and release deployment; complete-model arbitrary-input equality is not established.",
+  "pi_bridge": {
+    "config_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+    "services": "active",
+    "control_probe": "HTTP 200; ABI matches release"
+  },
+  "post_benchmark_health": {
+    "checked_at": 1790289045.847069,
+    "http_status": 200,
+    "target_head": "global512",
+    "worker": "optimized_d7_worker.OptimizedWorker",
+    "bridge_abi_matches": true
+  },
+  "benchmark_results": {
+    "coding_contexts": "benchmarks/results/pi-coding-contexts.json",
+    "chained": "benchmarks/results/pi-coding-json-compaction.json",
+    "head": "benchmarks/results/head-candidate-depth-normalization-20260924.json",
+    "stages": "benchmarks/results/compiled-global512-stage-profile-20260924.json",
+    "residual": "benchmarks/results/matched-stage-residual-20260924.json"
+  },
+  "benchmark_report_cpu_tests_passed": 60
+}

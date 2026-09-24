@@ -67,6 +67,21 @@ def test_all_layer_instances_must_pass_the_position():
     assert result["stages"]["MLP gate/up projection"]["fixed"]["top20_set_exact"] == 8
 
 
+@pytest.mark.parametrize("stage,count", [
+    ("Embedding + first input normalization + FP8 production", 1),
+    ("Layer input residual/normalization + FP8 production", 63),
+    ("Post-attention/GDN residual/normalization + FP8 production", 64),
+    ("GDN output gated normalization + FP8 production", 48),
+    ("Full BF16 comparison head", 1),
+])
+def test_current_fused_boundaries_require_their_full_layer_inventory(stage, count):
+    instances = sorted(audit.expected_instances(stage))
+    assert len(instances) == count
+    assert stage in audit.aggregate_groups([group(stage, instances)])["stages"]
+    with pytest.raises(DiagnosticError):
+        audit.aggregate_groups([group(stage, instances[:-1])])
+
+
 @pytest.mark.parametrize(
     "fault",
     [

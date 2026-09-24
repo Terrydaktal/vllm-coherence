@@ -15,13 +15,18 @@ def checked_report(entry):
     if not entry.get("sources"):
         raise ValueError("prefill qualification has no source binding")
     for name, expected in entry["sources"].items():
-        if Path(name).name != name or digest(Path(__file__).with_name(name)) != expected:
+        if (
+            Path(name).name != name
+            or digest(Path(__file__).with_name(name)) != expected
+        ):
             raise ValueError("prefill implementation changed")
     return json.loads(Path(entry["qualification"]).read_text())
 
 
 def gdn_evidence(entry):
     r = checked_report(entry)
+    if bool(r.get("row_invariant")) != bool(entry.get("row_invariant")):
+        raise ValueError("GDN qualification uses a different normalization contract")
     if (
         r.get("status") != "SAMPLE_CHECKED"
         or r.get("sites") != 48
@@ -30,10 +35,16 @@ def gdn_evidence(entry):
         or r.get("source_sha256") != entry["sources"].get("stock_gdn_norm_quant.py")
     ):
         raise ValueError("GDN norm/quant qualification is incomplete")
-    actual = {(c["site"], c["width"]): c["matching_rows"] for c in r["checks"] if "site" in c}
-    if any(actual.get((site, width), 0) < 1000 for site in range(48) for width in (1, 8)):
+    actual = {
+        (c["site"], c["width"]): c["matching_rows"] for c in r["checks"] if "site" in c
+    }
+    if any(
+        actual.get((site, width), 0) < 1000 for site in range(48) for width in (1, 8)
+    ):
         raise ValueError("GDN norm/quant requires 1000 exact rows at all 48 sites")
-    widths = {c["prefill_width"]: c["equal"] for c in r["checks"] if "prefill_width" in c}
+    widths = {
+        c["prefill_width"]: c["equal"] for c in r["checks"] if "prefill_width" in c
+    }
     if any(widths.get(width) is not True for width in (9, 320, 1000, 1648, 2048)):
         raise ValueError("GDN norm/quant prefill comparison is incomplete")
     return r

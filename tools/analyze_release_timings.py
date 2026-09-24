@@ -138,7 +138,7 @@ def measure_round_windows(events, starts, selected, *, allow_transfers=False):
     }
 
 
-def measure_worker_windows(events, targets, selected, stages_by_event, groups):
+def measure_worker_windows(events, targets, selected, stages_by_event, groups, head="global256", layers_by_event=None):
     """Use CPU entry markers also timed by the clean control, clipping GPU work.
 
     Markers are only boundaries. Their CPU duration is never added to a stage.
@@ -157,12 +157,15 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups):
     # extends beyond the next worker entry. Target stages require full mapping.
     for (scope, _), group in groups.items():
         if scope != "target_body":
-            stage = {"drafter": "Drafter", "target_vocabulary_head": "Target head (global256)"}.get(scope, "Other GPU bookkeeping")
+            stage = {"drafter": "Drafter", "target_vocabulary_head": f"Target head ({head})"}.get(scope, "Other GPU bookkeeping")
             for event in group:
                 stages_by_event.setdefault(id(event), stage)
     activity = [e for e in events if e.get("ph") == "X"
                 and e.get("cat") in {"kernel", "gpu_memcpy", "gpu_memset"}]
     rows, omissions = [], []
+    layers_by_event = layers_by_event or {}
+    layer_totals = defaultdict(lambda: defaultdict(float))
+    kernel_totals = defaultdict(lambda: [0, 0.0])
     for index in selected:
         # Omit the first two cycles after trace activation, independently of
         # their duration. They can reflect profiler startup / clock recovery.
@@ -189,6 +192,13 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups):
             if stage is None:
                 raise ValueError("unclassified GPU work crosses a worker-entry window")
             stages[stage] += (hi - lo) / 1000
+            milliseconds = (hi - lo) / 1000
+            layer = layers_by_event.get(id(event))
+            if layer is not None:
+                layer_totals[layer][stage] += milliseconds
+            kernel = kernel_totals[(stage, event["name"])]
+            kernel[0] += 1
+            kernel[1] += milliseconds
             intervals.append((lo - start, hi - start))
             devices.add(event["args"]["device"])
             clipped += max(0, hi - lo) if lo != begin or hi != end else 0
@@ -209,8 +219,18 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups):
                      "kernel_count": count, "stages_ms": dict(stages)})
     if not rows:
         raise ValueError("no matched worker intervals retained")
+    count = len(rows)
+    kernels = [{"stage": stage, "kernel": name, "activity_records": values[0],
+                "ms_per_round": values[1] / count}
+               for (stage, name), values in sorted(kernel_totals.items())]
+    if not math.isclose(sum(k["ms_per_round"] for k in kernels),
+                        sum(r["kernel_sum_ms"] for r in rows) / count, abs_tol=1e-8):
+        raise ValueError("worker kernel detail and stage totals disagree")
     return {"boundary": "worker_execute_entry_to_next_worker_execute_entry",
-            "rounds": rows, "omissions": omissions}
+            "rounds": rows, "omissions": omissions,
+            "layers_ms": {layer: {stage: value / count for stage, value in stages.items()}
+                          for layer, stages in layer_totals.items()},
+            "kernel_groups": kernels}
 
 
 def target_inventory_issue(events):
@@ -232,6 +252,14 @@ def target_inventory_issue(events):
                 return f"incomplete attention inventory (layer {layer})"
         if sum("silu" in e["name"] for e in events[c + 1:d]) != 1:
             return f"incomplete activation inventory (layer {layer})"
+        start = 0 if layer == 0 else points[layer * 4 - 1][0] + 1
+        for begin, end, region in ((start, a, "input"), (a + 1, b, "mix"),
+                                   (b + 1, c, "post"), (c + 1, d, "activation")):
+            for event in events[begin:end]:
+                try:
+                    phase(layer, region, event["name"])
+                except ValueError as error:
+                    return f"inconsistent stage order (layer {layer}, {region}): {error}"
     return None
 
 
@@ -297,7 +325,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
         raise ValueError("insufficient complete target inventories")
     timing = measure_round_windows(trace["traceEvents"], starts, selected,
                                    allow_transfers=worker_boundaries)
-    records, assigned, stages_by_event = [], set(), {}
+    records, assigned, stages_by_event, layers_by_event = [], set(), {}, {}
 
     def append(e, scope, index, layer, stage):
         relative = e["ts"] - starts[index]
@@ -307,6 +335,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
             raise ValueError("duplicate kernel accounting")
         assigned.add(id(e))
         stages_by_event[id(e)] = stage
+        layers_by_event[id(e)] = layer
         records.append((scope, index, layer, stage, e["name"], float(e["dur"])))
 
     for index in selected:
@@ -432,7 +461,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
                 "The trace alone does not bound indirect profiler effects or establish production gaps."
             ),
         },
-        "scope": "Saved compiled Global-256 Pi decode trace. GPU dispatch sums and elapsed GPU cycles from the same bounded rounds; profiled, not uninstrumented serving latency.",
+        "scope": f"Saved compiled {head} Pi decode trace. GPU dispatch sums and elapsed GPU cycles from the same bounded rounds; profiled, not uninstrumented serving latency.",
         "profile_rounds": len(targets),
         "included_rounds": selected,
         "selection": "Complete modal kernel inventory and an observed next-target start; no duration-based exclusions. Work before the first target is excluded.",
@@ -466,7 +495,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
     }
     if worker_boundaries:
         result["worker_timing"] = measure_worker_windows(
-            trace["traceEvents"], targets, selected, stages_by_event, groups
+            trace["traceEvents"], targets, selected, stages_by_event, groups, head, layers_by_event
         )
     return result
 
@@ -474,7 +503,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--trace", required=True, type=Path)
-    p.add_argument("--head", required=True, choices=["global256", "full-bf16"])
+    p.add_argument("--head", required=True, choices=["global256", "global512", "full-bf16"])
     p.add_argument("--profile-rounds", type=int)
     p.add_argument("--output", required=True, type=Path)
     a = p.parse_args()

@@ -72,32 +72,83 @@
       "sha256": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd"
     },
     "release_files": {
-      "bootstrap_radiance_release.py": "b31e9f880ee91abe20d0a67dcc3ba5607e9d2df5d85c156d3bc1b101c8aa2de0",
-      "runtime-radiance-1.0.16.json": "c0f6ffdc41590846df3b213d2161a41c59679dc531acb0d239f53245942219f3",
+      "bootstrap_radiance_release.py": "6a94b8302efa13ea9e7c1e236a9d7e22e5d446cd3da636ae96b51c02cdbda9fb",
+      "runtime-radiance-1.0.16.json": "0c25e01a3a0f3ac7b974f1fc22b09b402512bb544673619ba7e468185e53685c",
       "radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
+      "patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5",
       "patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
       "gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
       "qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-      "optimized-release.json": "9f382c9b687354d8577ca40fe03d1eaa5e00a326fc96454c77875a3ae900a635",
-      "optimized_pi_release.py": "5442ba9d9bbfd7a7c26ccb2d20e786472a3f65d58cf3cc12a951d20401280714",
+      "optimized-release.json": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+      "optimized_pi_release.py": "82020959fba70cc0926be6891ab868f9dae8af5173b527e5ebd7bf1e6536a4b1",
+      "m1_arithmetic_release.py": "a24ac6eee704903f7c68703a15221673d1484313ba91bdbb67888353ae80b174",
+      "mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
+      "patch_gdn_stable_softplus.py": "2fa5c75d4ea177d83295aafcc4801308f5bd53bdd3e4ec25c58368188034e94b",
+      "probe_m1_arithmetic_repairs.py": "66612c98a67feb089781c094a3a146f2985a56f977ca419573cf9b0c8dd4c708",
+      "stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b",
+      "attention_precision.py": "166134578e80aa5e4039cb939cd3100edef1312128d120475fbd2cdceb6ba6e9",
+      "attention_precision_release.py": "b5e658decba5061626c5d6d80f289c45d11a86adbbc6699da880e275f86e5561",
+      "attention_precision_runtime.py": "fe0d23cf552dd4e43d8890ad571b493de33d53239ce7723b004d90e10b74fa1d",
+      "build_stock_m1_attention_shared.py": "71dab25a71174d36f900d49fb7887c82c384b151ffc4cf04bfa482b5f9ff7430",
+      "m1_followup_guards.py": "9b7e4504b86c3c323337ea70c11dcc462017b0221d4d50af228004c09c463049",
+      "stock_m1_attention.py": "057ea0ad3e8d6738e92e9e34fd377f753316c9ef22d736a5c3396d4205e8ed6d",
+      "stock_m1_attention_shared.py": "6e96e916b72f6aa7de948bfc4e520998f33ff30370f0ce62bedabb12b4551066",
+      "probe_stock_m1_attention_shared.py": "e39e3577c83fa5fcba6ee754e730227633c4928ad9dc771b25330d7b9152653a",
+      "probe_attention_precision_repair.py": "b677c86d552302a6ae7a5fa29e8e0136debf1304040fdb96f730d6d2daee4cc4",
+      "probe_attention_precision_oracle.py": "c5879c0daa921f08675aa8c6b410c8150cc69436c8b0853b95fb08fdb777eaed",
+      "probe_m1_attention_precision.py": "1140a0ab72a3019a2cd67283750efebd088224802d4f02c1592e8cce4e1b9ca0",
       "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
-      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138",
-      "patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5"
+      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
+    },
+    "draft_head_initialization": {
+      "installer": "patch_draft_head_initialization.py",
+      "upstream_commit": "https://github.com/GGZ14/vllm-mxfp4/commit/1d76c82699c24ffe537e543dc4da575500d4e639",
+      "source_preimage_sha256": "0de6f82cbf22d7ef6ac254748df60c72b329834fbc839cdb7d8f3cbf337bba92",
+      "source_postimage_sha256": "33ac79c763df528a28674c7f9d2bf0b8e1a3645757e6182210b09137be69adb3",
+      "contract": "Always defer INT2 draft-head packing until the real shared lm_head is passed to first use; unchanged quantizer, target arithmetic and snapshot data layout.",
+      "verification": "CPU lifecycle and installed-source regressions; no new GPU throughput or full-model numerical qualification claimed."
     },
     "optimized_d7": {
-      "manifest_sha256": "9f382c9b687354d8577ca40fe03d1eaa5e00a326fc96454c77875a3ae900a635",
+      "manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
       "state_layout": "existing-nine-slot",
       "worker": "optimized_d7_worker.OptimizedWorker",
       "arithmetic": {
-        "repair_sha256": "991ddb0bf613aef9e5dd10c4fc4eb07f158d52ef92d5b3e827f67c315c9babd3",
-        "performance_sha256": "17ecdb689820bd0dba678ca092aa7166cbd71859446122d0fe38875c16dadbaf",
+        "repair_sha256": "e342fcbd813559a9dc1b19e792322e53509888691d3504eadcaadb311bd3b7f5",
+        "performance_sha256": "3ac64300dd57b59cc6d1f151a868068c5f3e954b2684402cf4f2ebbc5890e01e",
         "precision_casts": "preserve eager BF16 rounding during compilation",
         "state_layout": "existing-nine-slot",
-        "target_head": "full BF16 with qualified M4-pair dispatch"
+        "target_head": "full BF16 with qualified M4-pair dispatch",
+        "m1_arithmetic": {
+          "gdn_softplus": "FP32 log1p(exp(x)); same M1/M8/prefill recurrence",
+          "mxfp4_fold": "exact E4M3 exponent differences -6..8; wider spans per-block",
+          "sources": {
+            "mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
+            "patch_gdn_stable_softplus.py": "2fa5c75d4ea177d83295aafcc4801308f5bd53bdd3e4ec25c58368188034e94b",
+            "stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b"
+          },
+          "gemm_binary": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676"
+        },
+        "attention_precision": {
+          "query_key": "exact BF16 operands, FP32 dot, post-dot scale",
+          "probability_value": "FP32 softmax, high+residual 16-bit probability terms; exact storage widening",
+          "partials": "FP32 unnormalised split output and denominator; one final BF16 rounding",
+          "cache_format": "OCP E4M3/uint8 or BF16; FNUZ rejected",
+          "packed_gdn": "existing packed inner state layout; non-overlapping outer slots",
+          "native_sha256": "ee3478c1f28732b47e35076ee749aee28e1e69d8586069efc7714dfb6d6d9625",
+          "shared_sha256": "4ec21250a614e9c33d1bb26d57e2f4015457f57d35a712a55b43ebbd9bf92f4d"
+        },
+        "normalization_consistency": {
+          "profile": "/qualification/diagnostics/norm-consistency-v2/contract.json",
+          "profile_sha256": "cef15a0dc015246129ff54fb4f297c85ced7bd0bc7c5fa9ae0a459a80924356d",
+          "hidden_norm": "M1 512-lane reduction for every admitted row count",
+          "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
+          "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
+          "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+        }
       },
-      "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-512 output-head selection is approximate and is recorded separately.",
+      "arithmetic_evidence_scope": "Native M1/prefill norm consistency and independent operator checks; older full-model alignment is historical.",
       "admission_changes": [
         {
           "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
@@ -117,18 +168,79 @@
         "candidate_depth_qualification": {
           "path": "benchmarks/results/head-candidate-depth-20260924.json",
           "sha256": "f5bf7716abde5eac07ed0fb09d4e8cd39122f9ec759b257d3124a294f2973c0c",
-          "scope": "Paired Global-256/512/full-head comparison on 12015 Pi prediction rows, temperature 1, top-p 0.95, top-k 40. Approximate candidate retention; no universal or full-model equivalence claim. Hidden inputs were captured on the separately identified live M1-repaired release; these results do not qualify this parent backbone."
+          "scope": "Paired Global-256/512/full-head comparison on 12015 Pi prediction rows, temperature 1, top-p 0.95, top-k 40. Approximate candidate retention; no universal or full-model equivalence claim."
         }
-      },
-      "performance_qualification": {
-        "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",
-        "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
-        "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
       },
       "attention_boundary_qualification": {
         "path": "/qualification/diagnostics/attention-page-boundary-v1/pi-comparison.json",
         "sha256": "afeed5c1f6216dbe45a273bce72e4a5b707d23133322b71d32779fabc9114dd2",
         "scope": "Exact sampled M1 attention outputs and natural Pi output agreement at 0K/60K/200K; no full-vocabulary or universal equivalence claim."
+      },
+      "m1_arithmetic": {
+        "build": "/qualification/diagnostics/m1-arithmetic-20260924/build",
+        "build_sha256": "0bd820287579a1ee29d4dc5654baf098a158abb8b7abff2e92a8bb73be326a72",
+        "qualification": "/qualification/diagnostics/m1-arithmetic-20260924/operators.json",
+        "qualification_sha256": "f2d46320563c776cf6c20ce2495d58568dfb5f486f54b7542e1de2bb22f73942",
+        "contract": {
+          "gdn_softplus": "FP32 log1p(exp(x)); same M1/M8/prefill recurrence",
+          "mxfp4_fold": "exact E4M3 exponent differences -6..8; wider spans per-block",
+          "sources": {
+            "mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
+            "patch_gdn_stable_softplus.py": "2fa5c75d4ea177d83295aafcc4801308f5bd53bdd3e4ec25c58368188034e94b",
+            "stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b"
+          },
+          "gemm_binary": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676"
+        }
+      },
+      "historical_performance_qualification": {
+        "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",
+        "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
+        "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
+      },
+      "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-norm-consistency-v2",
+      "attention_precision": {
+        "build": "/qualification/diagnostics/attention-precision-v1/build",
+        "build_sha256": "29ca302b2acda366b46a02536f7aceea7008d24db75bec6e64a57947d30e43ab",
+        "sources": {
+          "attention_precision.py": "166134578e80aa5e4039cb939cd3100edef1312128d120475fbd2cdceb6ba6e9",
+          "attention_precision_release.py": "b5e658decba5061626c5d6d80f289c45d11a86adbbc6699da880e275f86e5561",
+          "attention_precision_runtime.py": "fe0d23cf552dd4e43d8890ad571b493de33d53239ce7723b004d90e10b74fa1d",
+          "build_stock_m1_attention_shared.py": "71dab25a71174d36f900d49fb7887c82c384b151ffc4cf04bfa482b5f9ff7430",
+          "m1_followup_guards.py": "9b7e4504b86c3c323337ea70c11dcc462017b0221d4d50af228004c09c463049",
+          "stock_m1_attention.py": "057ea0ad3e8d6738e92e9e34fd377f753316c9ef22d736a5c3396d4205e8ed6d",
+          "stock_m1_attention_shared.py": "6e96e916b72f6aa7de948bfc4e520998f33ff30370f0ce62bedabb12b4551066",
+          "probe_stock_m1_attention_shared.py": "e39e3577c83fa5fcba6ee754e730227633c4928ad9dc771b25330d7b9152653a",
+          "probe_attention_precision_repair.py": "b677c86d552302a6ae7a5fa29e8e0136debf1304040fdb96f730d6d2daee4cc4",
+          "probe_attention_precision_oracle.py": "c5879c0daa921f08675aa8c6b410c8150cc69436c8b0853b95fb08fdb777eaed",
+          "probe_m1_attention_precision.py": "1140a0ab72a3019a2cd67283750efebd088224802d4f02c1592e8cce4e1b9ca0"
+        },
+        "witnesses": "/qualification/diagnostics/attention-precision-v1/witnesses/result.json",
+        "witnesses_sha256": "a2d029b914eed440cab753e86d3ee1334d000ed11cd776b49fe7c1c814a27903",
+        "alignment": "/qualification/diagnostics/attention-precision-v1/alignment/result.json",
+        "alignment_sha256": "2b37412688c0c21bddc50c259e0518ccfbc31763b00b868ef5b1733d1d504e44",
+        "oracle": "/qualification/diagnostics/attention-precision-v1/oracle/result.json",
+        "oracle_sha256": "4102db0174fb67ae78704bc5c537f1e48d538aad82466c10136929ea5854b364",
+        "contract": {
+          "query_key": "exact BF16 operands, FP32 dot, post-dot scale",
+          "probability_value": "FP32 softmax, high+residual 16-bit probability terms; exact storage widening",
+          "partials": "FP32 unnormalised split output and denominator; one final BF16 rounding",
+          "cache_format": "OCP E4M3/uint8 or BF16; FNUZ rejected",
+          "packed_gdn": "existing packed inner state layout; non-overlapping outer slots",
+          "native_sha256": "ee3478c1f28732b47e35076ee749aee28e1e69d8586069efc7714dfb6d6d9625",
+          "shared_sha256": "4ec21250a614e9c33d1bb26d57e2f4015457f57d35a712a55b43ebbd9bf92f4d"
+        }
+      },
+      "normalization_consistency": {
+        "qualification": "/qualification/diagnostics/norm-consistency-v2/audit.json",
+        "qualification_sha256": "98e323531c681fcf2242a575cb834b4084d43d7b8b3d4b2792e140e2fbd39d27",
+        "contract": {
+          "profile": "/qualification/diagnostics/norm-consistency-v2/contract.json",
+          "profile_sha256": "cef15a0dc015246129ff54fb4f297c85ced7bd0bc7c5fa9ae0a459a80924356d",
+          "hidden_norm": "M1 512-lane reduction for every admitted row count",
+          "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
+          "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
+          "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+        }
       }
     },
     "rocr_poll_backoff": {
@@ -190,7 +302,8 @@
         "contract": "on-request allocator snapshot with include_traces=False; numeric segment/block sizes; best-effort fixed-root storage owners; no addresses, trace history or tensor values; separate private/default/unknown pools; bounded analysis and overwritten tmpfs output"
       },
       "compatible_runtime_abis": [
-        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832"
+        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
+        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01"
       ]
     },
     "buffered_tool_usage": {
@@ -202,6 +315,7 @@
       "class": "qwen_radiance_fair_scheduler.FairScheduler",
       "policy": "uninterrupted responses; least-recently-served waiting chat at completion; handover overlaps client-side tool execution; reserve selected response through cache admission until completion or cancellation; swaps alone do not count as service; 2-second grace for completed tool calls; 30-second queue-age override at next boundary; equal priorities preserve this policy; higher priority 1 reserves the whole answer; higher priority 2 parks a response at the next safe synchronous step",
       "maximum_cached_chats": 2,
+      "pinned_host_page_policy": "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership and existing snapshot data ABI",
       "runner_state_slots": 2,
       "maximum_dispatched_sequences": 1,
       "answer_priority": {
@@ -232,16 +346,7 @@
         "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
         "retention": "last numeric response timings plus cumulative generation-round and draft/accepted counters per generation; at most 16 generations",
         "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
-      },
-      "pinned_host_page_policy": "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership and existing snapshot data ABI"
-    },
-    "draft_head_initialization": {
-      "installer": "patch_draft_head_initialization.py",
-      "upstream_commit": "https://github.com/GGZ14/vllm-mxfp4/commit/1d76c82699c24ffe537e543dc4da575500d4e639",
-      "source_preimage_sha256": "0de6f82cbf22d7ef6ac254748df60c72b329834fbc839cdb7d8f3cbf337bba92",
-      "source_postimage_sha256": "33ac79c763df528a28674c7f9d2bf0b8e1a3645757e6182210b09137be69adb3",
-      "contract": "Always defer INT2 draft-head packing until the real shared lm_head is passed to first use; unchanged quantizer, target arithmetic and snapshot data layout.",
-      "verification": "CPU lifecycle and installed-source regressions; no new GPU throughput or full-model numerical qualification claimed."
+      }
     }
   },
   "serving": {
@@ -283,8 +388,7 @@
     "load_failure_policy": "fail",
     "content_hashes_cross_restart": true,
     "writes": "temporary-file-plus-atomic-rename",
-    "output_head_compatibility": "Retain the prior canonical KV contract: only output-head selection changed; the backbone, state layout and processed-prefix identity are unchanged. The effective output head is recorded in runtime.optimized_d7.target_head.",
-    "data_abi": "36f9b53e291fe2c7bd8e38f3cac509d1f9b7d61d7818ba2bf5e04c0f75606cb5",
+    "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
     "data_contract": {
       "schema": "qwen-radiance-release-data-v1",
       "image_digest": "sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
@@ -302,7 +406,7 @@
         "RADIANCE_FP8_STREAM": "0",
         "RADIANCE_FAST_DRAFT": "1",
         "RADIANCE_DRAFT_RERANK": "80",
-        "RADIANCE_VERIFY_HEAD": "0",
+        "RADIANCE_VERIFY_HEAD": "1",
         "RADIANCE_VERIFY_HEAD_MAX_M": "32",
         "RADIANCE_DYNAMIC_WIDTH": "0",
         "VLLM_USE_V2_MODEL_RUNNER": "1",
@@ -311,7 +415,8 @@
         "RADIANCE_MXFP4_TRACED_QUANT": "0",
         "RADIANCE_MXFP4_PUREQUANT": "0",
         "RADIANCE_GDN_LAZY": "0",
-        "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1"
+        "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1",
+        "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "512"
       },
       "target": {
         "repository": "just1moremodel/Qwen3.8-27B-Uncensored-MXFP4-awq",
@@ -355,7 +460,7 @@
         ],
         "effective_chat_template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
         "cudagraph_mode": "PIECEWISE",
-        "target_verify_head": false,
+        "target_verify_head": true,
         "draft_rerank": 80,
         "r4d_attention_fp8": 0
       },
@@ -367,14 +472,41 @@
         "binary_sha256": "8b04f207868a4e800f5865e248a0f18396c1ec75dfb1fbd3ed696db97d28243a"
       },
       "optimized_arithmetic": {
-        "repair_sha256": "991ddb0bf613aef9e5dd10c4fc4eb07f158d52ef92d5b3e827f67c315c9babd3",
-        "performance_sha256": "17ecdb689820bd0dba678ca092aa7166cbd71859446122d0fe38875c16dadbaf",
+        "repair_sha256": "e342fcbd813559a9dc1b19e792322e53509888691d3504eadcaadb311bd3b7f5",
+        "performance_sha256": "3ac64300dd57b59cc6d1f151a868068c5f3e954b2684402cf4f2ebbc5890e01e",
         "precision_casts": "preserve eager BF16 rounding during compilation",
         "state_layout": "existing-nine-slot",
-        "target_head": "full BF16 with qualified M4-pair dispatch"
+        "target_head": "full BF16 with qualified M4-pair dispatch",
+        "m1_arithmetic": {
+          "gdn_softplus": "FP32 log1p(exp(x)); same M1/M8/prefill recurrence",
+          "mxfp4_fold": "exact E4M3 exponent differences -6..8; wider spans per-block",
+          "sources": {
+            "mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
+            "patch_gdn_stable_softplus.py": "2fa5c75d4ea177d83295aafcc4801308f5bd53bdd3e4ec25c58368188034e94b",
+            "stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b"
+          },
+          "gemm_binary": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676"
+        },
+        "attention_precision": {
+          "query_key": "exact BF16 operands, FP32 dot, post-dot scale",
+          "probability_value": "FP32 softmax, high+residual 16-bit probability terms; exact storage widening",
+          "partials": "FP32 unnormalised split output and denominator; one final BF16 rounding",
+          "cache_format": "OCP E4M3/uint8 or BF16; FNUZ rejected",
+          "packed_gdn": "existing packed inner state layout; non-overlapping outer slots",
+          "native_sha256": "ee3478c1f28732b47e35076ee749aee28e1e69d8586069efc7714dfb6d6d9625",
+          "shared_sha256": "4ec21250a614e9c33d1bb26d57e2f4015457f57d35a712a55b43ebbd9bf92f4d"
+        },
+        "normalization_consistency": {
+          "profile": "/qualification/diagnostics/norm-consistency-v2/contract.json",
+          "profile_sha256": "cef15a0dc015246129ff54fb4f297c85ced7bd0bc7c5fa9ae0a459a80924356d",
+          "hidden_norm": "M1 512-lane reduction for every admitted row count",
+          "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
+          "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
+          "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+        }
       }
     },
-    "previous_data_abi": "2ec52392be20945df93b37ee13dc2f605d29bb010b6e0e36d40f5b75d95ac560",
+    "previous_data_abi": "333d2702fbcd55c63ee868b65df97246ad2121a84dea747b6b98567aa0ccfff1",
     "migration": "retain previous ABI for rollback; rebuild each resumed chat once",
     "chat_snapshots": {
       "isolation": "session identity and compaction generation cache_salt",
@@ -389,7 +521,6 @@
       "publication_transaction": "previous disk head remains authoritative through tail write and full-head verification",
       "write_accounting": "persistent per-chat lower-bound counters plus backing-drive SMART telemetry",
       "legacy": "unlabelled requests bypass the durable snapshot tier"
-    },
-    "attention_boundary_compatibility": "Retain the declared corrected M1 arithmetic and existing nine-slot state layout. The shared M8 attention traversal changes work sharing across page boundaries; exact sampled operator output and natural Pi output agreement are bound in runtime.optimized_d7.attention_boundary_qualification. Existing processed-prefix snapshots remain compatible; this is sampled evidence, not a universal equivalence proof."
+    }
   }
 }

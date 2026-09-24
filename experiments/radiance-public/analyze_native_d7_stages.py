@@ -30,6 +30,9 @@ PAIRS = {
 
 
 def expected_instances(stage):
+    stage = stage.removesuffix(" + FP8 production")
+    if stage == "Full BF16 comparison head":
+        stage = "Full BF16 target head"
     if stage == "Embedding + first input normalization":
         return {"0"}
     if stage == "Final normalization/layout":

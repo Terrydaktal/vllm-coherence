@@ -1,0 +1,346 @@
+{
+  "schema": "eager-m1-followup-cpu-v1",
+  "complete": true,
+  "source_sha256": {
+    "r4d_attn_decode_h256_gqa6.hip": "c548b0d9d6d68fabc93fef2245fa2f7a48665ec9ee2e771f82f3ec7587da958c",
+    "r4d_attn_paged_h256_gqa6.hip": "b84686cb6f5b0371f3219aa795472120369b7c035a64af55579d1366c694d691",
+    "r4d_dt16.h": "b61525f1dbb6b272642e0e1410a3d753d1136ed87eb07cefca512843096c4c24",
+    "fixed_fused_recurrent.py": "cf367195e14880a17d3a06e0b34cfb9f67a96c46a08438b9e91e1459029473b4"
+  },
+  "script_sha256": "32a39165aa2e439981019b231e95a1742b68e2db57e21bf0a7a862babd9f7f2f",
+  "attention_probe_sha256": "1140a0ab72a3019a2cd67283750efebd088224802d4f02c1592e8cce4e1b9ca0",
+  "attention": [
+    {
+      "case": "uniform_mean_16",
+      "cache_dtype": "fp8",
+      "context_tokens": 16,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0,
+      "source_arithmetic_bf16": 1.0,
+      "equal": true,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 1,
+      "split_lengths": [
+        16
+      ],
+      "stored_partial_values": [
+        1.0
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 0,
+      "native_elements": 6144
+    },
+    {
+      "case": "uniform_mean_31",
+      "cache_dtype": "fp8",
+      "context_tokens": 31,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0078125,
+      "source_arithmetic_bf16": 1.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 2,
+      "split_lengths": [
+        15,
+        16
+      ],
+      "stored_partial_values": [
+        1.0,
+        1.0078125
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    },
+    {
+      "case": "uniform_mean_32",
+      "cache_dtype": "fp8",
+      "context_tokens": 32,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0,
+      "source_arithmetic_bf16": 1.0,
+      "equal": true,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 2,
+      "split_lengths": [
+        16
+      ],
+      "stored_partial_values": [
+        1.0,
+        1.0078125
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 0,
+      "native_elements": 6144
+    },
+    {
+      "case": "uniform_mean_511",
+      "cache_dtype": "fp8",
+      "context_tokens": 511,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0078125,
+      "source_arithmetic_bf16": 1.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 16,
+      "split_lengths": [
+        31,
+        32
+      ],
+      "stored_partial_values": [
+        1.00390625
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    },
+    {
+      "case": "uniform_mean_512",
+      "cache_dtype": "fp8",
+      "context_tokens": 512,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0,
+      "source_arithmetic_bf16": 1.0,
+      "equal": true,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 16,
+      "split_lengths": [
+        32
+      ],
+      "stored_partial_values": [
+        1.00390625
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 0,
+      "native_elements": 6144
+    },
+    {
+      "case": "uniform_mean_1023",
+      "cache_dtype": "fp8",
+      "context_tokens": 1023,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0078125,
+      "source_arithmetic_bf16": 1.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 32,
+      "split_lengths": [
+        31,
+        32
+      ],
+      "stored_partial_values": [
+        1.00390625
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    },
+    {
+      "case": "uniform_mean_4095",
+      "cache_dtype": "fp8",
+      "context_tokens": 4095,
+      "boundary": "normalized split output -> FP16 RTZ -> BF16 final output",
+      "expected_bf16": 1.0078125,
+      "source_arithmetic_bf16": 1.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "splits": 32,
+      "split_lengths": [
+        127,
+        128
+      ],
+      "stored_partial_values": [
+        1.00390625
+      ],
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    },
+    {
+      "case": "folded_query_underflow",
+      "cache_dtype": "fp8",
+      "context_tokens": 2,
+      "boundary": "scaled BF16 query -> FP16 RTZ before QK dot product",
+      "expected_bf16": 0.0008544921875,
+      "source_arithmetic_bf16": 0.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "scaled_query_before_fp16": 2.149783107086023e-08,
+      "native_actual_unique": [
+        0.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    },
+    {
+      "case": "bf16_single_value_1",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "boundary": "BF16 value -> FP16 before attention accumulation",
+      "expected_bf16": 1.0,
+      "source_arithmetic_bf16": 1.0,
+      "equal": true,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "live_profile_uses_this_cache_dtype": false,
+      "native_actual_unique": [
+        1.0
+      ],
+      "native_different_elements": 0,
+      "native_elements": 6144
+    },
+    {
+      "case": "bf16_single_value_9.31323e-10",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "boundary": "BF16 value -> FP16 before attention accumulation",
+      "expected_bf16": 9.313225746154785e-10,
+      "source_arithmetic_bf16": 0.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "live_profile_uses_this_cache_dtype": false,
+      "native_actual_unique": [
+        0.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    },
+    {
+      "case": "bf16_single_value_1.04858e+06",
+      "cache_dtype": "bf16",
+      "context_tokens": 1,
+      "boundary": "BF16 value -> FP16 before attention accumulation",
+      "expected_bf16": 1048576.0,
+      "source_arithmetic_bf16": 65536.0,
+      "equal": false,
+      "evidence": "CPU source-arithmetic reproduction confirmed by pinned R4D GPU execution",
+      "live_profile_uses_this_cache_dtype": false,
+      "native_actual_unique": [
+        65536.0
+      ],
+      "native_different_elements": 6144,
+      "native_elements": 6144
+    }
+  ],
+  "packed_m1_state_layout": [
+    {
+      "layout": "packed_control",
+      "shape": [
+        2,
+        48,
+        128,
+        128
+      ],
+      "strides": [
+        786432,
+        16384,
+        128,
+        1
+      ],
+      "accepted_by_actual_wrapper": true,
+      "native_launch_executed": false,
+      "elements": 786432,
+      "wrongly_addressed_values": 0,
+      "loaded_values": [
+        7.0
+      ],
+      "expected_values": [
+        7.0
+      ]
+    },
+    {
+      "layout": "padded_inner_rows",
+      "shape": [
+        2,
+        48,
+        128,
+        128
+      ],
+      "strides": [
+        1572864,
+        32768,
+        256,
+        1
+      ],
+      "accepted_by_actual_wrapper": true,
+      "native_launch_executed": false,
+      "elements": 786432,
+      "wrongly_addressed_values": 393216,
+      "loaded_values": [
+        7.0,
+        19.0
+      ],
+      "expected_values": [
+        7.0
+      ]
+    }
+  ],
+  "fp8_formats": {
+    "bytes": [
+      56,
+      64,
+      128
+    ],
+    "ocp_e4m3": [
+      1.0,
+      2.0,
+      -0.0
+    ],
+    "fnuz_e4m3": [
+      0.5,
+      1.0,
+      "NaN"
+    ],
+    "scope": "format distinction only; native selector admission recorded separately"
+  },
+  "limits": [
+    "No model or chat quality assessed",
+    "Synthetic admissible inputs do not establish frequency in model-generated activations",
+    "FP16 attention is a deliberate approximation; these witnesses refute exactness, not a declared tolerance bound",
+    "Padded state layout and FNUZ cache are not established as live configurations",
+    "Only attention kernels executed on GPU; GDN layout admission and FP8 selector findings remain CPU/source evidence"
+  ],
+  "runtime_identity_and_selector": {
+    "scope": "CPU-only native registry queries and file hashes; no HIP context or kernels",
+    "sources": {
+      "r4d.so": "daa7a3bf79d2a1e0a7909a6ed9ddac2f0f3ac74b878569f4eabc2ccae839aecc",
+      "radiance_r4d_attn.py": "6d4b4571c938003d79e2edc322d1eadc674e30781597845a59b59b8065a6fd0a",
+      "vllm/third_party/flash_linear_attention/ops/fused_recurrent.py": "cf367195e14880a17d3a06e0b34cfb9f67a96c46a08438b9e91e1459029473b4"
+    },
+    "decode_selections": {
+      "torch.float8_e4m3fn": "attn_decode_h256_gqa6_fp8kv",
+      "torch.float8_e4m3fnuz": "attn_decode_h256_gqa6_fp8kv",
+      "bf16": "attn_decode_h256_gqa6_bf16kv"
+    }
+  },
+  "attention_native_validation": {
+    "status": "REPRODUCED",
+    "cases": 11,
+    "counterexample_cases": 7,
+    "matching_control_cases": 4,
+    "all_memory_guards_intact": true,
+    "elapsed_seconds": 0.3587750130100176,
+    "result_file": "eager-m1-attention-native-20260924.json",
+    "backend_stopped_during_probe": true
+  },
+  "validation": {
+    "cpu_audit_tests": 15,
+    "cpu_audit_tests_passed": 15,
+    "native_attention_counterexamples_confirmed": true,
+    "full_model_qualification": false
+  },
+  "reference_scope": "Exact means and a two-score softmax on representable synthetic values; actual wrapper admission and kernel address arithmetic; CPU queries against the pinned native selector. Not a fully specified independently verified model."
+}

@@ -57,6 +57,12 @@ def configure(profile, patches, *, root=Path("/qualification"), environ=None):
         if hashlib.sha256(artifact.read_bytes()).hexdigest() != expected:
             raise ValueError(f"optimized payload changed: {name}")
     env = manifest["environment"]
+    if manifest.get("m1_arithmetic") and (
+        entry.get("m1_arithmetic") != manifest["m1_arithmetic"]
+        or entry.get("arithmetic", {}).get("m1_arithmetic")
+        != manifest["m1_arithmetic"]["contract"]
+    ):
+        raise ValueError("M1 repair requires its own snapshot arithmetic identity")
     required = {
         "QWEN_STOCK_GDN_LAZY": "0",
         "RADIANCE_GDN_LAZY": "0",
@@ -76,7 +82,28 @@ def configure(profile, patches, *, root=Path("/qualification"), environ=None):
         raise ValueError("unsupported optimized target head")
     if any(env.get(key) != value for key, value in required.items()):
         raise ValueError("optimized arithmetic/state-layout contract changed")
+    if manifest.get("attention_precision"):
+        if (
+            entry.get("attention_precision") != manifest["attention_precision"]
+            or entry.get("arithmetic", {}).get("attention_precision")
+            != manifest["attention_precision"]["contract"]
+        ):
+            raise ValueError(
+                "attention precision requires its own snapshot arithmetic identity"
+            )
+    if manifest.get("normalization_consistency") and (
+        entry.get("normalization_consistency") != manifest["normalization_consistency"]
+        or entry.get("arithmetic", {}).get("normalization_consistency")
+        != manifest["normalization_consistency"]["contract"]
+    ):
+        raise ValueError(
+            "normalization repair requires its own snapshot arithmetic identity"
+        )
     environ.update(env)
+    if manifest.get("attention_precision"):
+        environ["QWEN_ATTENTION_PRECISION_BUILD"] = manifest["attention_precision"][
+            "build"
+        ]
     # The frozen preflight trees deliberately retain their historical modules,
     # but some of those names also exist in the pinned Radiance image.  Putting
     # the image's authenticated site-packages directory first prevents a stale

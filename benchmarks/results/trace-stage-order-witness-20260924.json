@@ -1,0 +1,45 @@
+{
+  "schema": "urn:coherence:trace-stage-order-witness:v1",
+  "status": "UNCLASSIFIED_TRACE_ORDER",
+  "context": "200K",
+  "trace_chunk": 2,
+  "target_index": 67,
+  "trace_sha256": "d44f13809559cac4032ade9451bea3fcb6216639f9361c2dd7e9ce4922e1efe8",
+  "records": [
+    {
+      "event_index": 153,
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 4, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "start_us_relative_to_target": 6675.310546875,
+      "duration_us": 87.039,
+      "stream": 1,
+      "launch_correlation": 3417126
+    },
+    {
+      "event_index": 154,
+      "kernel": "void radiance_mxfp4_fp8_gemm_decode<8, 128, 1, 1, true, true, true>(unsigned char const*, unsigned char const*, unsigned char const*, unsigned char const*, float const*, float*, int*, std::bfloat16_t*, int, int, int) [clone .kd]",
+      "start_us_relative_to_target": 6764.744140625,
+      "duration_us": 83.64,
+      "stream": 1,
+      "launch_correlation": 3417126
+    },
+    {
+      "event_index": 155,
+      "kernel": "void norm_quant<true, 512>(unsigned short const*, unsigned short const*, unsigned short const*, unsigned char*, float*, unsigned short*, long, long, float) [clone .kd]",
+      "start_us_relative_to_target": 6766.2705078125,
+      "duration_us": 7.759,
+      "stream": 1,
+      "launch_correlation": 3417126
+    },
+    {
+      "event_index": 156,
+      "kernel": "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>) [clone .kd]",
+      "start_us_relative_to_target": 6857.375,
+      "duration_us": 1.559,
+      "stream": 1,
+      "launch_correlation": 3417127
+    }
+  ],
+  "observation": "Normalization is timestamped after the projection boundary where the stage classifier requires it before the projection. The recorded intervals overlap on the same stream. Root cause is not established.",
+  "handling": "Exclude this unclassifiable target inventory from stage attribution and use identical retained control indices. Preserve raw trace and every native round; no duration-based rejection or fabricated stage duration.",
+  "private_content_included": false
+}

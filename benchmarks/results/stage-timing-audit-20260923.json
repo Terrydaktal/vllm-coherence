@@ -56,7 +56,7 @@
   },
   "finding": "Direct CPU instrumentation is excluded from the archived GPU kernel sums. Neither their indirect observer effect nor the control residual is qualified as current production time.",
   "histogram": {
-    "source": "benchmarks/results/pi-coding-contexts.json",
+    "source": "benchmarks/results/pi-coding-contexts-20260923.json",
     "source_sha256": "daff799c2d1fd8adcf16a2fc3c10e2d330405803e487ebc652442c0ff40d1908",
     "contexts": {
       "0K": {
@@ -81,5 +81,8 @@
         "duplicate_round_numbers": []
       }
     }
+  },
+  "source_artifacts": {
+    "tools/analyze_release_timings.py": "benchmarks/fixtures/stage-timing-audit-20260923/analyze_release_timings.py"
   }
 }

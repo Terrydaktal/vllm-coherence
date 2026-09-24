@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("fault", [None, "row", "layout", "adapter", "binary", "source", "control"])
+@pytest.mark.parametrize(
+    "fault",
+    [None, "row", "layout", "adapter", "binary", "source", "control", "wrapper"],
+)
 def test_tile_evidence_fails_closed(monkeypatch, tmp_path, fault):
     root = Path(__file__).parents[1] / "experiments/radiance-public"
     monkeypatch.syspath_prepend(str(root))
@@ -20,6 +23,7 @@ def test_tile_evidence_fails_closed(monkeypatch, tmp_path, fault):
         "pack_sha256": sources[names[0]],
         "probe_sha256": sources[names[1]],
         "binary_sha256": "a" * 64,
+        "wrapper_sha256": "c" * 64,
         "cases": [
             {
                 "M": m,
@@ -48,6 +52,8 @@ def test_tile_evidence_fails_closed(monkeypatch, tmp_path, fault):
         report["pack_sha256"] = "b" * 64
     elif fault == "control":
         report["negative_control_detected"] = False
+    elif fault == "wrapper":
+        report["wrapper_sha256"] = "old wrapper"
     path = tmp_path / "evidence.json"
     path.write_text(json.dumps(report))
     entry = {
@@ -55,6 +61,7 @@ def test_tile_evidence_fails_closed(monkeypatch, tmp_path, fault):
         "qualification_sha256": module.digest(path),
         "sources": sources,
         "binary_sha256": "a" * 64,
+        "wrapper_sha256": "c" * 64,
     }
     if fault:
         with pytest.raises(ValueError):

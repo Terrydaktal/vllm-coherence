@@ -1,0 +1,23 @@
+{
+  "vllm/model_executor/layers/mamba/gdn/qwen_gdn_linear_attn.py": "05cc80646bf5f91cac2589e9780b7c8071f639f85203612c80a4886135d2065c",
+  "vllm/third_party/flash_linear_attention/ops/fused_recurrent.py": "00a3b971b0dbb6ed26e246970a0e1a21a9a174030974685bdd3f0c8ab5fb4bfe",
+  "vllm/third_party/flash_linear_attention/ops/fused_gdn_prefill_post_conv.py": "590717b2107abc90d72548de06b5d315229eb2775c94614f3f545df11cc2b5df",
+  "vllm/third_party/flash_linear_attention/ops/l2norm.py": "520f4513ef4fc97e6b88dc07877cca8e29da0d34e44673fe989e3af002d86381",
+  "vllm/model_executor/layers/layernorm.py": "3460eba01758849027bb59b8592626406e33ab25b23d2def729bb0ec42afce67",
+  "vllm/model_executor/layers/rotary_embedding/common.py": "39bf5bb498ae45ca7a38269e85aa8b9b257a00c919e2d4d14a7ceb44ac7e9c98",
+  "radiance_mxfp4.py": "7fd10b2d5b6a6c3853583eb71ca10dfcaf6784694c7941bd1e28968addcb88f2",
+  "radiance_gdn.py": "e4b4a735804c490f52bee2a11735a7a3b29a9c5209bdc0fa34f452f96595aafb",
+  "transformers/models/qwen3_5/modeling_qwen3_5.py": "67cf849081143a998f0e189c551e4b5f532365a055805570747385e400372abb",
+  "vllm/third_party/flash_linear_attention/ops/layernorm_guard.py": "0ca5e46aab408b80d673561b91cf7bff7987c71d798d3bdacac75b7e29416f49",
+  "radiance_r4d_attn.py": "6d4b4571c938003d79e2edc322d1eadc674e30781597845a59b59b8065a6fd0a",
+  "vllm/model_executor/models/qwen3_5.py": "d5fa8f7c99c5cac89bfb0c0288bab58c846ee27b9733178bf957ca44b9d1392d",
+  "vllm/model_executor/models/qwen3_next.py": "5aeac6c81bfa7c680e517106aecb7741a0a4e90fa52de77f0be1eadebc7516fa",
+  "vllm/model_executor/layers/activation.py": "157cb7610fba4237350daf7ec3b58c34c7f3fb38de8ff7b9e55584a69ca475c3",
+  "vllm/envs.py": "f596585ba92c05504b6815d24c7e75f6910f925aa5b6c5d57ce898dbed40c4d9",
+  "vllm/third_party/flash_linear_attention/ops/fused_sigmoid_gating.py": "000ab8996af9788fdb8843a6a3b91833e7a14c8acc0e1ea073a536330f64cb6f",
+  "gemm/candidate.hip": "0507fbdfef3c348266b011069bd55222f5cd3a8adeea4e1f272c154dd45a5f79",
+  "gemm/build.json": "bae3f2c325442850c9194eabf650f5f17b2098d6c85e650626aa1c288f216136",
+  "coherence/stock_gdn_scan_kernel.py": "bc38321d7a0954d718f86e0f6b19d6b6ad9218cf88aeb03d49e08953bd5e7163",
+  "coherence/stock_gdn_norm_quant.py": "e54603b85c954cbbe226299c1bcff59d1021b53f8f181f9587af5894405b7158",
+  "coherence/stock_fp8_epilogue.hip": "32b75658415902658ffc094f6e399c53bbacfd61a592e3b8083816ca619c4c99"
+}

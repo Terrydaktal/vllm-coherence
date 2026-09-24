@@ -27,7 +27,9 @@ def m1_splits(context):
 
 def split_groups(width, bound):
     if type(width) is not int or not 1 <= width <= 8 or bound < width:
-        raise DiagnosticError("independent attention query range is outside the contract")
+        raise DiagnosticError(
+            "independent attention query range is outside the contract"
+        )
     groups = []
     for row in range(width):
         splits = m1_splits(bound - width + row + 1)
@@ -64,8 +66,17 @@ class StockM1Attention:
 
         import radiance_r4d_attn as native
 
-        if hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest() != ATTENTION_SOURCE:
-            raise DiagnosticError("independent attention requires the pinned Radiance wrapper")
+        if (
+            hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest()
+            != ATTENTION_SOURCE
+        ):
+            from attention_precision_release import wrapper_source
+
+            source = Path(native.__file__).read_text()
+            if wrapper_source(source) != source:
+                raise DiagnosticError(
+                    "independent attention requires the pinned Radiance wrapper"
+                )
         self.calls = self.rows = 0
         original = native.R4DAttentionImpl.forward
 
@@ -105,7 +116,9 @@ class StockM1Attention:
                 or output_scale is not None
                 or output_block_scale is not None
             ):
-                raise DiagnosticError("independent attention requires one unmixed decode sequence")
+                raise DiagnosticError(
+                    "independent attention requires one unmixed decode sequence"
+                )
             width = plan[0][2]
             if (impl.num_heads, impl.num_kv_heads, impl.head_size) != (24, 4, 256):
                 raise DiagnosticError(
@@ -114,7 +127,9 @@ class StockM1Attention:
             full_output = output
             query, output = active_decode_buffers(query, output, width)
             if query.dtype != torch.bfloat16 or output.dtype != query.dtype:
-                raise DiagnosticError("independent attention query/output dtype changed")
+                raise DiagnosticError(
+                    "independent attention query/output dtype changed"
+                )
             variant, block_stride, head_stride = impl._geometry(kv_cache, query, output)
             groups = split_groups(width, md.r4d_max_ctx)
             table = md.block_table[:1].expand(width, -1).contiguous()
@@ -128,7 +143,9 @@ class StockM1Attention:
                 scales.append(
                     None
                     if scale == 1.0
-                    else torch.full((width, 4), scale, device=query.device, dtype=torch.float32)
+                    else torch.full(
+                        (width, 4), scale, device=query.device, dtype=torch.float32
+                    )
                 )
             for start, stop, splits in groups:
                 rows = stop - start
@@ -136,7 +153,9 @@ class StockM1Attention:
                     rows, 1, 24, 4, 256, md.r4d_max_ctx, splits
                 )
                 if needed > md.r4d_scratch.numel() * md.r4d_scratch.element_size():
-                    raise DiagnosticError("independent attention scratch capacity is insufficient")
+                    raise DiagnosticError(
+                        "independent attention scratch capacity is insufficient"
+                    )
                 native._DECODE[variant](
                     query[start:stop].data_ptr(),
                     kv_cache.data_ptr(),

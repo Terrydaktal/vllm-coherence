@@ -123,9 +123,8 @@ extern "C" int qwen_stock_fp8_norm(const void *x, const void *r, const void *w,
     void *q, void *s, void *carry, int rows, long sx, long sr, float eps, void *stream) {
   if (rows < 1 || rows > 2048 || sx < 5120 || (r && sr < 5120) || !x || !w || !q || !s || (r && !carry))
     return static_cast<int>(hipErrorInvalidValue);
-  // PyTorch's vectorized row reduction uses 512 lanes for M1 and
-  // 64/32 lanes for batches with 8/16 or more outputs. Corrected decode
-  // intentionally retains M1 arithmetic through eight positions.
+  // Preserve the M1 reduction for every row, including prefill. Selecting
+  // 64/32 lanes by batch size changed FP8 bytes at BF16 rounding boundaries.
 #define LAUNCH_NORM(T) \
   if (r) hipLaunchKernelGGL((norm_quant<true, T>), dim3(rows), dim3(T), 0, static_cast<hipStream_t>(stream), \
     (const uint16_t*)x, (const uint16_t*)r, (const uint16_t*)w, (unsigned char*)q, \
@@ -133,9 +132,7 @@ extern "C" int qwen_stock_fp8_norm(const void *x, const void *r, const void *w,
   else hipLaunchKernelGGL((norm_quant<false, T>), dim3(rows), dim3(T), 0, static_cast<hipStream_t>(stream), \
     (const uint16_t*)x, nullptr, (const uint16_t*)w, (unsigned char*)q, \
     (float*)s, nullptr, sx, sr, eps)
-  if (rows <= 8) { LAUNCH_NORM(512); }
-  else if (rows < 16) { LAUNCH_NORM(64); }
-  else { LAUNCH_NORM(32); }
+  LAUNCH_NORM(512);
 #undef LAUNCH_NORM
   return static_cast<int>(hipGetLastError());
 }

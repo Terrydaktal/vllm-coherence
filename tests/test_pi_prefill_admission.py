@@ -9,7 +9,9 @@ import pytest
 
 @pytest.fixture
 def admission(monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "experiments/radiance-public"))
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).parents[1] / "experiments/radiance-public")
+    )
     return importlib.import_module("pi_prefill_admission")
 
 
@@ -19,7 +21,9 @@ def write_report(module, tmp_path, report, names):
     return {
         "qualification": str(path),
         "qualification_sha256": module.digest(path),
-        "sources": {name: module.digest(Path(module.__file__).with_name(name)) for name in names},
+        "sources": {
+            name: module.digest(Path(module.__file__).with_name(name)) for name in names
+        },
     }
 
 
@@ -28,14 +32,19 @@ def gdn_report(module):
         "status": "SAMPLE_CHECKED",
         "sites": 48,
         "input_rows_per_site": 1000,
-        "source_sha256": module.digest(Path(module.__file__).with_name("stock_gdn_norm_quant.py")),
+        "source_sha256": module.digest(
+            Path(module.__file__).with_name("stock_gdn_norm_quant.py")
+        ),
         "negative_control_detected": True,
         "checks": [
             {"site": site, "width": width, "matching_rows": 1000}
             for site in range(48)
             for width in (1, 8)
         ]
-        + [{"prefill_width": width, "equal": True} for width in (9, 320, 1000, 1648, 2048)],
+        + [
+            {"prefill_width": width, "equal": True}
+            for width in (9, 320, 1000, 1648, 2048)
+        ],
     }
 
 
@@ -72,7 +81,9 @@ def test_gdn_requires_every_site_width_and_fault_control(admission, tmp_path, fa
 
 
 def test_changed_report_or_source_cannot_reuse_qualification(admission, tmp_path):
-    entry = write_report(admission, tmp_path, gdn_report(admission), ("stock_gdn_norm_quant.py",))
+    entry = write_report(
+        admission, tmp_path, gdn_report(admission), ("stock_gdn_norm_quant.py",)
+    )
     bad = dict(entry, sources={"stock_gdn_norm_quant.py": "0" * 64})
     with pytest.raises(ValueError, match="implementation changed"):
         admission.gdn_evidence(bad)
@@ -81,12 +92,28 @@ def test_changed_report_or_source_cannot_reuse_qualification(admission, tmp_path
         admission.gdn_evidence(entry)
 
 
+@pytest.mark.parametrize("row_invariant", [False, True])
+def test_norm_evidence_must_use_the_selected_arithmetic(
+    admission, tmp_path, row_invariant
+):
+    report = gdn_report(admission)
+    report["row_invariant"] = row_invariant
+    entry = write_report(admission, tmp_path, report, ("stock_gdn_norm_quant.py",))
+    entry["row_invariant"] = row_invariant
+    admission.gdn_evidence(entry)
+    entry["row_invariant"] = not row_invariant
+    with pytest.raises(ValueError, match="different normalization contract"):
+        admission.gdn_evidence(entry)
+
+
 def test_scan_requires_actual_adapter_not_just_alternative_tiles(admission, tmp_path):
     names = ("optimized_prefill_scan.py", "probe_prefill_tiles.py")
     report = {
         "status": "SAMPLE_CHECKED",
         "negative_control_detected": True,
-        "sources": {n: admission.digest(Path(admission.__file__).with_name(n)) for n in names},
+        "sources": {
+            n: admission.digest(Path(admission.__file__).with_name(n)) for n in names
+        },
         "checks": [
             {"tokens": rows, "tile": tile, "exact": True}
             for rows in (1, 8, 64, 320, 1000, 1648, 2048)

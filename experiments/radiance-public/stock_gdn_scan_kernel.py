@@ -89,7 +89,8 @@ def stock_gdn_scan_kernel(
         A_log_val = tl.load(A_log + i_hv).to(tl.float32)
         dt_bias_val = tl.load(dt_bias + i_hv).to(tl.float32)
         x = a_val + dt_bias_val
-        softplus_x = tl.where(x <= 20.0, tl.log(1.0 + tl.exp(x)), x)
+        # Keep tiny nonzero gates: adding exp(x) to 1 first cancels them in FP32.
+        softplus_x = tl.where(x <= 20.0, tl.extra.libdevice.log1p(tl.exp(x)), x)
         g_val = -tl.exp(A_log_val) * softplus_x
         beta_val = tl.sigmoid(b_val).to(b.dtype.element_ty).to(tl.float32)
         b_h *= exp(g_val)

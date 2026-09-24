@@ -1,0 +1,76 @@
+{
+  "schema": "urn:coherence:m1-arithmetic-contract:v2",
+  "id": "qwen38-mxfp4-fp8-m1-row-invariant-v2",
+  "status": "DECLARED; complete-model conformance UNPROVED",
+  "model": {
+    "architecture": "Qwen3.8 target: 64 layers, hidden 5120, 48 GDN and 16 full-attention layers",
+    "weights": "Exact checkpoint tensor identities in each audit result; no requantization",
+    "checkpoint_identity_source": "benchmarks/results/eager-m1-all-stages-20260924.json"
+  },
+  "intentional_approximations": {
+    "weights": "E2M1 signed nibble times E8M0 scale per 32 coefficients; low nibble first; exact reconstruction of stored codes",
+    "activations": "OCP E4M3FN dynamic per-token scaling at declared BF16 boundaries",
+    "kv": "OCP E4M3FN with the request's stored FP32 K/V descales; BF16 alternative has a separate storage identity",
+    "attention": "Native full causal attention; no Quest or other sparse selector",
+    "global512": "Separate approximate serving policy. Neither shortlist completeness nor bit-identical reranked scores are certified by this contract. Full vocabulary scoring is used to isolate backbone comparisons."
+  },
+  "scalar_rules": {
+    "bf16_store": "Round to nearest, ties to even; retain the signed-zero bit",
+    "fp32": "IEEE binary32 rounding after each declared operation; a permitted FMA is one rounding, never silently interchangeable with separate multiply/add",
+    "fp8_store": "OCP E4M3FN round to nearest ties even, saturate finite to [-448,448]; FNUZ is a distinct unsupported format",
+    "nonfinite": "Nonfinite inputs, intermediates or outputs are explicit qualification failures/unsupported cases, never a successful equality check. This does not claim all production wrappers enforce that condition.",
+    "transcendentals": "The exact rsqrt/exp/log1p implementation must be bound to its executable artifact. FP64 mathematical comparisons measure error; they do not establish bit identity with a GPU intrinsic.",
+    "denormals": "No blanket flush-to-zero allowance. Per-kernel denormal behavior remains an explicit unproved obligation where not independently checked."
+  },
+  "activation_quantization": {
+    "input": "The declared preceding BF16 result widened exactly to FP32",
+    "scale": "max(FP32(max(abs(input))/448), FP32(1/(448*512))) per token",
+    "codes": "E4M3FN_RNE_satfinite(FP32(input/scale))",
+    "matmul_input": "Exact code reconstruction times the stored FP32 scale",
+    "forbidden": "Quantizing an unrounded fused FP32 temporary when the contract requires a BF16 boundary"
+  },
+  "hidden_normalization": {
+    "reference": "experiments/radiance-public/m1_arithmetic_contract.py:hidden_norm",
+    "shape": "[rows,5120], same row arithmetic for M1, M8 and prefill",
+    "residual": "z=FP32(widen(x)+widen(residual)); carry=BF16_RNE(z); normalization consumes z before carry rounding",
+    "reduction": "512 logical lanes; four component accumulators per lane; vector indices lane+512*j; FP32 square then add; combine components left-to-right; combine lane groups at offsets 256,128,64,32 then increasing intra-wave offsets 1,2,4,8,16",
+    "inverse": "FP32(rsqrt_binary64(FP64(FP32(FP32(sum*FP32(1/5120))+eps)))))",
+    "output": "BF16_RNE(FP32(FP32(z*inverse)*FP32(widen(weight)+1)))",
+    "contraction": "Disabled for square, accumulation and output multiplies",
+    "batch_invariant": true
+  },
+  "gdn_gated_normalization": {
+    "shape": "48 heads of 128 BF16 values per token; BF16 or FP32 scale weights",
+    "reduction": "FP32 square/reduction with the M1 per-head layout: four adjacent components per lane, 32 lanes; preserve this numerical layout when batching rows",
+    "formula": "u=FP32(FP32(x*rsqrt(FP32(mean(x*x)+eps)))*weight); g=FP32(z*sigmoid_FP32(z)); y=BF16_RNE(FP32(u*g))",
+    "boundaries": "No BF16 cast between normalization, weight multiplication and gating. Exactly one final BF16 output boundary before any FP8 conversion.",
+    "choice": "Preserve the already repaired native M1 contract. Adding Hugging Face's intermediate BF16 casts would select a different arithmetic target and is not an automatic correctness repair.",
+    "transcendental_binding": "Pinned layernorm_guard.py / Gluon intrinsic implementation; exact real-function equality is not asserted."
+  },
+  "gdn_recurrence": {
+    "qkv": "BF16 inputs widened to FP32; Q/K normalization stays FP32",
+    "beta": "BF16_RNE(sigmoid_FP32(b)) widened to FP32",
+    "softplus": "Stable log1p(exp(x)) for x<=20, x otherwise; x=FP32(a+dt_bias). Never log(1+exp(x)) with a rounded add that cancels small gates.",
+    "state": "FP32 persistent delta-rule state; causal sequential transitions; retained multiply-add contraction must match the pinned M1 operation",
+    "output": "BF16_RNE of the output dot product",
+    "history": "Existing nine-slot layout; physical slots may differ but logical state and accepted-prefix versions must agree",
+    "historical_contract": "gdn-stock-m1-arithmetic-v1.json records the old unstable-softplus artifact; its old hashes are historical evidence, not the current reference identity."
+  },
+  "other_boundaries": {
+    "projection": "Exact decoded stored MXFP4 coefficients and declared FP8 activations; FP32 accumulation, final BF16_RNE. Row folding cannot remove representable coefficients. Reduction-order bit equivalence remains a separately checked obligation.",
+    "convolution": "BF16 history and inputs, declared native FP32 convolution/SiLU arithmetic, final BF16 output; rejected rows cannot modify retained history",
+    "rope": "Stored frequency construction and position layout are part of the identity; FP32 rotation with corrected BF16_RNE output, untouched nonrotary values exact",
+    "attention": "BF16 Q/K operands preserve range; FP32 QK accumulation and post-dot scale; FP32 softmax; high-plus-residual probability/value product; FP32 unnormalised split numerators/denominators; final BF16_RNE. Independent dense FP64 oracle separately quantifies finite-precision error.",
+    "mlp": "BF16_RNE(SiLU_FP32(gate)), then BF16_RNE(product with BF16 up); FP8 conversion only after that second boundary",
+    "final_norm": "BF16 output; no serving FP8 final norm",
+    "sampler": "Explicit temperature/top-k/top-p and mask order; independent proposal and target replacement randomness; distribution checks are statistical, not identical-seed path proofs"
+  },
+  "conformance_obligations": [
+    "A row's normalized BF16/FP8 values and scales do not depend on batch partition or unrelated rows.",
+    "Independent coefficient reconstruction and full projection-output checks; sampled numerical criteria do not certify arbitrary inputs.",
+    "Physical page permutation with the same logical KV sequence preserves attention; padded future values and unreferenced pages are invisible.",
+    "Saved state carries its arithmetic identity. A normalization/state change needs a new snapshot namespace before production deployment.",
+    "Fresh complete-model M1/M8 and eager/compiled qualification is required after arithmetic changes; historical agreement is not inherited.",
+    "Record both original counterexamples and repaired outputs; never widen tolerances to make a failure pass."
+  ]
+}

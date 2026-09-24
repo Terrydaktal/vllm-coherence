@@ -57,8 +57,10 @@ def test_checkpoint_validation_requires_one_marker_and_all_headings():
         "Progress",
         "Measurements & Evidence",
         "Key Decisions",
-        "Open Risks",
-        "Next Actions",
+        "Rejected / Failed Approaches",
+        "Unresolved Questions & Hypotheses",
+        "Next Steps",
+        "Critical Context",
     ]
     text = "\n".join(f"### {heading}\nNone" for heading in headings)
     result = MODULE._checkpoint_validation(
@@ -69,3 +71,19 @@ def test_checkpoint_validation_requires_one_marker_and_all_headings():
 
 def test_checkpoint_validation_rejects_a_missing_marker():
     assert MODULE._checkpoint_validation("### Goal\nNone", "stop")["passed"] is False
+
+
+def test_compaction_prompt_requests_the_heading_syntax_its_validator_requires():
+    import re
+
+    headings = re.findall(r"^### .+$", MODULE.COMPACTION_PROMPT, re.MULTILINE)
+    assert len(headings) == 10
+    contract = MODULE._checkpoint_validation(
+        "\n".join(headings + [MODULE.COMPACTION_MARKER]), "stop"
+    )
+    assert contract["passed"] is True
+    pi_prompt = (
+        ROOT / "integrations/pi/qwen-loss-sensitive-compact-prompt.md"
+    ).read_text()
+    for heading in headings:
+        assert heading in pi_prompt.splitlines()

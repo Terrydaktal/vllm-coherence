@@ -15,9 +15,10 @@ from qwen_r9700_lab.diagnostic_contract import private_json, seal, write_private
 def qualify(args):
     spec = private_json(args.spec)
     os.environ.update(spec["environment"])
-    import radiance_r4d_attn as native
     import torch
     from stock_m1_attention_shared import SharedM1Attention
+
+    import radiance_r4d_attn as native
 
     torch.set_num_threads(2)
     torch.manual_seed(19023)
@@ -28,6 +29,15 @@ def qualify(args):
     )
     candidate = SharedM1Attention(args.build)
     previous = SharedM1Attention(args.previous_build) if args.previous_build else None
+    precision = None
+    if args.precision:
+        from attention_precision_runtime import PrecisionAttention
+
+        precision = PrecisionAttention(args.build)
+        native._DECODE = tuple(
+            getattr(precision, f"attn_decode_h256_gqa6_{dtype}kv")
+            for dtype in ("fp8", "bf16")
+        )
     # Every page offset, plus the points where the 32-split M1 tile allocation
     # changes. Testing/timing only offset zero hid the duplicate KV traversal.
     prefixes = tuple(
@@ -51,7 +61,10 @@ def qualify(args):
     table[0, :blocks] = torch.randperm(blocks, device="cuda", dtype=torch.int32)
     repeated = table.expand(8, -1).contiguous()
     guarded = torch.full(
-        (8 * 24 * 32 * 520 + 1024,), 0xA5, device="cuda", dtype=torch.uint8
+        (8 * 24 * 32 * candidate.partial_bytes + 1024,),
+        0xA5,
+        device="cuda",
+        dtype=torch.uint8,
     )
     scratch = guarded[512:-512]
     lengths = torch.empty((1,), device="cuda", dtype=torch.int32)
@@ -201,6 +214,11 @@ def qualify(args):
                 )
             graphs, samples = {}, {name: [] for name in functions}
             for name, function in functions.items():
+                reference = (
+                    function().clone()
+                    if name == "previous_shared_kv_queries" and args.precision
+                    else oracle
+                )
                 stream = torch.cuda.Stream()
                 stream.wait_stream(torch.cuda.current_stream())
                 with torch.cuda.stream(stream):
@@ -212,7 +230,7 @@ def qualify(args):
                     result = function()
                 graph.replay()
                 require(
-                    mismatches(result, oracle) == 0,
+                    mismatches(result, reference) == 0,
                     "captured attention differs from M1",
                 )
                 graphs[name] = (graph, result)
@@ -249,6 +267,9 @@ def qualify(args):
         "previous_build": previous.manifest["sha256"] if previous is not None else None,
         "graph_checks": True,
         "reference": "eight native M1 queries with the pinned 32-split graph contract",
+        "precision_repair": precision.manifest["sha256"]
+        if precision is not None
+        else None,
     }
 
 
@@ -257,6 +278,11 @@ def main():
     for name in ("spec", "build", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--previous-build", type=Path)
+    parser.add_argument(
+        "--precision",
+        action="store_true",
+        help="Compare repaired M8 against repaired M1; time the previous arithmetic separately",
+    )
     parser.add_argument("--allow-gpu", action="store_true")
     args = parser.parse_args()
     require(

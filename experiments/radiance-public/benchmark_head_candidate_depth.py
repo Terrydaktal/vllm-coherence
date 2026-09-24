@@ -1,6 +1,6 @@
 """Opt-in, head-only comparison inside an isolated copy of the serving release.
 
-The target continues using its original Global-256 result. The observer compares
+The target continues using its original configured result. The observer compares
 256/512/full on identical hidden rows; only numeric aggregates leave the worker.
 No production loader imports this module. Timing excludes comparison/reporting.
 """
@@ -166,13 +166,16 @@ def observe(module, original, root):
         ):
             return result
         if (
-            module.GLOBAL_TOPK != 256
+            module.GLOBAL_TOPK not in (256, 512)
             or bias is not None
             or hidden.shape[0] not in (1, 8)
         ):
             raise ValueError(
-                "benchmark requires the production Global-256 M1/M8 target path"
+                "benchmark requires a production Global-256/512 M1/M8 target path"
             )
+        observed_mode = f"global{module.GLOBAL_TOPK}"
+        if report.setdefault("observed_target_mode", observed_mode) != observed_mode:
+            raise ValueError("serving target-head depth changed during the comparison")
         label = control["label"]
         if label not in ("coding", "reasoning", "prose"):
             raise ValueError("unsupported public workload label")
@@ -216,9 +219,9 @@ def observe(module, original, root):
         )
         for name, function in functions.items():
             candidate = reference if name == "full" else function()
-            if name == "global256" and not torch.equal(candidate, result):
+            if name == observed_mode and not torch.equal(candidate, result):
                 raise ValueError(
-                    "probe Global-256 does not reproduce the actual returned target logits"
+                    "probe does not reproduce the actual returned target logits"
                 )
             stats = compare(reference, candidate)
             accumulate(report["modes"][name], stats)

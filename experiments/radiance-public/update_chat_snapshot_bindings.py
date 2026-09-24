@@ -5,6 +5,9 @@ import json
 import re
 from pathlib import Path
 
+from patch_draft_head_initialization import POSTIMAGE as DRAFT_POSTIMAGE
+from patch_draft_head_initialization import PREIMAGE as DRAFT_PREIMAGE
+from patch_draft_head_initialization import UPSTREAM as DRAFT_UPSTREAM
 from patch_gdn_extreme_decay import LIBRARY_SHA256, PREIMAGE, SOURCE_SHA256
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -42,18 +45,46 @@ manifest["runtime"] = {
             "radiance_request_guard.py",
             "patch_verify_head_memory.py",
             "patch_dflash_sampling_rng.py",
+            "patch_draft_head_initialization.py",
             "patch_gdn_extreme_decay.py",
             "gdn_extreme_decay_reference.hip",
             "qwen-fixed-v22.3.jinja",
         )
     },
 }
+manifest["runtime"]["draft_head_initialization"] = {
+    "installer": "patch_draft_head_initialization.py",
+    "upstream_commit": DRAFT_UPSTREAM,
+    "source_preimage_sha256": DRAFT_PREIMAGE,
+    "source_postimage_sha256": DRAFT_POSTIMAGE,
+    "contract": (
+        "Always defer INT2 draft-head packing until the real shared lm_head is passed to first use; "
+        "unchanged quantizer, target arithmetic and snapshot data layout."
+    ),
+    "verification": (
+        "CPU lifecycle and installed-source regressions; no new GPU throughput or "
+        "full-model numerical qualification claimed."
+    ),
+}
 if profile.get("optimized_d7"):
     manifest["runtime"]["optimized_d7"] = profile["optimized_d7"]
     for name in ("optimized-release.json", "optimized_pi_release.py"):
         manifest["runtime"]["release_files"][name] = sha(BASE / name)
+    if profile["optimized_d7"].get("m1_arithmetic"):
+        for name in (
+            "m1_arithmetic_release.py",
+            "mxfp4_fold_precision.py",
+            "patch_gdn_stable_softplus.py",
+            "probe_m1_arithmetic_repairs.py",
+            "stock_gdn_scan_kernel.py",
+        ):
+            manifest["runtime"]["release_files"][name] = sha(BASE / name)
+    if profile["optimized_d7"].get("attention_precision"):
+        for name in profile["optimized_d7"]["attention_precision"]["sources"]:
+            manifest["runtime"]["release_files"][name] = sha(BASE / name)
     if profile["optimized_d7"].get("target_head", {}).get("mode") in (
-        "global256", "global512"
+        "global256",
+        "global512",
     ):
         manifest["runtime"]["release_files"]["radiance_verifyhead_global.py"] = sha(
             BASE / "radiance_verifyhead_global.py"
@@ -62,7 +93,9 @@ rocr_path = BASE / "rocr-poll-backoff/runtime.json"
 if rocr_path.exists():
     # Keep the already-qualified CPU backoff when refreshing scheduler bindings.
     manifest["runtime"]["rocr_poll_backoff"] = json.loads(rocr_path.read_text())
-    manifest["runtime"]["release_files"]["rocr-poll-backoff/runtime.json"] = sha(rocr_path)
+    manifest["runtime"]["release_files"]["rocr-poll-backoff/runtime.json"] = sha(
+        rocr_path
+    )
 manifest["runtime"]["draft_sampling"] = {
     "installer": "patch_dflash_sampling_rng.py",
     "upstream_pr": "https://github.com/vllm-project/vllm/pull/54282",
@@ -102,7 +135,9 @@ manifest["runtime"]["memory_report"] = {
     "schema": "urn:qwen-r9700:radiance-memory:v1",
     "interval_seconds": 1,
     "directory": "/dev/shm/qwen-radiance-memory-v1",
-    "worker_preimage_sha256": profile["source_preimages"]["vllm/v1/worker/gpu_worker.py"],
+    "worker_preimage_sha256": profile["source_preimages"][
+        "vllm/v1/worker/gpu_worker.py"
+    ],
     "contract": (
         "one shared CPU counter sampler; bounded startup/on-request storage inventory; "
         "no GPU work, tensor values, synchronization, cache clearing, or peak resets"
@@ -118,6 +153,10 @@ manifest["runtime"]["memory_report"] = {
     },
     "compatible_runtime_abis": [
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
+        # Candidate-only M1 bootstrap support does not alter the current serving
+        # profile. A future M1 deployment changes data_abi and cannot reuse this
+        # running predecessor even when its runtime identifier is listed here.
+        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
     ],
 }
 manifest["runtime"]["buffered_tool_usage"] = {
@@ -138,6 +177,11 @@ manifest["runtime"]["fair_scheduler"] = {
         "higher priority 2 parks a response at the next safe synchronous step"
     ),
     "maximum_cached_chats": 2,
+    "pinned_host_page_policy": (
+        "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation "
+        "and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership "
+        "and existing snapshot data ABI"
+    ),
     "runner_state_slots": 2,
     "maximum_dispatched_sequences": 1,
     "answer_priority": {
@@ -156,7 +200,9 @@ manifest["runtime"]["fair_scheduler"] = {
         "contract": (
             "parser outcome through local engine IPC; no text; no blocking of client stream"
         ),
-        "engine_core_preimage_sha256": (profile["source_preimages"]["vllm/v1/engine/core.py"]),
+        "engine_core_preimage_sha256": (
+            profile["source_preimages"]["vllm/v1/engine/core.py"]
+        ),
     },
     "handover": (
         "flush pending stores; discard a superseded same-chat generation in place; "
@@ -203,7 +249,9 @@ data_contract = {
     "serving": manifest["serving"],
     "layout": "qwen-chat-cache-v1; complete-window-plus-eagle-page; retained-mamba-pages=3",
 }
-previous_data_abi = hashlib.sha256(json.dumps(data_contract, sort_keys=True).encode()).hexdigest()
+previous_data_abi = hashlib.sha256(
+    json.dumps(data_contract, sort_keys=True).encode()
+).hexdigest()
 data_contract["prefill_math"] = prefill_math
 if profile.get("optimized_d7"):
     data_contract["optimized_arithmetic"] = profile["optimized_d7"]["arithmetic"]
@@ -219,7 +267,9 @@ if profile.get("optimized_d7"):
             "the backbone, state layout and processed-prefix identity are unchanged. "
             "The effective output head is recorded in runtime.optimized_d7.target_head."
         )
-data_abi = hashlib.sha256(json.dumps(data_contract, sort_keys=True).encode()).hexdigest()
+data_abi = hashlib.sha256(
+    json.dumps(data_contract, sort_keys=True).encode()
+).hexdigest()
 manifest["storage"]["data_abi"] = data_abi
 manifest["storage"]["data_contract"] = data_contract
 prior_storage = prior.get("storage", {})
@@ -269,6 +319,16 @@ manifest["storage"]["chat_snapshots"] = {
     "legacy": "unlabelled requests bypass the durable snapshot tier",
 }
 manifest_path = BASE / "snapshot-abi-chat-cache-v1.json"
+if profile.get("optimized_d7", {}).get(
+    "attention_boundary_qualification"
+) and not profile["optimized_d7"].get("m1_arithmetic"):
+    manifest["storage"]["attention_boundary_compatibility"] = (
+        "Retain the declared corrected M1 arithmetic and existing nine-slot state layout. "
+        "The shared M8 attention traversal changes work sharing across page boundaries; "
+        "exact sampled operator output and natural Pi output agreement are bound in "
+        "runtime.optimized_d7.attention_boundary_qualification. Existing processed-prefix "
+        "snapshots remain compatible; this is sampled evidence, not a universal equivalence proof."
+    )
 manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 abi = sha(manifest_path)
 launcher = BASE / "launch_public_clean_snapshot_server.sh"

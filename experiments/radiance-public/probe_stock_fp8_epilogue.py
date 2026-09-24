@@ -63,7 +63,10 @@ def run(args):
     for m in (1, 8):
         for residual in (False, True):
             for start in range(0, 320, m):
-                inp, res = x[start : start + m], r[start : start + m] if residual else None
+                inp, res = (
+                    x[start : start + m],
+                    r[start : start + m] if residual else None,
+                )
                 expected = frozen(inp, res, w, 1e-6)
                 normed, carry = expected if residual else (expected, None)
                 eq, es = quant(normed)
@@ -78,7 +81,9 @@ def run(args):
     gu[1] *= 1e-20
     # Exercise all finite BF16 gate encodings, with a bounded up projection.
     values = (
-        torch.arange(65536, device="cuda", dtype=torch.int32).to(torch.int16).view(torch.bfloat16)
+        torch.arange(65536, device="cuda", dtype=torch.int32)
+        .to(torch.int16)
+        .view(torch.bfloat16)
     )
     values = values[torch.isfinite(values)]
     gu[2:6, :17408].copy_(values.repeat(2)[: 4 * 17408].reshape(4, 17408))
@@ -144,10 +149,16 @@ def run(args):
                 end.record()
                 end.synchronize()
                 samples.append(start.elapsed_time(end) / 100)
-            report["timings"].append({"stage": name, "rows": m, "ms": sorted(samples)[2]})
+            report["timings"].append(
+                {"stage": name, "rows": m, "ms": sorted(samples)[2]}
+            )
         for stage in ("norm", "silu"):
             for index, (got, expected) in enumerate(
-                zip(outputs[stage + "-fused"], outputs[stage + "-reference"], strict=True)
+                zip(
+                    outputs[stage + "-fused"],
+                    outputs[stage + "-reference"],
+                    strict=True,
+                )
             ):
                 compare(f"graph/{stage}-m{m}-{index}", got, expected)
     bad = cq.view(torch.uint8).clone()
@@ -172,15 +183,18 @@ def run(args):
 
 
 def qualify_prefill(args, candidate, compare, report):
-    """Use every actual decoder weight; preserve large-batch native arithmetic."""
+    """Check every decoder weight against the explicitly selected norm contract."""
     import torch
     from safetensors import safe_open
     from vllm import _custom_ops as ops
     from vllm.config import VllmConfig, set_current_vllm_config
     from vllm.model_executor.layers.layernorm import GemmaRMSNorm
+    from stock_m1_norm import StockM1Norm
 
     model = Path("/models/Qwen3.8-27B-Uncensored-MXFP4-awq")
-    index = json.loads((model / "model.safetensors.index.json").read_text())["weight_map"]
+    index = json.loads((model / "model.safetensors.index.json").read_text())[
+        "weight_map"
+    ]
     names = sorted(
         n
         for n in index
@@ -191,6 +205,8 @@ def qualify_prefill(args, candidate, compare, report):
         raise RuntimeError("prefill decoder norm inventory changed")
     with set_current_vllm_config(VllmConfig()):
         module = GemmaRMSNorm(5120, eps=1e-6).to(device="cuda", dtype=torch.bfloat16)
+    canonical = StockM1Norm(args.reference) if args.row_invariant else None
+    report["row_invariant"] = args.row_invariant
     torch.manual_seed(20260918)
     x = torch.randn(2048, 5120, device="cuda", dtype=torch.bfloat16)
     residual = torch.randn_like(x)
@@ -206,9 +222,15 @@ def qualify_prefill(args, candidate, compare, report):
         for width in (9, 15, 16, 320, 1000, 1648, 2048) if site == 0 else (1000,):
             for has_residual in (False, True):
                 xx, rr = x[:width], residual[:width] if has_residual else None
-                result = module.forward_native(xx, rr)
+                result = (
+                    canonical(xx, rr, module.weight, 1e-6)
+                    if canonical is not None
+                    else module.forward_native(xx, rr)
+                )
                 y, carry = result if has_residual else (result, None)
-                q, scale = ops.scaled_fp8_quant(y, scale=None, use_per_token_if_dynamic=True)
+                q, scale = ops.scaled_fp8_quant(
+                    y, scale=None, use_per_token_if_dynamic=True
+                )
                 actual = candidate.norm(xx, rr, module.weight, 1e-6)
                 prefix = f"prefill-site{site}-m{width}-r{int(has_residual)}"
                 for label, got, expected in zip(
@@ -226,6 +248,11 @@ if __name__ == "__main__":
     for name in ("build", "reference", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--allow-gpu", action="store_true")
+    parser.add_argument(
+        "--row-invariant",
+        action="store_true",
+        help="Use the declared M1 arithmetic for prefill rows too",
+    )
     args = parser.parse_args()
     if not args.allow_gpu or not os.environ.get("QWEN_CONFORMANCE_GPU_LOCK"):
         raise RuntimeError("explicit GPU admission and lease required")

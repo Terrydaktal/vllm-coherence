@@ -1,0 +1,414 @@
+{
+  "schema": "coherence-current-320-confirmations-v1",
+  "status": "SAMPLE_CHECKED",
+  "prefix_tokens": 60000,
+  "decode_tokens_per_arm": 320,
+  "prefill_predictions_per_arm": 1,
+  "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+  "optimized_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+  "scope": "Current corrected release: common forced Pi tokens, fresh prefill in every arm; full BF16 comparison head; no snapshot reuse. Approximate Global-512 support has separate evidence.",
+  "limits": "Finite agreement, not arbitrary-input proof, independent model certification, natural completion quality, all rejection histories or snapshot/concurrency qualification. This 320-token slice was recovered from the retained Pi corpus and differs from the historical standalone 320 fixture.",
+  "executions": {
+    "compiled-m1": {
+      "metadata_sha256": "1fe09c59d0127c6d3c9324dae090923653a33d7cc386db159be0d0c924efc357",
+      "private_rows_sha256": "c39441f74e2fef1872450dda6f7cb8ea5c4055aaca9cc07f0c46cf94cc29d715",
+      "sample_sha256": "39cad6ec136c3b7e53ad9cb99a23282e6e28fe03e81ef727896414100e8a300c",
+      "binding": {
+        "arm": "compiled-m1",
+        "driver_sha256": "5eb038e360de4c2d0aa2019d6ece82f81a95c48cec8d6807ea72299612208835",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "6faa9b40b0a54756531933b8a36c0bfbafcda1ffbc786545baae5995f894a8ad"
+      },
+      "compilation_mode": 3,
+      "graph_mode": "PIECEWISE",
+      "target_graph_replays": 20800,
+      "eager_rotary_repair": null
+    },
+    "compiled-m8": {
+      "metadata_sha256": "ca04179de5ae4d430893ce774807111d72ee26632c340e671777bb3e58f9f629",
+      "private_rows_sha256": "c993a5da8651e5e0c48f5b5fa671224001c70efa24cfafb569f477c86370d7fe",
+      "sample_sha256": "a86b284ddf26b40caa7f2d0b6bfcf55b6a26df68a62da13698dc1ff5d8cefe36",
+      "binding": {
+        "arm": "compiled-m8",
+        "driver_sha256": "5eb038e360de4c2d0aa2019d6ece82f81a95c48cec8d6807ea72299612208835",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "6faa9b40b0a54756531933b8a36c0bfbafcda1ffbc786545baae5995f894a8ad"
+      },
+      "compilation_mode": 3,
+      "graph_mode": "PIECEWISE",
+      "target_graph_replays": 2600,
+      "eager_rotary_repair": null
+    },
+    "eager-m1": {
+      "metadata_sha256": "06a049f971b83216269d890a8e10d1d8558b56e8300d898f4993fa03f53691ff",
+      "private_rows_sha256": "1bda45ec547c8400853f1afed78a3f1ad0bb7b229e3f74e4001b8fa6e5b7c14d",
+      "sample_sha256": "3d5aa905ef402adab8c8007730c6dbc7345e46cdf3c091a198be0275c294b42d",
+      "binding": {
+        "arm": "eager-m1",
+        "driver_sha256": "e7cdc6d64e92c9511734fcceef25304debaf17d7990c76893957b83db0e8538f",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "6faa9b40b0a54756531933b8a36c0bfbafcda1ffbc786545baae5995f894a8ad"
+      },
+      "compilation_mode": 0,
+      "graph_mode": "NONE",
+      "target_graph_replays": 0,
+      "eager_rotary_repair": {
+        "calls": 80,
+        "identity": {
+          "installed_before_load": true,
+          "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+          "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+          "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+          "schema": "qwen.rotary-rne-worker.v1",
+          "scope": "Eager native MRoPE product rounding only; no installed files changed.",
+          "sha256": "17aa5ab70f2e12df93221501012bdbfc46c18b02f790ca3f8f31b6122e0075b2",
+          "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+        }
+      }
+    },
+    "eager-m8": {
+      "metadata_sha256": "523093a2e12040e3bcf34b2a84c488784fc9dfb907354a5b3025a59926ed03d0",
+      "private_rows_sha256": "ee37e0689ac2d40a9e02d2414507c484bd261fd290cfd91caa31d91d54121b16",
+      "sample_sha256": "34c09c478685777f1072b186e7c0245f6a4cd4d6748aef65db0144b2410e3590",
+      "binding": {
+        "arm": "eager-m8",
+        "driver_sha256": "e7cdc6d64e92c9511734fcceef25304debaf17d7990c76893957b83db0e8538f",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "6faa9b40b0a54756531933b8a36c0bfbafcda1ffbc786545baae5995f894a8ad"
+      },
+      "compilation_mode": 0,
+      "graph_mode": "NONE",
+      "target_graph_replays": 0,
+      "eager_rotary_repair": {
+        "calls": 112,
+        "identity": {
+          "installed_before_load": true,
+          "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+          "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+          "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+          "schema": "qwen.rotary-rne-worker.v1",
+          "scope": "Eager native MRoPE product rounding only; no installed files changed.",
+          "sha256": "17aa5ab70f2e12df93221501012bdbfc46c18b02f790ca3f8f31b6122e0075b2",
+          "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+        }
+      }
+    }
+  },
+  "comparisons": {
+    "compiled-m1_vs_compiled-m8": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 0,
+          "candidate_boundary_tied": 0,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 88,
+          "candidate_boundary_tied": 88,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 125,
+          "candidate_boundary_tied": 125,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    },
+    "eager-m1_vs_compiled-m1": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 0,
+          "candidate_boundary_tied": 0,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 88,
+          "candidate_boundary_tied": 88,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 125,
+          "candidate_boundary_tied": 125,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    },
+    "eager-m8_vs_compiled-m8": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 0,
+          "candidate_boundary_tied": 0,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 88,
+          "candidate_boundary_tied": 88,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 125,
+          "candidate_boundary_tied": 125,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    },
+    "eager-m1_vs_compiled-m8": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 0,
+          "candidate_boundary_tied": 0,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 88,
+          "candidate_boundary_tied": 88,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 125,
+          "candidate_boundary_tied": 125,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    }
+  },
+  "reporter_sha256": "85e583d5c2045257b4f8821db39573722fdc2f70342b0223ed5984ac7d9667c0",
+  "private_text_decoded_or_published": false,
+  "sha256": "6c4105bc88c4e475a834361f011bb861c6c941671e415c4e26a834ed0e86d09f"
+}

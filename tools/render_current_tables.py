@@ -7,6 +7,7 @@ import argparse
 import copy
 import json
 import math
+import statistics
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,58 +17,39 @@ ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- COHERENCE_CURRENT_RESULTS -->"
 END = "<!-- /COHERENCE_CURRENT_RESULTS -->"
 REPOSITORY = "https://github.com/Terrydaktal/vllm-coherence"
+# Keep captured checkout identities intact; link to the same tree after rewording.
+REWORDED_COMMITS = {
+    "7386d835a32e4be3549e87cfff9bb9998e0a91c3": "9bb795d2e612c76087d16932841131edf4834d5e",
+}
 def render_head_candidate_benchmark():
-    evidence = json.loads(
-        (ROOT / "benchmarks/results/head-candidate-depth-20260924.json").read_text()
-    )
+    current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
+    reference = current.get("head_candidate_result", "benchmarks/results/head-candidate-depth-20260924.json")
+    evidence = json.loads((ROOT / reference).read_text())
+    requests = evidence["requests"]["stages"]
+    workloads = "; ".join(f"{row['label']}: {row['input_tokens']:,} input and {row['output_tokens']:,} output tokens ({row['finish_reason']})" for row in requests)
+    rows = evidence["modes"]["full"]["rows"]
+    samples = evidence["timings_m8"]["full"]["samples"]
     lines = [
-        "## Global-512 target-head",
-        "",
-        "Global-512 is the serving default. This paired comparison used the same hidden",
-        "inputs from a natural coding completion (5,812 output tokens) and a following",
-        "reasoning completion (4,720 output tokens), starting at 60,208 and 66,167 input",
-        "tokens respectively. Sampling was temperature 1, top-p 0.95 and top-k 40.",
-        "",
+        "## Global-512 target-head", "",
+        "Global-512 is the serving default. This paired comparison used identical hidden inputs for every head method from two natural completions starting with the retained 60K Pi prefix: " + workloads + ". Sampling was temperature 1, top-p 0.95 and top-k 40.", "",
         "| Target path | Median M8 head time | Same top-1 token | Complete reference top-20 retained | Complete reference top-40 retained |",
         "|---|---:|---:|---:|---:|",
     ]
-    for mode, label in (
-        ("global256", "Global INT2 top-256 + BF16 rerank"),
-        ("global512", "Global INT2 top-512 + BF16 rerank (default)"),
-        ("full", "Full BF16 reference"),
-    ):
+    for mode, label in (("global256", "Global INT2 top-256 + BF16 rerank"), ("global512", "Global INT2 top-512 + BF16 rerank (default)"), ("full", "Full BF16 reference")):
         result = evidence["modes"][mode]
-        rows = result["rows"]
         cells = []
-        for key in (
-            "argmax_equal",
-            "top20_complete_including_ties",
-            "top40_complete_including_ties",
-        ):
+        for key in ("argmax_equal", "top20_complete_including_ties", "top40_complete_including_ties"):
             count = result[key]
             percent = "100%" if count == rows else f"{100 * count / rows:.4f}%"
             cells.append(f"{count:,}/{rows:,} ({percent})")
         timing = evidence["timings_m8"][mode]["median_ms"]
         lines.append(f"| {label} | {timing:.3f} ms | " + " | ".join(cells) + " |")
-    lines.extend([
-        "",
-        "The comparison covers **12,015 prediction rows**, including prefill and rejected",
-        "speculative rows, not 12,015 generated tokens. Timing uses 47 eight-row hidden",
-        "inputs with five randomized-order repetitions: 235 measurements per method.",
-        "These are isolated head timings; they do not measure whole-round time or tok/s.",
-        "",
-        "Global-512 reduced incomplete top-40 retention from 395 rows to 82 (79.2% fewer),",
-        "for 0.022 ms added median head time. Retention includes cutoff ties and does not",
-        "establish score equality, ordering or identical sampling probabilities. Both",
-        "shortlists remain approximate; the full BF16 head is the reference for this",
-        "comparison, not an independently proved model. The drafter is unchanged.",
-        "",
-        "[Methodology and limits](docs/HEAD_CANDIDATE_DEPTH.md)",
-        "· [Numeric results](benchmarks/results/head-candidate-depth-20260924.json)",
-        "· [Earlier Global-256 study](docs/VERIFY_HEAD_GLOBAL_TOPK.md).",
-    ])
+    misses = [rows - evidence["modes"][mode]["top40_complete_including_ties"] for mode in ("global256", "global512")]
+    added = evidence["timings_m8"]["global512"]["median_ms"] - evidence["timings_m8"]["global256"]["median_ms"]
+    lines += ["", f"The comparison covers **{rows:,} prediction rows**, including prefill and rejected speculative rows, not {rows:,} generated tokens. Timing uses {samples // 5} eight-row hidden inputs with five randomized-order repetitions: {samples} measurements per method. These isolated head timings include native dispatch gaps and exclude comparison/reporting; they do not measure whole-round time or tok/s.", "",
+        f"Incomplete top-40 retention occurred in {misses[0]:,} rows with Global-256 and {misses[1]:,} with Global-512; the added median head time was {added:.3f} ms. Retention includes cutoff ties and does not establish score equality, ordering or identical sampling probabilities. Both shortlists remain approximate; the full BF16 head is the reference for this comparison, not an independently proved model. The drafter is unchanged.", "",
+        f"[Methodology and limits](docs/HEAD_CANDIDATE_DEPTH.md) · [Numeric results]({reference}) · [Earlier Global-256 study](docs/VERIFY_HEAD_GLOBAL_TOPK.md)."]
     return lines
-
 
 
 def measurement_marker(data):
@@ -108,6 +90,7 @@ def commit_marker(commit):
         or any(character not in "0123456789abcdef" for character in commit)
     ):
         raise ValueError("evidence must identify a full commit hash")
+    commit = REWORDED_COMMITS.get(commit, commit)
     return f"[`{commit[:7]}`]({REPOSITORY}/commit/{commit})"
 
 
@@ -154,6 +137,11 @@ def current_stage_profile(data):
         evidence_commit = raw["stage26_execution"]["measurement_commit"]
     grouped["measurement_commit"] = evidence_commit
     grouped["matched"] = matched
+    grouped["measurement_date"] = raw.get("measurement_date", "2026-09-23")
+    grouped["optimized_manifest_sha256"] = raw.get("binding", {}).get("optimized_manifest_sha256")
+    head = raw.get("target_head", "global256")
+    depth = head.removeprefix("global")
+    grouped["target_head"] = head
     grouped["scope"] = (
         "Archived diagnostic compiled Global-256 stage attribution, with BF16 attention arithmetic. "
         "The 0K / 60K / 200K cells sum **GPU kernel activity durations**, excluding CPU annotations, "
@@ -175,14 +163,14 @@ def current_stage_profile(data):
         outputs = " / ".join(f"{raw['contexts'][c]['generated_tokens_per_arm']:,}" for c in raw["context_order"])
         deltas = " / ".join(f"{raw['observer_comparison']['contexts'][c]['mean_delta_ms']:.3f}" for c in raw["context_order"])
         grouped["scope"] = (
-            "Measured on 2026-09-23 using the then-current compiled, optimized Global-256 serving backend"
+            f"Measured on {grouped['measurement_date']} using the compiled, optimized Global-{depth} serving backend"
             + (" with the pinned-RAM huge-page promotion repair" if raw["binding"].get("host_runtime") else "")
             + "; sampling is temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: "
             "0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran "
             "a natural warmup followed by clean control, trace, and clean control; each arm generated "
             + outputs + " tokens respectively. Generated-token hashes and accepted-token schedules matched. "
             "The stage means retain " + counts + " complete M8 cycles (0K / 60K / 200K), and controls "
-            "use exactly those same decode indices. Trace setup/export boundaries and incomplete trace "
+            "use exactly those same decode indices. Trace setup/export boundaries and incomplete or inconsistent trace "
             "inventories are excluded by structure, never by duration; complete native round logs retain "
             "all rounds and stalls. GPU activity timestamps supply the stage times; CPU annotations, "
             "Python hooks and export time are excluded. No per-stage event probes or forced-token replay "
@@ -190,9 +178,23 @@ def current_stage_profile(data):
             "reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus "
             "the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect "
             "clocks and scheduling. Overlap is counted once in the total. "
-            "[Capture and source identities](benchmarks/results/compiled-global256-stage-profile-20260923.json) "
-            "· [controls](benchmarks/results/stage26-control-20260923.json) · [method and uncertainty](docs/STAGE_TIMING.md)."
+            "The header identifies the checkout commit at capture time; the run also included "
+            "then-uncommitted repairs recorded in the capture's source manifest. "
+            f"[Capture and source identities]({data['matched_stage_profile']}) "
+            f"· [controls]({data['matched_stage_control']}) · [method and uncertainty](docs/STAGE_TIMING.md)."
         )
+        long_context = raw["observer_comparison"]["contexts"].get("200K", {})
+        later = long_context.get("control_after_round_ms", [])
+        pauses = [value for value in later if value > 100]
+        if pauses:
+            low, high = long_context["remainder_before_after_range_ms"]
+            grouped["scope"] += (
+                f"\n\nThe later 200K clean control retained {len(pauses)} intervals above 100 ms, "
+                f"the longest **{max(pauses):,.3f} ms**, although its median was {statistics.median(later):.3f} ms. "
+                f"These pauses raise the displayed mean and row 26. The before/after remainder range is "
+                f"{low:.3f}–{high:.3f} ms; their cause remains unresolved. This is repeat variability, "
+                "not a confidence interval or proof that earlier tracing had no indirect effect."
+            )
     context_tokens = {"0K": 0, "60K": 60_000, "200K": 200_000}
     grouped["stage26"] = copy.deepcopy(base["stage26"])
     control_ref = (data["matched_stage_control"] if matched else
@@ -353,8 +355,8 @@ def current_stage_profile(data):
         ),
         (
             "Global-256 target head",
-            "Target head (global256)",
-            "Scores the vocabulary with INT2, selects 256 candidates and rescores them with BF16 weights. Selection remains approximate.",
+            f"Target head ({head})",
+            f"Scores the vocabulary with INT2, selects {depth} candidates and rescores them with BF16 weights. Selection remains approximate.",
         ),
         (
             "Other GPU bookkeeping",
@@ -363,7 +365,7 @@ def current_stage_profile(data):
         ),
     )
     grouped["stage_order"] = [row[0] for row in historical_rows]
-    grouped["stage_labels"] = {row[0]: row[0] for row in historical_rows}
+    grouped["stage_labels"] = {row[0]: row[0].replace("Global-256", f"Global-{depth}") for row in historical_rows}
     grouped["evidence_sources"] = {row[0]: row[0] for row in historical_rows}
     grouped["historical_raw_scopes"] = {row[0]: row[1] for row in historical_rows}
     grouped["stage_notes"] = {row[0]: row[2] for row in historical_rows}
@@ -393,7 +395,7 @@ def current_stage_profile(data):
     return grouped
 
 
-def render_stage_profile_table(data):
+def _render_stage_profile_table(data):
     """Render the archived 26-stage attribution as one 0K/60K/200K column.
 
     The older aggregate ``stages`` table is retained in the JSON for the
@@ -411,12 +413,20 @@ def render_stage_profile_table(data):
     contexts = profile["contexts"]
     commit = commit_marker(profile["measurement_commit"])
     old_rows = {row["stage"]: row for row in data["stages"] if row["ms"] is not None}
+    deployment = json.loads((ROOT / "benchmarks/results/eager-m1-normalization-deployment-20260924.json").read_text())
+    confirmations_ref = data.get("current_stage_confirmations")
+    confirmations = json.loads((ROOT / confirmations_ref).read_text()) if confirmations_ref else None
+    if confirmations and (
+        confirmations["status"] != "SAMPLE_CHECKED"
+        or confirmations["optimized_manifest_sha256"] != deployment["optimized_manifest_sha256"]
+    ):
+        raise ValueError("current stage evidence is incomplete or belongs to another release")
     heading = ("Current GPU activity per retained compiled M8 cycle" if profile.get("matched") else
                "Archived diagnostic interval per retained compiled profile cycle")
-    run_label = ("2026-09-23; exact source hashes in capture" if profile.get("matched") else
+    run_label = (f"{profile['measurement_date']}; run {commit}" if profile.get("matched") else
                  f"evidence run {commit}")
     lines = [
-        f"| Stage | {heading} ({' / '.join(context_order)}; milliseconds unless explicitly marked; {run_label}) | Current correctness evidence | Last relevant code commit / change | What this stage does |",
+        f"| Stage | {heading} ({' / '.join(context_order)}; milliseconds unless explicitly marked; {run_label}) | Current M1->M8 correctness and eager->compiled correctness evidence | Last relevant code commit / change | What this stage does |",
         "| --- | ---: | --- | --- | --- |",
     ]
     timing_labels = {
@@ -443,6 +453,55 @@ def render_stage_profile_table(data):
         if profile.get("matched") and stage == "Attention decode":
             evidence = "Paired natural outputs match at 0K/60K/200K · [attention repair evidence](benchmarks/results/attention-page-boundary-20260923.json); earlier isolated alignment evidence remains in the report."
             provenance = "[September 23 attention-page repair](experiments/radiance-public/build_stock_m1_attention_shared.py): reuse the context traversal when M8 queries cross a 16-token attention-page boundary; source/binary hashes are in the capture."
+        if profile.get("optimized_manifest_sha256") == deployment["optimized_manifest_sha256"]:
+            norm_rows = {
+                "Embedding + first input normalization + FP8 production",
+                "Layer input residual/normalization + FP8 production",
+                "Post-attention/GDN residual/normalization + FP8 production",
+            }
+            if stage in norm_rows or stage == "GDN output gated normalization + FP8 production":
+                sites = 128 if stage in norm_rows else 48
+                evidence = f"Released row-invariant normalization gate: {sites} sites × 1,000 rows; finite operator checks, not a new full-model alignment run · [24 September evidence](docs/eager-m1-contract-qualification.md)."
+                provenance = "24 September release, pending commit: preserve M1 reduction and rounding across prefill/decode; [source and binary identities](benchmarks/results/eager-m1-normalization-deployment-20260924.json)."
+            elif stage in {"Attention decode", "Attention split-KV merge"}:
+                provenance = "24 September release, pending commit: repair split-merge precision and unsafe scaling; retain the September 23 page-boundary optimization · [repair evidence](docs/eager-m1-followup-audit.md)."
+        if profile.get("target_head") == "global512" and stage == "Global-256 target head":
+            head_ref = data["head_candidate_result"]
+            measured_head = json.loads((ROOT / head_ref).read_text())["modes"]["global512"]
+            evidence = (
+                f"Same top-1: {measured_head['argmax_equal']:,}/{measured_head['rows']:,}; "
+                f"complete reference top-20 retained: {measured_head['top20_complete_including_ties']:,}/{measured_head['rows']:,}. "
+                f"Includes M1/M8; not an M1-versus-M8 ordering test · [current head study]({head_ref})."
+            )
+            previous_head = commit_marker(data["stage_provenance"][stage]["commit"])
+            current_head = commit_marker("7386d835a32e4be3549e87cfff9bb9998e0a91c3")
+            provenance = current_head + ": increase target shortlist to 512; drafter unchanged. Extends the Global-256 method from " + previous_head + "."
+        if confirmations:
+            paired_stage = (
+                "Attention decode and split-KV merge"
+                if stage in {"Attention decode", "Attention split-KV merge"} else stage
+            )
+            measured = confirmations["stages"].get(paired_stage)
+            if measured:
+                fixed, modes = measured["fixed"], measured["final_modes"]
+                count = fixed["positions"]
+                evidence = (
+                    f"M1/M8: {fixed['top20_set_exact']}/{count}; {fixed['top20_order_exact']}/{count}. "
+                    f"Eager/compiled M8: {modes['top20_set_exact']}/{count}; {modes['top20_order_exact']}/{count} "
+                    f"· [current 320-token run]({confirmations_ref})."
+                )
+                if paired_stage != stage:
+                    evidence += " Decode and merge checked together."
+            elif stage == "GDN layout/copies and buffer initialization":
+                evidence = (
+                    f"Authoritative cache/state restored in all {confirmations['cache_restored_groups']} "
+                    f"eight-token groups; state/output corruption controls detected "
+                    f"· [current replay]({confirmations_ref}). No separate layout top-20 attribution."
+                )
+            elif stage == "Drafter":
+                evidence = "Separate proposal model; target M1/M8 comparisons do not independently qualify it."
+            elif stage == "Other GPU bookkeeping":
+                evidence = "No isolated top-20 operator claim; sampling/state controls have separate evidence."
         lines.append(
             f"| **{number}. {profile['stage_labels'][stage]}** | {timing} | {evidence} | {provenance} | {profile['stage_notes'][stage]} |"
         )
@@ -471,17 +530,11 @@ def render_stage_profile_table(data):
             ),
         }.get(stage, ())
         if detail_rows:
-            detail_commit = (
-                data.get("stage_provenance", {})
-                .get(evidence_source, {})
-                .get("commit", profile["measurement_commit"])
-            )
-            detail_marker = commit_marker(detail_commit)
             for detail_label, detail_note in detail_rows:
                 lines.append(
                     f"| ↳ {detail_label} | Included in **stage {number}** | "
-                    f"Exact fused FP8 bytes/scales; see stage {number} · "
-                    f"{detail_marker} | {provenance} | {detail_note} |"
+                    f"Exact fused FP8 bytes/scales; see stage {number} and its evidence scope | "
+                    f"{provenance} | {detail_note} |"
                 )
     audit = profile.get("stage26_audit")
     if not isinstance(audit, dict):
@@ -503,13 +556,42 @@ def render_stage_profile_table(data):
         totals = " / ".join(f"{audit['contexts'][key]['full_uninstrumented_round_ms']:.3f}" for key in context_order)
         lines.extend([
             f"| **26. {profile['stage26']['label']}** | {timing} (estimate) | "
-            "[Matched control minus GPU activity union](benchmarks/results/matched-stage-residual-20260923.json) | "
-            "2026-09-23: matched natural-serving measurement; source hashes in capture | Indirect observer effects are not proved zero. |",
+            f"[Matched control minus GPU activity union]({data.get('matched_stage_residual', 'benchmarks/results/matched-stage-residual-20260923.json')}) | "
+            f"{profile['measurement_date']}: matched natural-serving measurement; source hashes in capture | Indirect observer effects are not proved zero. |",
             f"| **Total reconstructed round (stages 1–26)** | **{totals}** | "
             "GPU activity union plus the estimated remainder | "
             "— | Overlapping stages are counted once in the total. |",
         ])
     return lines
+
+
+def render_stage_profile_table(data):
+    """Keep independently scoped eager-M1 evidence when refreshing timings."""
+    import re
+
+    evidence = json.loads((ROOT / "benchmarks/results/eager-m1-readme-evidence.json").read_text())
+    lines = _render_stage_profile_table(data)
+    enriched = []
+    observed = set()
+    for line in lines:
+        if not line.startswith("|"):
+            enriched.append(line)
+            continue
+        cells = line.strip("|").strip().split(" | ")
+        if cells[0] == "Stage":
+            value = "Current Eager M1 correctness evidence"
+        elif cells[0].startswith("---"):
+            value = "---"
+        else:
+            label = re.sub(r"^\*\*\d+\. ", "", cells[0]).removesuffix("**")
+            key = "Global-256 target head" if label == "Global-512 target head" else label
+            value = evidence["rows"][key]
+            observed.add(key)
+        cells.insert(3, value)
+        enriched.append("| " + " | ".join(cells) + " |")
+    if observed != set(evidence["rows"]):
+        raise ValueError("eager-M1 evidence does not cover every compiled stage row")
+    return evidence["paragraphs"].splitlines() + [""] + enriched
 
 
 CHAINED_RESULTS = ROOT / "benchmarks/results/pi-coding-json-compaction.json"
@@ -529,7 +611,7 @@ def render_chained_workload_results(report=None):
         "",
         (
             "This benchmark uses the retained 60,000-input-token Pi prefix and the compiled "
-            "Coherence backend with Global-256, the attention-page-boundary repair and the "
+            f"Coherence backend with {report.get('runtime', {}).get('target_head', 'global256')}, the attention-page-boundary repair and the "
             "pinned-RAM huge-page promotion repair. Five "
             "requests are chained in one context: code, prose about code measurement, JSON, "
             "thinking/prose and checkpoint generation. Code and JSON disable thinking; both "
@@ -600,7 +682,7 @@ def render_chained_workload_results(report=None):
 
 
 def render_coding_json_compaction_benchmark():
-    lines = [
+    return [
         *render_chained_workload_results(),
         *render_coding_context_benchmark(),
         "",
@@ -608,99 +690,68 @@ def render_coding_json_compaction_benchmark():
         "",
         *render_round_histogram(),
         "",
+        *render_known_remaining_symptoms(),
+    ]
+
+
+def render_known_remaining_symptoms():
+    current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
+    head = json.loads((ROOT / current["head_candidate_result"]).read_text())["modes"]["global512"]
+    profile = json.loads((ROOT / current["matched_stage_profile"]).read_text())
+    control = profile["observer_comparison"]["contexts"]["200K"]
+    later = control["control_after_round_ms"]
+    pauses = [value for value in later if value > 100]
+    low, high = control["remainder_before_after_range_ms"]
+    return [
         "### Known remaining symptoms and likely causes",
         "",
-        *render_hugepage_comparison(),
-        "",
-        *render_attention_boundary_comparison(),
-        "",
         (
-            "The situation recorded in `cbbf495` had warm rounds around 43.6--43.8 ms but a "
-            "repeatable fresh-cache state around 53.5--53.9 ms. A stream or device "
-            "synchronization recovered roughly 6.4 ms, which narrowed the evidence to a residual "
-            "HIP/ROCr stream or queue dependency but did not identify a permanent repair."
+            "**Occasional long-context pauses remain.** The evidence comes from the separate "
+            "compiled-stage timing experiment. Its later unprofiled 200K control, run after "
+            f"the profiling arm, recorded {len(pauses)} of {len(later):,} retained intervals "
+            "above 100 ms: " + ", ".join(f"{value:,.3f} ms" for value in pauses) + ". "
+            f"Its median was {statistics.median(later):.3f} ms. The coding-context histogram "
+            "above covers a different run; these control intervals are recorded separately. "
+            f"The paired control residuals span {low:.3f}–{high:.3f} ms. "
+            "This is an intermittent stall, not a sustained increase in every kernel's cost. "
+            "Its cause is not localized: host scheduling, cache/dependency waits and HIP/ROCr "
+            "queue state remain candidates. Correlated per-round host and GPU event records "
+            "are needed to distinguish them. All measured intervals, including the pauses, "
+            f"remain in the [current controls]({current['matched_stage_control']})."
         ),
         "",
         (
-            "Since that diagnosis, [`abb7668`](https://github.com/Terrydaktal/vllm-coherence/commit/"
-            "abb76682e96e1600e9b28ff404c36fa294244c54) made the runtime behavior and observation "
-            "path explicit. It now drains pending device work after cache/mamba preparation, "
-            "records each decode round "
-            "without charging another chat's GPU time to it, and gives Pi one shared snapshot "
-            "for scheduler, cache, temperature, round and acceptance telemetry. Its scheduler "
-            "also preserves response ownership through generation, makes tool-call handover "
-            "decisions at the intended boundary, and retires superseded cache generations safely."
+            "**Stage attribution has a separate trace limitation.** One 200K cycle recorded "
+            "normalization after its consuming projection. That inconsistent timestamp order "
+            "is excluded from per-stage attribution, while the original records are retained. "
+            "It does not establish that the GPU executed the dependency incorrectly. "
+            "Profiling can also affect clocks and scheduling indirectly; subtracting traced "
+            "activity from the clean control is not proof of an exact, observer-free gap total. "
+            "[Trace witness](benchmarks/results/trace-stage-order-witness-20260924.json) · "
+            "[timing method](docs/STAGE_TIMING.md)."
         ),
         "",
         (
-            "[`b8d6810`](https://github.com/Terrydaktal/vllm-coherence/commit/"
-            "b8d681001cc726089c387eeddfc7c78e2e74ac3c) carries the missing HIP event-gap and "
-            "round-latency records and made backend failures retain a content-safe, expandable "
-            "diagnostic report. These changes fix the previous lack of evidence and misleading "
-            "Pi status; they do not make the underlying asynchronous queue issue mathematically "
-            "solved. The M1/M8 and eager/compiled arithmetic repairs, Global-256 target-head "
-            "change and GEMM performance backports were already present in the baseline documented "
-            "by `cbbf495`; they are not new fixes after that commit."
+            "**The benchmark stream still lacks a separate reasoning channel.** "
+            "Thinking-enabled requests exposed only prose, so the table cannot isolate their "
+            "reasoning throughput. The unresolved boundary is the provider/parser metadata path; "
+            "this observation alone does not show whether internal reasoning was absent. "
+            "The latest checkpoint passed its section and completion-marker checks. "
+            "That benchmark covers checkpoint generation and tail flushing; full Pi transcript "
+            "commit, retirement, cancellation and concurrent-chat recovery need their own "
+            "integration checks. [Current chained run](benchmarks/results/pi-coding-json-compaction.json)."
         ),
         "",
         (
-            "The event collector now reclaims completed asynchronous HIP-event pairs and uses "
-            "a separately managed marker pool. The previous monotonic ring and an unclosed "
-            "sample-boundary marker could exhaust after about 64 rounds, causing later gap "
-            "records to disappear; the repair is covered by an 80-round CPU telemetry test. "
-            "Asynchronous rows are now held until their already-recorded HIP end events complete, "
-            "then written with a round span and all available stage gaps; this adds no device "
-            "synchronization to the serving path. The scheduler's recovery fence is adaptive: "
-            "after the transition fence it triggers only when a previous round exceeds the recent "
-            "baseline by at least 4 ms and 8%, so it does not manufacture a fixed-cadence spike. "
-            "The generic and Radiance launchers both bound JIT checks to the current warmup log "
-            "tail and repeat a warmup that compiled a new shape. Even `--reuse-existing` now "
-            "performs that non-session warmup before Pi attaches, because a restarted backend "
-            "must not expose first-use compilation to a chat; `QWEN_PI_SKIP_WARMUP=1` is an "
-            "explicit diagnostic opt-out. Native-runtime validation of the repaired collector "
-            "is still required for these paths."
-        ),
-        "",
-        (
-            "The September 20 chained run did not reproduce the old 53--54 ms state: its measured "
-            "generation intervals were 44.60--47.01 ms. That is evidence that the transition and "
-            "adaptive recovery changes help, not proof that the slow state is impossible. The "
-            "archived cbbf495 latency mode remains historical evidence; the current per-round "
-            "results and the later page-boundary diagnosis are reported above. The completed "
-            "event feed can now distinguish a GPU queue gap from host dispatch, cache transfer and "
-            "telemetry wait; the new analyzer rejects dropped or incomplete rows. Round means also "
-            "depend on workload and speculative acceptance, so the 47.01 ms thinking row alone is "
-            "not a new kernel regression."
-        ),
-        "",
-        (
-            "A September 21 content-free synthetic token-ID capture after the non-session warm-up is "
-            "recorded in [round-steady-state-20260921.json](benchmarks/results/"
-            "round-steady-state-20260921.json). Excluding the first verification row after each "
-            "request boundary, the GPU round spans were 53.52 ms at 0K, 58.88 ms at 60K and "
-            "67.20 ms at 200K; the corresponding target-forward means were 44.39, 48.09 and "
-            "56.44 ms. The 200K rows ranged only from 67.15 to 67.25 ms, all three captures used "
-            "the same PIECEWISE eight-token runtime descriptor, and no new inference-time JIT or "
-            "dropped telemetry record occurred after warm-up. This capture excluded new first-use "
-            "compilation during its measured window. It did not establish that natural Pi requests "
-            "cannot alternate between fast and slow modes; the later page-boundary comparison above "
-            "reproduces and repairs one such cause. In this synthetic capture, the event "
-            "feed measured every named inter-stage GPU gap below 0.02 ms. This is a separate "
-            "historical diagnostic, not a replacement for the matched stage-26 control: "
-            "its disposable runtime and synthetic token-ID fixture are intentionally different "
-            "from the authenticated stage-profile execution identity."
-        ),
-        "",
-        (
-            "Two independent correctness/observability issues remain visible in this run: the "
-            "provider did not expose a reasoning channel even when requested, and the checkpoint "
-            "marker was present while the required section contract was absent. The first points "
-            "to the provider/stream adapter's reasoning metadata path; the second is a checkpoint-"
-            "format or model-compliance failure, not evidence of a cache-timing failure. Both "
-            "should remain explicit failures in qualification."
+            "**Global-512 candidate selection remains approximate.** The current study retained "
+            f"the reference top-1 in {head['argmax_equal']:,}/{head['rows']:,} rows and the complete "
+            f"top-20 in {head['top20_complete_including_ties']:,}/{head['rows']:,}. "
+            "An excluded vocabulary token can still belong in the reference sampling support. "
+            "The new exact M1/M8 and eager/compiled confirmations use the full BF16 comparison "
+            "head; they do not certify shortlist completeness or eliminate model-generated loops. "
+            f"[Current head evidence]({current['head_candidate_result']})."
         ),
     ]
-    return lines
 
 
 def render_hugepage_comparison():
@@ -728,7 +779,7 @@ def render_hugepage_comparison():
         "",
         f"The targeted 200K control had {len(before['spikes_over100ms'])} rounds over 100 ms "
         f"among {before['rounds']:,}; both repaired 200K replays had none, including a return "
-        "from RAM. The full rerun above preserved all three coding output-token hashes "
+        "from RAM. The September 23 rerun preserved all three coding output-token hashes "
         f"({tokens:,} tokens) and all five chained-task hashes. Across its {rounds:,} timed "
         f"coding rounds, {spikes} exceeded 100 ms; maximum rounds were "
         + " / ".join(f"{rerun[c]['max_ms']:.3f}" for c in ("0K", "60K", "200K"))
@@ -986,7 +1037,11 @@ def render_round_histogram():
             return f"{mean:.2f} / {median:.2f} ms"
 
         lines = [
-            "The histogram below is generated from the complete per-round records in this benchmark. Every measured `round_ms` value appears in exactly one bin; untimed events are reported separately.",
+            "The histogram below is generated from the complete per-round records of the "
+            "[coding-context benchmark](benchmarks/results/pi-coding-contexts.json). Every measured "
+            "`round_ms` value appears in exactly one bin; untimed events are reported separately. "
+            "The compiled-stage timing experiment has separate unprofiled control runs; their "
+            "pauses are discussed below and are not part of this histogram.",
             "",
             "| Round time | 0K arm | 60K arm | 200K arm |",
             "|---|---:|---:|---:|",
@@ -1077,10 +1132,43 @@ def render_round_histogram():
     ]
 
 
+def current_fine_detail(data):
+    reference = data.get("matched_stage_profile")
+    if not reference:
+        return None
+    capture = json.loads((ROOT / reference).read_text())
+    context = capture["contexts"]["60K"]
+    if "layers_ms" not in context:
+        return None
+    if set(context["layers_ms"]) != {str(i) for i in range(64)}:
+        raise ValueError("current layer detail must cover all 64 layers")
+    layers = []
+    for i in range(64):
+        values = context["layers_ms"][str(i)]
+        kind = "Attention" if i % 4 == 3 else "GDN"
+        row = {"layer": i, "type": kind, "total": sum(values.values()),
+               "input": values[f"{kind} input projection"],
+               "output": values[f"{kind} output projection"],
+               "gate_up": values["MLP gate/up projection"],
+               "down": values["MLP down projection"]}
+        row["other"] = row["total"] - sum(row[k] for k in ("input", "output", "gate_up", "down"))
+        layers.append(row)
+    kernels = [{"stage": k["stage"], "kernel": k["kernel"], "calls": k["activity_records"],
+                "ms": k["ms_per_round"]} for k in context["kernel_groups"]]
+    kernels.sort(key=lambda row: (capture["stage_order"].index(row["stage"]), row["kernel"]))
+    if not math.isclose(sum(k["ms"] for k in kernels), context["stage_sum_ms"], abs_tol=1e-8):
+        raise ValueError("current granular detail does not reconcile to the stage table")
+    return {"layers": layers, "kernels": kernels, "cycles": context["included_rounds"],
+            "date": capture["measurement_date"]}
+
+
 def render(data):
     timing = data["round_timing"]
     mean = timing["mean"]
     retained_cycles = len(timing["rounds"])
+    detail = current_fine_detail(data)
+    if detail:
+        retained_cycles = detail["cycles"]
     commit = measurement_marker(data)
     stage_profile = current_stage_profile(data)
     serving_overhead = data["serving_overhead"]
@@ -1146,12 +1234,12 @@ def render(data):
         ),
         "",
         (
-            "**Set/order** in the numerical section means the same top-20 token set, "
-            "followed by the same ranking. Historical correctness results link to their "
-            "evidence commits; the current timing capture records exact source hashes "
-            "and is archived with this repair. The profile checks repeatability, not new reference "
-            "equality. The provenance column links the last relevant implementation commit "
-            "or links the attention-page repair source."
+            "Each **set/order** pair means the same top-20 token set, followed by the same "
+            "ranking. Current stage confirmations identify M1/M8 and eager/compiled M8 separately. "
+            "Each position passes only if every layer instance passes on the same captured inputs. "
+            "These diagnostic stage replays are checked against the compiled graph control; "
+            "their times are not used in this table. Timing and correctness captures record their "
+            "own exact source hashes. The provenance column identifies the last relevant code change."
         ),
     ]
     lines += [
@@ -1165,13 +1253,18 @@ def render(data):
         ),
         "",
         (
-            f"The lower layer and kernel detail remains the separate compiled 60K trace: it "
-            f"contains {retained_cycles} retained complete cycles and is not the 0K/60K/200K "
-            "profile table above. Its cycle count must not be read as an output-token count."
+            (f"The expandable layer and kernel tables use the same {retained_cycles:,} retained "
+             f"60K cycles as the main table ({detail['date']}). GPU activity crossing a worker "
+             "boundary is clipped to that boundary; activity-record counts include these fragments. "
+             "CPU profiling work is excluded. Cycle counts are not output-token counts."
+             if detail else
+             f"The lower layer and kernel detail remains the separate historical compiled 60K trace: "
+             f"it contains {retained_cycles} retained complete cycles and is not the 0K/60K/200K "
+             "profile table above. Its cycle count must not be read as an output-token count.")
         ),
         "",
         "<details>",
-        "<summary>Historical compiled 60K decoder-layer detail: projection and remaining-work timings</summary>",
+        "<summary>" + ("Current" if detail else "Historical") + " compiled 60K decoder-layer detail: projection and remaining-work timings</summary>",
         "",
         (
             "Finish each row's layer, including its MLP, before moving to the next row. "
@@ -1183,7 +1276,7 @@ def render(data):
         "| Layer | Type | All layer work ms | Input projection ms | Output projection ms | Gate/up projection ms | Down projection ms | Other work ms |",
         "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for row in data["layers"]:
+    for row in (detail["layers"] if detail else data["layers"]):
         lines.append(
             f"| {row['layer']} | {row['type']} | {row['total']:.4f} | {row['input']:.4f} | {row['output']:.4f} | {row['gate_up']:.4f} | {row['down']:.4f} | {row['other']:.4f} |"
         )
@@ -1192,12 +1285,13 @@ def render(data):
         "</details>",
         "",
         "<details>",
-        "<summary>Every recorded kernel, grouped by stage</summary>",
+        "<summary>" + ("Current 60K GPU activity" if detail else "Historical recorded kernels") + ", grouped by stage</summary>",
         "",
-        f"| Stage / compiled kernel | Calls in {retained_cycles} retained cycles | Current GPU ms per profile cycle |",
+        (f"| Stage / compiled kernel | Activity records in {retained_cycles:,} retained cycles | Current GPU ms per retained 60K cycle |"
+         if detail else f"| Stage / compiled kernel | Calls in {retained_cycles} retained cycles | Historical GPU ms per profile cycle |"),
         "| --- | ---: | ---: |",
     ]
-    for row in data["kernels"]:
+    for row in (detail["kernels"] if detail else data["kernels"]):
         name = row["kernel"].replace("|", "&#124;").replace("`", "")
         lines.append(
             f"| {row['stage']} / `{name}` | {row['calls']} | {row['ms']:.6f} |"

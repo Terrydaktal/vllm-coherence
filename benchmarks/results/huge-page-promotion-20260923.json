@@ -394,8 +394,8 @@
       }
     ],
     "source_sha256": {
-      "pi-coding-contexts.json": "daff799c2d1fd8adcf16a2fc3c10e2d330405803e487ebc652442c0ff40d1908",
-      "pi-coding-json-compaction.json": "f52a1a4ecddfe54b3cd45bee9145d5c3714293bef4e5aaaf6550d78c70c7c144"
+      "pi-coding-contexts-20260923.json": "daff799c2d1fd8adcf16a2fc3c10e2d330405803e487ebc652442c0ff40d1908",
+      "pi-coding-json-compaction-20260923.json": "f52a1a4ecddfe54b3cd45bee9145d5c3714293bef4e5aaaf6550d78c70c7c144"
     },
     "validation_failures": {
       "contexts": [
@@ -411,7 +411,9 @@
       "chained": [
         "checkpoint headings or completion contract did not validate"
       ]
-    }
+    },
+    "context_result": "pi-coding-contexts-20260923.json",
+    "chained_result": "pi-coding-json-compaction-20260923.json"
   },
   "limitations": [
     "The intervention includes a backend restart; repeated warm RAM-return runs support the diagnosis but are not universal proof.",

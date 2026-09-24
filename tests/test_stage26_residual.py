@@ -170,11 +170,11 @@ def test_measured_label_without_observer_samples_is_rejected():
     assert "60K: observer comparison lacks valid profiled_round_ms samples" in result["qualification_issues"]
 
 
-def test_published_audit_is_bound_to_current_sources_and_full_histogram():
+def test_archived_audit_is_bound_to_its_measured_sources_and_full_histogram():
     root = Path(__file__).resolve().parents[1]
     audit = json.loads((root / "benchmarks/results/stage-timing-audit-20260923.json").read_text())
     for path, expected in audit["sources"].items():
-        assert hashlib.sha256((root / path).read_bytes()).hexdigest() == expected
+        assert hashlib.sha256((root / audit.get("source_artifacts", {}).get(path, path)).read_bytes()).hexdigest() == expected
     histogram = audit["histogram"]
     source = root / histogram["source"]
     assert hashlib.sha256(source.read_bytes()).hexdigest() == histogram["source_sha256"]
@@ -188,8 +188,9 @@ def test_published_audit_is_bound_to_current_sources_and_full_histogram():
 
 def test_native_matched_evidence_keeps_tracing_slowdown_out_of_runtime_gaps():
     root = Path(__file__).resolve().parents[1]
-    profile_data = json.loads((root / "benchmarks/results/compiled-global256-stage-profile-20260923.json").read_text())
-    control_data = json.loads((root / "benchmarks/results/stage26-control-20260923.json").read_text())
+    current = json.loads((root / "benchmarks/results/coherence-current.json").read_text())
+    profile_data = json.loads((root / current["matched_stage_profile"]).read_text())
+    control_data = json.loads((root / current["matched_stage_control"]).read_text())
     result = compute(profile_data, control_data)
     assert result["status"] == "matched_estimate"
     assert result["zero_observer_effect_proven"] is False
@@ -198,7 +199,13 @@ def test_native_matched_evidence_keeps_tracing_slowdown_out_of_runtime_gaps():
     host = profile_data["binding"]["host_runtime"]
     for name, expected in host["source_sha256"].items():
         assert hashlib.sha256((root / "experiments/radiance-public" / name).read_bytes()).hexdigest() == expected
-    assert host["worker_page_policy"]["host_page_policy"] == "no_hugepage_promotion"
+    observed = host["worker_page_policy"]
+    if observed["allocated_bytes"]:
+        assert observed["host_page_policy"] == "no_hugepage_promotion"
+        assert observed["host_page_policy_bytes"] >= observed["allocated_bytes"]
+    else:
+        assert observed["host_page_policy"] == "unallocated"
+        assert observed["host_page_policy_bytes"] == 0
     for context, observation in profile_data["binding"]["host_page_policy_observations"].items():
         if observation["allocated_bytes"]:
             assert observation["host_page_policy"] == "no_hugepage_promotion", context
@@ -218,3 +225,7 @@ def test_native_matched_evidence_keeps_tracing_slowdown_out_of_runtime_gaps():
         remainder = result["contexts"][context]["union_corrected_difference_ms"]
         assert remainder + profiled["round_timing_ms"]["gpu_busy_ms"] == pytest.approx(clean_mean)
         assert remainder != pytest.approx(profiled["round_timing_ms"]["overhead_ms"])
+        assert set(profiled["layers_ms"]) == {str(i) for i in range(64)}
+        assert sum(k["ms_per_round"] for k in profiled["kernel_groups"]) == pytest.approx(profiled["stage_sum_ms"])
+        for stage, expected in profiled["stages_ms"].items():
+            assert sum(k["ms_per_round"] for k in profiled["kernel_groups"] if k["stage"] == stage) == pytest.approx(expected)

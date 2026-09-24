@@ -17,7 +17,9 @@ def run(args):
     torch.set_num_threads(4)
     torch.manual_seed(91848128)
     oracle = StockM1GdnNorm()
-    index = json.loads((args.model / "model.safetensors.index.json").read_text())["weight_map"]
+    index = json.loads((args.model / "model.safetensors.index.json").read_text())[
+        "weight_map"
+    ]
     names = sorted(k for k in index if k.endswith(".linear_attn.norm.weight"))
     if len(names) != 48:
         raise ValueError("checkpoint GDN inventory changed")
@@ -32,6 +34,7 @@ def run(args):
         "checks": [],
         "timings": [],
         "private_chat_read": False,
+        "row_invariant": args.row_invariant,
         "reference": "Pinned corrected FLA GDN norm, then unmodified native FP8 quantizer",
         "source_sha256": hashlib.sha256(
             Path(__file__).with_name("stock_gdn_norm_quant.py").read_bytes()
@@ -43,7 +46,17 @@ def run(args):
 
     def reference(x, z, w):
         xx, zz = x.reshape(-1, 128), z.reshape(-1, 128)
-        if x.shape[0] <= 8:
+        if args.row_invariant and x.shape[0] > 8:
+            # The M1 oracle wrapper admits at most eight token rows. Preserve
+            # its arithmetic by partitioning, not by bypassing that admission.
+            yy = torch.cat(
+                [
+                    oracle(xx[start : start + 384], zz[start : start + 384], w, 1e-6)
+                    for start in range(0, len(xx), 384)
+                ],
+                dim=0,
+            )
+        elif x.shape[0] <= 8:
             yy = oracle(xx, zz, w, 1e-6)
         else:
             yy = oracle.native.layer_norm_fwd(
@@ -61,7 +74,9 @@ def run(args):
         )
 
     def equal(a, b):
-        return torch.equal(a.contiguous().view(torch.uint8), b.contiguous().view(torch.uint8))
+        return torch.equal(
+            a.contiguous().view(torch.uint8), b.contiguous().view(torch.uint8)
+        )
 
     x = torch.randn(args.rows, 48, 128, device="cuda", dtype=torch.bfloat16)
     backing = torch.randn(args.rows, 64, 128, device="cuda", dtype=torch.bfloat16)
@@ -95,9 +110,13 @@ def run(args):
                     }
                     report["status"] = "FAILED"
                     save()
-                    raise RuntimeError("GDN norm/quant mismatch; numerical aggregate saved")
+                    raise RuntimeError(
+                        "GDN norm/quant mismatch; numerical aggregate saved"
+                    )
                 good += xx.shape[0]
-            report["checks"].append({"site": site, "width": width, "matching_rows": good})
+            report["checks"].append(
+                {"site": site, "width": width, "matching_rows": good}
+            )
         save()
     for width in (9, 320, 1000, 1648, 2048):
         xx = x.repeat((3, 1, 1))[:width].contiguous()
@@ -109,7 +128,9 @@ def run(args):
         if not ok:
             report["status"] = "FAILED"
             save()
-            raise RuntimeError("prefill norm/quant differs from existing large-batch contract")
+            raise RuntimeError(
+                "prefill norm/quant differs from the selected arithmetic contract"
+            )
     mutated = b[0].clone()
     mutated.view(torch.uint8).reshape(-1)[0] ^= 1
     report["negative_control_detected"] = not equal(b[0], mutated)
@@ -179,5 +200,10 @@ if __name__ == "__main__":
         "--model", type=Path, default=Path("/models/Qwen3.8-27B-Uncensored-MXFP4-awq")
     )
     parser.add_argument("--rows", type=int, default=1000)
+    parser.add_argument(
+        "--row-invariant",
+        action="store_true",
+        help="Use the declared M1 arithmetic for prefill rows too",
+    )
     parser.add_argument("--output", type=Path, required=True)
     run(parser.parse_args())
