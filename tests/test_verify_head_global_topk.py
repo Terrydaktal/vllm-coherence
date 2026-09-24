@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from test_verify_head_sampling_capacity import SOURCE, batch, gate, load_module
 
 
@@ -27,8 +26,8 @@ def neutral_processors(sampler):
     )
 
 
-@pytest.mark.parametrize("depth", [128, 256])
-@pytest.mark.parametrize("top_k", [1, 8, 20, 32, 33, 64, 65, 1024])
+@pytest.mark.parametrize("depth", [128, 256, 512])
+@pytest.mark.parametrize("top_k", [1, 8, 20, 32, 33, 40, 64, 65, 128, 129, 1024])
 @pytest.mark.parametrize("mixed", [False, True])
 def test_global_gate_uses_target_budget_not_draft_tile_capacity(depth, top_k, mixed):
     runner, request = batch(top_k, mixed=mixed)
@@ -38,6 +37,7 @@ def test_global_gate_uses_target_budget_not_draft_tile_capacity(depth, top_k, mi
     )
 
 
+@pytest.mark.parametrize("depth", [256, 512])
 @pytest.mark.parametrize("greedy", [False, True])
 @pytest.mark.parametrize(
     "restriction",
@@ -54,7 +54,7 @@ def test_global_gate_uses_target_budget_not_draft_tile_capacity(depth, top_k, mi
         "trace_replay",
     ],
 )
-def test_global_fallbacks_cover_each_selected_request(restriction, greedy):
+def test_global_fallbacks_cover_each_selected_request(restriction, greedy, depth):
     runner, request = batch(20, mixed=True)
     sampler = runner.sampler
     neutral_processors(sampler)
@@ -81,7 +81,7 @@ def test_global_fallbacks_cover_each_selected_request(restriction, greedy):
         del sampler.penalties_state
     else:
         request.logits_indices = np.zeros(33, dtype=np.int32)
-    assert gate(global_topk=256)(runner, request, grammar) is False
+    assert gate(global_topk=depth)(runner, request, grammar) is False
 
 
 def test_unselected_request_does_not_disable_global_path():
@@ -93,7 +93,9 @@ def test_unselected_request_does_not_disable_global_path():
     assert gate(global_topk=256)(runner, request, None) is True
 
 
-@pytest.mark.parametrize("top_k,min_p", [(0, 0), (-1, 0), (20, 0.1), (20, float("nan"))])
+@pytest.mark.parametrize(
+    "top_k,min_p", [(0, 0), (-1, 0), (20, 0.1), (20, float("nan"))]
+)
 def test_global_rejects_invalid_or_unbounded_support(top_k, min_p):
     runner, request = batch(top_k)
     neutral_processors(runner.sampler)
@@ -101,7 +103,9 @@ def test_global_rejects_invalid_or_unbounded_support(top_k, min_p):
     assert gate(global_topk=256)(runner, request, None) is False
 
 
-@pytest.mark.parametrize("value", [None, "0", "128", "256", "64", "-1", "invalid"])
+@pytest.mark.parametrize(
+    "value", [None, "0", "128", "256", "512", "64", "1024", "-1", "invalid"]
+)
 def test_global_option_values(value):
     tree = ast.parse((SOURCE / "radiance_verifyhead.py").read_text())
     nodes = [
@@ -109,7 +113,9 @@ def test_global_option_values(value):
         for node in tree.body
         if (
             isinstance(node, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "GLOBAL_TOPK" for t in node.targets)
+            and any(
+                isinstance(t, ast.Name) and t.id == "GLOBAL_TOPK" for t in node.targets
+            )
         )
         or (isinstance(node, ast.If) and "GLOBAL_TOPK" in ast.unparse(node.test))
     ]
@@ -117,12 +123,14 @@ def test_global_option_values(value):
     environ = {} if value is None else {"RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": value}
     namespace = {"os": SimpleNamespace(environ=environ)}
     code = compile(ast.Module(body=nodes, type_ignores=[]), "actual-option", "exec")
-    if value in {None, "0", "128", "256"}:
+    if value in {None, "0", "128", "256", "512"}:
         exec(code, namespace)
-        assert namespace["GLOBAL_TOPK"] == (256 if value is None else int(value))
+        assert namespace["GLOBAL_TOPK"] == (512 if value is None else int(value))
         runner, request = batch(20)
         neutral_processors(runner.sampler)
-        assert gate(global_topk=namespace["GLOBAL_TOPK"])(runner, request, None) == (value != "0")
+        assert gate(global_topk=namespace["GLOBAL_TOPK"])(runner, request, None) == (
+            value != "0"
+        )
     else:
         with pytest.raises(ValueError):
             exec(code, namespace)
@@ -147,7 +155,9 @@ def native_fixture(torch, draft, rows, *, vocab=1024, width=512):
     head = SimpleNamespace(weight=weight, tp_size=1)
     state = SimpleNamespace(head_dtype=None, _radiance_topk_only=True)
     draft._quantize_head_now(state, head)
-    state._radiance_exact_head = lambda lm, x, b: torch.nn.functional.linear(x, lm.weight, b)
+    state._radiance_exact_head = lambda lm, x, b: torch.nn.functional.linear(
+        x, lm.weight, b
+    )
     return state, head, hidden
 
 
@@ -158,9 +168,11 @@ def native_enabled():
 
 
 @pytest.mark.skipif(not native_enabled(), reason="GPU opt-in")
-@pytest.mark.parametrize("depth", [128, 256])
+@pytest.mark.parametrize("depth", [128, 256, 512])
 @pytest.mark.parametrize("rows", [1, 2, 3, 8, 16, 32])
-def test_native_global_recovers_clustered_top20_without_changing_drafter(monkeypatch, depth, rows):
+def test_native_global_recovers_clustered_top20_without_changing_drafter(
+    monkeypatch, depth, rows
+):
     import torch
 
     draft, verify = native_modules(monkeypatch, depth)
@@ -181,8 +193,12 @@ def test_native_global_recovers_clustered_top20_without_changing_drafter(monkeyp
 
 
 @pytest.mark.skipif(not native_enabled(), reason="GPU opt-in")
-@pytest.mark.parametrize("restriction", ["bias", "tp2", "wide", "small_vocab", "small_width"])
-def test_native_global_unsupported_inputs_use_complete_reference(monkeypatch, restriction):
+@pytest.mark.parametrize(
+    "restriction", ["bias", "tp2", "wide", "small_vocab", "small_width"]
+)
+def test_native_global_unsupported_inputs_use_complete_reference(
+    monkeypatch, restriction
+):
     import torch
 
     draft, verify = native_modules(monkeypatch, 256)
@@ -220,7 +236,9 @@ def test_native_public_hook_switches_global_and_full_head(monkeypatch):
             return torch.nn.functional.linear(x, lm_head.weight, bias)
 
     lp = Processor()
-    model = SimpleNamespace(logits_processor=lp, lm_head=head, named_children=lambda: [])
+    model = SimpleNamespace(
+        logits_processor=lp, lm_head=head, named_children=list
+    )
     runner, request = batch(20, mixed=True)
     runner.model = model
     neutral_processors(runner.sampler)
@@ -233,7 +251,9 @@ def test_native_public_hook_switches_global_and_full_head(monkeypatch):
     verify.before_compute_logits(runner, request, object())
     assert not lp._radiance_fast_ok
     full = torch.nn.functional.linear(hidden, head.weight)
-    assert torch.equal(lp._apply_head(head, hidden).view(torch.uint8), full.view(torch.uint8))
+    assert torch.equal(
+        lp._apply_head(head, hidden).view(torch.uint8), full.view(torch.uint8)
+    )
     verify.before_compute_logits(runner, request, None)
     resumed = lp._apply_head(head, hidden)
     assert lp._radiance_fast_ok

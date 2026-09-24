@@ -1,7 +1,7 @@
 """Experimental INT2 target head with BF16-weight reranking and full-head fallback.
 
-The default target method selects 256 candidates globally from the complete
-INT2 score row. RADIANCE_VERIFY_HEAD_GLOBAL_TOPK=128 selects a smaller global
+The default target method selects 512 candidates globally from the complete
+INT2 score row. RADIANCE_VERIFY_HEAD_GLOBAL_TOPK=128 or 256 selects a smaller global
 shortlist; setting 0 restores block selection with the sampled capacity gate
 top_k <= min(RERANK // 4, KCAND). That gate is necessary, not a recall proof.
 
@@ -40,9 +40,9 @@ except Exception as e:                  # pragma: no cover
     sys.stderr.write(f"[radiance.verifyhead] radiance_drafthead unavailable: {e!r}\n")
 
 ENABLED = os.environ.get("RADIANCE_VERIFY_HEAD", "0") == "1"
-GLOBAL_TOPK = int(os.environ.get("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", "256"))
-if GLOBAL_TOPK not in (0, 128, 256):
-    raise ValueError("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK must be 0, 128 or 256")
+GLOBAL_TOPK = int(os.environ.get("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", "512"))
+if GLOBAL_TOPK not in (0, 128, 256, 512):
+    raise ValueError("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK must be 0, 128, 256 or 512")
 _GLOBAL_MAX_ROWS = 32
 # Rows above which the gate declines. NON-BINDING BY DEFAULT, deliberately.
 #

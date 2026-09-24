@@ -19,7 +19,7 @@ def functions():
     tree = ast.parse(SOURCE.read_text())
     nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
     ns = {
-        "GLOBAL_TOPK": 256,
+        "GLOBAL_TOPK": 512,
         "MAX_ROWS": 32,
         "_GLOBAL_MAX_ROWS": 32,
         "_NO_LOGPROBS": -1,
@@ -52,9 +52,10 @@ def batch():
     )
 
 
-def test_pi_top20_admitted_without_changing_drafter_capacity():
+def test_pi_top40_admitted_without_changing_drafter_capacity():
     ns = functions()
     runner, request = batch()
+    runner.sampler.sampling_states.top_k.np[0] = 40
     assert ns["_batch_is_safe"](runner, request, None)
     assert ns["_dh"].KCAND == 8
     runner.sampler.penalties_state.use_penalty[1] = True  # unselected request
@@ -80,7 +81,7 @@ def test_unsupported_sampling_uses_corrected_full_head(restriction):
     elif restriction == "min_p":
         sampler.sampling_states.min_p.np[0] = 0.1
     elif restriction == "top_k":
-        sampler.sampling_states.top_k.np[0] = 100
+        sampler.sampling_states.top_k.np[0] = 129
     elif restriction == "rows":
         request.logits_indices = np.zeros(33)
     else:

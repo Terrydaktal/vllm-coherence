@@ -150,10 +150,10 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         "stage26-control-20260921.json"
     )
     assert "Calls in 6 retained cycles" in readme
-    assert readme.index("## Global-256 target-head") < readme.index("## Benchmarks")
-    assert readme.count("## Global-256 target-head") == 1
+    assert readme.index("## Global-512 target-head") < readme.index("## Benchmarks")
+    assert readme.count("## Global-512 target-head") == 1
     assert readme.count("## Benchmarks") == 1
-    assert "## Global-256 target-head benchmark" not in readme
+    assert "## Global-512 target-head benchmark" not in readme
     assert "## 60K coding, prose, JSON, thinking and compaction benchmark" not in readme
     assert "**≈2.8**" not in readme
     assert "estimated from separate runs" not in readme

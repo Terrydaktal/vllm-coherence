@@ -63,10 +63,13 @@ def configure(profile, patches, *, root=Path("/qualification"), environ=None):
         "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1",
     }
     head = manifest.get("target_head", "full-bf16")
-    if head == "global256":
+    if head in ("global256", "global512"):
         if entry.get("target_head", {}).get("mode") != head:
             raise ValueError("optimized target head differs from release profile")
-        required.update(RADIANCE_VERIFY_HEAD="1", RADIANCE_VERIFY_HEAD_GLOBAL_TOPK="256")
+        required.update(
+            RADIANCE_VERIFY_HEAD="1",
+            RADIANCE_VERIFY_HEAD_GLOBAL_TOPK=head.removeprefix("global"),
+        )
     elif head == "full-bf16":
         required["RADIANCE_VERIFY_HEAD"] = "0"
     else:

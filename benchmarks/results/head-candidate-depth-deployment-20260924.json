@@ -1,0 +1,24 @@
+{
+  "status": "LIVE",
+  "head": "global512",
+  "candidate_count": 512,
+  "runtime_abi": "c95356319c29f7e3740ef45a39a7d11402d1857baa55ca8dafba984acf57402e",
+  "data_abi": "f37d6b4b9b01c00452b4fa46235a2862d41fbbe7aa73162cbda3835724386e3e",
+  "snapshot_data_unchanged": true,
+  "activated_in_worker": true,
+  "health": 200,
+  "vm_inference": "passed; public READY request stopped naturally after 2 tokens",
+  "cpu_checks": {
+    "passed": 224,
+    "gpu_opt_in_skipped": 25
+  },
+  "time": 1790259982.365743,
+  "startup_receipt_sha256": "b2962fe29de76462f5e0d3fe11658ac2c4d4839c52bf57a26d203675d62409b0",
+  "startup_receipt_keys": [
+    "dispatch",
+    "installed_before_compile_and_capture",
+    "performance",
+    "repair",
+    "sha256"
+  ]
+}

@@ -33,7 +33,8 @@ def test_help_and_doctor_are_cpu_only(tmp_path):
     assert report["gpu_opened"] is False
 
 
-def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path):
+@pytest.mark.parametrize("head", [None, "global256", "global512", "full-bf16"])
+def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path, head):
     state = tmp_path / "untouched"
     result = subprocess.run(
         [
@@ -47,6 +48,7 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path):
             "/models/a space/target",
             "--draft",
             "/models/draft",
+            *(["--head", head] if head else []),
         ],
         capture_output=True,
         check=False,
@@ -59,6 +61,11 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path):
     assert "--enforce-eager" not in command
     assert command[command.index("--host") + 1] == "127.0.0.1"
     assert "TORCHINDUCTOR_EMULATE_PRECISION_CASTS=1" in command
+    assert f"RADIANCE_VERIFY_HEAD={0 if head == 'full-bf16' else 1}" in command
+    assert (
+        f"RADIANCE_VERIFY_HEAD_GLOBAL_TOPK={256 if head == 'global256' else 512}"
+        in command
+    )
     assert "/models/a space/target:/models/target:ro" in command
     assert "--privileged" not in command
     assert not state.exists()

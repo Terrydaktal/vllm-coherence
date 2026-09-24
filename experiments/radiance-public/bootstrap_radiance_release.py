@@ -51,7 +51,9 @@ def main():
     runpy.run_path(str(source / "patch_streaming_snapshot.py"))
     os.environ.pop("QWEN_SNAPSHOT_SCHEDULER")
     install(package, source / "radiance_cache.py", source / "radiance_chat_tier.py")
-    if profile.get("optimized_d7", {}).get("target_head", {}).get("mode") == "global256":
+    if profile.get("optimized_d7", {}).get("target_head", {}).get("mode") in (
+        "global256", "global512"
+    ):
         shutil.copyfile(
             source / "radiance_verifyhead_global.py", package / "radiance_verifyhead.py"
         )

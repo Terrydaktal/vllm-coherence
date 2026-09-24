@@ -63,7 +63,7 @@
     "RADIANCE_MXFP4_PUREQUANT": "0",
     "RADIANCE_GDN_LAZY": "0",
     "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1",
-    "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"
+    "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "512"
   },
   "rollback": {
     "commit": "27fe00f04e3bdea9de6320b016f625dda90263ff",
@@ -72,7 +72,7 @@
     "launcher_root": "/home/lewis/projects/r9700-public-clean-20260906/qwen3.6-vllm-gfx1201-launchers"
   },
   "optimized_d7": {
-    "manifest_sha256": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
+    "manifest_sha256": "9f382c9b687354d8577ca40fe03d1eaa5e00a326fc96454c77875a3ae900a635",
     "state_layout": "existing-nine-slot",
     "worker": "optimized_d7_worker.OptimizedWorker",
     "arithmetic": {
@@ -82,7 +82,7 @@
       "state_layout": "existing-nine-slot",
       "target_head": "full BF16 with qualified M4-pair dispatch"
     },
-    "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-256 output-head selection is approximate and is recorded separately.",
+    "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-512 output-head selection is approximate and is recorded separately.",
     "admission_changes": [
       {
         "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
@@ -92,13 +92,18 @@
       }
     ],
     "target_head": {
-      "mode": "global256",
-      "candidate_count": 256,
-      "selection": "full-vocabulary INT2 top-256 then BF16-weight rerank",
+      "mode": "global512",
+      "candidate_count": 512,
+      "selection": "full-vocabulary INT2 top-512 then BF16-weight rerank",
       "fallback": "installed corrected full BF16 head with qualified M4-pair dispatch",
       "approximate": true,
-      "source_sha256": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
-      "cache_state": "unchanged for an identical processed token prefix"
+      "source_sha256": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
+      "cache_state": "unchanged for an identical processed token prefix",
+      "candidate_depth_qualification": {
+        "path": "benchmarks/results/head-candidate-depth-20260924.json",
+        "sha256": "f5bf7716abde5eac07ed0fb09d4e8cd39122f9ec759b257d3124a294f2973c0c",
+        "scope": "Paired Global-256/512/full-head comparison on 12015 Pi prediction rows, temperature 1, top-p 0.95, top-k 40. Approximate candidate retention; no universal or full-model equivalence claim. Hidden inputs were captured on the separately identified live M1-repaired release; these results do not qualify this parent backbone."
+      }
     },
     "performance_qualification": {
       "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",

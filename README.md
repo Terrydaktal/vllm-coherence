@@ -92,8 +92,8 @@ and [Dockerfile](Dockerfile) document its base stack.
   dispatch, normalization/FP8 fusion, GDN prefill scan tiling and tiled prefill
   inputs. The backports retain the corrected arithmetic and existing state layout,
   with operator and complete-model comparisons documented below.
-- **Global-256 target-head improvement:** search the complete INT2 score row, then
-  rescore 256 candidates using BF16 weights. This removes the old eight-candidates-
+- **Global-512 target-head improvement:** search the complete INT2 score row, then
+  rescore 512 candidates using BF16 weights. This removes the old eight-candidates-
   per-tile restriction and improves measured candidate recall; it remains approximate.
 - **The Pi workflow below:** a patched agent runtime and extensions, backed by
   persistent chat state, transactional compaction, shared-GPU scheduling and live
@@ -182,7 +182,7 @@ All 320 full-vocabulary hashes and the prefill prediction matched. These are fin
 
 ## Compiled backend stages
 
-Measured on 2026-09-23 using the current compiled, optimized Global-256 serving backend with the pinned-RAM huge-page promotion repair; sampling is temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: 0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran a natural warmup followed by clean control, trace, and clean control; each arm generated 4,981 / 8,213 / 4,233 tokens respectively. Generated-token hashes and accepted-token schedules matched. The stage means retain 917 / 1130 / 774 complete M8 cycles (0K / 60K / 200K), and controls use exactly those same decode indices. Trace setup/export boundaries and incomplete trace inventories are excluded by structure, never by duration; complete native round logs retain all rounds and stalls. GPU activity timestamps supply the stage times; CPU annotations, Python hooks and export time are excluded. No per-stage event probes or forced-token replay are used. The measured tracing slowdown was 8.717 / 5.154 / 5.383 ms per retained round; it is reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect clocks and scheduling. Overlap is counted once in the total. [Capture and source identities](benchmarks/results/compiled-global256-stage-profile-20260923.json) · [controls](benchmarks/results/stage26-control-20260923.json) · [method and uncertainty](docs/STAGE_TIMING.md).
+Measured on 2026-09-23 using the then-current compiled, optimized Global-256 serving backend with the pinned-RAM huge-page promotion repair; sampling is temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: 0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran a natural warmup followed by clean control, trace, and clean control; each arm generated 4,981 / 8,213 / 4,233 tokens respectively. Generated-token hashes and accepted-token schedules matched. The stage means retain 917 / 1130 / 774 complete M8 cycles (0K / 60K / 200K), and controls use exactly those same decode indices. Trace setup/export boundaries and incomplete trace inventories are excluded by structure, never by duration; complete native round logs retain all rounds and stalls. GPU activity timestamps supply the stage times; CPU annotations, Python hooks and export time are excluded. No per-stage event probes or forced-token replay are used. The measured tracing slowdown was 8.717 / 5.154 / 5.383 ms per retained round; it is reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect clocks and scheduling. Overlap is counted once in the total. [Capture and source identities](benchmarks/results/compiled-global256-stage-profile-20260923.json) · [controls](benchmarks/results/stage26-control-20260923.json) · [method and uncertainty](docs/STAGE_TIMING.md).
 
 | Stage | Current GPU activity per retained compiled M8 cycle (0K / 60K / 200K; milliseconds unless explicitly marked; 2026-09-23; exact source hashes in capture) | Current correctness evidence | Last relevant code commit / change | What this stage does |
 | --- | ---: | --- | --- | --- |
@@ -473,33 +473,33 @@ Finish each row's layer, including its MLP, before moving to the next row. Each 
 
 </details>
 
-## Global-256 target-head
+## Global-512 target-head
 
-This is the table from [the top-256 PR](https://github.com/magiccodingman/vllm-radiance/pull/9).
-It is a **separate, earlier 60K-generated-token benchmark per method**, predating the
-M1/M8 and eager/compiled repairs and subsequent performance backports. Its old
-end-to-end throughput figures are intentionally omitted because they do not
-describe the current complete backend.
+Global-512 is the serving default. This paired comparison used the same hidden
+inputs from a natural coding completion (5,812 output tokens) and a following
+reasoning completion (4,720 output tokens), starting at 60,208 and 66,167 input
+tokens respectively. Sampling was temperature 1, top-p 0.95 and top-k 40.
 
-| Target path | Median M8 head time | Top-1 match | Complete reference top-20 retained |
-|---|---:|---:|---:|
-| Full BF16 fallback | 4.122 ms | 119,988/119,988 (100.0000%) | 119,988/119,988 (100.0000%) |
-| Original block-8/64 + rerank-80 | 1.085 ms | 119,956/119,988 (99.9733%) | 98,452/119,988 (82.0515%) |
-| Global INT2 top-128 + BF16 rerank | 1.114 ms | 119,986/119,988 (99.9983%) | 118,254/119,988 (98.5549%) |
-| Global INT2 top-256 + BF16 rerank (default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) |
+| Target path | Median M8 head time | Same top-1 token | Complete reference top-20 retained | Complete reference top-40 retained |
+|---|---:|---:|---:|---:|
+| Global INT2 top-256 + BF16 rerank | 1.156 ms | 12,015/12,015 (100%) | 11,975/12,015 (99.6671%) | 11,620/12,015 (96.7124%) |
+| Global INT2 top-512 + BF16 rerank (default) | 1.178 ms | 12,015/12,015 (100%) | 11,996/12,015 (99.8419%) | 11,933/12,015 (99.3175%) |
+| Full BF16 reference | 4.061 ms | 12,015/12,015 (100%) | 12,015/12,015 (100%) | 12,015/12,015 (100%) |
 
-There were 115 natural completions per method on 11 private Pi request boundaries
-with 57,008–65,527 input tokens. Output totals were 60,598 / 60,075 / 60,348 /
-60,675 tokens for full / block / global-128 / global-256 respectively. Tools were
-not executed. Head timings are median eight-row GPU-event measurements on the
-same captured hidden vectors; 119,988 prediction rows were compared.
+The comparison covers **12,015 prediction rows**, including prefill and rejected
+speculative rows, not 12,015 generated tokens. Timing uses 47 eight-row hidden
+inputs with five randomized-order repetitions: 235 measurements per method.
+These are isolated head timings; they do not measure whole-round time or tok/s.
 
-Global-256 removes the eight-per-tile capacity limit, but remains approximate.
-The two changed final argmax IDs and 202 incomplete top-20 sets are observed
-misses. Complete top-20 retention does not certify score equality, ordering or
-sampling probabilities. The full BF16 path is the reference in this head study,
-not an independent proof of the model. [Methodology](docs/VERIFY_HEAD_GLOBAL_TOPK.md)
-· [Aggregate evidence](benchmarks/results/20260916-verify-head-global-topk-long/summary.json).
+Global-512 reduced incomplete top-40 retention from 395 rows to 82 (79.2% fewer),
+for 0.022 ms added median head time. Retention includes cutoff ties and does not
+establish score equality, ordering or identical sampling probabilities. Both
+shortlists remain approximate; the full BF16 head is the reference for this
+comparison, not an independently proved model. The drafter is unchanged.
+
+[Methodology and limits](docs/HEAD_CANDIDATE_DEPTH.md)
+· [Numeric results](benchmarks/results/head-candidate-depth-20260924.json)
+· [Earlier Global-256 study](docs/VERIFY_HEAD_GLOBAL_TOPK.md).
 
 ## Benchmarks
 
@@ -656,7 +656,8 @@ curl http://127.0.0.1:8080/v1/models
 
 Use `--dry-run` to inspect the complete command, or `--head full-bf16` for the
 complete target vocabulary head. The default
-`global256` profile uses faster, approximate candidate selection.
+`global512` profile uses faster, approximate candidate selection; `--head global256`
+retains the smaller shortlist.
 
 Keep the pinned compiler/image stack together. Rebuilding numerical code needs
 fresh qualification; replacing hashes does not transfer evidence.

@@ -52,7 +52,9 @@ if profile.get("optimized_d7"):
     manifest["runtime"]["optimized_d7"] = profile["optimized_d7"]
     for name in ("optimized-release.json", "optimized_pi_release.py"):
         manifest["runtime"]["release_files"][name] = sha(BASE / name)
-    if profile["optimized_d7"].get("target_head", {}).get("mode") == "global256":
+    if profile["optimized_d7"].get("target_head", {}).get("mode") in (
+        "global256", "global512"
+    ):
         manifest["runtime"]["release_files"]["radiance_verifyhead_global.py"] = sha(
             BASE / "radiance_verifyhead_global.py"
         )

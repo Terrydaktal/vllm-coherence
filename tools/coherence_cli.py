@@ -46,7 +46,7 @@ OPTIONS
     --draft PATH       Corresponding Qwen3.8-27B-DFlash2-FP8 directory.
     --engine NAME      podman (the supported container runtime).
     --port PORT        Local API port (default: 8080).
-    --head MODE        global256 (default) or full-bf16.
+    --head MODE        global512 (default), global256 or full-bf16.
     --dry-run          Print the container command; do not prepare or launch it.
     --ssh HOST         Forward a remote Coherence backend over SSH for Pi.
     --remote-state P   Remote state directory (default: ~/.local/state/vllm-coherence).
@@ -222,12 +222,12 @@ def verify_runtime(state):
     return manifest
 
 
-def prepare(state, archive=None, head="global256"):
+def prepare(state, archive=None, head="global512"):
     with deployment_lock(state):
         return _prepare(state, archive, head)
 
 
-def _prepare(state, archive=None, head="global256"):
+def _prepare(state, archive=None, head="global512"):
     private_directory(state)
     spec = release()
     runtime = state / "runtime"
@@ -277,17 +277,30 @@ def _prepare(state, archive=None, head="global256"):
     manifest = json.loads(json.dumps(original))
     manifest["target_head"] = head
     manifest["environment"]["RADIANCE_VERIFY_HEAD"] = (
-        "1" if head == "global256" else "0"
+        "1" if head in ("global256", "global512") else "0"
     )
-    manifest["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = "256"
+    manifest["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = (
+        head.removeprefix("global") if head.startswith("global") else "512"
+    )
     write_json(patches / "optimized-release.json", manifest)
     profile["optimized_d7"]["manifest_sha256"] = digest(
         patches / "optimized-release.json"
     )
     profile["optimized_d7"]["target_head"]["mode"] = head
+    profile["optimized_d7"]["target_head"]["candidate_count"] = (
+        int(head.removeprefix("global")) if head.startswith("global") else 0
+    )
+    profile["optimized_d7"]["target_head"]["selection"] = (
+        f"full-vocabulary INT2 top-{head.removeprefix('global')} then BF16-weight rerank"
+        if head.startswith("global")
+        else "complete corrected BF16 head"
+    )
     profile["kernel_environment"]["RADIANCE_VERIFY_HEAD"] = manifest["environment"][
         "RADIANCE_VERIFY_HEAD"
     ]
+    profile["kernel_environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = manifest[
+        "environment"
+    ]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"]
     write_json(patches / "runtime-radiance-1.0.16.json", profile)
     # A separate namespace for this exported release; old user cache is never
     # reinterpreted under a new state/arithmetic contract.
@@ -364,7 +377,12 @@ def serving_command(args, connection):
         "TRITON_CACHE_AUTOTUNING": "1",
         "QWEN_OPTIMIZED_STARTUP_RECEIPT": f"/cache/runtime/{abi}/startup-{uuid.uuid4().hex}.json",
     }
-    environment["RADIANCE_VERIFY_HEAD"] = "1" if args.head == "global256" else "0"
+    environment["RADIANCE_VERIFY_HEAD"] = (
+        "1" if args.head in ("global256", "global512") else "0"
+    )
+    environment["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = (
+        args.head.removeprefix("global") if args.head.startswith("global") else "512"
+    )
     transfer = {
         "kv_connector": "OffloadingConnector",
         "engine_id": f"coherence-{abi[:16]}",
@@ -522,7 +540,7 @@ def main(argv=None):
     parser.add_argument("--state")
     parser.add_argument("--archive")
     parser.add_argument(
-        "--head", choices=("global256", "full-bf16"), default="global256"
+        "--head", choices=("global512", "global256", "full-bf16"), default="global512"
     )
     parser.add_argument("--model")
     parser.add_argument("--draft")

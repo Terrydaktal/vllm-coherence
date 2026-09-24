@@ -70,7 +70,7 @@ def package(source, output):
         "patch_files": patch_paths,
         "integration_sha256": {name: digest(ROOT / name) for name in patch_paths},
         "support_files": {support: backoff["library_sha256"]},
-        "scope": "Frozen serving payload; existing nine-slot state layout; full-head numerical controls and separate approximate global-256 head. Repackaging does not create new GPU qualification.",
+        "scope": "Frozen serving payload; existing nine-slot state layout; full-head numerical controls and separate approximate global-512 head. Repackaging does not create new GPU qualification.",
     }
 
 

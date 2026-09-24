@@ -70,18 +70,47 @@ def test_manifest_cannot_silently_change_layout_or_arithmetic(tmp_path, key, val
         release.configure(publish(tmp_path, manifest), tmp_path, root=root, environ={})
 
 
-def test_global_head_is_explicit_and_authenticated(tmp_path):
+@pytest.mark.parametrize("depth", [256, 512])
+def test_global_head_is_explicit_and_authenticated(tmp_path, depth):
     root, _, manifest = payload(tmp_path)
-    manifest["target_head"] = "global256"
-    manifest["environment"].update(RADIANCE_VERIFY_HEAD="1", RADIANCE_VERIFY_HEAD_GLOBAL_TOPK="256")
+    manifest["target_head"] = f"global{depth}"
+    manifest["environment"].update(
+        RADIANCE_VERIFY_HEAD="1", RADIANCE_VERIFY_HEAD_GLOBAL_TOPK=str(depth)
+    )
     profile = publish(tmp_path, manifest)
     with pytest.raises(ValueError, match="target head differs"):
         release.configure(profile, tmp_path, root=root, environ={})
-    profile["optimized_d7"]["target_head"] = {"mode": "global256"}
+    profile["optimized_d7"]["target_head"] = {"mode": f"global{depth}"}
     env = {}
     release.configure(profile, tmp_path, root=root, environ=env)
-    assert env["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] == "256"
+    assert env["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] == str(depth)
     assert env["RADIANCE_VERIFY_HEAD"] == "1"
+
+
+def test_global512_cannot_publish_the_old_candidate_depth(tmp_path):
+    root, _, manifest = payload(tmp_path)
+    manifest["target_head"] = "global512"
+    manifest["environment"].update(
+        RADIANCE_VERIFY_HEAD="1", RADIANCE_VERIFY_HEAD_GLOBAL_TOPK="256"
+    )
+    profile = publish(tmp_path, manifest)
+    profile["optimized_d7"]["target_head"] = {"mode": "global512"}
+    env = {}
+    with pytest.raises(ValueError, match="contract changed"):
+        release.configure(profile, tmp_path, root=root, environ=env)
+    assert env == {}
+
+
+def test_global512_retains_global256_snapshot_data_identity():
+    from copy import deepcopy
+
+    old = {
+        "kernel_environment": {"RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"},
+        "optimized_arithmetic": {"m1": "fixed", "layout": "nine-slot"},
+    }
+    new = deepcopy(old)
+    new["kernel_environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = "512"
+    assert release.compatible_output_head_contract(old, new) is old
 
 
 def test_output_head_change_reuses_only_identical_backbone_state_contract():

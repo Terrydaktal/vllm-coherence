@@ -16,35 +16,58 @@ ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- COHERENCE_CURRENT_RESULTS -->"
 END = "<!-- /COHERENCE_CURRENT_RESULTS -->"
 REPOSITORY = "https://github.com/Terrydaktal/vllm-coherence"
-GLOBAL_BENCHMARK_LINES = (
-    "## Global-256 target-head",
-    "",
-    "This is the table from [the top-256 PR](https://github.com/magiccodingman/vllm-radiance/pull/9).",
-    "It is a **separate, earlier 60K-generated-token benchmark per method**, predating the",
-    "M1/M8 and eager/compiled repairs and subsequent performance backports. Its old",
-    "end-to-end throughput figures are intentionally omitted because they do not",
-    "describe the current complete backend.",
-    "",
-    "| Target path | Median M8 head time | Top-1 match | Complete reference top-20 retained |",
-    "|---|---:|---:|---:|",
-    "| Full BF16 fallback | 4.122 ms | 119,988/119,988 (100.0000%) | 119,988/119,988 (100.0000%) |",
-    "| Original block-8/64 + rerank-80 | 1.085 ms | 119,956/119,988 (99.9733%) | 98,452/119,988 (82.0515%) |",
-    "| Global INT2 top-128 + BF16 rerank | 1.114 ms | 119,986/119,988 (99.9983%) | 118,254/119,988 (98.5549%) |",
-    "| Global INT2 top-256 + BF16 rerank (default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) |",
-    "",
-    "There were 115 natural completions per method on 11 private Pi request boundaries",
-    "with 57,008–65,527 input tokens. Output totals were 60,598 / 60,075 / 60,348 /",
-    "60,675 tokens for full / block / global-128 / global-256 respectively. Tools were",
-    "not executed. Head timings are median eight-row GPU-event measurements on the",
-    "same captured hidden vectors; 119,988 prediction rows were compared.",
-    "",
-    "Global-256 removes the eight-per-tile capacity limit, but remains approximate.",
-    "The two changed final argmax IDs and 202 incomplete top-20 sets are observed",
-    "misses. Complete top-20 retention does not certify score equality, ordering or",
-    "sampling probabilities. The full BF16 path is the reference in this head study,",
-    "not an independent proof of the model. [Methodology](docs/VERIFY_HEAD_GLOBAL_TOPK.md)",
-    "· [Aggregate evidence](benchmarks/results/20260916-verify-head-global-topk-long/summary.json).",
-)
+def render_head_candidate_benchmark():
+    evidence = json.loads(
+        (ROOT / "benchmarks/results/head-candidate-depth-20260924.json").read_text()
+    )
+    lines = [
+        "## Global-512 target-head",
+        "",
+        "Global-512 is the serving default. This paired comparison used the same hidden",
+        "inputs from a natural coding completion (5,812 output tokens) and a following",
+        "reasoning completion (4,720 output tokens), starting at 60,208 and 66,167 input",
+        "tokens respectively. Sampling was temperature 1, top-p 0.95 and top-k 40.",
+        "",
+        "| Target path | Median M8 head time | Same top-1 token | Complete reference top-20 retained | Complete reference top-40 retained |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for mode, label in (
+        ("global256", "Global INT2 top-256 + BF16 rerank"),
+        ("global512", "Global INT2 top-512 + BF16 rerank (default)"),
+        ("full", "Full BF16 reference"),
+    ):
+        result = evidence["modes"][mode]
+        rows = result["rows"]
+        cells = []
+        for key in (
+            "argmax_equal",
+            "top20_complete_including_ties",
+            "top40_complete_including_ties",
+        ):
+            count = result[key]
+            percent = "100%" if count == rows else f"{100 * count / rows:.4f}%"
+            cells.append(f"{count:,}/{rows:,} ({percent})")
+        timing = evidence["timings_m8"][mode]["median_ms"]
+        lines.append(f"| {label} | {timing:.3f} ms | " + " | ".join(cells) + " |")
+    lines.extend([
+        "",
+        "The comparison covers **12,015 prediction rows**, including prefill and rejected",
+        "speculative rows, not 12,015 generated tokens. Timing uses 47 eight-row hidden",
+        "inputs with five randomized-order repetitions: 235 measurements per method.",
+        "These are isolated head timings; they do not measure whole-round time or tok/s.",
+        "",
+        "Global-512 reduced incomplete top-40 retention from 395 rows to 82 (79.2% fewer),",
+        "for 0.022 ms added median head time. Retention includes cutoff ties and does not",
+        "establish score equality, ordering or identical sampling probabilities. Both",
+        "shortlists remain approximate; the full BF16 head is the reference for this",
+        "comparison, not an independently proved model. The drafter is unchanged.",
+        "",
+        "[Methodology and limits](docs/HEAD_CANDIDATE_DEPTH.md)",
+        "· [Numeric results](benchmarks/results/head-candidate-depth-20260924.json)",
+        "· [Earlier Global-256 study](docs/VERIFY_HEAD_GLOBAL_TOPK.md).",
+    ])
+    return lines
+
 
 
 def measurement_marker(data):
@@ -152,7 +175,7 @@ def current_stage_profile(data):
         outputs = " / ".join(f"{raw['contexts'][c]['generated_tokens_per_arm']:,}" for c in raw["context_order"])
         deltas = " / ".join(f"{raw['observer_comparison']['contexts'][c]['mean_delta_ms']:.3f}" for c in raw["context_order"])
         grouped["scope"] = (
-            "Measured on 2026-09-23 using the current compiled, optimized Global-256 serving backend"
+            "Measured on 2026-09-23 using the then-current compiled, optimized Global-256 serving backend"
             + (" with the pinned-RAM huge-page promotion repair" if raw["binding"].get("host_runtime") else "")
             + "; sampling is temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: "
             "0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran "
@@ -1183,7 +1206,7 @@ def render(data):
         "",
         "</details>",
         "",
-        *GLOBAL_BENCHMARK_LINES,
+        *render_head_candidate_benchmark(),
         "",
         *render_coding_json_compaction_benchmark(),
         "",

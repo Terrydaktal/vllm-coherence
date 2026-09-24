@@ -1,9 +1,9 @@
 {
   "schema": "urn:qwen:optimized-pi-release:v1",
-  "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260923-attention-page-boundary-v1",
+  "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-global512-base-v1",
   "container_root": "/qualification",
   "state_layout": "existing-nine-slot",
-  "target_head": "global256",
+  "target_head": "global512",
   "repair": "/qualification/preflight/d7-stock-repair-bundle-003.json",
   "repair_sha256": "693de5c443c8c05f693c8d42f06044911689b669c22448477192b4e858188719",
   "performance": "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json",
@@ -26,7 +26,7 @@
     "QWEN_OPTIMIZED_PERFORMANCE": "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json",
     "QWEN_OPTIMIZED_REPAIR": "/qualification/preflight/d7-stock-repair-bundle-003.json",
     "RADIANCE_VERIFY_HEAD": "1",
-    "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"
+    "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "512"
   },
   "admission_changes": [
     {
@@ -728,7 +728,7 @@
     "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
     "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
   },
-  "parent_manifest_sha256": "d6fc9cc7752b1f62456e725130ee9aafe0befb1c80a4d5b2b66eb71b2f2655b2",
+  "parent_manifest_sha256": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
   "attention_boundary_qualification": {
     "path": "/qualification/diagnostics/attention-page-boundary-v1/pi-comparison.json",
     "sha256": "afeed5c1f6216dbe45a273bce72e4a5b707d23133322b71d32779fabc9114dd2",

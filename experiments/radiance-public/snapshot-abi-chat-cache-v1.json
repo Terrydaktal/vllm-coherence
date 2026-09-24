@@ -62,7 +62,7 @@
       "RADIANCE_MXFP4_PUREQUANT": "0",
       "RADIANCE_GDN_LAZY": "0",
       "TORCHINDUCTOR_EMULATE_PRECISION_CASTS": "1",
-      "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "256"
+      "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK": "512"
     },
     "deterministic_offload_hashes": {
       "PYTHONHASHSEED": "0"
@@ -72,22 +72,22 @@
       "sha256": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd"
     },
     "release_files": {
-      "bootstrap_radiance_release.py": "e08bed11fabee61c744a04b2c42450f99097bd7d0716a61ac1e2fc1423965e6f",
-      "runtime-radiance-1.0.16.json": "27bd4de2bb547beb8f5f03f346ab64bb2fa9a1574230a968fbc7b89f106edd38",
+      "bootstrap_radiance_release.py": "b31e9f880ee91abe20d0a67dcc3ba5607e9d2df5d85c156d3bc1b101c8aa2de0",
+      "runtime-radiance-1.0.16.json": "c0f6ffdc41590846df3b213d2161a41c59679dc531acb0d239f53245942219f3",
       "radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
       "patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
       "gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
       "qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-      "optimized-release.json": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
-      "optimized_pi_release.py": "c97a35d1d613a7bbfd7a17b49d956cab6480580ce9c44a58657a5d7f3998d6f8",
-      "radiance_verifyhead_global.py": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
+      "optimized-release.json": "9f382c9b687354d8577ca40fe03d1eaa5e00a326fc96454c77875a3ae900a635",
+      "optimized_pi_release.py": "5442ba9d9bbfd7a7c26ccb2d20e786472a3f65d58cf3cc12a951d20401280714",
+      "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
       "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138",
       "patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5"
     },
     "optimized_d7": {
-      "manifest_sha256": "2c4148d6f694c9be3c7c08aa420ee55453c2864853053d0878258f6ddf48dcbd",
+      "manifest_sha256": "9f382c9b687354d8577ca40fe03d1eaa5e00a326fc96454c77875a3ae900a635",
       "state_layout": "existing-nine-slot",
       "worker": "optimized_d7_worker.OptimizedWorker",
       "arithmetic": {
@@ -97,7 +97,7 @@
         "state_layout": "existing-nine-slot",
         "target_head": "full BF16 with qualified M4-pair dispatch"
       },
-      "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-256 output-head selection is approximate and is recorded separately.",
+      "arithmetic_evidence_scope": "The arithmetic identity names the corrected numerical parent and full-head reference. Qualified norm/FP8 fusion and prefill tiling preserve it on the recorded operator and full-model samples; this is not a universal equivalence proof. Global-512 output-head selection is approximate and is recorded separately.",
       "admission_changes": [
         {
           "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
@@ -107,13 +107,18 @@
         }
       ],
       "target_head": {
-        "mode": "global256",
-        "candidate_count": 256,
-        "selection": "full-vocabulary INT2 top-256 then BF16-weight rerank",
+        "mode": "global512",
+        "candidate_count": 512,
+        "selection": "full-vocabulary INT2 top-512 then BF16-weight rerank",
         "fallback": "installed corrected full BF16 head with qualified M4-pair dispatch",
         "approximate": true,
-        "source_sha256": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
-        "cache_state": "unchanged for an identical processed token prefix"
+        "source_sha256": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
+        "cache_state": "unchanged for an identical processed token prefix",
+        "candidate_depth_qualification": {
+          "path": "benchmarks/results/head-candidate-depth-20260924.json",
+          "sha256": "f5bf7716abde5eac07ed0fb09d4e8cd39122f9ec759b257d3124a294f2973c0c",
+          "scope": "Paired Global-256/512/full-head comparison on 12015 Pi prediction rows, temperature 1, top-p 0.95, top-k 40. Approximate candidate retention; no universal or full-model equivalence claim. Hidden inputs were captured on the separately identified live M1-repaired release; these results do not qualify this parent backbone."
+        }
       },
       "performance_qualification": {
         "path": "/qualification/preflight/pi-serving-audit-20260918/evidence/model-tiled-comparison.json",

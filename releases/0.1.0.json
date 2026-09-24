@@ -28,9 +28,9 @@
     "src/qwen_r9700_lab/radiance_memory.py"
   ],
   "integration_sha256": {
-    "experiments/radiance-public/bootstrap_radiance_release.py": "e08bed11fabee61c744a04b2c42450f99097bd7d0716a61ac1e2fc1423965e6f",
-    "experiments/radiance-public/optimized_pi_release.py": "c97a35d1d613a7bbfd7a17b49d956cab6480580ce9c44a58657a5d7f3998d6f8",
-    "experiments/radiance-public/runtime-radiance-1.0.16.json": "27bd4de2bb547beb8f5f03f346ab64bb2fa9a1574230a968fbc7b89f106edd38",
+    "experiments/radiance-public/bootstrap_radiance_release.py": "b31e9f880ee91abe20d0a67dcc3ba5607e9d2df5d85c156d3bc1b101c8aa2de0",
+    "experiments/radiance-public/optimized_pi_release.py": "5442ba9d9bbfd7a7c26ccb2d20e786472a3f65d58cf3cc12a951d20401280714",
+    "experiments/radiance-public/runtime-radiance-1.0.16.json": "c0f6ffdc41590846df3b213d2161a41c59679dc531acb0d239f53245942219f3",
     "experiments/radiance-public/patch_streaming_snapshot.py": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd",
     "experiments/radiance-public/patch_chat_snapshot.py": "edabd083e5bbeebf76a02c45cee040e58b8af6a61990308e2dd0a90ef3026ce6",
     "experiments/radiance-public/radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
@@ -39,7 +39,7 @@
     "experiments/radiance-public/patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
     "experiments/radiance-public/patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5",
     "experiments/radiance-public/patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
-    "experiments/radiance-public/radiance_verifyhead_global.py": "980d2d979300701a795d3627fe543bc54b018bdd843bb4f8296a2b411ce1e232",
+    "experiments/radiance-public/radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
     "experiments/radiance-public/patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
     "experiments/radiance-public/gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
     "experiments/radiance-public/qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
@@ -49,5 +49,5 @@
   "support_files": {
     "support/libhsa-runtime64.so.1.21.0": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda"
   },
-  "scope": "Frozen serving payload; existing nine-slot state layout; full-head numerical controls and separate approximate global-256 head. Repackaging does not create new GPU qualification."
+  "scope": "Frozen serving payload; existing nine-slot state layout; full-head numerical controls and separate approximate global-512 head. Repackaging does not create new GPU qualification."
 }

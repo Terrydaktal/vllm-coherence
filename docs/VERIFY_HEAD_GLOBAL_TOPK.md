@@ -5,12 +5,12 @@ For sampled `top_k=20`, that can discard required tokens before BF16 reranking.
 The legacy capacity fix therefore uses the full target head when
 `top_k > min(RADIANCE_DRAFT_RERANK // 4, 8)`.
 
-The default target method now uses a global-256 shortlist, removing that
+The default target method now uses a global-512 shortlist, removing that
 per-tile quota:
 
 ```text
 complete INT2 vocabulary projection
-    → global top-256 (or top-128)
+    → global top-512 (or top-256/top-128)
     → rescore those rows using the original BF16 weights
     → mask other logits to -inf
     → existing sampler
@@ -27,11 +27,11 @@ and candidate buffers.
 ```text
 RADIANCE_FAST_DRAFT=1
 RADIANCE_VERIFY_HEAD=1
-RADIANCE_VERIFY_HEAD_GLOBAL_TOPK=256
+RADIANCE_VERIFY_HEAD_GLOBAL_TOPK=512
 ```
 
-`RADIANCE_VERIFY_HEAD_GLOBAL_TOPK` defaults to `256` in Python and Compose.
-Set `128` for a smaller global shortlist or `0` to restore the legacy block
+`RADIANCE_VERIFY_HEAD_GLOBAL_TOPK` defaults to `512` in Python and Compose.
+Set `128` or `256` for a smaller global shortlist or `0` to restore the legacy block
 shortlist with its capacity gate. The target optimization still requires
 `RADIANCE_VERIFY_HEAD=1` and `RADIANCE_FAST_DRAFT=1`.
 Global selection requires TP1, BF16 inputs and
@@ -66,7 +66,7 @@ configuration and cache format remain constant across methods.
 | Full BF16 fallback | 4.122 ms | 119,988/119,988 (100.0000%) | 119,988/119,988 (100.0000%) |
 | Original block-8/64 + rerank-80 | 1.085 ms | 119,956/119,988 (99.9733%) | 98,452/119,988 (82.0515%) |
 | Global INT2 top-128 + BF16 rerank | 1.114 ms | 119,986/119,988 (99.9983%) | 118,254/119,988 (98.5549%) |
-| Global INT2 top-256 + BF16 rerank (default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) |
+| Global INT2 top-256 + BF16 rerank (then default) | 1.128 ms | 119,986/119,988 (99.9983%) | 119,786/119,988 (99.8316%) |
 
 ### Generated output and raw timing
 
