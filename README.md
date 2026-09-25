@@ -538,7 +538,7 @@ This is the same natural-stop coding task run independently at empty, 60K and 20
 
 Report status: `complete_with_validation_failure`. [Numeric results and every round](benchmarks/results/pi-coding-contexts.json). Each completed row stores every scheduler event under `contexts.<context>.round_capture.records`; a count mismatch is a validation failure. The target is 5,000 output tokens, with shorter natural completions reported explicitly.
 
-Run all three arms against an active backend with `uv run python experiments/radiance-public/benchmark_pi_coding_contexts.py --fixture-60k PATH_TO_60K_FIXTURE --fixture-200k PATH_TO_200K_FIXTURE --tokenizer-json PATH_TO_TOKENIZER --abi SNAPSHOT_ABI --top-k 40`.
+For the next full refresh, use [the shared benchmark suite](docs/BENCHMARK_SUITE.md): `benchmark_pi_coding_contexts.py --suite` reuses each context's predetermined unprofiled control for its coding row and complete histogram, and continues the same 60K output through prose, JSON, thinking and compaction. It keeps both controls around each stage trace for the residual calculation. Existing numbers above retain their original capture provenance.
 
 ### Complete per-round capture
 

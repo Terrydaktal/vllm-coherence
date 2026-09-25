@@ -57,6 +57,22 @@ def package(args):
     for name in sources[:2]:
         if hashes[name] != hashlib.sha256((private / Path(name).name).read_bytes()).hexdigest():
             raise ValueError("the benchmark source differs from the executed copy")
+    # Unified runs retain the coordinator and request helpers as well. Keep
+    # their binding instead of attributing the capture only to the old driver.
+    suite_binding = None
+    if (private / "checkpoint.json").exists():
+        suite = read(private / "checkpoint.json")
+        contract = suite["contract"]
+        for name, expected in contract["measurement_sources"].items():
+            source = f"experiments/radiance-public/{name}"
+            if (Path(name).name != name or
+                    hashlib.sha256((ROOT / source).read_bytes()).hexdigest() != expected or
+                    hashlib.sha256((private / name).read_bytes()).hexdigest() != expected):
+                raise ValueError("shared benchmark source differs from its capture")
+            hashes[source] = expected
+        suite_binding = {"capture_id": suite["id"], "contract_sha256": digest(contract),
+                         "control_selection": contract["control_selection"],
+                         "runtime_manifest_sha256": contract["runtime_manifest_sha256"]}
     binding = {
         "image_id": original["Image"], "optimized_manifest_sha256": args.manifest_sha256,
         "worker": "matched_stage_profile_worker.MatchedStageWorker",
@@ -66,6 +82,8 @@ def package(args):
         "measurement_source_state": f"{args.source_commit} plus recorded working-tree source; pinned numerical payload identified by manifest SHA256",
         "privacy": "No chat text or token arrays included.",
     }
+    if suite_binding is not None:
+        binding["shared_suite"] = suite_binding
     # A host-memory policy can change round stalls without changing the
     # numerical payload. Bind it separately so a rerun cannot silently claim
     # to qualify a different scheduler or snapshot-runtime release.

@@ -217,6 +217,23 @@
         "tests/test_optimized_stock_norm.py"
       ],
       "native": "24 September 2026: 554 reported checks, zero failures; original 55 hidden-norm and 9 GDN-norm FP8 differences eliminated in the combined sample; 30 complete projections, 96 varied-layout attention cases, 12 saved operator-activation replays. Causal traces confirm changed GDN state and MLP output; they are not equality assertions. Paired graph operator timings and exact identities in benchmarks/results/eager-m1-contract-20260924.json and eager-m1-contract-norm-build-20260924.json. Source candidate only: live frozen release unchanged. Full-model, arbitrary-input and private-chat activation-distribution qualification remain unproved."
+    },
+    {
+      "id": "BENCH-SHARED-CAPTURES-01",
+      "contract": "One predetermined unprofiled coding capture per context feeds workload and histogram views; the exact 60K continuation feeds subsequent tasks. Profiling keeps paired controls and matched M8 residual analysis. Resume validates artifacts, source, runtime, sampler, fixture and worker identities; incomplete brackets restart without discarding evidence. Private token IDs never enter public reports.",
+      "sources": [
+        "experiments/radiance-public/benchmark_pi_suite.py",
+        "experiments/radiance-public/benchmark_pi_coding_contexts.py",
+        "experiments/radiance-public/benchmark_matched_stage_timings.py",
+        "experiments/radiance-public/matched_stage_profile_worker.py"
+      ],
+      "tests": [
+        "tests/test_pi_benchmark_suite.py",
+        "tests/test_matched_stage_profile.py",
+        "tests/test_pi_coding_contexts.py",
+        "tests/test_stage26_residual.py"
+      ],
+      "native": "Not run for the new coordinator. CPU orchestration/negative controls only; historical GPU results retain their original source bindings."
     }
   ]
 }

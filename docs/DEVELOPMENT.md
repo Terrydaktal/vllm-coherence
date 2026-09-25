@@ -43,6 +43,10 @@ deployment. Both select the backend container explicitly for telemetry.
 Linking source does not replace modules already loaded by a running backend or
 Pi process. Normal deployment/restart and Pi reload rules still apply.
 
+For a full benchmark refresh, use the [shared capture suite](BENCHMARK_SUITE.md).
+It supplies the coding, chained-workload and histogram views from the existing
+stage controls, preserving the paired measurements needed for the stage residual.
+
 ## Maintaining compatibility links
 
 `tools/reconcile_lab.py` is a CPU-only utility. From the Coherence checkout:

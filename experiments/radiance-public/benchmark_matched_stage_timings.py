@@ -10,7 +10,10 @@ from pathlib import Path
 
 import benchmark_pi_coding_contexts as coding
 from benchmark_pi_coding_json_compaction import (
-    CODING_PROMPT, _render_user_turn, _request, _turn_suffix,
+    CODING_PROMPT,
+    _render_user_turn,
+    _request,
+    _turn_suffix,
 )
 
 
@@ -18,6 +21,65 @@ def write(path, data):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=2) + "\n")
     temporary.replace(path)
+
+
+def rpc_request(opener, base_url, method, *values):
+    request = urllib.request.Request(
+        base_url + "/collective_rpc",
+        json.dumps({"method": method, "args": values, "timeout": 300}).encode(),
+        {"Content-Type": "application/json"},
+    )
+    with opener.open(request, timeout=360) as response:
+        payload = json.load(response)
+    results = payload.get("results") if isinstance(payload, dict) else payload
+    if not isinstance(results, list) or len(results) != 1:
+        raise RuntimeError("collective RPC must return exactly one worker result")
+    return results[0]
+
+
+def require_compiled(metadata):
+    if metadata["enforce_eager"] or not metadata["compilation_mode"]:
+        raise RuntimeError("compiled execution required")
+
+
+def capture_arm(*, opener, args, rpc, tokenizer, identity, prompt, suffix, arm, root):
+    """One request, one round capture. Return IDs only for private continuation.
+
+    Both entry points use this path, including the same profiler boundaries.
+    Finishing an armed profiler is mandatory even when validation/request fails.
+    """
+    worker = None
+    armed = False
+    try:
+        if arm != "warmup":
+            receipt = rpc("qwen_timing_arm", str(root),
+                          "profile" if arm == "profile" else "control",
+                          args.warmup_rounds, args.chunk_rounds, args.profile_rounds)
+            armed = True
+            require_compiled(receipt["metadata"])
+        baseline = coding._round_log_snapshot(args.round_log, identity)
+        started_ms = int(time.time() * 1000)
+        result, ids, completion = _request(
+            opener=opener, args=args, identity=identity, tokenizer=tokenizer,
+            prompt_tokens=prompt, suffix_tokens=suffix, stage="coding",
+            max_tokens=getattr(args, "coding_max_tokens", 10000), thinking=False,
+        )
+        del completion
+    finally:
+        if armed:
+            worker = rpc("qwen_timing_finish")
+    result["round_capture"] = coding._capture_rounds_until_complete(
+        path=args.round_log, identity=identity, baseline_keys=baseline,
+        started_at_ms=started_ms, expected_rounds=result.get("generation_rounds"),
+        settle_timeout=getattr(args, "round_log_settle_timeout", 10),
+    )
+    result["round_capture"]["histogram"] = coding._round_histogram(
+        result["round_capture"]["records"])
+    if worker is not None:
+        result.update(worker_file=str(root / "worker.json"),
+                      worker_decode_rounds=len(worker["rows"]),
+                      trace_chunks=len(worker["chunks"]))
+    return result, ids, worker
 
 
 def run(args):
@@ -28,21 +90,10 @@ def run(args):
     args.output.mkdir(parents=True, exist_ok=True)
 
     def rpc(method, *values):
-        request = urllib.request.Request(
-            args.base_url + "/collective_rpc",
-            json.dumps({"method": method, "args": values, "timeout": 300}).encode(),
-            {"Content-Type": "application/json"},
-        )
-        with opener.open(request, timeout=360) as response:
-            payload = json.load(response)
-        results = payload.get("results") if isinstance(payload, dict) else payload
-        if not isinstance(results, list) or len(results) != 1:
-            raise RuntimeError("collective RPC must return exactly one worker result")
-        return results[0]
+        return rpc_request(opener, args.base_url, method, *values)
 
     metadata = rpc("qwen_optimized_metadata")
-    if metadata["enforce_eager"] or not metadata["compilation_mode"]:
-        raise RuntimeError("compiled execution required before benchmark warmup")
+    require_compiled(metadata)
     rendered = _render_user_turn(opener, args.base_url, CODING_PROMPT,
                                  thinking=False, timeout=args.request_timeout)
     report = {"schema": "urn:coherence:matched-stage-serving:v1", "status": "running",
@@ -69,36 +120,10 @@ def run(args):
             report["current"] = {"context": context, "arm": arm, "started_at": time.time()}
             write(args.output / "report.json", report)
             print(json.dumps(report["current"]), flush=True)
-            if arm != "warmup":
-                armed = rpc("qwen_timing_arm", str(arm_root),
-                            "profile" if arm == "profile" else "control",
-                            args.warmup_rounds, args.chunk_rounds, args.profile_rounds)
-                metadata = armed["metadata"]
-                if metadata["enforce_eager"] or not metadata["compilation_mode"]:
-                    raise RuntimeError("compiled execution required")
-            baseline = coding._round_log_snapshot(args.round_log, identity)
-            started_ms = int(time.time() * 1000)
-            try:
-                result, ids, completion = _request(
-                    opener=opener, args=args, identity=identity, tokenizer=tokenizer,
-                    prompt_tokens=prompt, suffix_tokens=suffix, stage="coding",
-                    max_tokens=10000, thinking=False,
-                )
-                # The existing streaming consumer keeps text in memory only;
-                # immediately discard it. Never serialize prompt/output arrays.
-                del ids, completion
-            finally:
-                if arm != "warmup":
-                    worker = rpc("qwen_timing_finish")
-            result["round_capture"] = coding._capture_rounds_until_complete(
-                path=args.round_log, identity=identity, baseline_keys=baseline,
-                started_at_ms=started_ms, expected_rounds=result.get("generation_rounds"),
-                settle_timeout=10,
-            )
-            if arm != "warmup":
-                result["worker_file"] = str(arm_root / "worker.json")
-                result["worker_decode_rounds"] = len(worker["rows"])
-                result["trace_chunks"] = len(worker["chunks"])
+            result, ids, _ = capture_arm(
+                opener=opener, args=args, rpc=rpc, tokenizer=tokenizer,
+                identity=identity, prompt=prompt, suffix=suffix, arm=arm, root=arm_root)
+            del ids
             section["arms"][arm] = result
             write(args.output / "report.json", report)
             print(json.dumps({"context": context, "arm": arm,

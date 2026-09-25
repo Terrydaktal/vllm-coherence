@@ -948,10 +948,12 @@ def render_coding_context_benchmark():
         "",
         *( [provenance_line, ""] if provenance_line else [] ),
         (
-            "Run all three arms against an active backend with `uv run python "
-            "experiments/radiance-public/benchmark_pi_coding_contexts.py --fixture-60k "
-            "PATH_TO_60K_FIXTURE --fixture-200k PATH_TO_200K_FIXTURE "
-            f"--tokenizer-json PATH_TO_TOKENIZER --abi SNAPSHOT_ABI --top-k {sampling.get('top_k', 20)}`."
+            "For the next full refresh, use [the shared benchmark suite](docs/BENCHMARK_SUITE.md): "
+            "`benchmark_pi_coding_contexts.py --suite` reuses each context's predetermined "
+            "unprofiled control for its coding row and complete histogram, and continues the "
+            "same 60K output through prose, JSON, thinking and compaction. It keeps both "
+            "controls around each stage trace for the residual calculation. Existing numbers "
+            "above retain their original capture provenance."
         ),
     ]
 

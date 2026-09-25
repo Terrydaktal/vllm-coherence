@@ -6,13 +6,34 @@ Trace activation/export happens between declared chunks, outside retained rounds
 """
 
 import json
+import os
 import time
+import uuid
 from pathlib import Path
 
 from optimized_d7_worker import GraphObservation, OptimizedWorker
 
 
 class MatchedStageWorker(OptimizedWorker):
+    def qwen_timing_status(self):
+        if not hasattr(self, "_timing_instance"):
+            self._timing_instance = uuid.uuid4().hex
+        return {"instance": self._timing_instance, "arm_active": hasattr(self, "_timing_run")}
+
+    def qwen_timing_identity(self):
+        """Bind resumable captures to this worker; no hot-path or GPU work."""
+        model = self.vllm_config.model_config
+        return {
+            **self.qwen_timing_status(),
+            "model": {key: str(getattr(model, key, None)) for key in
+                      ("model", "revision", "tokenizer", "tokenizer_revision",
+                       "dtype", "quantization")},
+            "metadata": self.qwen_optimized_metadata(),
+            "target_head_environment": {name: os.environ.get(name) for name in (
+                "RADIANCE_VERIFY_HEAD", "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK",
+                "RADIANCE_VERIFY_HEAD_MAX_M", "RADIANCE_DRAFT_RERANK")},
+        }
+
     def qwen_timing_arm(self, root, mode, warmup=64, chunk_rounds=128, max_rounds=1152):
         if mode not in {"control", "profile"} or hasattr(self, "_timing_run"):
             raise ValueError("invalid timing arm or unfinished run")

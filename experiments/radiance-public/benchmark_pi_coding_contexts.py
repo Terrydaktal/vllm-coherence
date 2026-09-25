@@ -590,7 +590,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> None:
+    # The combined run is the preferred entry point when refreshing all tables.
+    # Retain the independent context-only command for focused measurements.
+    import sys
+    if "--suite" in sys.argv[1:]:
+        from benchmark_pi_suite import main as suite_main
+        suite_main([arg for arg in sys.argv[1:] if arg != "--suite"])
+        return
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", action="store_true",
+                        help="run the shared workload/profile suite; use --suite --help")
     parser.add_argument("--fixture-60k", type=Path)
     parser.add_argument("--fixture-200k", type=Path)
     parser.add_argument("--tokenizer-json", type=Path, required=True)

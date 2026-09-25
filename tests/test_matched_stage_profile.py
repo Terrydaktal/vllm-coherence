@@ -78,3 +78,17 @@ def test_finish_closes_partial_chunk_without_claiming_missing_rounds(tmp_path, m
     assert len(report["rows"]) == 5
     assert len(report["chunks"]) == 1
     assert calls[-1] == ("stop",)
+
+
+def test_capture_identity_is_stable_for_one_worker_and_changes_on_restart(monkeypatch):
+    worker, calls = load(monkeypatch)
+    worker.vllm_config = types.SimpleNamespace(model_config=types.SimpleNamespace(
+        model="model", revision="pinned", tokenizer="tokenizer", dtype="bfloat16"))
+    monkeypatch.setenv("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", "512")
+    first = worker.qwen_timing_identity()
+    second = worker.qwen_timing_identity()
+    assert first == second
+    assert first["target_head_environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] == "512"
+    replacement, _ = load(monkeypatch)
+    assert replacement.qwen_timing_status()["instance"] != first["instance"]
+    assert calls == []  # Identity checks neither execute a model nor profile it.
