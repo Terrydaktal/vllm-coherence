@@ -264,7 +264,8 @@ def target_inventory_issue(events):
 
 
 def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
-            worker_boundaries=False, admitted_decode_indices=None):
+            worker_boundaries=False, admitted_decode_indices=None,
+            expected_target_graphs=65):
     trace = json.loads(raw)
     groups, graph_launches = launch_groups(trace["traceEvents"])
     targets = sorted((k, v) for k, v in groups.items() if k[0] == "target_body")
@@ -272,8 +273,10 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
         raise ValueError(
             f"expected {expected_rounds} compiled rounds, found {len(targets)}"
         )
-    if not targets or any(graph_launches[k] != 65 for k, _ in targets):
-        raise ValueError("compiled rounds must contain 65 target graphs each")
+    if expected_target_graphs not in (1, 65):
+        raise ValueError("unsupported target graph contract")
+    if not targets or any(graph_launches[k] != expected_target_graphs for k, _ in targets):
+        raise ValueError(f"compiled rounds must contain {expected_target_graphs} target graphs each")
     inventories = [
         tuple(sorted(Counter(e["name"] for e in v).items())) for _, v in targets
     ]

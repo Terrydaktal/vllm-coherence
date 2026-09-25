@@ -1,6 +1,7 @@
 """Install the pinned chat storage and streaming-progress runtime repairs."""
 
 import hashlib
+import re
 from pathlib import Path
 
 STREAMING_CHAT_SHA256 = "f3fb82d6eeb956e0e5e9b8e17e135769b3378421ad0fb7958daaf774adc57079"
@@ -256,11 +257,27 @@ def add_fair_runner_hooks(text: str) -> str:
         if text.count(FAIR_RUNNER_OLD) != 1:
             raise ValueError("fair scheduler runner anchor changed")
         text = text.replace(FAIR_RUNNER_OLD, FAIR_RUNNER_NEW)
-    if FAIR_PREPARE_NEW not in text:
-        if text.count(FAIR_PREPARE_OLD) < 1:
-            raise ValueError("fair scheduler cache-prepare anchor changed")
-        text = text.replace(FAIR_PREPARE_OLD, FAIR_PREPARE_NEW)
-    return text
+    # FULL replay prepares the connector at a different indentation from the
+    # piecewise/eager branch. Both need the transition/recovery fence after
+    # preparation. Match each call site independently so an older, partially
+    # patched runner is repaired too.
+    prepare = re.compile(
+        r"(?m)^(?P<indent> +)self\.kv_connector\.pre_forward\(scheduler_output\)\n"
+    )
+    if not prepare.search(text):
+        raise ValueError("fair scheduler cache-prepare anchor changed")
+
+    def add_prepare_hook(match):
+        indent = match["indent"]
+        hook = (
+            f"{indent}from qwen_radiance_fair_scheduler import after_forward_prepare\n"
+            f"{indent}after_forward_prepare(self, scheduler_output)\n"
+        )
+        if text[match.end():].startswith(hook):
+            return match.group(0)
+        return match.group(0) + hook
+
+    return prepare.sub(add_prepare_hook, text)
 
 
 def transformed_sources(

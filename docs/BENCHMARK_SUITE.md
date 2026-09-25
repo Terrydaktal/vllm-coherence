@@ -26,7 +26,11 @@ These are shared observations, not independent benchmark repetitions.
 
 Use an isolated `matched_stage_profile_worker.MatchedStageWorker` server with the
 current frozen numerical release, its compiled PIECEWISE path and Global-512
-target head. This diagnostic worker is not installed into the normal Pi server.
+target head. To qualify the banked speed candidate, use
+`speed_matched_stage_worker.SpeedMatchedStageWorker`: it records the target GEMM
+binary, drafter attention implementation and FULL graph capture identities. Its
+analyzer requires one target graph per retained M8 round; the PIECEWISE release
+requires 65. These diagnostic workers are not installed into the normal Pi server.
 The command validates the live head selection and compiled mode; it does not
 start, stop or change a backend. A busy backend is rejected by the request helper.
 
@@ -96,6 +100,12 @@ can still perturb individual kernel timings; the paired controls expose observer
 effects, not a proof that those effects are zero.
 
 CPU tests cover shared provenance, exact continuation, complete histograms,
-interruption recovery, invalidation and privacy boundaries. The combined runner
-still needs its first GPU execution; existing published numbers have not been
-relabelled as measurements of this coordinator.
+interruption recovery, invalidation and privacy boundaries. The September 25
+GPU run completed all three contexts and the chained tasks using the speed
+candidate plus the FULL-graph cache-preparation hook repair. Its 0K and 200K
+coding responses stopped naturally below the 5K target; those length checks
+remain explicit failures. All three before/profile/after groups reproduced
+their output and accepted-token schedules, allowing matched stage analysis.
+The public reports share capture ID `6ec96682eeba444b9c1cddaa0cdb5cc2` and bind
+the exact measured source hashes. This benchmark does not itself deploy the
+candidate or establish universal numerical equivalence.

@@ -48,7 +48,7 @@
     "experiments/radiance-public/optimized_pi_release.py": "82020959fba70cc0926be6891ab868f9dae8af5173b527e5ebd7bf1e6536a4b1",
     "experiments/radiance-public/runtime-radiance-1.0.16.json": "0c25e01a3a0f3ac7b974f1fc22b09b402512bb544673619ba7e468185e53685c",
     "experiments/radiance-public/patch_streaming_snapshot.py": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd",
-    "experiments/radiance-public/patch_chat_snapshot.py": "edabd083e5bbeebf76a02c45cee040e58b8af6a61990308e2dd0a90ef3026ce6",
+    "experiments/radiance-public/patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7",
     "experiments/radiance-public/radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
     "experiments/radiance-public/radiance_fair_scheduler.py": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6",
     "experiments/radiance-public/radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",

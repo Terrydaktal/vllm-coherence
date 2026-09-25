@@ -1,0 +1,507 @@
+{
+  "schema": "coherence-speed-investigation-summary-v1",
+  "date": "2026-09-25",
+  "status": "Stopped at user request; qualified experimental changes retained, not deployed.",
+  "baseline_commit": "8b5c9db126006e316265950ea5bf0b8a26c719ce",
+  "arithmetic_commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+  "hardware": {
+    "gpu": "AMD Radeon AI PRO R9700 32 GiB",
+    "post_power_cut_mode": "auto",
+    "voltage_offset_mv": 0,
+    "settings_changed_during_comparison": false
+  },
+  "serving_contract": {
+    "execution": "compiled",
+    "target_head": "Global-512",
+    "speculation": "D7/M8",
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 40,
+    "seed": 113,
+    "gdn_state_layout": "existing nine-slot layout"
+  },
+  "scope": "60,000-token private Pi fixture plus a natural coding completion. No prompt or response text is published. Disposable server; production snapshot and chat-handover paths are not qualified by these runs.",
+  "goal": {
+    "requested_saved_ms": [
+      5,
+      10
+    ],
+    "achieved": false,
+    "combined_original_baseline_measurement": "Not run; stopped before final combined-u comparison."
+  },
+  "qualified_changes": [
+    {
+      "name": "full corrected target graph",
+      "control": "original piecewise target graph",
+      "candidate": "full target graph with repaired GDN/attention bindings",
+      "control_ms": 43.50867089607859,
+      "candidate_ms": 42.843050540196316,
+      "saved_ms": 0.6656203558822753,
+      "design": "separate server arms; weaker drift control than ABBA",
+      "tokens_each": 4488,
+      "natural_output_and_acceptance_equal": true,
+      "correctness": {
+        "decode": {
+          "positions": 320,
+          "full_logits_exact": 320,
+          "1": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 0,
+            "candidate_boundary_tied": 0,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 1.0,
+            "mean_overlap_percent": 100.0
+          },
+          "10": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 88,
+            "candidate_boundary_tied": 88,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 10.0,
+            "mean_overlap_percent": 100.0
+          },
+          "20": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 125,
+            "candidate_boundary_tied": 125,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 20.0,
+            "mean_overlap_percent": 100.0
+          }
+        },
+        "prefill": {
+          "full_logits_exact": true,
+          "1": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 1,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": false,
+            "candidate_boundary_tied": false,
+            "retained_scores_exact": true
+          },
+          "10": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 10,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": false,
+            "candidate_boundary_tied": false,
+            "retained_scores_exact": true
+          },
+          "20": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 20,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": true,
+            "candidate_boundary_tied": true,
+            "retained_scores_exact": true
+          }
+        }
+      }
+    },
+    {
+      "name": "tuned drafter attention",
+      "control": "full target graph with original drafter attention",
+      "candidate": "same plus unit_w4_s1_occ2 drafter attention",
+      "measurement": {
+        "report_sha256": "fcb487101ca804bba947cefd55ac4c1f6ab2382abb3f9b3bc41060481a703b4c",
+        "driver_sha256": "575aad250e35b416b53fed3931c8e90ef59b99dc96e13177d26c5e30af1747ee",
+        "prefix_tokens": 60000,
+        "arms": [
+          {
+            "arm": "control",
+            "mean_generation_round_ms": 42.93385591470581,
+            "post_first_tokens_per_second": 102.53468137713335,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          },
+          {
+            "arm": "candidate",
+            "mean_generation_round_ms": 41.64111740980361,
+            "post_first_tokens_per_second": 105.70093007584106,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          },
+          {
+            "arm": "candidate",
+            "mean_generation_round_ms": 41.59067324803889,
+            "post_first_tokens_per_second": 105.82929571741413,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          },
+          {
+            "arm": "control",
+            "mean_generation_round_ms": 42.91396111960721,
+            "post_first_tokens_per_second": 102.5836962546748,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          }
+        ],
+        "means_ms": {
+          "control": 42.923908517156505,
+          "candidate": 41.615895328921255
+        },
+        "saved_ms": 1.3080131882352504,
+        "same_output_and_acceptance": true
+      },
+      "correctness": {
+        "decode": {
+          "positions": 320,
+          "full_logits_exact": 320,
+          "1": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 0,
+            "candidate_boundary_tied": 0,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 1.0,
+            "mean_overlap_percent": 100.0
+          },
+          "10": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 88,
+            "candidate_boundary_tied": 88,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 10.0,
+            "mean_overlap_percent": 100.0
+          },
+          "20": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 125,
+            "candidate_boundary_tied": 125,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 20.0,
+            "mean_overlap_percent": 100.0
+          }
+        },
+        "prefill": {
+          "full_logits_exact": true,
+          "1": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 1,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": false,
+            "candidate_boundary_tied": false,
+            "retained_scores_exact": true
+          },
+          "10": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 10,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": false,
+            "candidate_boundary_tied": false,
+            "retained_scores_exact": true
+          },
+          "20": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 20,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": true,
+            "candidate_boundary_tied": true,
+            "retained_scores_exact": true
+          }
+        }
+      },
+      "operator_contexts": [
+        1024,
+        60000,
+        200000
+      ],
+      "operator_cases": 6,
+      "operator_positions_per_case": 320,
+      "kv_scales": [
+        1.0,
+        0.5,
+        1.25,
+        0.003
+      ]
+    },
+    {
+      "name": "local split-K output/down projections",
+      "control": "full target graph plus tuned drafter attention",
+      "candidate": "same plus shape-gated local_split matrix kernel",
+      "measurement": {
+        "report_sha256": "2b52c0d5cac725822732aa09f2abcdfc4b017eab1e71f85ff6775cdf3ee0f7af",
+        "driver_sha256": "6535956a612027ad8798ec307f897355ca187e9c38e4985a27eea17c26efc433",
+        "prefix_tokens": 60000,
+        "arms": [
+          {
+            "arm": "control",
+            "mean_generation_round_ms": 41.48779959999885,
+            "post_first_tokens_per_second": 106.0894403409497,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          },
+          {
+            "arm": "candidate",
+            "mean_generation_round_ms": 41.08096828823524,
+            "post_first_tokens_per_second": 107.15155381391568,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          },
+          {
+            "arm": "candidate",
+            "mean_generation_round_ms": 41.08007736274386,
+            "post_first_tokens_per_second": 107.1614015907462,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          },
+          {
+            "arm": "control",
+            "mean_generation_round_ms": 41.55387651666673,
+            "post_first_tokens_per_second": 105.93022415805609,
+            "generated_tokens": 4488,
+            "generation_rounds": 1020,
+            "accepted_tokens": 3468,
+            "draft_tokens": 7140,
+            "acceptance_rate": 0.4857142857142857,
+            "finish_reason": "stop",
+            "output_sha256": "f05d72be01e38ab1f9c6166582ce2257fac83d94f5b82f96716de71b54303b3e"
+          }
+        ],
+        "means_ms": {
+          "control": 41.52083805833279,
+          "candidate": 41.08052282548955
+        },
+        "saved_ms": 0.4403152328432398,
+        "same_output_and_acceptance": true
+      },
+      "correctness": {
+        "decode": {
+          "positions": 320,
+          "full_logits_exact": 320,
+          "1": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 0,
+            "candidate_boundary_tied": 0,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 1.0,
+            "mean_overlap_percent": 100.0
+          },
+          "10": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 88,
+            "candidate_boundary_tied": 88,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 10.0,
+            "mean_overlap_percent": 100.0
+          },
+          "20": {
+            "set_exact": 320,
+            "ranked_exact": 320,
+            "inclusive_tie_set_exact": 320,
+            "reference_boundary_tied": 125,
+            "candidate_boundary_tied": 125,
+            "retained_scores_exact": 320,
+            "set_exact_percent": 100.0,
+            "ranked_exact_percent": 100.0,
+            "mean_overlap_tokens": 20.0,
+            "mean_overlap_percent": 100.0
+          }
+        },
+        "prefill": {
+          "full_logits_exact": true,
+          "1": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 1,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": false,
+            "candidate_boundary_tied": false,
+            "retained_scores_exact": true
+          },
+          "10": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 10,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": false,
+            "candidate_boundary_tied": false,
+            "retained_scores_exact": true
+          },
+          "20": {
+            "set_exact": true,
+            "ranked_exact": true,
+            "overlap": 20,
+            "inclusive_tie_set_exact": true,
+            "reference_boundary_tied": true,
+            "candidate_boundary_tied": true,
+            "retained_scores_exact": true
+          }
+        }
+      },
+      "shape_admission": {
+        "M": [
+          1,
+          8
+        ],
+        "N": 5120,
+        "K": [
+          6144,
+          17408
+        ]
+      },
+      "retained_arithmetic": "Original four K ranges, WMMA order, ordered FP32 partial reduction and BF16 epilogue."
+    }
+  ],
+  "qualified_artifacts": {
+    "draft_attention_candidate": {
+      "source_sha256": "01cf56d3bda4e60a24d2b224847a5e2531dfcd88327b1c3137b2247651f4c5d9",
+      "qualified_generator_sha256": "6680b6394d394605a1f1c55b1a66cc4fe50f6ee29ae06abb00ffc573cdd4d328",
+      "qualification_sha256": "bd4388a4dbb510ffa38157fab412fc599346da69feea0c10cc0e4098b3ec9843",
+      "variant": "unit_w4_s1_occ2",
+      "scope": "drafter only; original target attention is unchanged"
+    },
+    "target_gemm_candidate": {
+      "variant": "local_split",
+      "binary_sha256": "b451db24d512acd057bec81b954f9197e56a702adaed2b438701ab445ab8a3db",
+      "qualification_sha256": "ecb05706280429da2d685db705841109d0abc4cc59a669bf3ada106ec10da578",
+      "scope": "full target graph, M1/M8 down and output projections only"
+    }
+  },
+  "rejected_or_not_adopted": [
+    {
+      "name": "packed three-wave target attention",
+      "reason": "Exact sampled outputs and FP32 partials; isolated gains did not establish an additional full-model gain.",
+      "combined_60k_ms": [
+        43.32836318921556,
+        41.663604665196615
+      ],
+      "combined_200k_ms": [
+        53.19068245919272,
+        51.91256607668201
+      ],
+      "caution": "Includes full target graph and tuned drafter, but not the final local split-K change."
+    },
+    {
+      "name": "separate probability/PV attention passes",
+      "reason": "320 sampled positions per context and partials exact, but slower at 1K/60K/200K."
+    },
+    {
+      "name": "wider attention staging",
+      "reason": "Exact sampled outputs and partials, but slower at long context."
+    },
+    {
+      "name": "GDN geometry BV16",
+      "reason": "Full states and outputs exact; projected saving only 0.0424 ms over 48 layers. Not integrated."
+    },
+    {
+      "name": "separate GDN gate preparation",
+      "reason": "Exact four-warp variant slower; one-warp normalization changed state/output and was rejected."
+    },
+    {
+      "name": "target head graph",
+      "reason": "320/320 head vectors exact; no material full-model improvement."
+    },
+    {
+      "name": "head plus sampler graph",
+      "reason": "All 2178 eligible replays exercised, 320 sampled logits checked; no overall saving."
+    },
+    {
+      "name": "TP1 W4 drafter projections",
+      "reason": "Target forced logits exact, but acceptance fell to 0.43796 and natural throughput fell to 97.97 t/s."
+    },
+    {
+      "name": "head selection/launch sweeps",
+      "reason": "No worthwhile improvement while retaining candidate selection."
+    },
+    {
+      "name": "other matrix staging/folding/prefetch variants",
+      "reason": "Exact variants generally slower or too small to integrate. An unguarded wide slab changed 21 outputs; dispatch now preserves original split boundaries."
+    }
+  ],
+  "limitations": [
+    "Sampled equality is not a universal proof.",
+    "Do not sum separate savings and describe the result as a measured combined speedup.",
+    "Qualification uses full BF16 logits via top_k=129; performance uses Global-512/top_k=40.",
+    "No new production release or snapshot ABI was created.",
+    "The final combined selector includes bookkeeping added after the last GPU run; no new performance result is attributed to it."
+  ],
+  "evidence_sha256": {
+    "piecewise-b-workload.json": "fbf9b7497ce3d482d6005fad651acb44ee5888230fef3e8ea08a892392680a64",
+    "fullgraph-e-workload.json": "9ad15c7a9f9422c7953a0541bc9d13dc81771f2f8a98b0ee43dbe026ca65fcc6",
+    "fullgraph-g-equivalence.json": "17eeedde87f6086e9d4618aaa38909ff99c511ce513d3e917acd285e5a559fdc",
+    "draftpair-m-result.json": "fcb487101ca804bba947cefd55ac4c1f6ab2382abb3f9b3bc41060481a703b4c",
+    "drafttune-l-comparison.json": "b5046af3b891dfc46ed989870bff4d026d1eb32e9550bc1f73973ad2b1d4b024",
+    "draft-attention-v4-mode1-result.json": "bd4388a4dbb510ffa38157fab412fc599346da69feea0c10cc0e4098b3ec9843",
+    "gemmpair-t-paired-result.json": "2b52c0d5cac725822732aa09f2abcdfc4b017eab1e71f85ff6775cdf3ee0f7af",
+    "gemmpair-t-comparison.json": "b5046af3b891dfc46ed989870bff4d026d1eb32e9550bc1f73973ad2b1d4b024",
+    "gemm-tuning-v9-result.json": "ecb05706280429da2d685db705841109d0abc4cc59a669bf3ada106ec10da578",
+    "combined-q-paired-result.json": "c210bba8c117ab379fe46daa785857ad66d61c0a3bb59526769f483934c0479a",
+    "combined-q-200k-paired-result.json": "3256bbd861e047db32f05fb3597d9ba07c884d4a84e1f0d971170fe4d9c478b2",
+    "attention-tuning-v15-result.json": "220ae7b4218a1fc433a1a347db3bcc96282be33318793c57d3fefc6a9996f4a6",
+    "gdn-geometry-v2-result.json": "e00911f8794db340d1a06a7ea035318d0fcdc3e4801f65e4c27fd699a0f88ba9",
+    "sampler-r-paired-result.json": "ab809c3a15680bf65261493b7d41efdde12e84c3c31449bd9b778f5e1563ad9b"
+  }
+}

@@ -43,6 +43,12 @@ def reduce_context(root, context, head="global256"):
         m = workers[arm]["metadata"]
         if m["enforce_eager"] or not m["compilation_mode"] or "PIECEWISE" not in m["graph_mode"]:
             raise ValueError("not the compiled piecewise path")
+    candidates = [worker["metadata"].get("speed_candidate") for worker in workers.values()]
+    if any(candidate != candidates[0] for candidate in candidates):
+        raise ValueError("speed candidate identities differ between matched arms")
+    expected_graphs = (candidates[0] or {}).get("target_graph_launches_per_round", 65)
+    if expected_graphs == 1 and not (candidates[0] or {}).get("full_graph_enabled"):
+        raise ValueError("full target graph lacks an enabled candidate receipt")
     rows, sources, chunks = [], [], []
     layers, kernels = defaultdict(lambda: defaultdict(float)), defaultdict(lambda: [0, 0.0])
     for number, chunk in enumerate(workers["profile"]["chunks"]):
@@ -69,6 +75,7 @@ def reduce_context(root, context, head="global256"):
                 result = None
             if result is None:
                 result = analyze(raw, head, worker_boundaries=True,
+                                 expected_target_graphs=expected_graphs,
                                  admitted_decode_indices={r["decode_index"] for r in workers["profile"]["rows"]
                                                           if r["scheduled_tokens"] == 8})
                 result["analyzer_sha256"] = analyzer_hash

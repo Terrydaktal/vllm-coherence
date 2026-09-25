@@ -1,0 +1,101 @@
+{
+  "schema": "coherence-snapshot-lifecycle-refresh-v1",
+  "status": "SAMPLE_CHECKED",
+  "measurement_date": "2026-09-25",
+  "workload": "Public synthetic record text; A 10,000 input tokens, B 4,000, replacement A 4,000",
+  "runtime_abi": "d98aaebd1842c13ae94b6110e85ace92aa3211afa15776f503510ae1eca0bc4f",
+  "snapshot_data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+  "source_sha256": "0b1a5a2f56ba09bedef3218a7f0da75e2da9cad5e3159c6dc7060759e1cdb2c0",
+  "logs_sha256": {
+    "snapshot-seed.log": "50d05ffe2bbddbb8ba9a566a52496aed116a3117fddc300d85c0896d68e573f8",
+    "snapshot-resume.log": "2feb581826f01a5e8cf52ce0127efd87baca249b10249c4320888658259679be"
+  },
+  "ram_handover": {
+    "sequence": [
+      "A",
+      "B",
+      "A"
+    ],
+    "identical_completion": true,
+    "restored_usage": {
+      "prompt_tokens": 10000,
+      "total_tokens": 10008,
+      "completion_tokens": 8,
+      "prompt_tokens_details": {
+        "cached_tokens": 8240,
+        "created_cache_tokens": null,
+        "multimodal_tokens": null
+      },
+      "completion_tokens_details": null
+    }
+  },
+  "cold_backend_restart": {
+    "identical_completion": true,
+    "restored_usage": {
+      "prompt_tokens": 10000,
+      "total_tokens": 10008,
+      "completion_tokens": 8,
+      "prompt_tokens_details": {
+        "cached_tokens": 6592,
+        "created_cache_tokens": null,
+        "multimodal_tokens": null
+      },
+      "completion_tokens_details": null
+    }
+  },
+  "original_snapshot": {
+    "tokens": 10008,
+    "files": 27,
+    "file_bytes": 604887788,
+    "allocated_bytes": 604942336,
+    "raw_bytes": 729022464
+  },
+  "other_chat_unchanged": true,
+  "cycles": [
+    {
+      "retained_fallback_bytes": 604887788,
+      "removed_before_verification_bytes": 0,
+      "verified_replacement": {
+        "tokens": 4008,
+        "files": 11,
+        "file_bytes": 249701983,
+        "allocated_bytes": 249733120,
+        "raw_bytes": 297009152
+      },
+      "remaining_generations": 1,
+      "fallback_removed_after_verification": true
+    },
+    {
+      "retained_fallback_bytes": 249701983,
+      "removed_before_verification_bytes": 0,
+      "verified_replacement": {
+        "tokens": 4008,
+        "files": 11,
+        "file_bytes": 249701983,
+        "allocated_bytes": 249733120,
+        "raw_bytes": 297009152
+      },
+      "remaining_generations": 1,
+      "fallback_removed_after_verification": true
+    },
+    {
+      "retained_fallback_bytes": 249701983,
+      "removed_before_verification_bytes": 0,
+      "verified_replacement": {
+        "tokens": 4008,
+        "files": 11,
+        "file_bytes": 249701983,
+        "allocated_bytes": 249733120,
+        "raw_bytes": 297009152
+      },
+      "remaining_generations": 1,
+      "fallback_removed_after_verification": true
+    }
+  ],
+  "limits": [
+    "Finite public synthetic replay; not arbitrary-input or all-concurrency proof.",
+    "Generation replacement exercises cache lifecycle, not Pi transcript UI or checkpoint model compliance.",
+    "RAM handover and process-restart disk restore compare complete output, not all latent tensor bytes."
+  ],
+  "private_chat_read": false
+}

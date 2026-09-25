@@ -23,11 +23,14 @@ def read(path):
 
 
 def runtime(metadata):
-    return {k: metadata[k] for k in ("enforce_eager", "compilation_mode", "graph_mode", "effective_capacity", "diagnostic_sources")} | {
+    result = {k: metadata[k] for k in ("enforce_eager", "compilation_mode", "graph_mode", "effective_capacity", "diagnostic_sources")} | {
         "repair_bundle": metadata["repair"]["bundle"],
         "performance_manifest": metadata["performance"]["manifest"],
         "gemm_binary_sha256": metadata["performance"]["gemm_dispatch"]["binary_sha256"],
     }
+    if "speed_candidate" in metadata:
+        result["speed_candidate"] = metadata["speed_candidate"]
+    return result
 
 
 def package(args):
@@ -42,6 +45,9 @@ def package(args):
         raise ValueError("all three contexts are required")
     original = read(private / "production-inspect.json")
     env = dict(item.split("=", 1) for item in original["Config"]["Env"])
+    # A disposable container may run its measured server through podman exec;
+    # PID 1's environment then describes the idle container, not that server.
+    env.update(original.get("MeasuredProcess", {}).get("environment", {}))
     workers = {c: {arm: read(private / "runs" / c / f"{c}-{arm}" / "worker.json") for arm in ARMS} for c in analyses}
     runtimes = {arm: {c: runtime(workers[c][arm]["metadata"]) for c in analyses} for arm in ARMS}
     if len({digest(value) for value in runtimes.values()}) != 1:
@@ -73,9 +79,17 @@ def package(args):
         suite_binding = {"capture_id": suite["id"], "contract_sha256": digest(contract),
                          "control_selection": contract["control_selection"],
                          "runtime_manifest_sha256": contract["runtime_manifest_sha256"]}
+    candidate = workers["0K"]["profile"]["metadata"].get("speed_candidate")
+    if candidate is not None:
+        for name, expected in candidate["sources"].items():
+            source = f"experiments/radiance-public/{name}"
+            if Path(name).name != name or hashlib.sha256((ROOT / source).read_bytes()).hexdigest() != expected:
+                raise ValueError("speed candidate source differs from its capture")
+            hashes[source] = expected
     binding = {
         "image_id": original["Image"], "optimized_manifest_sha256": args.manifest_sha256,
-        "worker": "matched_stage_profile_worker.MatchedStageWorker",
+        "worker": ("speed_matched_stage_worker.SpeedMatchedStageWorker" if candidate is not None
+                   else "matched_stage_profile_worker.MatchedStageWorker"),
         "recorded_runtime": runtimes["profile"]["0K"],
         "environment": {k: env[k] for k in ("RADIANCE_VERIFY_HEAD", "RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", "RADIANCE_DRAFT_RERANK")},
         "source_sha256": hashes,
@@ -91,8 +105,13 @@ def package(args):
     if runtime_binding.exists():
         host_runtime = read(runtime_binding)
         sources = host_runtime["source_sha256"]
-        for name in ("radiance_fair_scheduler.py", "snapshot-abi-chat-cache-v1.json",
-                     "runtime-radiance-1.0.16.json", "optimized-release.json"):
+        required = {"radiance_fair_scheduler.py", "snapshot-abi-chat-cache-v1.json",
+                    "runtime-radiance-1.0.16.json", "optimized-release.json"}
+        if not required <= sources.keys():
+            raise ValueError("incomplete host runtime source identity")
+        for name in sources:
+            if Path(name).name != name:
+                raise ValueError("invalid host runtime source path")
             local = ROOT / "experiments/radiance-public" / name
             if hashlib.sha256(local.read_bytes()).hexdigest() != sources[name]:
                 raise ValueError(f"measured host runtime differs from source: {name}")
@@ -101,8 +120,10 @@ def package(args):
         binding["host_runtime"] = host_runtime
         binding["host_runtime_binding_sha256"] = hashlib.sha256(runtime_binding.read_bytes()).hexdigest()
         binding["host_page_policy_observations"] = {}
-        for context in analyses:
-            observation = read(private / f"{context}-host-page-policy.json")
+        observations = ({"sample": host_runtime["host_page_policy_observation"]}
+                        if "host_page_policy_observation" in host_runtime else
+                        {context: read(private / f"{context}-host-page-policy.json") for context in analyses})
+        for context, observation in observations.items():
             if observation["allocated_bytes"]:
                 if observation["host_page_policy"] != "no_hugepage_promotion":
                     raise ValueError(f"{context}: pinned RAM was not protected during measurement")

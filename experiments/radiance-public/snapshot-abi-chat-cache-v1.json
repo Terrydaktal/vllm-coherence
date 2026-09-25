@@ -287,7 +287,7 @@
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
         "radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
         "radiance_fair_scheduler.py": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6",
-        "patch_chat_snapshot.py": "edabd083e5bbeebf76a02c45cee040e58b8af6a61990308e2dd0a90ef3026ce6"
+        "patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7"
       }
     },
     "memory_report": {

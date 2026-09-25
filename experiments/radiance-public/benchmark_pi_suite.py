@@ -78,6 +78,7 @@ def stable_worker_identity(receipt):
     # worker.json but are not configuration identities. A new worker UUID always
     # invalidates reuse, even if its release/configuration happens to match.
     return {"instance": receipt["instance"], "model": receipt["model"],
+            "speed_candidate": metadata.get("speed_candidate"),
             "target_head_environment": receipt["target_head_environment"],
             "configuration": {key: metadata[key] for key in (
                 "enforce_eager", "compilation_mode", "backend", "graph_mode",

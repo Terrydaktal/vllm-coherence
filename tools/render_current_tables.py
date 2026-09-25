@@ -72,6 +72,11 @@ def provenance_marker(data, stage):
         raise TypeError(f"missing code provenance for compiled stage: {stage}")
     commit = entry.get("commit")
     change = entry.get("change")
+    document = entry.get("document")
+    if document:
+        if document != data.get("current_qualification_document") or not change:
+            raise ValueError(f"invalid qualification document for compiled stage: {stage}")
+        return f"[Qualified speed changes]({document}): {change}"
     if (
         not isinstance(commit, str)
         or len(commit) != 40
@@ -180,11 +185,31 @@ def current_stage_profile(data):
             "reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus "
             "the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect "
             "clocks and scheduling. Overlap is counted once in the total. "
-            "The header identifies the commit containing the measured backend repairs and "
-            "captured results; the capture retains its original checkout and source identities. "
+            + ("The header links the qualification bundled with these repairs; its captures retain their original source identities. "
+               if data.get("current_qualification_document") else
+               "The header identifies the base revision and marks the uncommitted source changes. "
+               if data.get("uncommitted_qualification") else
+               "The header identifies the commit containing the measured backend repairs and captured results. ")
+            + "The capture retains its original checkout and source identities. "
             f"[Capture and source identities]({data['matched_stage_profile']}) "
             f"· [controls]({data['matched_stage_control']}) · [method and uncertainty](docs/STAGE_TIMING.md)."
         )
+        if data.get("current_qualification_document"):
+            grouped["scope"] += (
+                "\n\nThis candidate rerun includes the full-graph cache-preparation repair and "
+                "measurement adapters in the [qualified speed refresh]("
+                + data["current_qualification_document"] + "). Captured checkout identities "
+                "remain unchanged after the history rewrite; the installed source and binary "
+                "hashes bind the measured implementation. The experimental worker is separate "
+                "from the normal Pi deployment."
+            )
+        elif data.get("uncommitted_qualification"):
+            grouped["scope"] += (
+                "\n\nThis candidate rerun uses the banked speed changes plus the uncommitted "
+                "full-graph cache-preparation repair and measurement adapters. The commit link "
+                "identifies the base revision; the capture binds the actual installed source "
+                "and binary hashes. It is not yet a deployed production release."
+            )
         long_context = raw["observer_comparison"]["contexts"].get("200K", {})
         later = long_context.get("control_after_round_ms", [])
         pauses = [value for value in later if value > 100]
@@ -413,7 +438,11 @@ def _render_stage_profile_table(data):
     order = profile["stage_order"]
     context_order = profile["context_order"]
     contexts = profile["contexts"]
-    commit = commit_marker(profile["measurement_commit"])
+    commit = (
+        f"[qualified speed refresh]({data['current_qualification_document']})"
+        if data.get("current_qualification_document")
+        else commit_marker(profile["measurement_commit"])
+    )
     old_rows = {row["stage"]: row for row in data["stages"] if row["ms"] is not None}
     deployment = json.loads((ROOT / "benchmarks/results/eager-m1-normalization-deployment-20260924.json").read_text())
     confirmations_ref = data.get("current_stage_confirmations")
@@ -427,6 +456,8 @@ def _render_stage_profile_table(data):
                "Archived diagnostic interval per retained compiled profile cycle")
     run_label = (f"{profile['measurement_date']}; run {commit}" if profile.get("matched") else
                  f"evidence run {commit}")
+    if data.get("uncommitted_qualification"):
+        run_label = f"{profile['measurement_date']}; base {commit} + recorded working-tree changes"
     lines = [
         f"| Stage | {heading} ({' / '.join(context_order)}; milliseconds unless explicitly marked; {run_label}) | Current M1->M8 correctness and eager->compiled correctness evidence | Last relevant code commit / change | What this stage does |",
         "| --- | ---: | --- | --- | --- |",
@@ -476,7 +507,7 @@ def _render_stage_profile_table(data):
                 f"Includes M1/M8; not an M1-versus-M8 ordering test · [current head study]({head_ref})."
             )
             previous_head = commit_marker(data["stage_provenance"][stage]["commit"])
-            current_head = commit_marker("7386d835a32e4be3549e87cfff9bb9998e0a91c3")
+            current_head = commit_marker(data["target_head_change_commit"])
             provenance = current_head + ": increase target shortlist to 512; drafter unchanged. Extends the Global-256 method from " + previous_head + "."
         if confirmations:
             paired_stage = (
@@ -599,6 +630,30 @@ def render_stage_profile_table(data):
 CHAINED_RESULTS = ROOT / "benchmarks/results/pi-coding-json-compaction.json"
 
 
+def workload_target_head(report):
+    """Bind shared-workload labels to the measured runtime, never a default."""
+    if report.get("suite_capture_id"):
+        current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
+        profile = json.loads((ROOT / current["matched_stage_profile"]).read_text())
+        shared = profile.get("binding", {}).get("shared_suite", {})
+        for report_key, binding_key in (
+            ("suite_capture_id", "capture_id"),
+            ("contract_sha256", "contract_sha256"),
+            ("runtime_manifest_sha256", "runtime_manifest_sha256"),
+        ):
+            if not report.get(report_key) or report[report_key] != shared.get(binding_key):
+                raise ValueError(f"shared workload/profile identity mismatch: {report_key}")
+        head = profile.get("target_head")
+        declared = report.get("runtime", {}).get("target_head")
+        if declared and declared != head:
+            raise ValueError("shared workload target head disagrees with measured profile")
+    else:
+        head = report.get("runtime", {}).get("target_head")
+    if head not in ("global256", "global512", "full"):
+        raise ValueError("workload target head is not recorded")
+    return head
+
+
 def render_chained_workload_results(report=None):
     if report is None:
         report = json.loads(CHAINED_RESULTS.read_text())
@@ -608,12 +663,20 @@ def render_chained_workload_results(report=None):
     compaction = stages.get("compaction", {})
     checkpoint = compaction.get("checkpoint_validation", {})
     compaction_temperature = compaction.get("sampling", {}).get("temperature", 0.3)
+    head = workload_target_head(report)
+    runner = (
+        "[benchmark_pi_coding_contexts.py --suite]"
+        "(experiments/radiance-public/benchmark_pi_coding_contexts.py)"
+        if report.get("suite_capture_id") else
+        "[benchmark_pi_coding_json_compaction.py]"
+        "(experiments/radiance-public/benchmark_pi_coding_json_compaction.py)"
+    )
     lines = [
         "## Benchmarks",
         "",
         (
             "This benchmark uses the retained 60,000-input-token Pi prefix and the compiled "
-            f"Coherence backend with {report.get('runtime', {}).get('target_head', 'global256')}, the attention-page-boundary repair and the "
+            f"Coherence backend with {head}, the attention-page-boundary repair and the "
             "pinned-RAM huge-page promotion repair. Five "
             "requests are chained in one context: code, prose about code measurement, JSON, "
             "thinking/prose and checkpoint generation. Code and JSON disable thinking; both "
@@ -621,9 +684,11 @@ def render_chained_workload_results(report=None):
             f"Generation uses temperature {sampling['temperature']:g}, top-p {sampling['top_p']:g}, "
             f"top-k {sampling['top_k']} and seed {sampling['seed']}; compaction uses temperature "
             f"{compaction_temperature:g}. The checkpoint request forces a snapshot-tail flush. "
-            "Private fixture text was not decoded or inspected, and no generated text or token "
-            "arrays were saved. Runner: [benchmark_pi_coding_json_compaction.py]"
-            "(experiments/radiance-public/benchmark_pi_coding_json_compaction.py)."
+            "Private fixture text was not decoded or inspected. Public results contain "
+            "aggregates and hashes, not chat text or token arrays. "
+            + ("The shared suite retains sealed continuation tokens privately for resumability. "
+               if report.get("suite_capture_id") else "")
+            + f"Runner: {runner}."
         ),
         "",
         "| Stage | Thinking | Prompt tokens | Generated tokens | Classified output | First data | Mean round | Post-first | Peak 3s | Acceptance |",
@@ -704,6 +769,78 @@ def render_known_remaining_symptoms():
     later = control["control_after_round_ms"]
     pauses = [value for value in later if value > 100]
     low, high = control["remainder_before_after_range_ms"]
+    if current.get("full_graph_repair"):
+        shared = bool(profile["binding"].get("shared_suite"))
+        workload = json.loads(CODING_CONTEXT_RESULTS.read_text())
+        feed_pauses = []
+        control_pauses = []
+        for context in profile["context_order"]:
+            records = workload["contexts"][context]["round_capture"]["records"]
+            slow = [row for row in records if (row.get("round_ms") or 0) > 100]
+            if slow:
+                feed_pauses.append(
+                    f"{context}: {len(slow)} interval(s), longest {max(row['round_ms'] for row in slow):,.3f} ms"
+                )
+            observed_controls = profile["observer_comparison"]["contexts"][context]
+            for arm in ("before", "after"):
+                slow = [ms for ms in observed_controls[f"control_{arm}_round_ms"] if ms > 100]
+                if slow:
+                    control_pauses.append(
+                        f"{context} {arm}: {len(slow)} interval(s), longest {max(slow):,.3f} ms"
+                    )
+        pause_note = (
+            "**Isolated pauses remain.** The complete coding/histogram feeds retain "
+            + ("; ".join(feed_pauses) if feed_pauses else "no intervals above 100 ms")
+            + ". The retained paired controls separately contain "
+            + ("; ".join(control_pauses) if control_pauses else "no intervals above 100 ms")
+            + ". Their cause has not been localized. The histogram uses the predetermined after-control; "
+            "row 26 uses both controls at the trace's retained indices. Warmup and trace-boundary "
+            "exclusions are structural, not duration-based; every coding round remains in the public feed."
+        )
+        if pauses:
+            observed = (
+                f"The later 200K clean control retained {len(pauses)} of {len(later):,} "
+                f"matched intervals above 100 ms, reaching {max(pauses):,.3f} ms; "
+                f"its median was {statistics.median(later):.3f} ms. "
+            )
+        else:
+            observed = (
+                f"None of the {len(later):,} matched intervals in the later 200K clean control "
+                f"exceeded 100 ms; its median was {statistics.median(later):.3f} ms. "
+            )
+        return [
+            "### Known remaining symptoms and likely causes", "",
+            ("**The missing full-graph preparation hook is repaired.** The first integrated speed run "
+            "took 59.44 ms at 60K because FULL replay bypassed the existing post-cache-preparation "
+            "synchronization and recovery hook. After installing it on both execution branches, "
+            "the matched comparison measured 43.38 ms control versus 41.14 ms optimized, with "
+            "identical output and acceptance. Fresh-chat reproductions also recovered. "
+            "This fixes a specific integration defect; it does not prove that all HIP/ROCr queue "
+            "stalls are impossible. "
+            f"[Reproduction and repair evidence]({current['full_graph_repair']})."), "",
+            observed
+            + ("The histogram includes this same predetermined control's entire round feed; the stage "
+               "residual uses its subset of exactly matched M8 cycles plus the preceding control. "
+               if shared else "The context histogram and matched controls are separate captures. ")
+            + f"The paired residual estimates span {low:.3f}–{high:.3f} ms. "
+            "Profiling overhead is reported separately. Indirect changes in clocks, execution duration "
+            "and scheduling remain measurement uncertainty, so the residual is an estimate rather "
+            "than a proved exact sum of runtime gaps. "
+            f"[Current controls]({current['matched_stage_control']}).", "",
+            ("**The completions stream still lacks a separate reasoning channel.** Thinking-enabled "
+            "requests are reported as observed prose; their reasoning throughput cannot be isolated "
+            "from this stream. The checkpoint benchmark measures generation and requested tail "
+            "flushing, not a complete Pi transcript commit. Its format-validation result is reported "
+            "in the table. Natural completions shorter than the coding target remain explicit "
+            "validation failures, even when their timing and round captures are complete."), "",
+            pause_note, "",
+            ("**Global-512 candidate selection remains approximate.** The current head study matched "
+            f"reference top-1 in {head['argmax_equal']:,}/{head['rows']:,} rows and retained the complete "
+            f"reference top-20 in {head['top20_complete_including_ties']:,}/{head['rows']:,}. "
+            "Full-head M1/M8 and eager/compiled agreement does not certify shortlist completeness "
+            "or eliminate model-generated loops. "
+            f"[Current head evidence]({current['head_candidate_result']})."),
+        ]
     return [
         "### Known remaining symptoms and likely causes",
         "",
@@ -934,7 +1071,7 @@ def render_coding_context_benchmark():
             "200K input context. Thinking is disabled, EOS remains enabled, and each arm uses "
             f"temperature {sampling.get('temperature', 1):g}, top-p {sampling.get('top_p', 0.95):g} "
             f"and top-k {sampling.get('top_k', 20)}. The non-empty arms use operator-supplied "
-            "token-prefix fixtures; only their hashes are retained. The three-second peak is "
+            "token-prefix fixtures; only their hashes are published. The three-second peak is "
             "the maximum completed sliding-window rate, not a single-frame burst. Runner: "
             "[benchmark_pi_coding_contexts.py](experiments/radiance-public/"
             "benchmark_pi_coding_contexts.py)."
@@ -948,12 +1085,15 @@ def render_coding_context_benchmark():
         "",
         *( [provenance_line, ""] if provenance_line else [] ),
         (
-            "For the next full refresh, use [the shared benchmark suite](docs/BENCHMARK_SUITE.md): "
+            ("These results use " if report.get("suite_capture_id") else "The next refresh can use ")
+            + "[the shared benchmark suite](docs/BENCHMARK_SUITE.md): "
             "`benchmark_pi_coding_contexts.py --suite` reuses each context's predetermined "
             "unprofiled control for its coding row and complete histogram, and continues the "
             "same 60K output through prose, JSON, thinking and compaction. It keeps both "
-            "controls around each stage trace for the residual calculation. Existing numbers "
-            "above retain their original capture provenance."
+            "controls around each stage trace for the residual calculation. "
+            + ("The 60K coding row above and the chained coding row are the same measured request."
+               if report.get("suite_capture_id") else
+               "Existing numbers above retain their original capture provenance.")
         ),
     ]
 
@@ -1044,8 +1184,12 @@ def render_round_histogram():
             "The histogram below is generated from the complete per-round records of the "
             "[coding-context benchmark](benchmarks/results/pi-coding-contexts.json). Every measured "
             "`round_ms` value appears in exactly one bin; untimed events are reported separately. "
-            "The compiled-stage timing experiment has separate unprofiled control runs; their "
-            "pauses are discussed below and are not part of this histogram.",
+            + ("The shared suite uses this same predetermined clean control for the coding row and "
+             "histogram; the stage residual matches only structurally admitted M8 cycles from both "
+             "controls, while this histogram retains every measured round."
+             if report.get("suite_capture_id") else
+             "The compiled-stage timing experiment has separate unprofiled control runs; their "
+             "pauses are discussed below and are not part of this histogram."),
             "",
             "| Round time | 0K arm | 60K arm | 200K arm |",
             "|---|---:|---:|---:|",

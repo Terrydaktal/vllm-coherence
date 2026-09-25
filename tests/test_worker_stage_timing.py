@@ -14,7 +14,7 @@ def test_worker_window_clips_previous_tail_and_unions_overlap():
     markers = [{"ph": "X", "cat": "user_annotation", "name": f"qwen_timing_round/{i}",
                 "ts": i * 10., "dur": 9.} for i in range(4)]
     def kernel(start, duration, stream=1):
-        return {"ph": "X", "cat": "kernel", "ts": start, "dur": duration,
+        return {"ph": "X", "cat": "kernel", "name": "synthetic_kernel", "ts": start, "dur": duration,
                 "args": {"device": 0, "stream": stream}}
     tail, a, b = kernel(19., 2.), kernel(22., 4.), kernel(24., 4., 2)
     targets = [(("target_body", i * 10. + 1), []) for i in range(4)]

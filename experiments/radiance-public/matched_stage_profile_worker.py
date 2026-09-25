@@ -15,6 +15,8 @@ from optimized_d7_worker import GraphObservation, OptimizedWorker
 
 
 class MatchedStageWorker(OptimizedWorker):
+    observation_class = GraphObservation
+
     def qwen_timing_status(self):
         if not hasattr(self, "_timing_instance"):
             self._timing_instance = uuid.uuid4().hex
@@ -75,7 +77,7 @@ class MatchedStageWorker(OptimizedWorker):
             size = min(run["chunk_rounds"], run["max_rounds"] - run["captured_rounds"])
             # Capture an extra boundary round; never invent a next-round start.
             root = run["root"] / f"chunk-{len(run['chunks']):03d}"
-            observer = GraphObservation(self.model_runner, root, profile=True)
+            observer = self.observation_class(self.model_runner, root, profile=True)
             observer.start_profile()
             run["observer"] = observer
             run["active"] = {"first_decode_index": index, "end_exclusive": index + size + 1}

@@ -233,7 +233,7 @@
         "tests/test_pi_coding_contexts.py",
         "tests/test_stage26_residual.py"
       ],
-      "native": "Not run for the new coordinator. CPU orchestration/negative controls only; historical GPU results retain their original source bindings."
+      "native": "25 September 2026: shared 0K/60K/200K warmup/control/profile/control capture completed on the repaired compiled Global-512 speed candidate. All paired outputs and accepted-token schedules matched; every expected speculative round was retained. The same 60K coding capture feeds the chained tasks. Natural 0K/200K outputs below the 5K target remain explicit validation failures. Matched GPU union and clean-control residuals exclude measured profiling slowdown; isolated pauses remain in the reports. Capture 6ec96682eeba444b9c1cddaa0cdb5cc2; exact measured source and runtime hashes are in benchmarks/results/compiled-global512-stage-profile-20260925.json."
     }
   ]
 }

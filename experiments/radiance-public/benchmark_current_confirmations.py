@@ -14,7 +14,6 @@ import runpy
 import sys
 from pathlib import Path
 
-
 ARMS = ("compiled-m1", "compiled-m8", "eager-m1", "eager-m8", "stages")
 OPERATOR_INVENTORY = {
     "normalization": 161, "residual_norm": 129, "residual_carry": 129,
@@ -45,7 +44,7 @@ STAGE_INVENTORY = {
 }
 
 
-def current_config(base_config, spec, lane, **kwargs):
+def current_config(base_config, spec, lane, *, speed_candidate=False, **kwargs):
     config = base_config(spec, lane, **kwargs)
     if kwargs["execution_mode"] == "compiled-no-graphs":
         config["worker_cls"] = "native_d7_tape_worker.NativeTapeWorker"
@@ -53,6 +52,11 @@ def current_config(base_config, spec, lane, **kwargs):
         # The eager control must include the already-qualified RNE RoPE repair.
         # ExecutionModeWorker alone is the historical, unaligned eager path.
         config["worker_cls"] = "rotary_mode_d7_worker.RotaryRneWorker"
+    if speed_candidate and kwargs["execution_mode"] == "compiled" and kwargs["speculation"]:
+        config["worker_cls"] = "speed_matched_stage_worker.SpeedMatchedStageWorker"
+        config["compilation_config"] = {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [8]}
+    if speed_candidate and kwargs["execution_mode"] == "compiled-no-graphs":
+        config["worker_cls"] = "speed_confirmation_worker.SpeedTapeWorker"
     return config
 
 
@@ -69,6 +73,8 @@ def bootstrap(args):
     os.environ["RADIANCE_VERIFY_HEAD"] = "0"
     os.environ.pop("RADIANCE_VERIFY_HEAD_GLOBAL_TOPK", None)
     os.environ["QWEN_OPTIMIZED_STARTUP_RECEIPT"] = str(args.output / "before-compile.json")
+    if args.speed_candidate:
+        os.environ["QWEN_SPEED_FULL_GRAPH_CAPTURE"] = "1" if args.arm == "compiled-m8" else "0"
     os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve()), "worker", *old[2:]])
 
 
@@ -76,7 +82,13 @@ def worker(args):
     from types import SimpleNamespace
 
     import benchmark_optimized_d7 as benchmark
-    from qwen_r9700_lab.diagnostic_contract import authenticate, private_json, seal, write_private
+
+    from qwen_r9700_lab.diagnostic_contract import (
+        authenticate,
+        private_json,
+        seal,
+        write_private,
+    )
 
     fixture = private_json(args.fixture)
     authenticate(fixture)
@@ -90,7 +102,11 @@ def worker(args):
         raise ValueError("release manifest identity changed")
     spec = private_json(args.spec)
     package = Path("/opt/vllm/lib/python3.12/site-packages")
-    names = sorted(set(spec["binding"]["files"]) | set(profile["source_preimages"]))
+    names = set(spec["binding"]["files"]) | set(profile["source_preimages"])
+    if args.speed_candidate:
+        names.update(("speed_candidate_worker.py", "speed_matched_stage_worker.py",
+                      "matched_stage_profile_worker.py", "speed_confirmation_worker.py"))
+    names = sorted(names)
     binding = seal({
         "schema": "urn:qwen:radiance-native-binding:v1",
         "files": {name: hashlib.sha256((package / name).read_bytes()).hexdigest() for name in names},
@@ -110,12 +126,14 @@ def worker(args):
         "production_head": "global512",
         "snapshot_reuse": False,
         "serving_timing_measurement": False,
+        "speed_candidate": args.speed_candidate,
     })
     lane = "fixed-bf16"
     (args.output / lane).mkdir(mode=0o700)
     (args.private / lane).mkdir(mode=0o700)
     original_config = benchmark.make_config
-    benchmark.make_config = lambda spec, lane, **kw: current_config(original_config, spec, lane, **kw)
+    benchmark.make_config = lambda spec, lane, **kw: current_config(
+        original_config, spec, lane, speed_candidate=args.speed_candidate, **kw)
     benchmark.worker(SimpleNamespace(
         spec=actual_spec, fixture=args.fixture, output=args.output, private=args.private,
         lane=lane, m1=args.arm.endswith("m1"), isolated_capture=False,
@@ -164,7 +182,14 @@ def summarize(root, output):
         compiled = arm.startswith("compiled")
         require(metadata["enforce_eager"] is not compiled, "execution mode changed")
         require(metadata["compilation_mode"] == (3 if compiled else 0), "wrong compiler mode")
-        require(metadata["graph_mode"] == ("PIECEWISE" if compiled else "NONE"), "wrong graph mode")
+        candidate = bindings[arm].get("speed_candidate", False)
+        expected_graph = ("FULL_AND_PIECEWISE" if candidate and arm == "compiled-m8" else
+                          "PIECEWISE" if compiled else "NONE")
+        require(metadata["graph_mode"] == expected_graph, "wrong graph mode")
+        if candidate and arm == "compiled-m8":
+            receipt = metadata.get("speed_candidate", {})
+            require(receipt.get("full_graph_enabled") and receipt.get("target_gemm_enabled")
+                    and receipt.get("draft_attention_enabled"), "missing banked speed candidates")
         require(metadata["runtime"]["flags"]["RADIANCE_VERIFY_HEAD"] == "0", "wrong comparison head")
         count = sample["observation"]["observation"]["counts"].get("target_graph_replays", 0)
         require((count > 0) is compiled, "actual graph execution differs")
@@ -180,6 +205,7 @@ def summarize(root, output):
             "graph_mode": metadata["graph_mode"],
             "target_graph_replays": count,
             "eager_rotary_repair": metadata.get("rotary_intervention"),
+            "speed_candidate": metadata.get("speed_candidate"),
         }
     for key in ("release_manifest_sha256", "source_binding_sha256", "fixture_sha256"):
         require(len({b[key] for b in bindings.values()}) == 1, "different execution binding: " + key)
@@ -265,6 +291,7 @@ def summarize_operators(source, output):
 
 def summarize_stages(root, arm, output):
     from analyze_native_d7_stages import aggregate_groups
+
     from qwen_r9700_lab.diagnostic_contract import authenticate, private_json, seal
 
     def checked(path):
@@ -340,6 +367,8 @@ def main():
     parser.add_argument("--operator-audit", type=Path)
     parser.add_argument("--stage-arm", default="stages")
     parser.add_argument("--patches", type=Path, default=Path("/patches"))
+    parser.add_argument("--speed-candidate", action="store_true",
+                        help="qualify the banked full-graph M8 against original M1/eager operators")
     args = parser.parse_args()
     os.umask(0o077)
     if args.command == "stage-report":

@@ -194,18 +194,25 @@ def test_native_matched_evidence_keeps_tracing_slowdown_out_of_runtime_gaps():
     result = compute(profile_data, control_data)
     assert result["status"] == "matched_estimate"
     assert result["zero_observer_effect_proven"] is False
-    for path, expected in profile_data["binding"]["source_sha256"].items():
-        # Historical evidence qualifies its recorded source, not later runner
-        # refactors. Still verify every byte against the published source hash.
-        source = subprocess.check_output([
+
+    def measured_source(path):
+        # The qualification bundled with a rewritten commit binds actual source
+        # bytes, without relabelling immutable captures with a later commit ID.
+        if current.get("uncommitted_qualification") or current.get("current_qualification_document"):
+            return (root / path).read_bytes()
+        return subprocess.check_output([
             "git", "-C", str(root), "show",
             f"{current['current_qualification_commit']}:{path}",
         ])
-        assert hashlib.sha256(source).hexdigest() == expected
+
+    for path, expected in profile_data["binding"]["source_sha256"].items():
+        assert hashlib.sha256(measured_source(path)).hexdigest() == expected
     host = profile_data["binding"]["host_runtime"]
     for name, expected in host["source_sha256"].items():
-        assert hashlib.sha256((root / "experiments/radiance-public" / name).read_bytes()).hexdigest() == expected
-    observed = host["worker_page_policy"]
+        source = measured_source(f"experiments/radiance-public/{name}")
+        assert hashlib.sha256(source).hexdigest() == expected
+    observed = host.get("host_page_policy_observation", host.get("worker_page_policy"))
+    assert isinstance(observed, dict)
     if observed["allocated_bytes"]:
         assert observed["host_page_policy"] == "no_hugepage_promotion"
         assert observed["host_page_policy_bytes"] >= observed["allocated_bytes"]

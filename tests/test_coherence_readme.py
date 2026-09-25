@@ -15,6 +15,7 @@ from render_current_tables import (
     commit_marker,
     current_stage_profile,
     render_chained_workload_results,
+    workload_target_head,
     update,
 )
 
@@ -35,9 +36,14 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert set(data["stage_provenance"]) == measured_stages
     matched = json.loads((ROOT / data["matched_stage_profile"]).read_text())
     for stage, entry in data["stage_provenance"].items():
+        if entry.get("document"):
+            assert entry["document"] == data["current_qualification_document"]
+            assert f"[Qualified speed changes]({entry['document']})" in readme
+            assert entry["change"]
+            continue
         assert len(entry["commit"]) == 40
         if stage == "Global-256 target head" and matched.get("target_head") == "global512":
-            assert commit_marker(matched["stage26_execution"]["measurement_commit"]) in readme
+            assert commit_marker(data["target_head_change_commit"]) in readme
         else:
             assert entry["commit"] in readme
         assert entry["change"]
@@ -77,12 +83,14 @@ def test_readme_is_current_only_and_matches_committed_measurements():
                 provenance_stage, [data["measurement_commit"]]
             )
         )
-        expected_links[data["stage_provenance"][provenance_stage]["commit"]] += 1
+        provenance = data["stage_provenance"][provenance_stage]
+        if "commit" in provenance:
+            expected_links[provenance["commit"]] += 1
     expected_links[data["measurement_commit"]] += 1  # overhead evidence
     for commit in expected_links:
         commit_url = f"https://github.com/Terrydaktal/vllm-coherence/commit/{commit}"
         assert readme.count(commit_url) >= 1
-    assert data["current_qualification_commit"] == profile_commit
+    assert data.get("current_qualification_commit", data.get("capture_base_commit")) == profile_commit
     assert "pending commit" not in readme
     assert "Current stage confirmations identify M1/M8 and eager/compiled M8 separately" in readme
     confirmations = json.loads((ROOT / data["current_confirmations"]).read_text())
@@ -98,9 +106,15 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert stages["negative_controls_passed_groups"] == stages["cache_restored_groups"] == 40
     assert all(v["positions"] == v["full_logits_exact"] == v["top20_set_exact"] == v["top20_order_exact"] == 320
                for s in stages["stages"].values() for v in s.values())
+    run_label = (
+        f"; run [qualified speed refresh]({data['current_qualification_document']})"
+        if data.get("current_qualification_document") else
+        f"; base {commit_marker(profile_commit)} + recorded working-tree changes"
+        if data.get("uncommitted_qualification") else f"; run {commit_marker(profile_commit)}"
+    )
     assert (
         f"Current GPU activity per retained compiled M8 cycle (0K / 60K / 200K; milliseconds unless explicitly marked; {matched['measurement_date']}"
-        f"; run {commit_marker(profile_commit)})"
+        f"{run_label})"
         in readme
     )
     compiled_table = readme.split("## Compiled backend stages\n\n", 1)[1].split(
@@ -210,10 +224,15 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "### Remaining symptoms and likely causes" not in readme
     assert "Status: pending fix" not in readme
     remaining = readme.split("### Known remaining symptoms and likely causes", 1)[1].split("\n## ", 1)[0]
-    assert "Occasional long-context pauses remain" in remaining
-    assert "trace limitation" in remaining
+    if data.get("full_graph_repair"):
+        assert "The missing full-graph preparation hook is repaired" in remaining
+        assert data["full_graph_repair"] in remaining
+        assert "does not prove that all HIP/ROCr queue" in remaining
+    else:
+        assert "Occasional long-context pauses remain" in remaining
+        assert "trace limitation" in remaining
     assert "lacks a separate reasoning channel" in remaining
-    assert "stage26-control-20260924.json" in remaining
+    assert data["matched_stage_control"] in remaining
     for obsolete in ("cbbf495", "abb7668", "b8d6810", "September 20 chained run", "September 21"):
         assert obsolete not in remaining
     assert "Native-runtime validation of the repaired collector is still required" not in remaining
@@ -264,6 +283,19 @@ def test_workload_table_uses_result_values_and_validation_status():
     assert "format failed" not in rendered
     assert "No separate reasoning channel" not in rendered
     assert "phase_token_counts_cover_output=false" not in rendered
+
+
+def test_workload_head_has_no_silent_global256_default():
+    with pytest.raises(ValueError, match="target head is not recorded"):
+        workload_target_head({})
+    assert workload_target_head({"runtime": {"target_head": "global512"}}) == "global512"
+
+
+def test_shared_workload_cannot_borrow_another_capture_head():
+    report = json.loads((ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text())
+    report["suite_capture_id"] = "unrelated-run"
+    with pytest.raises(ValueError, match="identity mismatch: suite_capture_id"):
+        workload_target_head(report)
 
 
 def test_current_context_results_account_for_every_round():

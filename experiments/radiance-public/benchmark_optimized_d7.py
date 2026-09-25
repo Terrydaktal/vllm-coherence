@@ -55,11 +55,17 @@ def make_config(spec, lane, *, speculation=True, isolated_capture=False, executi
     return config
 
 
-def validate_execution_metadata(metadata, *, execution_mode, isolated_capture):
+def validate_execution_metadata(metadata, *, execution_mode, isolated_capture, expected_graph_mode=None):
     eager = execution_mode == "eager"
     require(metadata["enforce_eager"] == eager, "actual eager setting differs from requested mode")
     require((metadata["compilation_mode"] == 0) == eager, "actual compilation mode differs")
     expected_graph = "NONE" if isolated_capture or execution_mode != "compiled" else "PIECEWISE"
+    if expected_graph_mode is not None:
+        require(expected_graph_mode in {"NONE", "PIECEWISE", "FULL_AND_PIECEWISE"},
+                "unqualified requested graph mode")
+        require(expected_graph == "PIECEWISE" or expected_graph_mode == "NONE",
+                "graphs requested for eager/graph-disabled replay")
+        expected_graph = expected_graph_mode
     require(
         str(metadata["graph_mode"]).split(".")[-1] == expected_graph,
         "actual graph mode differs from requested mode",
@@ -91,7 +97,8 @@ def worker(args):
     with reject_dead_native_rpcs(engine.engine_core):
         metadata = llm.collective_rpc("qwen_optimized_metadata")[0]
     validate_execution_metadata(
-        metadata, execution_mode=args.execution_mode, isolated_capture=args.isolated_capture
+        metadata, execution_mode=args.execution_mode, isolated_capture=args.isolated_capture,
+        expected_graph_mode=config["compilation_config"]["cudagraph_mode"],
     )
     write_private(root / "actual-runtime.json", seal(metadata))
     passes = []

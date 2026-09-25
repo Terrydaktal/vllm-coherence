@@ -9,7 +9,7 @@
     "method": "unprofiled_round_ms - gpu_ms",
     "assumption": "Traced GPU kernel durations are representative of normal execution. The measurements come from separate runs; this is not an independently measured gap total."
   },
-  "correctness_scope": "Current repaired release: **320 forced decode tokens after a fresh 60,000-token Pi prefill**, plus the prefill prediction, in each of four arms. Compiled M1 versus compiled M8, eager M1 versus compiled M1, eager M8 versus compiled M8, and eager M1 versus compiled M8 each produced the results below. Compiled controls use production piecewise graphs; eager controls include the existing RoPE rounding repair. The **full BF16 comparison head** exposes target-body differences; production uses approximate Global-512, measured separately. [Run identities and all four comparisons](benchmarks/results/current-320-confirmations-20260924.json).",
+  "correctness_scope": "September 25 candidate rerun: **320 forced decode tokens after a fresh 60,000-token Pi prefill**, plus the prefill prediction, in each of four arms. Compiled M1 versus compiled M8, eager M1 versus compiled M1, eager M8 versus compiled M8, and eager M1 versus compiled M8 each produced the results below. Compiled M8 includes the three banked speed candidates and uses the FULL graph; compiled M1 retains the original PIECEWISE path. Eager controls retain the existing RoPE rounding repair and original operators. The **full BF16 comparison head** exposes target-body differences; serving performance uses approximate Global-512, measured separately. [Run identities and all four comparisons](benchmarks/results/current-320-confirmations-20260925.json). The [qualified speed refresh](docs/SPEED_INVESTIGATION_20260925.md) includes the measurement adapters and FULL-graph preparation repair. Captures retain their original checkout identities and measured source hashes after the history rewrite. The experimental worker remains separate from the normal Pi deployment.",
   "predictions": [
     {
       "k": 1,
@@ -33,12 +33,12 @@
       "overlap": 20.0
     }
   ],
-  "correctness_limits": "Each comparison also matched all 320 full-vocabulary logit hashes and the prefill prediction. This is finite execution consistency, not independent model certification, an arbitrary-input proof or a natural-completion quality test. This fresh slice comes from the retained Pi corpus; it is not the deleted historical standalone 320-token fixture. The earlier 10K study remains historical and was not rerun.",
+  "correctness_limits": "Each comparison also matched all 320 full-vocabulary logit hashes and the prefill prediction. This is finite execution consistency, not independent model certification, an arbitrary-input proof or a natural-completion quality test. The slice comes from the retained Pi corpus; it is not the deleted historical standalone 320-token fixture. The earlier 10K study remains historical and was not rerun.",
   "timing_scope": "Latest retained **compiled, piecewise-graph** decode profile from a saved **60,000-input-token Pi prefix**, with the global-256 head, both alignment repairs and the GGZ14-derived backports. The trace contains **8 observed profile rounds**; the displayed stage and layer values are arithmetic means over **6 complete retained rounds** (rounds 0\u20134 and 6), with one sample per stage per round. Each sample is one compiled decode/profile cycle containing drafting and target verification. This is a kernel profile, not six natural completions or a 60K-output run; the trace has no natural-completion output-token total. Round 5 lacks a complete kernel inventory; round 7 has no following target start to close its interval. Selection uses inventory and observed boundaries, never duration. Work preceding the first target is excluded. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Each fused kernel has one combined duration.",
   "stage_provenance": {
     "Drafter": {
-      "commit": "146c6824c530acd1a627a99db67b0159c10cf0ac",
-      "change": "Defer INT2 draft-head packing until the real shared target weights are bound, avoiding uninitialized placeholder weights."
+      "change": "Use the qualified unit_w4_s1_occ2 drafter attention launch; target attention is unchanged and deferred head initialization is retained.",
+      "document": "docs/SPEED_INVESTIGATION_20260925.md"
     },
     "Embedding + first input normalization + FP8 production": {
       "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
@@ -69,8 +69,8 @@
       "change": "Preserve the M1 gated-normalization reduction layout during prefill and retain one final BF16 rounding before FP8 production."
     },
     "GDN output projection": {
-      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
-      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
+      "change": "Use qualified local-split GEMM for M1/M8 down/output shapes; preserve the repaired MXFP4 coefficients and reduction order.",
+      "document": "docs/SPEED_INVESTIGATION_20260925.md"
     },
     "Attention input projection": {
       "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
@@ -101,8 +101,8 @@
       "change": "Enabled qualified native-rounding FP8 output production and rejected approximate traced quantization."
     },
     "Attention output projection": {
-      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
-      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
+      "change": "Use qualified local-split GEMM for M1/M8 down/output shapes; preserve the repaired MXFP4 coefficients and reduction order.",
+      "document": "docs/SPEED_INVESTIGATION_20260925.md"
     },
     "Post-attention/GDN residual/normalization + FP8 production": {
       "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
@@ -121,8 +121,8 @@
       "change": "Enabled qualified native per-token FP8 production for the down projection input."
     },
     "MLP down projection": {
-      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
-      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
+      "change": "Use qualified local-split GEMM for M1/M8 down/output shapes; preserve the repaired MXFP4 coefficients and reduction order.",
+      "document": "docs/SPEED_INVESTIGATION_20260925.md"
     },
     "Final normalization/layout": {
       "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
@@ -2425,12 +2425,16 @@
       "audit_artifact": "benchmarks/results/stage-timing-audit-20260923.json"
     }
   },
-  "matched_stage_profile": "benchmarks/results/compiled-global512-stage-profile-20260924.json",
-  "matched_stage_control": "benchmarks/results/stage26-control-20260924.json",
-  "head_candidate_result": "benchmarks/results/head-candidate-depth-normalization-20260924.json",
-  "matched_stage_residual": "benchmarks/results/matched-stage-residual-20260924.json",
-  "current_confirmations": "benchmarks/results/current-320-confirmations-20260924.json",
-  "current_operator_confirmations": "benchmarks/results/current-operator-confirmations-20260924.json",
-  "current_stage_confirmations": "benchmarks/results/current-stage-confirmations-20260924.json",
-  "current_qualification_commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed"
+  "matched_stage_profile": "benchmarks/results/compiled-global512-stage-profile-20260925.json",
+  "matched_stage_control": "benchmarks/results/stage26-control-20260925.json",
+  "head_candidate_result": "benchmarks/results/head-candidate-depth-20260925.json",
+  "matched_stage_residual": "benchmarks/results/matched-stage-residual-20260925.json",
+  "current_confirmations": "benchmarks/results/current-320-confirmations-20260925.json",
+  "current_operator_confirmations": "benchmarks/results/current-operator-confirmations-20260925.json",
+  "current_stage_confirmations": "benchmarks/results/current-stage-confirmations-20260925.json",
+  "target_head_change_commit": "9bb795d2e612c76087d16932841131edf4834d5e",
+  "full_graph_repair": "benchmarks/results/full-graph-cache-prepare-20260925.json",
+  "current_snapshot_confirmations": "benchmarks/results/snapshot-lifecycle-20260925.json",
+  "capture_base_commit": "840c329ebb063db574cde9c7cf0de2241f8e89b2",
+  "current_qualification_document": "docs/SPEED_INVESTIGATION_20260925.md"
 }

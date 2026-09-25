@@ -44,6 +44,19 @@ def test_eager_control_retains_the_existing_rotary_repair():
     ] == "original"
 
 
+def test_banked_speed_config_changes_only_candidate_m8_and_its_stage_replay():
+    base = lambda *a, **kw: {"worker_cls": "original", "compilation_config": {"cudagraph_mode": "PIECEWISE"}}
+    args = {"speed_candidate": True, "execution_mode": "compiled", "speculation": True}
+    candidate = MODULE.current_config(base, {}, "fixed-bf16", **args)
+    assert candidate["worker_cls"] == "speed_matched_stage_worker.SpeedMatchedStageWorker"
+    assert candidate["compilation_config"] == {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [8]}
+    reference = MODULE.current_config(base, {}, "fixed-bf16", **{**args, "speculation": False})
+    assert reference["worker_cls"] == "original"
+    assert reference["compilation_config"]["cudagraph_mode"] == "PIECEWISE"
+    assert MODULE.current_config(base, {}, "fixed-bf16", **{**args, "execution_mode": "eager"})["worker_cls"] == "rotary_mode_d7_worker.RotaryRneWorker"
+    assert MODULE.current_config(base, {}, "fixed-bf16", **{**args, "execution_mode": "compiled-no-graphs"})["worker_cls"] == "speed_confirmation_worker.SpeedTapeWorker"
+
+
 def test_complete_pair_and_late_negative_control():
     left, right = report(1), report(8)
     result = MODULE.compare_pair(left, right, left_width=1, right_width=8)

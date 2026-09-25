@@ -76,6 +76,10 @@ def make_fair_runtime_fixtures(root):
         "def execute_model(self, scheduler_output, dummy_run=False):\n"
         "        if not dummy_run:\n"
         "            # Update the request states.\n"
+        "            pass\n"
+        "        if full_graph:\n"
+        "            self.kv_connector.pre_forward(scheduler_output)\n"
+        "        else:\n"
         "            with context:\n"
         "                self.kv_connector.pre_forward(scheduler_output)\n"
     )
@@ -299,7 +303,7 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     assert factory.read_text().count("qwen_chat_fs") == 1
     assert output.read_text().count("qwen_fair: dict | None = None") == 1
     assert runner.read_text().count("before_forward(self, scheduler_output)") == 1
-    assert runner.read_text().count("after_forward_prepare(self, scheduler_output)") == 1
+    assert runner.read_text().count("after_forward_prepare(self, scheduler_output)") == 2
     assert scheduler.read_text().count("fair.get('barrier')") == 1
     fair_scheduler = scheduler.read_text()
     fair_start = fair_scheduler.index("store_jobs = self._build_store_jobs")
@@ -321,6 +325,71 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     with pytest.raises(ValueError, match="anchor changed"):
         installer.install(tmp_path, core, tier)
     assert scheduler.read_text() == "# unexpected source\n"
+
+
+@pytest.mark.parametrize("previous_piecewise_patch", [False, True])
+def test_cache_preparation_finishes_before_every_execution_route(
+    monkeypatch, previous_piecewise_patch
+):
+    """Exercise v0.28's differently indented FULL and piecewise/eager branches."""
+    from contextlib import nullcontext
+
+    spec = importlib.util.spec_from_file_location(
+        "chat_patch_all_graph_routes", PATCH_SCRIPT.with_name("patch_chat_snapshot.py")
+    )
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    source = '''def execute_model(self, scheduler_output, mode, dummy_run=False):
+        if not dummy_run:
+            # Update the request states.
+            pass
+        if mode == "FULL":
+            self.kv_connector.pre_forward(scheduler_output)
+            self.run(mode)
+        else:
+            with nullcontext():
+                self.kv_connector.pre_forward(scheduler_output)
+                self.run(mode)
+'''
+    if previous_piecewise_patch:
+        # Reproduce the released partial installation: the old exact string
+        # matched only the 16-space call, and then its global guard skipped all
+        # further preparation hooks.
+        source = source.replace(installer.FAIR_PREPARE_OLD, installer.FAIR_PREPARE_NEW)
+    patched = installer.add_fair_runner_hooks(source)
+    assert installer.add_fair_runner_hooks(patched) == patched
+    calls = []
+    pending = [False]
+
+    def prepare(_):
+        pending[0] = True
+        calls.append("prepare")
+
+    def finish_prepare(runner, output):
+        assert pending[0]
+        pending[0] = False
+        calls.append("finish_prepare")
+
+    def run(mode):
+        assert not pending[0], "GPU execution bypassed cache preparation completion"
+        calls.append(mode)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "qwen_radiance_fair_scheduler",
+        SimpleNamespace(
+            before_forward=lambda *_: calls.append("before"),
+            after_forward_prepare=finish_prepare,
+        ),
+    )
+    namespace = {"nullcontext": nullcontext}
+    # Execute only this test's fixed source after applying the real installer.
+    exec(compile(patched, "patched_runner_routes.py", "exec"), namespace)  # noqa: S102
+    runner = SimpleNamespace(kv_connector=SimpleNamespace(pre_forward=prepare), run=run)
+    for mode in ("FULL", "PIECEWISE", "NONE"):
+        calls.clear()
+        namespace["execute_model"](runner, SimpleNamespace(), mode)
+        assert calls == ["before", "prepare", "finish_prepare", mode]
 
 
 def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
