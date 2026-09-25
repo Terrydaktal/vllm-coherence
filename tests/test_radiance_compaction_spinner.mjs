@@ -74,6 +74,7 @@ test("native manual and automatic compaction spinners update in place and disapp
         mode.defaultEditor.onEscape();
         assert.equal(aborted, true, "the compaction cancellation control remains connected");
         const scheduler = { start() {}, stop() {}, read: () => ({ available: true,
+          lastRequestTiming: { last_round_ms: 44.2, acceptance_rate_3s: 0.6 },
           request: { chat_id: "a".repeat(64), generation: "b".repeat(64), state: "paused",
             computed_tokens: 0, input_tokens: 239265 },
           activeChat: { chat_id: "c".repeat(64), generation: "d".repeat(64) }, workerAvailable: true,
@@ -91,7 +92,14 @@ test("native manual and automatic compaction spinners update in place and disapp
         assert.match(rendered.join("\n"), /Find and load cached context: not observed yet/);
         assert.match(rendered.join("\n"), /Input: 239,265 tok/);
         assert.ok(rendered.every((line) => visibleWidth(line) <= 100), "multiline spinner respects terminal width");
-        progress.update({ phase: "generate", outputTokens: 3962, cacheRead: 235664 });
+        progress.update({ phase: "generate", outputTokens: 3922, cacheRead: 235664 });
+        clock += 1000;
+        progress.update({ outputTokens: 3962 });
+        const generation = mode.statusContainer.render(100).map(stripAnsi);
+        assert.match(generation.join("\n"), /40.0 t\/s, 40.0 t\/s avg/);
+        assert.match(generation.join("\n"), /round 44.2 ms/);
+        assert.match(generation.join("\n"), /acceptance 60.0%/);
+        assert.ok(generation.every((line) => visibleWidth(line) <= 100), "metrics wrap inside the compaction spinner");
         if (["complete", "cleanup_pending"].includes(outcome)) {
           progress.update({ phase: "commit" }); progress.markAppended(); progress.markCommitted();
           progress.update({ phase: "cleanup", removedBytes: 2 ** 30 });

@@ -98,6 +98,21 @@ export function parseRequestPhases(text, pid, now = Date.now()) {
 	return value;
 }
 
+export function formatGenerationStats(observation) {
+	// Both generation spinners use the latest round and the backend's weighted
+	// three-second acceptance window, including during a short GPU handover.
+	const row = observation?.requestPhase ?? observation?.lastRequestTiming;
+	if (!row) return "";
+	const values = [];
+	if (typeof row.last_round_ms === "number" && Number.isFinite(row.last_round_ms)) {
+		values.push(`round ${row.last_round_ms.toFixed(1)} ms`);
+	}
+	if (typeof row.acceptance_rate_3s === "number" && Number.isFinite(row.acceptance_rate_3s)) {
+		values.push(`acceptance ${(100 * row.acceptance_rate_3s).toFixed(1)}%`);
+	}
+	return values.join(" \u2022 ");
+}
+
 export function requestPhaseStatus(observation) {
 	const row = observation?.requestPhase;
 	if (!row || row.phase === "complete") return undefined;

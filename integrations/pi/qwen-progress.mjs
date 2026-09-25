@@ -1,4 +1,4 @@
-import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus, REQUEST_PHASE_LABELS } from "./qwen-radiance-scheduler-telemetry.mjs";
+import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus, formatGenerationStats, REQUEST_PHASE_LABELS } from "./qwen-radiance-scheduler-telemetry.mjs";
 
 // The combined telemetry reader is cheap and shared across extensions. Keep
 // the spinner cadence aligned with it so round/acceptance values do not sit
@@ -441,22 +441,6 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		return Math.max(0, exactOutputTokens - tokensAtStart) / seconds;
 	}
 
-	function generationStats(observation) {
-		// Keep the current round and the weighted acceptance over the same three
-		// second window as the displayed rolling token rate visible during short
-		// buffering, handover and tool/scheduler phases.
-		const row = observation?.requestPhase ?? observation?.lastRequestTiming;
-		if (!row) return "";
-		const values = [];
-		if (typeof row.last_round_ms === "number" && Number.isFinite(row.last_round_ms)) {
-			values.push(`round ${row.last_round_ms.toFixed(1)} ms`);
-		}
-		if (typeof row.acceptance_rate_3s === "number" && Number.isFinite(row.acceptance_rate_3s)) {
-			values.push(`acceptance ${(100 * row.acceptance_rate_3s).toFixed(1)}%`);
-		}
-		return values.join(" \u2022 ");
-	}
-
 	function observeOutput(outputTokens, reasoningTokens, hasDelta = false, now = monotonicNow()) {
 		const advanced = outputTokens !== undefined && outputTokens > (exactOutputTokens ?? 0);
 		const reasoningAdvanced = reasoningTokens !== undefined && reasoningTokens > (exactReasoningTokens ?? 0);
@@ -528,7 +512,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 			const throughput = rate === undefined || recentRate === undefined
 				? "measuring t/s"
 				: `${recentRate.toFixed(1)} t/s, ${rate.toFixed(1)} t/s avg`;
-			const stats = generationStats(schedulerState);
+			const stats = formatGenerationStats(schedulerState);
 			// Keep the round and rolling acceptance telemetry visible while a request
 			// is briefly classified as waiting (for example during a handover).
 			// The waiting explanation must not hide these current-window values.

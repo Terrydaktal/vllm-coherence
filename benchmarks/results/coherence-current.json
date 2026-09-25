@@ -37,44 +37,44 @@
   "timing_scope": "Latest retained **compiled, piecewise-graph** decode profile from a saved **60,000-input-token Pi prefix**, with the global-256 head, both alignment repairs and the GGZ14-derived backports. The trace contains **8 observed profile rounds**; the displayed stage and layer values are arithmetic means over **6 complete retained rounds** (rounds 0\u20134 and 6), with one sample per stage per round. Each sample is one compiled decode/profile cycle containing drafting and target verification. This is a kernel profile, not six natural completions or a 60K-output run; the trace has no natural-completion output-token total. Round 5 lacks a complete kernel inventory; round 7 has no following target start to close its interval. Selection uses inventory and observed boundaries, never duration. Work preceding the first target is excluded. The subsequent tiled-activation change is prefill-only and does not change these decode kernels. Each fused kernel has one combined duration.",
   "stage_provenance": {
     "Drafter": {
-      "commit": "2a2175a2cfe64e666b32df0db3c39f562ca96082",
-      "change": "Separated DFlash proposal and target replacement RNG streams so drafting and target verification cannot share random state."
+      "commit": "146c6824c530acd1a627a99db67b0159c10cf0ac",
+      "change": "Defer INT2 draft-head packing until the real shared target weights are bound, avoiding uninitialized placeholder weights."
     },
     "Embedding + first input normalization + FP8 production": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Enabled the qualified native-rounding norm/FP8 producer while preserving the BF16 residual interface."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve the M1 reduction and BF16/FP8 rounding at every admitted prefill width, removing batch-dependent activation differences."
     },
     "Layer input residual/normalization + FP8 production": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Enabled qualified TP1 FP8 norm/quant fusion while retaining the required residual and rounding boundaries."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve the M1 reduction and BF16/FP8 rounding at every admitted prefill width, removing batch-dependent activation differences."
     },
     "GDN input projection": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Added guarded wide-N MXFP4 decode dispatch for the 34,816-column projection, with exact GEMM checks."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
     },
     "GDN layout/copies and buffer initialization": {
-      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
-      "change": "Recovered packed GDN transport and retained-prefix state handling without changing the nine-slot state layout."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Reject unsupported packed GDN inner strides and overlapping state slots; retain the existing nine-slot layout."
     },
     "GDN convolution": {
       "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
       "change": "Aligned GDN convolution product and accumulation arithmetic across M1/M8 and eager/compiled execution."
     },
     "GDN recurrence and gates": {
-      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
-      "change": "Aligned recurrence, gates, chronological prefill and retained-prefix state semantics across execution paths."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Use stable log1p(exp(x)) in M1, M8 and prefill so small nonzero recurrent gates survive FP32 cancellation."
     },
     "GDN output gated normalization + FP8 production": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Enabled all 48 qualified GDN norm/quant fusion sites with native rounding and exact operator checks."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve the M1 gated-normalization reduction layout during prefill and retain one final BF16 rounding before FP8 production."
     },
     "GDN output projection": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Applied guarded wide-N MXFP4 decode dispatch to the recurrent output projection."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
     },
     "Attention input projection": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Routed the attention input projection through the qualified FP8 stream and guarded MXFP4 dispatch."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
     },
     "Attention Q/K normalization, RoPE and layout": {
       "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
@@ -85,12 +85,12 @@
       "change": "Aligned causal attention and cache writes with the M1/M8 arithmetic contract."
     },
     "Attention decode": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Added live-row attention buffer handling for graph padding while preserving corrected decode arithmetic."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve BF16 query/key/value range, scale after the FP32 dot product, retain probability residuals and reject incompatible FP8 formats; keep the page-boundary traversal repair."
     },
     "Attention split-KV merge": {
-      "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
-      "change": "Recovered shared attention reads and arithmetic-preserving split-KV merging."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Keep split outputs and normalization sums in FP32 until the final BF16 merge, removing intermediate FP16 rounding loss."
     },
     "Attention output gating": {
       "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
@@ -101,16 +101,16 @@
       "change": "Enabled qualified native-rounding FP8 output production and rejected approximate traced quantization."
     },
     "Attention output projection": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Routed the attention output through the qualified FP8 stream and guarded MXFP4 dispatch."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
     },
     "Post-attention/GDN residual/normalization + FP8 production": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Enabled qualified decoder residual norm/FP8 fusion while preserving BF16 residual and rounding boundaries."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve the M1 reduction and BF16/FP8 rounding at every admitted prefill width, removing batch-dependent activation differences."
     },
     "MLP gate/up projection": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Enabled guarded wide-N MXFP4 decode dispatch for Qwen's 34,816-column gate/up projection."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
     },
     "MLP SiLU and gating": {
       "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
@@ -121,8 +121,8 @@
       "change": "Enabled qualified native per-token FP8 production for the down projection input."
     },
     "MLP down projection": {
-      "commit": "dd892187327914c02ce8852665eb6ee5a119bca2",
-      "change": "Enabled guarded wide-N MXFP4 decode dispatch for the down projection."
+      "commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed",
+      "change": "Preserve stored MXFP4 coefficients in the folded lookup and repair fragment/tiled per-block fallbacks while retaining the qualified GEMM dispatch."
     },
     "Final normalization/layout": {
       "commit": "1fecdfe4c6891fe028d68c6cf8705322baa320f2",
@@ -2431,5 +2431,6 @@
   "matched_stage_residual": "benchmarks/results/matched-stage-residual-20260924.json",
   "current_confirmations": "benchmarks/results/current-320-confirmations-20260924.json",
   "current_operator_confirmations": "benchmarks/results/current-operator-confirmations-20260924.json",
-  "current_stage_confirmations": "benchmarks/results/current-stage-confirmations-20260924.json"
+  "current_stage_confirmations": "benchmarks/results/current-stage-confirmations-20260924.json",
+  "current_qualification_commit": "2f0c571a8847c8059c8aa549b60978a1d9722fed"
 }

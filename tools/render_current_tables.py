@@ -134,7 +134,9 @@ def current_stage_profile(data):
     evidence_commit = "b8d681001cc726089c387eeddfc7c78e2e74ac3c"
     grouped = copy.deepcopy(base)
     if matched:
-        evidence_commit = raw["stage26_execution"]["measurement_commit"]
+        evidence_commit = data.get(
+            "current_qualification_commit", raw["stage26_execution"]["measurement_commit"]
+        )
     grouped["measurement_commit"] = evidence_commit
     grouped["matched"] = matched
     grouped["measurement_date"] = raw.get("measurement_date", "2026-09-23")
@@ -178,8 +180,8 @@ def current_stage_profile(data):
             "reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus "
             "the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect "
             "clocks and scheduling. Overlap is counted once in the total. "
-            "The header identifies the checkout commit at capture time; the run also included "
-            "then-uncommitted repairs recorded in the capture's source manifest. "
+            "The header identifies the commit containing the measured backend repairs and "
+            "captured results; the capture retains its original checkout and source identities. "
             f"[Capture and source identities]({data['matched_stage_profile']}) "
             f"· [controls]({data['matched_stage_control']}) · [method and uncertainty](docs/STAGE_TIMING.md)."
         )
@@ -462,9 +464,9 @@ def _render_stage_profile_table(data):
             if stage in norm_rows or stage == "GDN output gated normalization + FP8 production":
                 sites = 128 if stage in norm_rows else 48
                 evidence = f"Released row-invariant normalization gate: {sites} sites × 1,000 rows; finite operator checks, not a new full-model alignment run · [24 September evidence](docs/eager-m1-contract-qualification.md)."
-                provenance = "24 September release, pending commit: preserve M1 reduction and rounding across prefill/decode; [source and binary identities](benchmarks/results/eager-m1-normalization-deployment-20260924.json)."
+                provenance = provenance_marker(data, stage)
             elif stage in {"Attention decode", "Attention split-KV merge"}:
-                provenance = "24 September release, pending commit: repair split-merge precision and unsafe scaling; retain the September 23 page-boundary optimization · [repair evidence](docs/eager-m1-followup-audit.md)."
+                provenance = provenance_marker(data, stage)
         if profile.get("target_head") == "global512" and stage == "Global-256 target head":
             head_ref = data["head_candidate_result"]
             measured_head = json.loads((ROOT / head_ref).read_text())["modes"]["global512"]
@@ -557,7 +559,7 @@ def _render_stage_profile_table(data):
         lines.extend([
             f"| **26. {profile['stage26']['label']}** | {timing} (estimate) | "
             f"[Matched control minus GPU activity union]({data.get('matched_stage_residual', 'benchmarks/results/matched-stage-residual-20260923.json')}) | "
-            f"{profile['measurement_date']}: matched natural-serving measurement; source hashes in capture | Indirect observer effects are not proved zero. |",
+            f"{commit}: record matched unprofiled controls and overlap-corrected residuals | Indirect observer effects are not proved zero. |",
             f"| **Total reconstructed round (stages 1–26)** | **{totals}** | "
             "GPU activity union plus the estimated remainder | "
             "— | Overlapping stages are counted once in the total. |",

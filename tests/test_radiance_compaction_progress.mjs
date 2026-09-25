@@ -8,7 +8,7 @@ const currentChat = { chat_id: "a".repeat(64), generation: "b".repeat(64) };
 const otherChat = { chat_id: "c".repeat(64), generation: "d".repeat(64) };
 
 function fixture(t, { observationAt = () => ({ available: false, configured: false }) } = {}) {
-  let clock = 0, tick, stopped = false, schedulerStopped = false;
+  let clock = 0, tick, intervalMs, stopped = false, schedulerStopped = false;
   const widgets = [], statuses = [], messages = [], reports = [], notices = [], abort = new AbortController();
   const sessionFile = `/synthetic-${randomUUID()}.jsonl`;
   const ctx = { sessionManager: { getSessionFile: () => sessionFile }, ui: {
@@ -23,7 +23,7 @@ function fixture(t, { observationAt = () => ({ available: false, configured: fal
   };
   const progress = startCompactionProgress(ctx, { signal: abort.signal, now: () => clock,
     save: (report) => reports.push(report), scheduler,
-    schedule: (fn) => { tick = fn; return 1; }, unschedule: () => { stopped = true; } });
+    schedule: (fn, ms) => { tick = fn; intervalMs = ms; return 1; }, unschedule: () => { stopped = true; } });
   t.after(async () => {
     await clearCompactionProgress(ctx);
     assert.ok(widgets.every((value) => value === undefined), "no pinned compaction widget");
@@ -31,7 +31,7 @@ function fixture(t, { observationAt = () => ({ available: false, configured: fal
     assert.equal(messages.at(-1), undefined, "no message left for the next working spinner");
   });
   return { ctx, progress, abort, widgets, statuses, messages, reports, notices,
-    stopped: () => stopped, schedulerStopped: () => schedulerStopped,
+    stopped: () => stopped, schedulerStopped: () => schedulerStopped, intervalMs: () => intervalMs,
     advance: (ms, render = true) => { clock += ms; if (!stopped && render) tick(); } };
 }
 
@@ -73,7 +73,7 @@ test("context preparation separately times GPU queue, cache restore, prefill and
   f.advance(10000);
   f.progress.update({ outputTokens: 400 });
   f.advance(1000);
-  assert.match(f.messages.at(-1), /400 tokens · 26.6 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /400 tokens · 26.6 t\/s/);
   f.progress.update({ phase: "validate" });
   await f.progress.finish("failed");
   assert.match(f.messages.at(-2), /Failed at: Validate and save checkpoint/);
@@ -127,7 +127,7 @@ test("compaction distinguishes tool grace from a cache-bank transfer", (t) => {
   assert.doesNotMatch(f.messages.at(-1), /transfer is still completing|0 \/ 240,000/);
 });
 
-test("checkpoint speed uses the last three seconds instead of the whole generation", (t) => {
+test("checkpoint shows separate three-second and total generation averages", (t) => {
   const f = fixture(t);
   f.progress.update({ phase: "wait", inputTokens: 238880, outputTokenLimit: 12288 });
   f.advance(166000);
@@ -138,8 +138,8 @@ test("checkpoint speed uses the last three seconds instead of the whole generati
     f.advance(1000, false);
     f.progress.update({ outputTokens });
   }
-  assert.match(f.messages.at(-1), /Checkpoint: 4,550 \/ 12,288 tokens · 40.0 tok\/s \(3s\)/);
-  assert.doesNotMatch(f.messages.at(-1), /16.6 tok\/s|avg/);
+  assert.match(f.messages.at(-1), /Checkpoint: 4,550 \/ 12,288 tokens · 40.0 t\/s, 16.6 t\/s avg/);
+  assert.doesNotMatch(f.messages.at(-1), /round |acceptance/);
   assert.equal(f.progress.snapshot().phases.generate.elapsedMs, 274000);
 });
 
@@ -148,15 +148,15 @@ test("sparse counters interpolate the window boundary and a silent stream decays
   f.progress.update({ phase: "generate", outputTokens: 1 });
   f.advance(10000, false);
   f.progress.update({ outputTokens: 401 });
-  assert.match(f.messages.at(-1), /40.0 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg/);
   f.advance(1000);
-  assert.match(f.messages.at(-1), /26.7 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /26.7 t\/s/);
   f.advance(2000);
-  assert.match(f.messages.at(-1), /0.0 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /0.0 t\/s, 40.0 t\/s avg/);
   f.progress.update({ outputTokens: 401 });
   f.progress.update({ outputTokens: 300 });
   f.advance(1000);
-  assert.match(f.messages.at(-1), /401 tokens · 0.0 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /401 tokens · 0.0 t\/s, 40.0 t\/s avg/);
   assert.equal(f.progress.snapshot().tokens.outputTokens, 401);
 });
 
@@ -174,30 +174,30 @@ test("GPU pauses show the blocker and freeze the rate window without changing wa
   f.advance(0);
   assert.match(f.messages.at(-1), /Checkpoint generation paused/);
   assert.match(f.messages.at(-1), /paused: another chat c{12}.*GPU/);
-  assert.doesNotMatch(f.messages.at(-1), /tok\/s/);
+  assert.doesNotMatch(f.messages.at(-1), /t\/s/);
   f.advance(15000);
   observation = { ...observation, activeChat: currentChat, otherRunningChatId: undefined,
     request: { ...observation.request, state: "running" } };
   f.advance(0);
-  assert.match(f.messages.at(-1), /40.0 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg/);
   f.advance(1000, false);
   f.progress.update({ outputTokens: 201 });
-  assert.match(f.messages.at(-1), /40.0 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg/);
   assert.equal(f.progress.snapshot().phases.generate.elapsedMs, 20000);
   f.progress.update({ phase: "validate" });
   f.advance(10000);
-  assert.doesNotMatch(f.messages.at(-1), /tok\/s/);
+  assert.doesNotMatch(f.messages.at(-1), /t\/s/);
 });
 
 test("character-only progress never invents a token rate and late counters start their own window", (t) => {
   const f = fixture(t);
   f.progress.update({ phase: "generate", characters: 100 });
   f.advance(20000);
-  assert.doesNotMatch(f.messages.at(-1), /tok\/s/);
+  assert.doesNotMatch(f.messages.at(-1), /t\/s/);
   f.progress.update({ outputTokens: 1000 });
   f.advance(1000, false);
   f.progress.update({ outputTokens: 1040 });
-  assert.match(f.messages.at(-1), /40.0 tok\/s \(3s\)/);
+  assert.match(f.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg/);
 });
 
 test("concurrent compactions have independent rolling windows", (t) => {
@@ -208,8 +208,55 @@ test("concurrent compactions have independent rolling windows", (t) => {
   second.advance(1000, false);
   first.progress.update({ outputTokens: 41 });
   second.progress.update({ outputTokens: 21 });
-  assert.match(first.messages.at(-1), /40.0 tok\/s \(3s\)/);
-  assert.match(second.messages.at(-1), /20.0 tok\/s \(3s\)/);
+  assert.match(first.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg/);
+  assert.match(second.messages.at(-1), /20.0 t\/s, 20.0 t\/s avg/);
+});
+
+test("compaction refreshes round and three-second acceptance at the normal 100 ms cadence", (t) => {
+  const timing = { phase: "generate", phase_elapsed_ms: 0, last_round_ms: 44.12,
+    acceptance_rate_3s: 0.6, acceptance_rate: 0.9, last_acceptance_rate: 1 };
+  const observation = { available: true, requestPhase: timing };
+  const f = fixture(t, { observationAt: () => observation });
+  assert.equal(f.intervalMs(), 100);
+  f.progress.update({ phase: "generate", outputTokens: 1 });
+  f.advance(1000, false);
+  f.progress.update({ outputTokens: 41 });
+  assert.match(f.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg · round 44.1 ms • acceptance 60.0%/);
+  assert.doesNotMatch(f.messages.at(-1), /acceptance (90.0|100.0)%/);
+  timing.last_round_ms = 46.23;
+  timing.acceptance_rate_3s = 0.65;
+  f.advance(100);
+  assert.match(f.messages.at(-1), /round 46.2 ms • acceptance 65.0%/);
+  // The final telemetry row may move to recent before the last SSE frame.
+  observation.requestPhase = undefined;
+  observation.lastRequestTiming = { ...timing, last_round_ms: 45.5, acceptance_rate_3s: 0 };
+  f.advance(100);
+  assert.match(f.messages.at(-1), /round 45.5 ms • acceptance 0.0%/);
+  observation.lastRequestTiming = { last_round_ms: null, acceptance_rate_3s: null };
+  f.advance(100);
+  assert.doesNotMatch(f.messages.at(-1), /round |acceptance/);
+});
+
+test("paused compaction retains round telemetry without charging the GPU wait to average throughput", (t) => {
+  let observation = { available: true, activeChat: currentChat,
+    request: { ...currentChat, state: "running", computed_tokens: 240000, input_tokens: 239000 },
+    lastRequestTiming: { last_round_ms: 43.7, acceptance_rate_3s: 0.57 } };
+  const f = fixture(t, { observationAt: () => observation });
+  f.progress.update({ phase: "generate", outputTokens: 1 });
+  f.advance(1000, false);
+  f.progress.update({ outputTokens: 41 });
+  observation = { ...observation, activeChat: otherChat, otherRunningChatId: otherChat.chat_id,
+    request: { ...observation.request, state: "paused" } };
+  f.advance(0);
+  f.advance(15000);
+  assert.match(f.messages.at(-1), /paused: another chat c{12}.*round 43.7 ms • acceptance 57.0%/);
+  assert.doesNotMatch(f.messages.at(-1), /t\/s/);
+  observation = { ...observation, activeChat: currentChat, otherRunningChatId: undefined,
+    request: { ...observation.request, state: "running" } };
+  f.advance(0);
+  f.advance(1000, false);
+  f.progress.update({ outputTokens: 81 });
+  assert.match(f.messages.at(-1), /40.0 t\/s, 40.0 t\/s avg/);
 });
 
 test("a partial cache hit reports physical prefill separately from the cached-token split", async (t) => {

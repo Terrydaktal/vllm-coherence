@@ -82,7 +82,8 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     for commit in expected_links:
         commit_url = f"https://github.com/Terrydaktal/vllm-coherence/commit/{commit}"
         assert readme.count(commit_url) >= 1
-    assert matched["stage26_execution"]["measurement_commit"] == profile_commit
+    assert data["current_qualification_commit"] == profile_commit
+    assert "pending commit" not in readme
     assert "Current stage confirmations identify M1/M8 and eager/compiled M8 separately" in readme
     confirmations = json.loads((ROOT / data["current_confirmations"]).read_text())
     assert confirmations["optimized_manifest_sha256"] == matched["binding"]["optimized_manifest_sha256"]
@@ -105,6 +106,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     compiled_table = readme.split("## Compiled backend stages\n\n", 1)[1].split(
         "\n\nThe table restores", 1
     )[0]
+    assert "exact source hashes in capture" not in compiled_table.splitlines()[0]
     row_names = [
         line.split("|")[1].strip()
         for line in compiled_table.splitlines()

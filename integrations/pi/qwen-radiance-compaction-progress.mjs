@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus } from "./qwen-radiance-scheduler-telemetry.mjs";
+import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus, formatGenerationStats } from "./qwen-radiance-scheduler-telemetry.mjs";
 
 const STAGES = [
   ["prepare", "Prepare checkpoint"],
@@ -36,6 +36,7 @@ const duration = (ms) => ms < 60000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.flo
 const count = (value) => value.toLocaleString("en-GB");
 const validCount = (value) => Number.isSafeInteger(value) && value >= 0;
 const RATE_WINDOW_MS = 3000;
+const TICK_MS = 100;
 const BACKEND_WAIT_PHASES = {
   admission: "admission", gpu_queue: "queue", priority_wait: "queue", priority_preempt: "queue", tool_grace: "queue", handover: "handover",
   ram_allocation: "ram_allocation", cache_update: "cache_update", cache_lookup: "cache_lookup",
@@ -190,7 +191,7 @@ export function startCompactionProgress(ctx, {
   let transcriptAppended = false, durableCommit = false, reusedCheckpoint = false;
   const tokens = {};
   const rateSamples = [];
-  let firstRateAt, ratePausedAt, excludedRateWaitMs = 0, generationWait;
+  let firstRateAt, firstRateTokens, lastRateAt, ratePausedAt, excludedRateWaitMs = 0, generationWait;
   let removedBytes, finishReason;
   let unsubscribe;
   stages.get(phase).state = "running";
@@ -214,10 +215,10 @@ export function startCompactionProgress(ctx, {
     generationWait = undefined;
   }
 
-  function observeGeneration(at, outputAdvanced) {
+  function observeGeneration(at, outputAdvanced, observation) {
     if (state !== "running" || phase !== "generate") return;
     // A new stream delta wins over a scheduler sample awaiting its next refresh.
-    const activity = outputAdvanced ? undefined : classifyCompactionWait(readScheduler());
+    const activity = outputAdvanced ? undefined : classifyCompactionWait(observation);
     if (activity && ["queue", "handover"].includes(activity.id)) {
       ratePausedAt ??= at;
       generationWait = activity;
@@ -236,6 +237,8 @@ export function startCompactionProgress(ctx, {
   function recordRate(at, outputTokens) {
     const activeAt = rateClock(at);
     firstRateAt ??= activeAt;
+    firstRateTokens ??= outputTokens;
+    lastRateAt = activeAt;
     const previous = rateSamples.at(-1);
     if (previous?.at === activeAt) previous.tokens = outputTokens;
     else rateSamples.push({ at: activeAt, tokens: outputTokens });
@@ -256,9 +259,17 @@ export function startCompactionProgress(ctx, {
     return Math.max(0, tokens.outputTokens - initialTokens) / seconds;
   }
 
-  function observeWait(at) {
+  function averageRate() {
+    if (firstRateAt === undefined || lastRateAt === undefined) return undefined;
+    // Match normal generation: after first data through the last output,
+    // excluding another chat's GPU time and subsequent validation/cache work.
+    const seconds = (lastRateAt - firstRateAt) / 1000;
+    if (seconds < 0.5) return undefined;
+    return Math.max(0, tokens.outputTokens - firstRateTokens) / seconds;
+  }
+
+  function observeWait(at, observation = readScheduler()) {
     if (state !== "running" || phase !== "wait") return;
-    const observation = readScheduler();
     const activity = classifyCompactionWait(observation);
     if (activity.id !== activeWaitId) {
       if (activeWaitId !== undefined && activeWaitStarted !== undefined) {
@@ -330,15 +341,16 @@ export function startCompactionProgress(ctx, {
   }
 
   function render(force = false, outputAdvanced = false) {
-    // Continuous usage arrives at token cadence. Refresh at most once a second,
-    // except at phase transitions, and keep ticking during a silent HTTP wait.
+    // Match the normal spinner's cadence and shared telemetry snapshot. This
+    // redraws local counters; it does not add backend/GPU probes.
     const at = now();
+    const observation = readScheduler();
     const wasPaused = Boolean(generationWait);
-    observeGeneration(at, outputAdvanced);
+    observeGeneration(at, outputAdvanced, observation);
     force ||= wasPaused !== Boolean(generationWait);
-    if (!force && at - lastRender < 1000) return;
+    if (!force && at - lastRender < TICK_MS) return;
     lastRender = at;
-    observeWait(at);
+    observeWait(at, observation);
     const report = snapshot(at);
     const label = phase === "generate" && generationWait ? "Checkpoint generation paused" :
       phase === "wait" && activeWaitId ? waitStageLabel(activeWaitId) : stageLabel(phase);
@@ -381,10 +393,14 @@ export function startCompactionProgress(ctx, {
     if (reusedCheckpoint) lines.push("Saved checkpoint reused; no new generation" +
       (tokens.outputTokens ? ` (${count(tokens.outputTokens)} tokens)` : "") + ". Counts describe the saved request.");
     if (!reusedCheckpoint && (tokens.outputTokens || tokens.characters)) {
-      const rate = state === "running" && phase === "generate" ? rollingRate(at) : undefined;
-      const rateText = state === "running" && phase === "generate" && generationWait
-        ? ` · paused: ${generationWait.detail}`
-        : rate === undefined ? "" : ` · ${rate.toFixed(1)} tok/s (3s)`;
+      const generating = state === "running" && phase === "generate";
+      const recentRate = generating ? rollingRate(at) : undefined;
+      const average = generating ? averageRate() : undefined;
+      const throughput = generationWait ? `paused: ${generationWait.detail}` :
+        recentRate === undefined || average === undefined ? "measuring t/s" :
+          `${recentRate.toFixed(1)} t/s, ${average.toFixed(1)} t/s avg`;
+      const stats = generating ? formatGenerationStats(observation) : "";
+      const rateText = generating ? ` · ${[throughput, stats].filter(Boolean).join(" · ")}` : "";
       lines.push(tokens.outputTokens ? `Checkpoint: ${count(tokens.outputTokens)}` +
         (tokens.outputTokenLimit ? ` / ${count(tokens.outputTokenLimit)}` : "") + " tokens" +
         rateText :
@@ -464,7 +480,7 @@ export function startCompactionProgress(ctx, {
     else scheduler.bind?.(ctx);
   } catch { /* The spinner reports unavailable telemetry while compaction continues. */ }
   unsubscribe = scheduler.subscribe?.(() => { if (state === "running") render(true); });
-  timer = schedule(() => render(), 1000);
+  timer = schedule(() => render(), TICK_MS);
   timer?.unref?.();
   signal?.addEventListener("abort", onAbort, { once: true });
   render(true);
