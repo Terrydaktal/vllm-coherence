@@ -2,12 +2,15 @@
 
 ## Distribution boundary
 
+This is the historical Radiance TP2 capacity profile. Coherence's repaired TP1
+deployment uses `tools/coherence`; follow the [current quick start](../README.md#quick-start).
+
 `docker-compose.yml` is publication-safe. It defaults to the published
 `magiccodingman/vllm-radiance:latest` image and relative `./models` and
 `./vllm-cache` host directories; it contains no developer filesystem paths or
 host-specific group IDs. `.env` and `docker-compose.dev.yml` are ignored by both
-Git and the Docker build context. `.gitlab-ci.yml` also refuses to publish when
-either developer overlay filename is present in the release checkout.
+Git and the Docker build context. The upstream GitLab publishing pipeline is
+retired from this checkout; Coherence's GitHub workflow runs CPU verification.
 
 `docker-compose.dev.example.yml` is the tracked template. Each developer copies
 it to `docker-compose.dev.yml`, adds local image/path/GID overrides there, and

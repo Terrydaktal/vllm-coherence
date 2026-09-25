@@ -57,8 +57,8 @@ maximum-length sequences fit on GPU.
 
 Immutable runs:
 
-- no-offload: `20260901T234819Z-kv-long-allgpu`
-- 24 GiB offload: `20260902T004340Z-kv-long-offload24`
+- no-offload: [20260901T234819Z-kv-long-allgpu](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T234819Z-kv-long-allgpu)
+- 24 GiB offload: [20260902T004340Z-kv-long-offload24](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260902T004340Z-kv-long-offload24)
 
 The raw phase name `gpu_hit` means **immediate repeat**. It is not assumed to
 be a GPU hit: the server's source counters below determine whether each token
@@ -153,7 +153,7 @@ experiment should run those paths from independent cold fills.
   qualification failure.
 - The preliminary 8K harness smoke exposed that known DFlash numerical
   variability on one repeat. It is preserved as
-  `20260901T234753Z-kv-long-smoke-allgpu`, not hidden or counted as a main
+  [20260901T234753Z-kv-long-smoke-allgpu](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T234753Z-kv-long-smoke-allgpu), not hidden or counted as a main
   pressure result.
 
 ## What this establishes for tuning

@@ -33,7 +33,7 @@ Branch: `agent/rocm-kv-offload-registration-fix`, based on merged `main`
 
 The source-consistent candidate became healthy and passed the 10.5K-token
 non-spec cold/GPU/CPU smoke gate under run
-`20260901T231624Z-candidate-nonspec-smoke`.
+[20260901T231624Z-candidate-nonspec-smoke](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T231624Z-candidate-nonspec-smoke).
 
 Target checkpoint:
 `/nvme/lexar-2/ai/models/Qwen3.8-27B-Quark-AWQ-MXFP4-amd`
@@ -68,9 +68,9 @@ reported in [vLLM #54360](https://github.com/vllm-project/vllm/issues/54360),
   hybrid groups;
 - the upstream DSpark marker and DeepSeek-V4 fallback remain intact.
 
-The pre-fix MTP run `20260901T225345Z-mtp-k4-final-restore` recorded zero
+The pre-fix MTP run [20260901T225345Z-mtp-k4-final-restore](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T225345Z-mtp-k4-final-restore) recorded zero
 external hits and no CPU→GPU bytes. The post-fix full run
-`20260901T230220Z-mtp-k4-final-restore2` restored 38,784 of 41,992 prompt
+[20260901T230220Z-mtp-k4-final-restore2](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T230220Z-mtp-k4-final-restore2) restored 38,784 of 41,992 prompt
 tokens, moved 1,508,179,968 bytes CPU→GPU in 53.1 ms, and was byte-identical
 across cold, GPU-hit, and CPU-restore paths.
 
@@ -106,9 +106,9 @@ meaningful prompt, temperature 0, seed 17, and immutable JSON output.
 
 | Mode | Run ID | Cold | GPU hit | CPU restore | Restored tokens | Strict result |
 |---|---|---:|---:|---:|---:|---|
-| Non-spec | `20260901T230936Z-nonspec-final2-restore` | 13.654 s | 1.160 s | 1.195 s | 40,768 | pass |
-| MTP K4 | `20260901T230220Z-mtp-k4-final-restore2` | 11.361 s | 1.351 s | 1.362 s | 38,784 | pass |
-| DFlash K7 | `20260901T230507Z-dflash-final2-restore` | 11.176 s | 1.215 s | 1.052 s | 39,552 | fail |
+| Non-spec | [20260901T230936Z-nonspec-final2-restore](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T230936Z-nonspec-final2-restore) | 13.654 s | 1.160 s | 1.195 s | 40,768 | pass |
+| MTP K4 | [20260901T230220Z-mtp-k4-final-restore2](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T230220Z-mtp-k4-final-restore2) | 11.361 s | 1.351 s | 1.362 s | 38,784 | pass |
+| DFlash K7 | [20260901T230507Z-dflash-final2-restore](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T230507Z-dflash-final2-restore) | 11.176 s | 1.215 s | 1.052 s | 39,552 | fail |
 
 The DFlash failure is not a missing restore: it moved 1,490,616,320 bytes in
 52.7 ms and served 39,552 external tokens. The three outputs remained coherent
@@ -127,7 +127,7 @@ The live structured-tool regression lane nevertheless passed 30/30 on final2:
 
 ## First CPU-restore/convoy baseline
 
-Run: `20260901T230544Z-dflash-cpu-kv-baseline-final2`.
+Run: [20260901T230544Z-dflash-cpu-kv-baseline-final2](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T230544Z-dflash-cpu-kv-baseline-final2).
 
 Each case used its own 16,390-token prompt, primed CPU once, reset only local
 GPU APC, then released an identical-prefix request wave at a barrier. Output
@@ -149,7 +149,7 @@ entire wave behind the transfer. Additional external queries were exactly the
 C4 is slower than C2 because three requests recompute that suffix concurrently
 and DFlash acceptance fell. That is the baseline opportunity for the next
 tuning phase, not a result to hide or optimize inside this repair checkpoint.
-A prior repeat, `20260901T224102Z-dflash-cpu-kv-baseline`, measured
+A prior repeat, [20260901T224102Z-dflash-cpu-kv-baseline](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T224102Z-dflash-cpu-kv-baseline), measured
 46.11/59.39/42.05 TPS and demonstrates close repeatability.
 
 ## Reproduction

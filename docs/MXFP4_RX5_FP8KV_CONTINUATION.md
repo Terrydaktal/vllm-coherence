@@ -76,11 +76,11 @@ source of truth.
 
 Exact runs:
 
-- isolation matrix: `benchmarks/results/20260908T1645Z_fp8kv-rx5/`;
+- isolation matrix: [benchmarks/results/20260908T1645Z_fp8kv-rx5/](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260908T1645Z_fp8kv-rx5);
 - post-reboot quick gate:
-  `benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-postreboot/`;
+  [benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-postreboot/](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-postreboot);
 - publication BetterBench:
-  `benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard/`.
+  [benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard/](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard).
 
 ## Why full RX5 remains experimental
 

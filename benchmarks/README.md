@@ -1,8 +1,15 @@
 # Radiance benchmark lab
 
-This directory holds the reusable online-serving benchmark harness and immutable
-run history for Radiance builds.  The suite measures stable, bounded concurrency
-rather than searching for maximum throughput.
+This directory retains Radiance's reusable online-serving benchmark harness and
+fixtures. The instructions below describe the historical upstream environment;
+Coherence's current runners are in `experiments/radiance-public/`, with aggregate
+measurements in `benchmarks/results/` and the [main README](../README.md#benchmarks).
+
+The 28 inherited result directories are preserved in the
+[original Radiance base commit](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results).
+They have been removed from the working tree; run identifiers below refer to that
+archive. The harness, fixtures and Coherence measurements remain here. New raw
+captures belong in the ignored `benchmarks/runs/` directory.
 
 ## Safety and storage
 
@@ -526,7 +533,7 @@ python benchmarks/bin/run_open_object_tool_gate.py \
   --model Qwen3.8-27B \
   --runs 5 \
   --temperature 1.0 \
-  --capture-root benchmarks/results/qwen-open-object-preserve-thinking
+  --capture-root benchmarks/runs/qwen-open-object-preserve-thinking
 
 python benchmarks/bin/run_open_object_tool_gate.py \
   --base-url http://127.0.0.1:8000/v1 \
@@ -534,7 +541,7 @@ python benchmarks/bin/run_open_object_tool_gate.py \
   --runs 5 \
   --temperature 1.0 \
   --no-preserve-thinking \
-  --capture-root benchmarks/results/qwen-open-object-no-preserve-thinking
+  --capture-root benchmarks/runs/qwen-open-object-no-preserve-thinking
 ```
 
 The gate records synthetic requests, response headers/request IDs, raw SSE or
@@ -578,7 +585,7 @@ python benchmarks/bin/run_kv_offload_baseline.py \
 ```
 
 The first immutable baseline is
-`20260901T230544Z-dflash-cpu-kv-baseline-final2`; full configuration,
+[20260901T230544Z-dflash-cpu-kv-baseline-final2](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T230544Z-dflash-cpu-kv-baseline-final2); full configuration,
 correctness status, negative experiments, and results are in
 `docs/ROCM_KV_OFFLOAD_RESTORE_BASELINE.md`.
 
@@ -604,8 +611,8 @@ python benchmarks/bin/run_kv_offload_long_context.py \
 ```
 
 The first matched no-offload/24-GiB runs are
-`20260901T234819Z-kv-long-allgpu` and
-`20260902T004340Z-kv-long-offload24`. The complete scoreboard, capacity
+[20260901T234819Z-kv-long-allgpu](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260901T234819Z-kv-long-allgpu) and
+[20260902T004340Z-kv-long-offload24](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260902T004340Z-kv-long-offload24). The complete scoreboard, capacity
 boundary, metric semantics, and reproduction manifest are in
 `docs/ROCM_KV_OFFLOAD_LONG_CONTEXT_BASELINE.md`.
 

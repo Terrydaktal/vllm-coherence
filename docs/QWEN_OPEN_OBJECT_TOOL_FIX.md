@@ -100,8 +100,8 @@ failures, zero restarts, and a healthy final state.
 
 Immutable synthetic wire captures are stored at:
 
-- `benchmarks/results/qwen-open-object-preserve-thinking/20260901T013349Z_open-object-tool-gate/`
-- `benchmarks/results/qwen-open-object-no-preserve-thinking/20260901T013423Z_open-object-tool-gate/`
+- [benchmarks/results/qwen-open-object-preserve-thinking/20260901T013349Z_open-object-tool-gate/](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/qwen-open-object-preserve-thinking/20260901T013349Z_open-object-tool-gate)
+- [benchmarks/results/qwen-open-object-no-preserve-thinking/20260901T013423Z_open-object-tool-gate/](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/qwen-open-object-no-preserve-thinking/20260901T013423Z_open-object-tool-gate)
 
 GPU-free qualification also passed:
 

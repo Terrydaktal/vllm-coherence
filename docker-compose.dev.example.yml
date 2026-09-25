@@ -1,3 +1,5 @@
+# Upstream Radiance reproduction overlay, not the Coherence serving profile.
+# Use tools/coherence and the root README Quick start for Coherence.
 # Copy this file to docker-compose.dev.yml for local-only overrides, then run:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #

@@ -64,8 +64,9 @@ patch required one guarded anchor update because v0.28 removed a now-unused
 `linear_backend` local; behavior was unchanged. All modified Python sources
 passed `ast.parse`.
 
-The old `patch_dflash2_v0271_backport.py` remains only as historical source
-archaeology and is no longer in any image build loop. The v0.28 Qwen3.8
+The old [v0.27.1 DFlash2 backport](https://github.com/Terrydaktal/vllm-coherence/blob/4e604dcccb311ca709858a4bd57a11fc636e7f43/patch_dflash2_v0271_backport.py)
+is preserved in the base commit and removed from the working tree; no image
+build loop uses it. The v0.28 Qwen3.8
 DFlash2 source files match the reviewed upstream implementation already used
 by this fork.
 
@@ -140,7 +141,7 @@ for this cold benchmark contract.
 The v0.27.1 control completed 24/24 requests at every concurrency, passed the
 eight-prompt meaningful fixture, and passed 30/30 sampled required-tool calls.
 Its immutable run is
-`20260826T1914Z_v028_upgrade/v0271-main-c8-betterbench-standard`.
+[20260826T1914Z_v028_upgrade/v0271-main-c8-betterbench-standard](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260826T1914Z_v028_upgrade/v0271-main-c8-betterbench-standard).
 
 The final v0.28 run completed 24/24 requests at every concurrency, completed
 all eight meaningful correctness prompts, and passed 100/100 sampled
@@ -156,7 +157,7 @@ half a percent. No claim is made that every workload or concurrency is faster.
 Per-category output TPS was 101.9 chat, 158.1 code, 173.1 file edit, 198.5
 JSON, 193.7 math, 118.1 prose, 118.9 reasoning, and 169.6 summarization. The
 immutable run is
-`20260826T1914Z_v028_upgrade/v028-final-betterbench-standard`; the exact
+[20260826T1914Z_v028_upgrade/v028-final-betterbench-standard](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260826T1914Z_v028_upgrade/v028-final-betterbench-standard); the exact
 direction-normalized table is `compare-v0271-main-v028-final.md` beside it.
 
 ## Negative and diagnostic results

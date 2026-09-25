@@ -715,7 +715,7 @@ configs/profiles/              Finite-precision numerical contracts
 tests/                         Synthetic regressions and negative controls
 reports/                       Public numerical report and aggregate evidence
 docs/                          Setup, architecture, verification and performance records
-benchmarks/                    Original Radiance fixtures and upstream historical results
+benchmarks/                    Current Coherence results and retained upstream harness/fixtures
 Dockerfile, patch_*, radiance_* Original base/build and focused upstream-facing changes
 ```
 
@@ -723,6 +723,11 @@ The `qwen_r9700_lab` namespace and wire-format names remain for evidence/snapsho
 compatibility. Root Radiance Dockerfiles support upstream reproduction;
 **`tools/coherence` launches the assembled Coherence profile**. Research drivers
 require explicit inputs and do not run automatically during serving.
+
+Inherited Radiance run artifacts remain in the
+[original base commit](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results).
+The working tree keeps Coherence's measurements. Root Compose files and
+`.env.example` are labelled upstream reproduction examples, not Coherence launchers.
 
 ## Contributing
 

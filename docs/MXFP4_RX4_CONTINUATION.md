@@ -103,7 +103,7 @@ the final digest differs only in human-facing wording for an invalid
 FP8-stream dependency error, after which package/import/Compose checks were
 repeated.
 All runs below are under
-`benchmarks/results/20260831T1130Z_mxfp4-rx4/`; failed and diagnostic runs are
+[benchmarks/results/20260831T1130Z_mxfp4-rx4/](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260831T1130Z_mxfp4-rx4); failed and diagnostic runs are
 preserved rather than overwritten.
 
 The matched BetterBench control kept traced quant and FP8 stream off. The full
@@ -144,7 +144,7 @@ Single-stream category medians were:
 The small weighted-average gain is not operationally persuasive: it came with
 worse c1/c2/c8, worse prefill at every measured depth, and a much worse ITL
 tail. Relative to the prior qualified RX3 publication run
-`20260830T0424Z_mxfp4-rx3/final-dflash-betterbench-standard-min5`, full RX4 was
+[20260830T0424Z_mxfp4-rx3/final-dflash-betterbench-standard-min5](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/final-dflash-betterbench-standard-min5), full RX4 was
 approximately +1.6% at c1, -0.3% at c2, -5.1% at c4, and -14.0% at c8. Most
 of the high-concurrency difference also appears in the matched RX4-dark
 control, so it must not be attributed solely to the new kernels.

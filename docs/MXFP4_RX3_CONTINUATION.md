@@ -167,18 +167,18 @@ observed peak package power of 221/311 W.
 
 Immutable run IDs:
 
-- baseline: `20260826T1914Z_v028_upgrade/v028-final-betterbench-standard`
+- baseline: [20260826T1914Z_v028_upgrade/v028-final-betterbench-standard](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260826T1914Z_v028_upgrade/v028-final-betterbench-standard)
 - candidate pass 1:
-  `20260830T0424Z_mxfp4-rx3/candidate-dflash-betterbench-standard`
+  [20260830T0424Z_mxfp4-rx3/candidate-dflash-betterbench-standard](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/candidate-dflash-betterbench-standard)
 - candidate pass 2:
-  `20260830T0424Z_mxfp4-rx3/candidate-dflash-betterbench-standard-warm`
+  [20260830T0424Z_mxfp4-rx3/candidate-dflash-betterbench-standard-warm](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/candidate-dflash-betterbench-standard-warm)
 - final exact-default pass:
-  `20260830T0424Z_mxfp4-rx3/final-dflash-betterbench-standard-min5`
+  [20260830T0424Z_mxfp4-rx3/final-dflash-betterbench-standard-min5](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/final-dflash-betterbench-standard-min5)
 - attention control/candidate:
-  `20260830T0424Z_mxfp4-rx3/attention-bf16-control` and
-  `20260830T0424Z_mxfp4-rx3/attention-fp8qk-pv-candidate`
+  [20260830T0424Z_mxfp4-rx3/attention-bf16-control](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/attention-bf16-control) and
+  [20260830T0424Z_mxfp4-rx3/attention-fp8qk-pv-candidate](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/attention-fp8qk-pv-candidate)
 - dynamic-width control/imported/final:
-  `20260830T0424Z_mxfp4-rx3/dynwidth-off-c4c8-control`,
+  [20260830T0424Z_mxfp4-rx3/dynwidth-off-c4c8-control](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260830T0424Z_mxfp4-rx3/dynwidth-off-c4c8-control),
   `dynwidth-on-c4c8-candidate`, and `dynwidth-min5-c4c8-final`
 
 ## Correctness and stability

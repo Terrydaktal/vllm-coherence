@@ -17,3 +17,25 @@ libr4d/
 # build outputs; rocm-bandwidth-test is built in stage 1
 *.so
 rocm-bandwidth-test
+
+# Coherence development environments, captured evidence and local state
+.venv/
+.build/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+**/node_modules/
+private/
+artifacts/
+sessions/
+.pi/
+benchmarks/results/
+reports/
+test-results.xml
+*.hsaco
+*.pt
+*.npy
+*.npz
+*.safetensors
+*.gguf
+# Keep radiance_amdsmi.pth: the base image copies this required startup hook.

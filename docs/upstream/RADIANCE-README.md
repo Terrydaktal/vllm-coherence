@@ -267,7 +267,7 @@ Cold prefill measured **4,031.8 / 4,444.7 / 4,268.6 TPS** at the 2K/4K/7K target
 arm completed 24/24 requests. These are the standard 8K/C8 laboratory results at 85% GPU allocation with
 prefix caching and CPU offload disabled; the 128K/C4 production profile above intentionally has a different
 capacity/latency contract. Exact category TTFT, ITL, prefill, run metadata, and immutable raw results are in
-the [current safe-subset BetterBench report](benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard/betterbench/report.md)
+the [current safe-subset BetterBench report](https://github.com/Terrydaktal/vllm-coherence/blob/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard/betterbench/report.md)
 and [RX5 continuation report](docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
 
 DFlash remains experimental and opt-in because strict speculative/non-spec greedy equivalence has not passed,
