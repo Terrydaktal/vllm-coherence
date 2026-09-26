@@ -41,11 +41,15 @@ manifest["runtime"] = {
         name: sha(BASE / name)
         for name in (
             "bootstrap_radiance_release.py",
+            "qualified_speed_release.py",
+            "qualified-speed-release.json",
+            "speed_candidate_worker.py",
             "runtime-radiance-1.0.16.json",
             "radiance_request_guard.py",
             "patch_verify_head_memory.py",
             "patch_dflash_sampling_rng.py",
             "patch_draft_head_initialization.py",
+            "patch_gdn_initial_prefill.py",
             "patch_gdn_extreme_decay.py",
             "gdn_extreme_decay_reference.hip",
             "qwen-fixed-v22.3.jinja",
@@ -66,6 +70,9 @@ manifest["runtime"]["draft_head_initialization"] = {
         "full-model numerical qualification claimed."
     ),
 }
+manifest["runtime"]["qualified_speed"] = json.loads(
+    (BASE / "qualified-speed-release.json").read_text()
+)
 if profile.get("optimized_d7"):
     manifest["runtime"]["optimized_d7"] = profile["optimized_d7"]
     for name in ("optimized-release.json", "optimized_pi_release.py"):

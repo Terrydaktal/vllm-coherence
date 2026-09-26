@@ -76,7 +76,7 @@ with the diagnostic contract. The specification supplies the native model
 configuration and source-binding inventory. Fixtures must be owned regular files
 with mode 0600; private directories use mode 0700.
 
-For the banked speed candidate, add `--speed-candidate` to every arm. The compiled M8 arm uses `SpeedMatchedStageWorker` and one FULL target graph; the stage arm uses `SpeedTapeWorker`, keeping the original M1/eager projection operators as controls. The worker validates the candidate binary and drafter-source qualification identities. These results bind the measured source and binary hashes in the [qualified speed refresh](SPEED_INVESTIGATION_20260925.md), including its measurement adapters and cache-preparation hook repair. Original capture checkout identities remain unchanged after the history rewrite; the experimental worker is not the normal Pi deployment.
+For the banked speed candidate, add `--speed-candidate` to every arm. The compiled M8 arm uses `SpeedMatchedStageWorker` and one FULL target graph; the stage arm uses `SpeedTapeWorker`, keeping the original M1/eager projection operators as controls. The worker validates the candidate binary and drafter-source qualification identities. These results bind the measured source and binary hashes in the [qualified speed refresh](SPEED_INVESTIGATION_20260925.md), including its measurement adapters and cache-preparation hook repair. Original capture checkout identities remain unchanged after the history rewrite. Following the cancellation and concurrent-chat qualification, the plain speed worker is now live in Pi; see the [deployment receipt](../benchmarks/results/qualified-speed-deployment-20260926.json). The diagnostic workers remain confined to qualification runs.
 
 For stage capture, use `--arm stages` and set `QWEN_D7_STAGE_MATRIX=1`,
 `QWEN_D7_CURRENT_STAGES=1`, `QWEN_D7_STATE_STAGES=1`,
@@ -101,5 +101,5 @@ Raw numeric fixtures, per-token rankings and stage captures stay in the private
 artifact directory.
 
 Remaining scope includes independent full-model arithmetic verification,
-prefill versus serial decode and arbitrary speculative rejection, cancellation and concurrent-session histories. A separate [finite native snapshot test](../benchmarks/results/snapshot-lifecycle-20260925.json) passes A/B/A handover, disk restore and three verified generation replacements; it does not exhaust those histories. Matching tests do not
+prefill versus serial decode and arbitrary speculative rejection, cancellation and concurrent-session histories. A separate [finite native snapshot test](../benchmarks/results/snapshot-lifecycle-20260925.json) passes A/B/A handover, disk restore and three verified generation replacements. The [September 26 lifecycle qualification](SPEED_LIFECYCLE_20260926.md) additionally passes all 11 cancellation, concurrent-chat and priority cases both with dispatch observation and on the plain worker, including sampled replay. Neither test exhausts those histories. Matching tests do not
 prove that model-generated loops or other reasoning errors are eliminated.

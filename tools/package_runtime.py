@@ -10,6 +10,9 @@ from coherence_cli import ROOT, digest, verify_payload
 
 PATCHES = [
     "bootstrap_radiance_release.py",
+    "qualified_speed_release.py",
+    "qualified-speed-release.json",
+    "speed_candidate_worker.py",
     "optimized_pi_release.py",
     "runtime-radiance-1.0.16.json",
     "patch_streaming_snapshot.py",
@@ -19,6 +22,7 @@ PATCHES = [
     "radiance_request_guard.py",
     "patch_dflash_sampling_rng.py",
     "patch_draft_head_initialization.py",
+    "patch_gdn_initial_prefill.py",
     "patch_verify_head_memory.py",
     "radiance_verifyhead_global.py",
     "patch_gdn_extreme_decay.py",

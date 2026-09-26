@@ -9,7 +9,7 @@
     "method": "unprofiled_round_ms - gpu_ms",
     "assumption": "Traced GPU kernel durations are representative of normal execution. The measurements come from separate runs; this is not an independently measured gap total."
   },
-  "correctness_scope": "September 25 candidate rerun: **320 forced decode tokens after a fresh 60,000-token Pi prefill**, plus the prefill prediction, in each of four arms. Compiled M1 versus compiled M8, eager M1 versus compiled M1, eager M8 versus compiled M8, and eager M1 versus compiled M8 each produced the results below. Compiled M8 includes the three banked speed candidates and uses the FULL graph; compiled M1 retains the original PIECEWISE path. Eager controls retain the existing RoPE rounding repair and original operators. The **full BF16 comparison head** exposes target-body differences; serving performance uses approximate Global-512, measured separately. [Run identities and all four comparisons](benchmarks/results/current-320-confirmations-20260925.json). The [qualified speed refresh](docs/SPEED_INVESTIGATION_20260925.md) includes the measurement adapters and FULL-graph preparation repair. Captures retain their original checkout identities and measured source hashes after the history rewrite. The experimental worker remains separate from the normal Pi deployment.",
+  "correctness_scope": "September 25 candidate rerun: **320 forced decode tokens after a fresh 60,000-token Pi prefill**, plus the prefill prediction, in each of four arms. Compiled M1 versus compiled M8, eager M1 versus compiled M1, eager M8 versus compiled M8, and eager M1 versus compiled M8 each produced the results below. Compiled M8 includes the three banked speed candidates and uses the FULL graph; compiled M1 retains the original PIECEWISE path. Eager controls retain the existing RoPE rounding repair and original operators. The **full BF16 comparison head** exposes target-body differences; serving performance uses approximate Global-512, measured separately. [Run identities and all four comparisons](benchmarks/results/current-320-confirmations-20260925.json). The [qualified speed refresh](docs/SPEED_INVESTIGATION_20260925.md) includes the measurement adapters and FULL-graph preparation repair. Captures retain their original checkout identities and measured source hashes after the history rewrite. The same qualified speed worker is now live for Pi and pi-opsec; the [September 26 deployment receipt](benchmarks/results/qualified-speed-deployment-20260926.json) records its installed identities and API smoke checks.",
   "predictions": [
     {
       "k": 1,
@@ -2436,5 +2436,6 @@
   "full_graph_repair": "benchmarks/results/full-graph-cache-prepare-20260925.json",
   "current_snapshot_confirmations": "benchmarks/results/snapshot-lifecycle-20260925.json",
   "capture_base_commit": "840c329ebb063db574cde9c7cf0de2241f8e89b2",
-  "current_qualification_document": "docs/SPEED_INVESTIGATION_20260925.md"
+  "current_qualification_document": "docs/SPEED_INVESTIGATION_20260925.md",
+  "current_deployment": "benchmarks/results/qualified-speed-deployment-20260926.json"
 }

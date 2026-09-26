@@ -1,0 +1,32 @@
+{
+  "schema": "urn:coherence:qualified-speed-release:v1",
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "compilation_config": {
+    "cudagraph_mode": "FULL_AND_PIECEWISE",
+    "cudagraph_capture_sizes": [
+      1,
+      2,
+      4,
+      8
+    ]
+  },
+  "parent_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+  "worker_sha256": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+  "qualification_sha256": "6c2f8986561cfb9d11cc8a1bd0c47b7e6f02107a4c7138a00a9a94043060e1b4",
+  "files": {
+    "gemm-tuning-v9/build.json": "956b73245be3905e4108f4ba5aa2895a76e64815358ba1d5aebb9008a8429cdc",
+    "gemm-tuning-v9/probe-001/result.json": "ecb05706280429da2d685db705841109d0abc4cc59a669bf3ada106ec10da578",
+    "gemm-tuning-v9/local_split/radiance_mxfp4_fp8.so": "b451db24d512acd057bec81b954f9197e56a702adaed2b438701ab445ab8a3db",
+    "gemm-tuning-v9/local_split/radiance_mxfp4_fp8.hip": "b58a1e264e6c01d6309cf6b91af9eb7eefa089e8a59d22ba7eef371ab15237d2",
+    "draft-attention-v4-mode1/result.json": "bd4388a4dbb510ffa38157fab412fc599346da69feea0c10cc0e4098b3ec9843",
+    "draft-attention-v4-mode1/unit_w4_s1_occ2.py": "01cf56d3bda4e60a24d2b224847a5e2531dfcd88327b1c3137b2247651f4c5d9",
+    "probe_draft_attention_tuning_v4.py": "6680b6394d394605a1f1c55b1a66cc4fe50f6ee29ae06abb00ffc573cdd4d328"
+  },
+  "environment": {
+    "QWEN_SPEED_FULL_GRAPH_CAPTURE": "1",
+    "QWEN_SPEED_TARGET_GEMM_BUILD": "/work/gemm-tuning-v9",
+    "QWEN_SPEED_DRAFT_ATTN_AB": "1",
+    "QWEN_SPEED_DRAFT_ATTN_SOURCE": "/work/draft-attention-v4-mode1/unit_w4_s1_occ2.py",
+    "QWEN_SPEED_DRAFT_ATTN_GENERATOR": "/work/probe_draft_attention_tuning_v4.py"
+  }
+}

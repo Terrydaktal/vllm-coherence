@@ -54,7 +54,7 @@ def current_config(base_config, spec, lane, *, speed_candidate=False, **kwargs):
         config["worker_cls"] = "rotary_mode_d7_worker.RotaryRneWorker"
     if speed_candidate and kwargs["execution_mode"] == "compiled" and kwargs["speculation"]:
         config["worker_cls"] = "speed_matched_stage_worker.SpeedMatchedStageWorker"
-        config["compilation_config"] = {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [8]}
+        config["compilation_config"] = {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [1, 2, 4, 8]}
     if speed_candidate and kwargs["execution_mode"] == "compiled-no-graphs":
         config["worker_cls"] = "speed_confirmation_worker.SpeedTapeWorker"
     return config

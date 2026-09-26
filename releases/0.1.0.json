@@ -19,6 +19,7 @@
     "experiments/radiance-public/radiance_request_guard.py",
     "experiments/radiance-public/patch_dflash_sampling_rng.py",
     "experiments/radiance-public/patch_draft_head_initialization.py",
+    "experiments/radiance-public/patch_gdn_initial_prefill.py",
     "experiments/radiance-public/patch_verify_head_memory.py",
     "experiments/radiance-public/radiance_verifyhead_global.py",
     "experiments/radiance-public/patch_gdn_extreme_decay.py",
@@ -41,19 +42,23 @@
     "experiments/radiance-public/gdn_extreme_decay_reference.hip",
     "experiments/radiance-public/qwen-fixed-v22.3.jinja",
     "src/qwen_r9700_lab/radiance_cache.py",
-    "src/qwen_r9700_lab/radiance_memory.py"
+    "src/qwen_r9700_lab/radiance_memory.py",
+    "experiments/radiance-public/qualified_speed_release.py",
+    "experiments/radiance-public/qualified-speed-release.json",
+    "experiments/radiance-public/speed_candidate_worker.py"
   ],
   "integration_sha256": {
-    "experiments/radiance-public/bootstrap_radiance_release.py": "6a94b8302efa13ea9e7c1e236a9d7e22e5d446cd3da636ae96b51c02cdbda9fb",
+    "experiments/radiance-public/bootstrap_radiance_release.py": "3276d52eed385e1c6eecef076c2dc49a3b9f52b876a3700ccc32355fbd986fb5",
     "experiments/radiance-public/optimized_pi_release.py": "82020959fba70cc0926be6891ab868f9dae8af5173b527e5ebd7bf1e6536a4b1",
     "experiments/radiance-public/runtime-radiance-1.0.16.json": "0c25e01a3a0f3ac7b974f1fc22b09b402512bb544673619ba7e468185e53685c",
     "experiments/radiance-public/patch_streaming_snapshot.py": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd",
     "experiments/radiance-public/patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7",
     "experiments/radiance-public/radiance_chat_tier.py": "828b10acd3dcda9cb5377c31e9aac6aa065c0a461c9047f9cc3477fb3b60cee4",
-    "experiments/radiance-public/radiance_fair_scheduler.py": "c3b69c4bf40cbdcf098bb7b05f889ebbc5d801a125bc863c99ab3fde2f45d3d6",
+    "experiments/radiance-public/radiance_fair_scheduler.py": "ae526c17e096ddc681e764bace1d83000bf6059cd833242d1457c64fbcddadf3",
     "experiments/radiance-public/radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
     "experiments/radiance-public/patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
     "experiments/radiance-public/patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5",
+    "experiments/radiance-public/patch_gdn_initial_prefill.py": "08ee2400af3d35703d9ae9bef931d863c7cbf4009d479a5ce3346fbaae64c86a",
     "experiments/radiance-public/patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
     "experiments/radiance-public/radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
     "experiments/radiance-public/patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
@@ -76,7 +81,10 @@
     "experiments/radiance-public/gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
     "experiments/radiance-public/qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
     "src/qwen_r9700_lab/radiance_cache.py": "04adc11af696ab006570ee481b9e0b04d673e4bc6282469ea03061e6567abe03",
-    "src/qwen_r9700_lab/radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600"
+    "src/qwen_r9700_lab/radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
+    "experiments/radiance-public/qualified_speed_release.py": "bf953d14af2f280a490326e59f2bac41015323d57692627e0deae80ff98674b2",
+    "experiments/radiance-public/qualified-speed-release.json": "7f22d3da389003b7065f096c9fbf04e0ba5089b14047c420f774e799b9183e5f",
+    "experiments/radiance-public/speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc"
   },
   "support_files": {
     "support/libhsa-runtime64.so.1.21.0": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda"

@@ -200,8 +200,14 @@ def current_stage_profile(data):
                 "measurement adapters in the [qualified speed refresh]("
                 + data["current_qualification_document"] + "). Captured checkout identities "
                 "remain unchanged after the history rewrite; the installed source and binary "
-                "hashes bind the measured implementation. The experimental worker is separate "
-                "from the normal Pi deployment."
+                "hashes bind the measured implementation. "
+                + (
+                    "The lifecycle-qualified worker is now selected by the live Pi backend; "
+                    f"its [deployment receipt]({data['current_deployment']}) preserves the "
+                    "installed source identities."
+                    if data.get("current_deployment") else
+                    "The experimental worker is separate from the normal Pi deployment."
+                )
             )
         elif data.get("uncommitted_qualification"):
             grouped["scope"] += (

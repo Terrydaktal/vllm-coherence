@@ -49,7 +49,7 @@ def test_banked_speed_config_changes_only_candidate_m8_and_its_stage_replay():
     args = {"speed_candidate": True, "execution_mode": "compiled", "speculation": True}
     candidate = MODULE.current_config(base, {}, "fixed-bf16", **args)
     assert candidate["worker_cls"] == "speed_matched_stage_worker.SpeedMatchedStageWorker"
-    assert candidate["compilation_config"] == {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [8]}
+    assert candidate["compilation_config"] == {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [1, 2, 4, 8]}
     reference = MODULE.current_config(base, {}, "fixed-bf16", **{**args, "speculation": False})
     assert reference["worker_cls"] == "original"
     assert reference["compilation_config"]["cudagraph_mode"] == "PIECEWISE"

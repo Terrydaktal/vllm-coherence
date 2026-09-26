@@ -1,0 +1,47 @@
+{
+  "schema": "urn:coherence:lifecycle-repairs-deployment:v1",
+  "date": "2026-09-26",
+  "phase": "ready",
+  "time": 1790385149.9609632,
+  "worker": "optimized_d7_worker.OptimizedWorker",
+  "speed_candidates_enabled": false,
+  "runtime_abi": "a71778bae51bc49e526ed10decf51c6a0c042d664d2ed43002fa6953e9b938cc",
+  "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+  "installed_source_hashes": {
+    "qwen_radiance_fair_scheduler.py": "ae526c17e096ddc681e764bace1d83000bf6059cd833242d1457c64fbcddadf3",
+    "vllm/v1/attention/backends/gdn_attn.py": "f1007fa33e1fb7d182cb588f11f0f7314cc076ebd87961b5d523dd54c4e1f6cc"
+  },
+  "smoke": [
+    {
+      "kind": "normal_pi_warmup",
+      "output_tokens": 86,
+      "finish": "stop",
+      "seconds": 3.0926100999931805
+    },
+    {
+      "kind": "normal_pi_warmup",
+      "output_tokens": 86,
+      "finish": "stop",
+      "seconds": 2.804482638995978
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "89d37e9f03b980e38873428d5c26640b4ac7690aeff9d8024f53a4fb8b0188e8"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "89d37e9f03b980e38873428d5c26640b4ac7690aeff9d8024f53a4fb8b0188e8"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "89d37e9f03b980e38873428d5c26640b4ac7690aeff9d8024f53a4fb8b0188e8"
+    }
+  ],
+  "health_status": 200,
+  "smoke_status": "PASS",
+  "snapshot_data_abi_changed": false,
+  "private_chat_contents_read": false
+}

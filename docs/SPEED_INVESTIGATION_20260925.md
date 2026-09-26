@@ -166,19 +166,37 @@ This establishes a missing integration hook and verifies its repair on the
 reproduction. It does not prove that all underlying HIP/ROCr queue stalls are
 eliminated. [Numeric evidence and source hashes](../benchmarks/results/full-graph-cache-prepare-20260925.json).
 
-## Remaining work before deployment
+## Deployment qualification
 
 The September 25 refresh passes A/B/A cache-bank handover, disk restore and three verified snapshot-generation replacements, plus all four 320-token whole-model comparisons, the 22-boundary stage replay and the 2,817-check independent operator audit. The shared 0K/60K/200K performance suite and chained tasks also completed; the 0K and 200K coding tasks naturally stopped below the requested 5K length. [Current confirmations](CURRENT_CONFIRMATIONS.md) and [shared-suite method](BENCHMARK_SUITE.md).
 
-Before switching the production launcher to this experimental worker, cancellation and all supported multi-request capture shapes still need targeted integration qualification. The initial tests used a disposable server without production
+The [September 26 lifecycle qualification](SPEED_LIFECYCLE_20260926.md) extends
+this evidence to cancellation, concurrent-chat handover and priorities. It found
+and repaired a queued-cancellation allocator/cleanup defect and an independent
+fresh one-token GDN initialization defect. The supported scheduler still dispatches
+one request at a time; two-chat residency does not authorize batched two-request
+FULL graphs. The initial tests used a disposable server without production
 snapshot I/O or the production ROCr polling-backoff overlay. A production
 speedup is therefore not promised by those initial results. The repaired
 integration tests include both systems. The hook repair changes the runtime
 ABI; it preserves the snapshot data ABI and numerical release.
 
-The normal Pi `optimized_d7_worker.OptimizedWorker` has been restored with
-Global-512 and the repaired runtime hooks. Startup authentication passed, and
-two non-session warmups each generated 86 tokens; the second observed no new
-inference-time compilation. The numerical release and durable snapshot data ABI
-are unchanged. The experimental FULL-graph speed worker remains separate from
-this production deployment.
+On September 26, the live Pi backend was switched from
+`optimized_d7_worker.OptimizedWorker` to the lifecycle-qualified
+`speed_candidate_worker.SpeedCandidateWorker`. It selects FULL target graphs,
+local-split target GEMM and `unit_w4_s1_occ2` drafter attention, retaining
+Global-512, all numerical repairs and the existing snapshot data ABI.
+Startup authentication, FULL graph captures and the loaded qualified GEMM binary
+were checked. Two normal Pi warmups completed and three fresh one-token requests
+produced identical 17-token outputs. The API was healthy and the scheduler empty.
+The [deployment receipt](../benchmarks/results/qualified-speed-deployment-20260926.json)
+records this smoke test; it is not another throughput benchmark.
+
+`qualified_speed_release.py` authenticates the exact worker and versioned
+serving payload against `qualified-speed-release.json` before launch. It also
+requires both complete native lifecycle runs, the expected parent numerical
+release and the qualified graph configuration. Changed artifacts or additional
+experimental speed settings fail startup. The live launcher enables this
+verified overlay explicitly; the older portable 0.1.0 runtime asset does not
+automatically acquire the external speed payload. No development RPC endpoint
+is enabled in production.

@@ -333,8 +333,12 @@ def test_hugepage_repair_evidence_matches_the_full_rerun():
         assert row["generated_tokens"] == observed["generated_tokens"]
         assert row["output_sha256"] == observed["output_sha256"]
         assert row["same_output_as_previous"] is True
-    scheduler = ROOT / "experiments/radiance-public/radiance_fair_scheduler.py"
-    assert hashlib.sha256(scheduler.read_bytes()).hexdigest() == evidence["runtime"]["scheduler_sha256"]
+    # Historical measurements bind their captured scheduler, not today's source.
+    # Current deployment/source equality is checked by test_qualified_speed_release.
+    captured = results["execution_binding"]["host_runtime"]["source_sha256"]
+    assert captured["radiance_fair_scheduler.py"] == evidence["runtime"]["scheduler_sha256"]
+    assert captured["snapshot-abi-chat-cache-v1.json"] == evidence["runtime"]["new_runtime_abi"]
+    assert evidence["production_restored"]["scheduler_sha256"] == captured["radiance_fair_scheduler.py"]
     assert evidence["repair"]["global_thp_changed"] is False
     assert evidence["repair"]["per_round_syscalls_added"] == 0
     for comparison in evidence["intervention_comparisons"]:

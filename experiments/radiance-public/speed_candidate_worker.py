@@ -133,8 +133,8 @@ class SpeedCandidateWorker(OptimizedWorker):
 
         config = self.vllm_config.compilation_config
         require(
-            list(config.cudagraph_capture_sizes) == [8],
-            "experimental full capture admits only one D7 batch",
+            list(config.cudagraph_capture_sizes) == [1, 2, 4, 8],
+            "full capture requires the production piecewise sizes [1, 2, 4, 8]",
         )
         repairs = self._qwen_persistent_repairs
         require(
@@ -169,8 +169,10 @@ class SpeedCandidateWorker(OptimizedWorker):
                 if desc.cg_mode != CUDAGraphMode.FULL:
                     return forward
                 require(
-                    desc.num_tokens == 8,
-                    "full capture must have exactly eight target rows",
+                    desc.num_tokens == 8
+                    and desc.num_reqs == 1
+                    and desc.uniform_token_count == 8,
+                    "full capture must have one request with exactly eight target rows",
                 )
 
                 def repaired_forward(*forward_args, **forward_kwargs):

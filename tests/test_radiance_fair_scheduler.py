@@ -59,6 +59,7 @@ def new_scheduler(module):
     instance.priorities = module.AnswerPriorities()
     instance.priority_hold = None
     instance.runner_state_slots = 2
+    instance.bankless_finished = set()
     return instance
 
 
@@ -117,6 +118,7 @@ def tool_boundary(module):
         active=BANK_A,
         owners={"a": BANK_A, "b": BANK_B},
         managers={BANK_A: object(), BANK_B: object()},
+        unallocated=set(),
     )
     scheduler.running = []
     scheduler.response_request = completed
@@ -780,6 +782,92 @@ def test_cache_banks_route_request_operations_to_their_owner(monkeypatch):
     assert initial.calls[-1] == ("a", 11)
     assert banks.reset_prefix_cache()
     assert banks.take_events() == ["manager-1", "manager-2"]
+
+
+def test_cancel_unadmitted_chat_has_no_cache_blocks_and_never_touches_live_bank(monkeypatch):
+    module = load_module(monkeypatch)
+    empty = SimpleNamespace(blocks=([], [], []))
+    initial = SimpleNamespace(empty_kv_cache_blocks=empty)
+
+    def unexpected_allocation():
+        raise AssertionError("cancelling an unadmitted request must not create a bank")
+
+    banks = module.CacheBanks(initial, unexpected_allocation)
+    banks.activate(BANK_A)
+    request = SimpleNamespace(request_id="queued-b", num_computed_tokens=0)
+    banks.register_owner(request.request_id, BANK_B)
+    banks.remove_skipped_blocks(request_id=request.request_id, processed_computed_tokens=0)
+    assert banks.get_block_ids_for_computed_tokens(
+        request_id=request.request_id, num_computed_tokens=0
+    ) == ([], [], [])
+    assert banks.get_blocks(request.request_id) is empty
+    assert banks.pop_blocks_for_free(request) == []
+    assert banks.free(request) is None
+    assert banks.active == BANK_A
+    assert set(banks.managers) == {BANK_A}
+    with pytest.raises(KeyError):
+        banks.allocate_slots(request, 1)
+
+
+def test_missing_previously_admitted_bank_is_not_treated_as_empty(monkeypatch):
+    module = load_module(monkeypatch)
+    banks = module.CacheBanks(object(), object)
+    banks.register_owner("active-a", BANK_A)
+    banks.activate(BANK_A)
+    banks.managers.pop(BANK_A)  # Deliberately corrupt retained ownership.
+    with pytest.raises(KeyError):
+        banks.free(SimpleNamespace(request_id="active-a"))
+
+
+def test_cancel_unadmitted_request_clears_ownership_after_connector_cleanup(monkeypatch):
+    module = load_module(monkeypatch)
+    scheduler = new_scheduler(module)
+    scheduler.banks = module.CacheBanks(
+        SimpleNamespace(empty_kv_cache_blocks=SimpleNamespace(blocks=([], []))), object
+    )
+    scheduler.banks.activate(BANK_A)
+    request = SimpleNamespace(request_id="queued", num_computed_tokens=0)
+    scheduler.banks.register_owner(request.request_id, BANK_B)
+    scheduler.parked = {}
+
+    def upstream_cleanup(self, rid):
+        self.banks.remove_skipped_blocks(request_id=rid, processed_computed_tokens=0)
+        assert self.banks.get_block_ids_for_computed_tokens(
+            request_id=rid, num_computed_tokens=0
+        ) == ([], [])
+        self.banks.free(request)
+        return [request]
+
+    monkeypatch.setattr(module.Scheduler, "finish_requests", upstream_cleanup, raising=False)
+    assert scheduler.finish_requests(request.request_id) == [request]
+    assert not scheduler.banks.unallocated
+    assert request.request_id not in scheduler.banks.owners
+    assert scheduler.banks.active == BANK_A
+
+    class Queue(list):
+        def remove_requests(self, requests):
+            for item in requests:
+                self.remove(item)
+
+        def add_request(self, request):
+            self.append(request)
+
+    scheduler.waiting = Queue()
+    scheduler.skipped_waiting = Queue()
+    scheduler.finished_req_ids = {request.request_id, "parked-finished"}
+    scheduler.banks.owners["parked-finished"] = BANK_B
+    scheduler.max_num_scheduled_tokens = 2048
+
+    def upstream_step(self, throttle=False):
+        sent = self.finished_req_ids
+        self.finished_req_ids = set()
+        return SimpleNamespace(finished_req_ids=sent)
+
+    monkeypatch.setattr(module.Scheduler, "schedule", upstream_step, raising=False)
+    output = scheduler._parent_step()
+    assert output.finished_req_ids == {request.request_id}
+    assert scheduler.finished_req_ids == {"parked-finished"}
+    assert not scheduler.bankless_finished
 
 
 def test_scheduler_handover_after_completion_has_a_flush_barrier_and_preserves_cache(

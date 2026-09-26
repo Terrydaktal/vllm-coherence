@@ -632,7 +632,13 @@ class CacheBanks:
         self.make_manager = make_manager
         self.managers = {}
         self.owners = {}
+        self.unallocated = set()
         self.active = None
+
+    def register_owner(self, request_id, key):
+        self.owners[request_id] = key
+        if key not in self.managers:
+            self.unallocated.add(request_id)
 
     def activate(self, key):
         if key not in self.managers:
@@ -640,6 +646,9 @@ class CacheBanks:
                 self.initial if not self.managers and self.active is None else self.make_manager()
             )
         self.active = key
+        self.unallocated.difference_update(
+            rid for rid in tuple(self.unallocated) if self.owners.get(rid) == key
+        )
 
     def manager(self, request):
         rid = request if isinstance(request, str) else request.request_id
@@ -679,6 +688,20 @@ class CacheBanks:
                 )
                 if owner is None:
                     raise TypeError(f"{name} requires a request identity")
+                rid = owner if isinstance(owner, str) else owner.request_id
+                if rid in self.unallocated:
+                    # A queued chat has an identity but no allocator or GPU
+                    # image yet. vLLM still runs connector/block cleanup when
+                    # it is cancelled. Return its genuinely empty block table;
+                    # never route that cleanup into the currently active chat.
+                    if name in {"free", "remove_skipped_blocks"}:
+                        return None
+                    if name == "pop_blocks_for_free":
+                        return []
+                    if name == "get_blocks":
+                        return self.initial.empty_kv_cache_blocks
+                    if name in {"get_block_ids", "get_block_ids_for_computed_tokens"}:
+                        return tuple([] for _ in self.initial.empty_kv_cache_blocks.blocks)
                 return getattr(self.manager(owner), name)(*args, **kwargs)
 
             return routed
@@ -796,6 +819,7 @@ class FairScheduler(Scheduler):
         self.banks = CacheBanks(self.kv_cache_manager, make_manager)
         self.kv_cache_manager = self.banks
         self.parked = {}
+        self.bankless_finished = set()
         self.last_served = {}
         self.response_request = None
         self.tool_handover = ToolHandover(float(config.get("tool_grace_seconds", 2)))
@@ -828,7 +852,7 @@ class FairScheduler(Scheduler):
 
     def add_request(self, request):
         key = bank_key(request)
-        self.banks.owners[request.request_id] = key
+        self.banks.register_owner(request.request_id, key)
         if hasattr(self, "request_phases"):
             self.request_phases.set(request, "admission")
         try:
@@ -838,6 +862,7 @@ class FairScheduler(Scheduler):
             # an owner behind that could later be mistaken for a live bank.
             if self.banks.owners.get(request.request_id) == key:
                 self.banks.owners.pop(request.request_id)
+            self.banks.unallocated.discard(request.request_id)
             if hasattr(self, "request_phases"):
                 self.request_phases.live.pop(request.request_id, None)
             raise
@@ -1101,7 +1126,10 @@ class FairScheduler(Scheduler):
         active = self.banks.active
         held_waiting = [r for r in self.waiting if self._key(r) != active]
         held_skipped = [r for r in self.skipped_waiting if self._key(r) != active]
-        held_finished = {rid for rid in self.finished_req_ids if self._key(rid) != active}
+        held_finished = {
+            rid for rid in self.finished_req_ids
+            if self._key(rid) != active and rid not in self.bankless_finished
+        }
         self.waiting.remove_requests(held_waiting)
         self.skipped_waiting.remove_requests(held_skipped)
         self.finished_req_ids.difference_update(held_finished)
@@ -1119,6 +1147,10 @@ class FairScheduler(Scheduler):
             for request in held_skipped:
                 self.skipped_waiting.add_request(request)
             self.finished_req_ids.update(held_finished)
+        # These cancellations never owned GPU blocks. Their connector finish
+        # must still reach the worker, even while another chat owns the bank.
+        # Otherwise settled-tail admission can wait forever for their cleanup.
+        self.bankless_finished.difference_update(output.finished_req_ids or ())
         return output
 
     def schedule(self, throttle_prefills: bool = False):
@@ -1376,6 +1408,12 @@ class FairScheduler(Scheduler):
 
     def finish_requests(self, *args, **kwargs):
         result = super().finish_requests(*args, **kwargs)
+        for request in result or ():
+            rid = request.request_id
+            if rid in self.banks.unallocated:
+                self.bankless_finished.add(rid)
+                self.banks.unallocated.discard(rid)
+                self.banks.owners.pop(rid, None)
         self.parked = {k: r for k, r in self.parked.items() if not r.is_finished()}
         if hasattr(self, "request_phases"):
             for request in result or ():

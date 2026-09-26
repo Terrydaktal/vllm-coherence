@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=d98aaebd1842c13ae94b6110e85ace92aa3211afa15776f503510ae1eca0bc4f
+readonly abi_id=7f1eb092c80e596575d58bc0e793cb9059b049af134fb5a4aa8af64fea565524
 readonly data_abi=d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
@@ -15,6 +15,7 @@ readonly image=docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe
 readonly required_shm_bytes=19327352832
 readonly required_snapshot_free_bytes=12884901888
 readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-norm-consistency-v2
+readonly speed_root=/home/lewis/.local/share/qwen-r9700/qualified-speed/20260926
 
 cd "$launcher_root"
 
@@ -47,6 +48,11 @@ done < <(jq -r '(.runtime.chat_storage.modules + .runtime.release_files) | to_en
 [[ -d $optimized_root && ! -L $optimized_root &&
 	$(sha256sum "$optimized_root/optimized-release.json" | awk '{print $1}') == $(jq -r '.optimized_d7.manifest_sha256' radiance-vllm-mxfp4/runtime-radiance-1.0.16.json) ]] || {
 	printf 'optimized serving payload is missing or differs from its qualified manifest\n' >&2
+	exit 1
+}
+
+[[ -d $speed_root && ! -L $speed_root ]] || {
+	printf 'qualified speed payload is missing: %s\n' "$speed_root" >&2
 	exit 1
 }
 
@@ -199,6 +205,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	--security-opt seccomp=unconfined --cap-add SYS_PTRACE \
 	-e PYTHONHASHSEED=0 -e ROCR_VISIBLE_DEVICES=0 -e HIP_VISIBLE_DEVICES=0 -e HF_HUB_OFFLINE=1 \
 	-e QWEN_RADIANCE_CACHE_ABI="$data_abi" \
+	-e QWEN_QUALIFIED_SPEED=1 \
 	-e QWEN_ROUND_EVENT_STATUS_PATH=/dev/shm/qwen-radiance-fair-public \
 	-e VLLM_ROCM_USE_AITER=1 -e VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=1 \
 	-e VLLM_ROCM_USE_AITER_MHA=0 -e VLLM_ROCM_USE_AITER_MLA=0 -e VLLM_ROCM_USE_AITER_MOE=0 \
@@ -217,6 +224,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	-v "$cache_root":/cache \
 	-v "$launcher_root/radiance-vllm-mxfp4":/patches:ro \
 	-v "$optimized_root":/qualification:ro \
+	-v "$speed_root":/work:ro \
 	-v "$rocr_library":/opt/rocm/core-7.14/lib/libhsa-runtime64.so.1.21.0:ro \
 	--entrypoint /opt/vllm/bin/python "$image" /patches/bootstrap_radiance_release.py \
 	/models/Qwen3.8-27B-Uncensored-MXFP4-awq --served-model-name "$model_id" \
@@ -227,7 +235,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	--attention-backend R4D --speculative-config "$speculative_config" \
 	--no-async-scheduling --language-model-only --skip-mm-profiling \
 	--scheduler-cls qwen_radiance_fair_scheduler.FairScheduler --additional-config "$fair_config" \
-	--worker-cls optimized_d7_worker.OptimizedWorker \
+	--worker-cls speed_candidate_worker.SpeedCandidateWorker \
 	--kv-transfer-config "$kv_transfer_config" \
 	--middleware qwen_radiance_request_guard.require_snapshot_abi \
 	--enable-prefix-caching --mamba-cache-mode align --enable-auto-tool-choice \
@@ -236,4 +244,4 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	--override-generation-config '{"temperature":1,"top_p":0.95,"top_k":20}' \
 	--chat-template /patches/qwen-fixed-v22.3.jinja \
 	--default-chat-template-kwargs '{"reasoning_effort":"xhigh"}' \
-	--compilation-config '{"cudagraph_mode":"PIECEWISE","cudagraph_capture_sizes":[1,2,4,8]}'
+	--compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[1,2,4,8]}'

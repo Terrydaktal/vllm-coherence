@@ -15,6 +15,7 @@ from pathlib import Path
 from patch_chat_snapshot import install
 from patch_dflash_sampling_rng import install as install_dflash_sampling_rng
 from patch_draft_head_initialization import install as install_draft_head_initialization
+from patch_gdn_initial_prefill import install as install_gdn_initial_prefill
 from patch_gdn_extreme_decay import (
     LIBRARY_SHA256 as GDN_LIBRARY_SHA256,
 )
@@ -87,6 +88,9 @@ def main():
     # A rejected draft must not share its Gumbel draw with the target's
     # replacement. Backport the independently qualified upstream stream salt.
     install_dflash_sampling_rng(package)
+    # A one-token fresh prompt must initialize recurrent/convolution state,
+    # rather than read allocator leftovers through the ordinary decode path.
+    install_gdn_initial_prefill(package)
     # The native scan can clamp valid recurrent contributions to zero for large
     # decay spans. Recompute affected heads with the verified bounded recurrence.
     library = build_gdn_correction(
@@ -97,6 +101,11 @@ def main():
     shutil.copyfile(
         source / "radiance_request_guard.py", package / "qwen_radiance_request_guard.py"
     )
+    if os.environ.get("QWEN_QUALIFIED_SPEED") == "1":
+        from qualified_speed_release import install as install_qualified_speed
+
+        receipt = install_qualified_speed(source, package, sys.argv[1:])
+        print("Qualified speed release: " + json.dumps(receipt), flush=True)
     print("Radiance release and local chat integration verified", flush=True)
     if sys.argv[1:] == ["--check-only"]:
         return

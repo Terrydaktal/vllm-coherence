@@ -1,0 +1,68 @@
+{
+  "schema": "urn:coherence:qualified-speed-deployment:v1",
+  "time": 1790386427.9296813,
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "runtime_abi": "7f1eb092c80e596575d58bc0e793cb9059b049af134fb5a4aa8af64fea565524",
+  "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "ae526c17e096ddc681e764bace1d83000bf6059cd833242d1457c64fbcddadf3",
+    "vllm/v1/attention/backends/gdn_attn.py": "f1007fa33e1fb7d182cb588f11f0f7314cc076ebd87961b5d523dd54c4e1f6cc"
+  },
+  "qualification_manifest_sha256": "7f22d3da389003b7065f096c9fbf04e0ba5089b14047c420f774e799b9183e5f",
+  "features": {
+    "target_full_graph": true,
+    "target_gemm": "local_split",
+    "draft_attention": "unit_w4_s1_occ2",
+    "global_topk": 512
+  },
+  "verification": {
+    "kind": "authenticated startup and installed source; compiled graph capture and loaded GEMM binary",
+    "development_rpc_enabled": false,
+    "worker_initialization_selects_candidate_graphs": true,
+    "target_full_graph_captured": true,
+    "drafter_graph_captured": true,
+    "qualified_gemm_binary_mapped": true
+  },
+  "compilation_config": {
+    "cudagraph_mode": "FULL_AND_PIECEWISE",
+    "cudagraph_capture_sizes": [
+      1,
+      2,
+      4,
+      8
+    ]
+  },
+  "smoke": [
+    {
+      "kind": "normal_pi_warmup",
+      "output_tokens": 86,
+      "finish": "stop",
+      "seconds": 2.5173104770074133
+    },
+    {
+      "kind": "normal_pi_warmup",
+      "output_tokens": 86,
+      "finish": "stop",
+      "seconds": 3.0863341350050177
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "89d37e9f03b980e38873428d5c26640b4ac7690aeff9d8024f53a4fb8b0188e8"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "89d37e9f03b980e38873428d5c26640b4ac7690aeff9d8024f53a4fb8b0188e8"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "89d37e9f03b980e38873428d5c26640b4ac7690aeff9d8024f53a4fb8b0188e8"
+    }
+  ],
+  "scope": "Live deployment authentication and synthetic API smoke; not a new throughput or exhaustive correctness benchmark.",
+  "health_status": 200,
+  "smoke_status": "PASS"
+}

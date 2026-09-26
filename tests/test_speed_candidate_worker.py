@@ -40,7 +40,11 @@ def test_full_capture_rebinds_repairs_and_restores_on_exit(
                 # vLLM's outer FULL capture calls the inner forward with NONE.
                 # It is the descriptor, not that argument, which determines
                 # whether repaired bindings must be active.
-                factory(types.SimpleNamespace(cg_mode=mode, num_tokens=8))("NONE")
+                factory(
+                    types.SimpleNamespace(
+                        cg_mode=mode, num_tokens=8, num_reqs=1, uniform_token_count=8
+                    )
+                )("NONE")
             return "captured"
 
     original_capture = Manager.capture
@@ -103,7 +107,7 @@ def test_full_capture_rebinds_repairs_and_restores_on_exit(
     spec.loader.exec_module(module)
     worker = module.SpeedCandidateWorker()
     worker.vllm_config = types.SimpleNamespace(
-        compilation_config=types.SimpleNamespace(cudagraph_capture_sizes=[8])
+        compilation_config=types.SimpleNamespace(cudagraph_capture_sizes=[1, 2, 4, 8])
     )
     worker.model_runner = types.SimpleNamespace(cudagraph_manager=Manager())
     worker._qwen_persistent_repairs = types.SimpleNamespace(
@@ -123,7 +127,7 @@ def test_full_capture_rebinds_repairs_and_restores_on_exit(
     assert all(getattr(owner, name) is repaired for owner, name in owners)
     assert target_attention.launch is repaired
     worker.vllm_config.compilation_config.cudagraph_capture_sizes = [1, 8]
-    with pytest.raises(DiagnosticError, match="only one D7 batch"):
+    with pytest.raises(DiagnosticError, match="production piecewise sizes"):
         worker.compile_or_warm_up_model()
     assert observed == ["startup", "repaired capture"]
 
