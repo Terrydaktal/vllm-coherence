@@ -77,6 +77,15 @@ class PerformanceRepairs:
         self.gdn_norm_quant = None
         self.prefill_scan = None
         self.activation_tiles = None
+        self.prefill_alignment = None
+        # Prefill wraps the already installed decode attention path. Its own
+        # hook scope permits that composition without replacing a site twice
+        # in the decode scope.
+        self.prefill_hooks = HookSet()
+        if self.manifest.get("prefill_alignment"):
+            from prefill_alignment_runtime import validate
+
+            validate(self.manifest["prefill_alignment"])
         self.repairs = repairs
         heads = [m for n, m in model.named_modules() if n.endswith("logits_processor")]
         require(len(heads) == 1, "target head module changed")
@@ -212,6 +221,10 @@ class PerformanceRepairs:
             from prefill_tiles_admission import install
 
             self.activation_tiles = install(self.manifest["activation_tiles"])
+        if self.manifest.get("prefill_alignment"):
+            from prefill_alignment_runtime import install
+
+            self.prefill_alignment = install(self.manifest["prefill_alignment"], self.prefill_hooks)
 
     def receipt(self):
         return {
@@ -223,4 +236,5 @@ class PerformanceRepairs:
             "gdn_norm_quant": self.gdn_norm_quant,
             "prefill_scan": self.prefill_scan,
             "activation_tiles": self.activation_tiles,
+            "prefill_alignment": self.prefill_alignment,
         }

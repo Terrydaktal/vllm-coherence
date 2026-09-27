@@ -72,12 +72,12 @@
     "launcher_root": "/home/lewis/projects/r9700-public-clean-20260906/qwen3.6-vllm-gfx1201-launchers"
   },
   "optimized_d7": {
-    "manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+    "manifest_sha256": "c9f2765545996f0dffb0f8d8ab126cd4f3c3e5b3a4d7c167f56b618193d68cf2",
     "state_layout": "existing-nine-slot",
     "worker": "optimized_d7_worker.OptimizedWorker",
     "arithmetic": {
-      "repair_sha256": "e342fcbd813559a9dc1b19e792322e53509888691d3504eadcaadb311bd3b7f5",
-      "performance_sha256": "3ac64300dd57b59cc6d1f151a868068c5f3e954b2684402cf4f2ebbc5890e01e",
+      "repair_sha256": "64295d52dafeb4e9231157c925e329c78f07303cf67efc2cc7724d034b23c042",
+      "performance_sha256": "6372548a7be4359774a6693a232c0d3359761a1d2b922df079dc71a098b2a9b4",
       "precision_casts": "preserve eager BF16 rounding during compilation",
       "state_layout": "existing-nine-slot",
       "target_head": "full BF16 with qualified M4-pair dispatch",
@@ -107,9 +107,17 @@
         "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
         "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
         "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+      },
+      "prefill_alignment": {
+        "attention": "same per-query TILE16, M1 split boundaries and FP32 merge order as decode",
+        "output_projections": "four contiguous 128-coefficient-aligned K ranges; ordered FP32 merge then BF16",
+        "final_normalization": "qualified M1 residual normalization for prefill and decode",
+        "attention_binary_sha256": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+        "projection_binary_sha256": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+        "snapshot_compatibility": "previous prefill states must be rebuilt; token histories remain valid"
       }
     },
-    "arithmetic_evidence_scope": "Native M1/prefill norm consistency and independent operator checks; older full-model alignment is historical.",
+    "arithmetic_evidence_scope": "Pinned single-R9700 prefill/decode forced-token samples and independent operator checks; not a universal proof or loop-rate measurement.",
     "admission_changes": [
       {
         "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
@@ -158,7 +166,7 @@
       "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
       "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
     },
-    "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-norm-consistency-v2",
+    "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260927-prefill-alignment-v2",
     "attention_precision": {
       "build": "/qualification/diagnostics/attention-precision-v1/build",
       "build_sha256": "29ca302b2acda366b46a02536f7aceea7008d24db75bec6e64a57947d30e43ab",
@@ -201,6 +209,34 @@
         "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
         "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
         "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+      }
+    },
+    "prefill_alignment": {
+      "qualification": "/qualification/diagnostics/prefill-alignment-v1/qualification.json",
+      "qualification_sha256": "ce635037f0fb55d81d40d51990d53af0f3793bd64f895fbb390a6c96eb61d8e3",
+      "sources": {
+        "prefill_attention_alignment.py": "46a930b44a658ac990e16a7acc7692a2306413756e1573bde101cabcab3cf376",
+        "prefill_gemm_alignment.py": "94622757665f8430a58091e2bce11b048ee8958fcf6a140405e96ee2b9cf1d56",
+        "prefill_alignment_runtime.py": "46988b9fffe558c8c6bbda3c9a7ee54e2393443a890cc9057fafe230af32eebe",
+        "optimized_stock_norm.py": "68d045bb7e38ac0c65f744644f9b0bb661a368a574f781c50be47fdf5ecf823a",
+        "optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
+        "optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5"
+      },
+      "attention": {
+        "build": "/qualification/diagnostics/prefill-alignment-v1/attention",
+        "build_sha256": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8"
+      },
+      "projection": {
+        "build": "/qualification/diagnostics/prefill-alignment-v1/projection",
+        "build_sha256": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623"
+      },
+      "contract": {
+        "attention": "same per-query TILE16, M1 split boundaries and FP32 merge order as decode",
+        "output_projections": "four contiguous 128-coefficient-aligned K ranges; ordered FP32 merge then BF16",
+        "final_normalization": "qualified M1 residual normalization for prefill and decode",
+        "attention_binary_sha256": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+        "projection_binary_sha256": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+        "snapshot_compatibility": "previous prefill states must be rebuilt; token histories remain valid"
       }
     }
   },

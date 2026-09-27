@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeSummaryThinking, checkpointOutputBudget, summaryInstruction, validateSummary, readCompletion, compactFromPayload,
   fileOperations, readReceipt, CONTRACT, MODEL, installRadianceCompaction, writeReceipt,
-  compactionReceiptKey, compactionRetryIdentities } from "../integrations/pi/qwen-radiance-compaction.mjs";
+  compactionReceiptKey, compactionRetryIdentities, postJson } from "../integrations/pi/qwen-radiance-compaction.mjs";
 import { getCompactionProgress } from "../integrations/pi/qwen-radiance-compaction-progress.mjs";
 
 const headings = ["Goal", "Current Authoritative State", "Constraints & Invariants", "Progress", "Measurements & Evidence",
@@ -21,6 +21,18 @@ function sse(frames, width = 7) {
   } }), { headers: { "Content-Type": "text/event-stream" } });
 }
 const choice = (text = "", finish_reason = null) => ({ choices: [{ index: 0, text, finish_reason }] });
+
+test("compaction reports a stale VM snapshot identity without exposing arbitrary error bodies", async () => {
+  const stale = "Radiance backend was updated. Exit Pi and resume the same chat with pi-opsec --workspace <your-workspace> --continue. /reload cannot refresh the cache identity. Your transcript is retained.";
+  await assert.rejects(postJson("http://fixture", {}, {}, signal(), async () =>
+    new Response(JSON.stringify({ error: stale }), { status: 400 })), /HTTP 400: snapshot identity mismatch.*host inference relay/);
+  await assert.rejects(postJson("http://fixture", {}, {}, signal(), async () =>
+    new Response(JSON.stringify({ error: "PRIVATE_SENTINEL" }), { status: 400 })),
+  { message: "compaction endpoint returned HTTP 400" });
+  await assert.rejects(postJson("http://fixture", {}, {}, signal(), async () =>
+    new Response(JSON.stringify({ error: stale, echoed_prompt: "x".repeat(5_000) }), { status: 400 })),
+  { message: "compaction endpoint returned HTTP 400" });
+});
 
 test("session resume backfills the latest exact compaction total from safe timing metadata", async (t) => {
   const previous = process.env.PI_CODING_AGENT_DIR;

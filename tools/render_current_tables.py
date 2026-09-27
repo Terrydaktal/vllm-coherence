@@ -816,6 +816,7 @@ def render_known_remaining_symptoms():
             )
         return [
             "### Known remaining symptoms and likely causes", "",
+            *([current["prefill_alignment_note"], ""] if current.get("prefill_alignment_note") else []),
             ("**The missing full-graph preparation hook is repaired.** The first integrated speed run "
             "took 59.44 ms at 60K because FULL replay bypassed the existing post-cache-preparation "
             "synchronization and recovery hook. After installing it on both execution branches, "
@@ -1316,6 +1317,234 @@ def current_fine_detail(data):
             "date": capture["measurement_date"]}
 
 
+def render_cache_state_equivalence(data):
+    """Keep cache-path equality and latency attached to their original captures."""
+    alignment_path = data["prefill_alignment_evidence"]
+    alignment = json.loads((ROOT / alignment_path).read_text())
+    deployment_path = data["current_deployment"]
+    deployment = json.loads((ROOT / deployment_path).read_text())
+    cache_path = data["current_response_end_qualification"]
+    cache = json.loads((ROOT / cache_path).read_text())
+    pressure_path = "benchmarks/results/response-end-pressure-20260927.json"
+    pressure = json.loads((ROOT / pressure_path).read_text())
+    snapshot_path = data["current_snapshot_confirmations"]
+    snapshot = json.loads((ROOT / snapshot_path).read_text())
+    rows = []
+
+    def add(comparison, workload, correctness, timing, evidence, *, before=None, before_time=None):
+        if evidence.startswith("[Earlier"):
+            before, before_time = correctness, timing
+            correctness, timing = "Not rerun after this repair", "Not rerun"
+        rows.append(
+            f"| {comparison} | {workload} | {before or 'Not captured'} | {correctness} | "
+            f"{before_time or 'Not benchmarked'} | {timing} | {evidence} |"
+        )
+
+    def span(values, unit="s"):
+        lo, hi = min(values), max(values)
+        return f"{lo:.3f} {unit}" if lo == hi else f"{lo:.3f}–{hi:.3f} {unit}"
+
+    aligned_link = f"[Aligned release]({alignment_path})"
+    cache_link = f"[Earlier cache release]({cache_path})"
+    lifecycle_link = f"[Aligned release]({deployment_path})"
+    # These diagnostic timings are preserved in the alignment report, not in
+    # the token-comparison JSON. Their different measurement boundaries remain
+    # explicit; none is a disk-restore latency or a decode-round measurement.
+    prefill_times = {
+        1651: ("Not separately benchmarked", "Not separately benchmarked"),
+        60000: (
+            "61K cold whole-model diagnostic: **36.56 s**. Attention only, 1,003 query rows at 60K: **20.17 ms**",
+            "61K cold whole-model diagnostic: **45.34 s**. Attention only, 1,003 query rows at 60K: **34.50 ms**",
+        ),
+        200000: (
+            "Attention only, 1,003 query rows at 200K: **63.49 ms**; no matched whole-model timing",
+            "Attention only, 1,003 query rows at 200K: **112.08 ms**; no matched whole-model timing",
+        ),
+    }
+
+    def numerical_result(case):
+        count = case["positions"]
+        ranks = "<br>".join(
+            f"Top-{k} set/order: {case['logits'][str(k)]['set_exact']:,}/{count:,}; "
+            f"{case['logits'][str(k)]['ranked_exact']:,}/{count:,}"
+            for k in (1, 10, 20)
+        )
+        if all(case["logits"][str(k)][metric] == count
+               for k in (1, 10, 20) for metric in ("set_exact", "ranked_exact")):
+            ranks = f"Top-1/10/20 sets and ordering all **{count:,}/{count:,} (100%)**"
+        return (f"Byte-exact hidden rows {case['hidden_exact_rows']:,}/{count:,}; full BF16-logit rows "
+                f"{case['logits']['full_logits_exact']:,}/{count:,}.<br>{ranks}")
+
+    baselines = {case["first_position"]: case for case in alignment["baseline_comparisons"]}
+    for case in alignment["model_comparisons"]:
+        count = case["positions"]
+        baseline = baselines.get(case["first_position"])
+        before_time, after_time = prefill_times[case["first_position"]]
+        add(
+            "Cold prefill ↔ retained decode history",
+            f"{case['first_position']:,}-token prefix + {count:,} forced token positions",
+            numerical_result(case), after_time,
+            aligned_link + " · [timing scope](docs/PREFILL_ALIGNMENT.md#performance-and-memory)",
+            before=numerical_result(baseline) if baseline else "No full-model baseline captured",
+            before_time=before_time,
+        )
+
+    copies = cache["native_byte_preservation"]
+    add(
+        "Response-end state copy ↔ source state",
+        f"{copies['layer_count']} GDN layers; {copies['gdn_conv_comparisons']:,} state/history checks; "
+        f"{copies['physical_page_copies']:,} physical-page copies",
+        f"{'Exact' if copies['same_bytes'] else 'DIFFERENT'}: {copies['bytes_compared']:,} bytes; "
+        f"observed accepted offsets {', '.join(map(str, copies['accepted_offsets_observed']))}",
+        "Not a production timing capture", cache_link,
+    )
+
+    def continuations(label, cases, evidence, scope="", *, before=None, before_time=None):
+        passed = sum(case["same_tokens"] for case in cases)
+        prompts = sorted({case["prompt_tokens"] for case in cases})
+        missing = sorted({case["uncached_tokens"] for case in cases})
+        output = sorted({case["continuation_tokens"] for case in cases})
+        add(
+            label,
+            f"{', '.join(f'{n:,}' for n in prompts)} input tokens; "
+            f"{', '.join(f'{n:,}' for n in missing)} uncached",
+            f"{passed}/{len(cases)} exact continuations, "
+            f"{' / '.join(map(str, output))} generated tokens each" + (f"; {scope}" if scope else ""),
+            "First data **" + span([case["first_data_seconds"] for case in cases]) + "**",
+            evidence, before=before, before_time=before_time,
+        )
+
+    runs = cache["native_continuations"]
+    continuations("Resident GPU reuse across block/response boundaries", runs["warm-boundaries-v3"]["cases"], cache_link)
+    for case in runs["warm-long-v3"]["cases"]:
+        continuations("Resident GPU reuse, long context", [case], cache_link)
+    continuations("GPU → RAM → GPU chat handover", runs["handover-v2"]["cases"], cache_link)
+    continuations(
+        "Reuse after GPU-bank eviction",
+        runs["eviction-v2"]["cases"] + runs["aligned-eviction-v6"]["cases"], cache_link,
+    )
+    continuations("Disk restore after backend restart, short context", runs["restore-v3"]["cases"], cache_link)
+    for case in runs["restore-long-v4"]["cases"]:
+        continuations("Disk restore after backend restart, long context", [case], cache_link)
+    continuations(
+        "Damaged snapshot → reject and cold rebuild", runs["restore-damaged-v4"]["cases"],
+        cache_link, "corrupted endpoint rejected; zero cached tokens used",
+    )
+    continuations("Reuse after explicit stop boundary", runs["stop-v4"]["cases"], cache_link)
+    for report in alignment["tool_continuations"]:
+        head = "full BF16" if report["target_head_policy"] == "full-bf16" else "Global-512"
+        failure = cache["separate_numerical_failure"]
+        if report["target_head_policy"] == "full-bf16":
+            original = next(c for c in failure["full_bf16_head_control"]["cases"] if c["kind"] == "generated-end")
+            original_time = original["first_data"]
+        else:
+            original = failure["failed_cold_control"]["cases"][0]
+            original_time = original["first_data_seconds"]
+        continuations(
+            f"Cached tool continuation ↔ cold full prompt ({head})", report["cases"],
+            aligned_link + f" · [baseline]({cache_path})", "greedy; same appended 41-token tool suffix",
+            before=f"**FAIL**: original 1,711-input-token case first differs at output offset {original['first_difference']}; no complete six-case baseline",
+            before_time=f"First data **{original_time:.3f} s** (original failing case only)",
+        )
+    continuations(
+        "Repeated sampled tool continuation",
+        runs["tool-repeat-sampled-v6"]["cases"], cache_link,
+        "T=1, top-p=0.95, top-k=40, seed=0; same prefill/decode boundaries, not a cold comparison",
+    )
+    continuations(
+        "Cancelled continuation ↔ uninterrupted control", pressure["cancelled_continuations"],
+        f"[Earlier pressure repair]({pressure_path})",
+    )
+
+    lifecycle = {case["name"]: case for case in deployment["packaged_lifecycle"]["cases"]}
+    old_lifecycle = {case["name"]: case for case in cache["lifecycle"]["cases"]}
+    lifecycle_link += f" · [baseline]({cache_path})"
+    cancel = lifecycle["cancel_decode_and_replay"]["interruptions"]
+    old_cancel = old_lifecycle["cancel_decode_and_replay"]["interruptions"]
+    add(
+        "Cancel during decode → replay",
+        "Interrupted after " + ", ".join(str(c["received_tokens"]) for c in cancel) + " received tokens",
+        f"{sum(c['replay_equal'] for c in cancel)}/{len(cancel)} replays equal uninterrupted control",
+        "Cancellation to scheduler release: **" + span([c["release_seconds"] * 1000 for c in cancel], "ms") + "**",
+        lifecycle_link,
+        before=f"{sum(c['replay_equal'] for c in old_cancel)}/{len(old_cancel)} replays equal uninterrupted control",
+        before_time="Cancellation to scheduler release: **" + span([c["release_seconds"] * 1000 for c in old_cancel], "ms") + "**",
+    )
+    for key, label, result in (
+        ("cancel_cold_prefill_and_replay", "Cancel during cold prefill → replay", "replay_equal"),
+        ("cancel_queued_request", "Cancel queued chat → replay", "owner_and_cancelled_replay_equal"),
+        ("sampled_cancel_and_waiter_replay", "Sampled cancellation with another chat waiting → replay", "waiter_and_cancelled_replay_equal"),
+    ):
+        case = lifecycle[key]
+        context = (
+            f"60K input; {case['computed_tokens_when_cancelled']:,} processed at cancellation"
+            if key == "cancel_cold_prefill_and_replay" else
+            "Two chats; T=1, top-p=0.95, top-k=40, seed=113"
+            if key == "sampled_cancel_and_waiter_replay" else "Two chats; cancelled request had not generated"
+        )
+        add(label, context, "Replay equal" if case[result] else "Replay DIFFERENT",
+            f"Cancellation to scheduler release: **{case['release_seconds'] * 1000:.3f} ms**", lifecycle_link,
+            before="Replay equal" if old_lifecycle[key][result] else "Replay DIFFERENT",
+            before_time=f"Cancellation to scheduler release: **{old_lifecycle[key]['release_seconds'] * 1000:.3f} ms**")
+    handovers = [lifecycle[name] for name in (
+        "equal_priority_response_handover", "priority2_complete", "priority2_parked",
+        "priority2_urgent", "priority1_tool_boundary_hold",
+    )]
+    add(
+        "Concurrent chats and priority handovers ↔ uninterrupted controls",
+        "Equal priority, immediate priority-2 takeover/cancellation, priority-1 tool-boundary hold",
+        f"{sum(c['status'] == 'PASS' for c in handovers)}/{len(handovers)} lifecycle cases pass their output/ownership checks",
+        "Isolated handover latency not measured", lifecycle_link,
+        before=f"{sum(old_lifecycle[c['name']]['status'] == 'PASS' for c in handovers)}/{len(handovers)} lifecycle cases pass their output/ownership checks",
+        before_time="Isolated handover latency not measured",
+    )
+    for case in pressure["capacity_cases"]:
+        preemptions = max(sample["preemptions"] for sample in case["samples"])
+        add(
+            "Near-limit endpoint ownership and cache reclamation",
+            f"{case['usage']['prompt_tokens']:,} input; "
+            f"{case['usage']['prompt_tokens_details']['cached_tokens']:,} cached; {case['tokens']:,} generated",
+            f"{preemptions} allocator preemptions; forward progress (not numerical-equivalence evidence)",
+            f"First data **{case['first_data_seconds']:.3f} s**",
+            f"[Earlier pressure repair]({pressure_path})",
+        )
+    cycles = snapshot["cycles"]
+    safe = sum(c["removed_before_verification_bytes"] == 0 and c["fallback_removed_after_verification"]
+               and c["remaining_generations"] == 1 for c in cycles)
+    add(
+        "Compaction-generation snapshot replacement",
+        f"{len(cycles)} publication/retirement cycles",
+        f"{safe}/{len(cycles)} keep the previous disk head until replacement verification, then retain one generation; "
+        "lifecycle safety, not old/new summary equivalence",
+        "Not separately benchmarked", f"[Earlier snapshot release]({snapshot_path})",
+    )
+    return [
+        "### Cache-state equivalence and prefill/restore timings", "",
+        "**Before / after refers to the prefill arithmetic repair introduced in this commit.** "
+        "The table distinguishes exact state bytes, hidden/logit equality and generated-token replay. "
+        "**Aligned release** is the repaired September 27 build; **earlier cache/pressure/snapshot release** "
+        "is the baseline. Where a path was not rerun or a baseline was not captured, that is explicit. "
+        "All workloads here are synthetic, and each source retains its tested identities.", "",
+        "| State / execution comparison | Workload and cache coverage | Correctness before | Correctness after | Speed / latency before | Speed / latency after | Capture |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+        *rows, "",
+        "**Timing boundaries:** first data is request-to-first-output wall time, including admission, "
+        "handover, restore and any required prefill; it is not pure disk or RAM transfer time. Restart "
+        "measurements start after the backend is ready. Attention times are five GPU-event samples of "
+        "one 1,003-query invocation; the 61K whole-model time is one diagnostic request. Cancellation "
+        "times measure scheduler release, not completion of the replay. No qualification-suite runtime "
+        "is substituted for an operation benchmark. The tool rows compare the original failing case "
+        "with an expanded six-case repaired run; their timing ranges are not a matched speedup estimate.", "",
+        "**Equality boundaries:** set/order lists identical token sets followed by identical ordering. "
+        "The full-vector prefill checks cover 2,320 distinct forced-token positions; the packaged "
+        "1,000-position repeat does not add new positions. Matching generated tokens alone does not "
+        "establish equality of every latent state or logit. Compaction creates a new history, so its "
+        "storage test checks safe replacement rather than equivalence to the uncompressed conversation. "
+        "These finite checks do not prove arbitrary-input correctness, exhaustive scheduling interleavings "
+        "or completeness of the approximate Global-512 head.",
+    ]
+
+
 def render(data):
     timing = data["round_timing"]
     mean = timing["mean"]
@@ -1405,6 +1634,8 @@ def render(data):
             "the kernel can change its performance, so those measurements are not an additive "
             "breakdown of the production kernel's time."
         ),
+        "",
+        *render_cache_state_equivalence(data),
         "",
         (
             (f"The expandable layer and kernel tables use the same {retained_cycles:,} retained "

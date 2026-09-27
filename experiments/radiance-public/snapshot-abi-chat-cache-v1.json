@@ -74,9 +74,9 @@
     "release_files": {
       "bootstrap_radiance_release.py": "50137ed474ab227cc19311217d67a60ae8989e0fa920ee3cf0d690591d79edcb",
       "qualified_speed_release.py": "bf953d14af2f280a490326e59f2bac41015323d57692627e0deae80ff98674b2",
-      "qualified-speed-release.json": "7f22d3da389003b7065f096c9fbf04e0ba5089b14047c420f774e799b9183e5f",
+      "qualified-speed-release.json": "0deb008ae72ac938c7a6c42a183f3932750f89635cc88ef191daedd2c203fecf",
       "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
-      "runtime-radiance-1.0.16.json": "0c25e01a3a0f3ac7b974f1fc22b09b402512bb544673619ba7e468185e53685c",
+      "runtime-radiance-1.0.16.json": "cd286a5552a78fda5c926286860d7aaefe7507aea359039d27df334ab7e6d5ee",
       "radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
@@ -88,8 +88,8 @@
       "patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
       "gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
       "qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-      "optimized-release.json": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
-      "optimized_pi_release.py": "82020959fba70cc0926be6891ab868f9dae8af5173b527e5ebd7bf1e6536a4b1",
+      "optimized-release.json": "c9f2765545996f0dffb0f8d8ab126cd4f3c3e5b3a4d7c167f56b618193d68cf2",
+      "optimized_pi_release.py": "264d2acad78642f6bcb29220ee855105bf9d3f38633c8c0cae428c1c750f287d",
       "m1_arithmetic_release.py": "a24ac6eee704903f7c68703a15221673d1484313ba91bdbb67888353ae80b174",
       "mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
       "patch_gdn_stable_softplus.py": "2fa5c75d4ea177d83295aafcc4801308f5bd53bdd3e4ec25c58368188034e94b",
@@ -106,6 +106,12 @@
       "probe_attention_precision_repair.py": "b677c86d552302a6ae7a5fa29e8e0136debf1304040fdb96f730d6d2daee4cc4",
       "probe_attention_precision_oracle.py": "c5879c0daa921f08675aa8c6b410c8150cc69436c8b0853b95fb08fdb777eaed",
       "probe_m1_attention_precision.py": "1140a0ab72a3019a2cd67283750efebd088224802d4f02c1592e8cce4e1b9ca0",
+      "prefill_attention_alignment.py": "46a930b44a658ac990e16a7acc7692a2306413756e1573bde101cabcab3cf376",
+      "prefill_gemm_alignment.py": "94622757665f8430a58091e2bce11b048ee8958fcf6a140405e96ee2b9cf1d56",
+      "prefill_alignment_runtime.py": "46988b9fffe558c8c6bbda3c9a7ee54e2393443a890cc9057fafe230af32eebe",
+      "optimized_stock_norm.py": "68d045bb7e38ac0c65f744644f9b0bb661a368a574f781c50be47fdf5ecf823a",
+      "optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
+      "optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5",
       "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
       "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
     },
@@ -129,7 +135,7 @@
           8
         ]
       },
-      "parent_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+      "parent_manifest_sha256": "c9f2765545996f0dffb0f8d8ab126cd4f3c3e5b3a4d7c167f56b618193d68cf2",
       "worker_sha256": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
       "qualification_sha256": "6c2f8986561cfb9d11cc8a1bd0c47b7e6f02107a4c7138a00a9a94043060e1b4",
       "files": {
@@ -150,12 +156,12 @@
       }
     },
     "optimized_d7": {
-      "manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
+      "manifest_sha256": "c9f2765545996f0dffb0f8d8ab126cd4f3c3e5b3a4d7c167f56b618193d68cf2",
       "state_layout": "existing-nine-slot",
       "worker": "optimized_d7_worker.OptimizedWorker",
       "arithmetic": {
-        "repair_sha256": "e342fcbd813559a9dc1b19e792322e53509888691d3504eadcaadb311bd3b7f5",
-        "performance_sha256": "3ac64300dd57b59cc6d1f151a868068c5f3e954b2684402cf4f2ebbc5890e01e",
+        "repair_sha256": "64295d52dafeb4e9231157c925e329c78f07303cf67efc2cc7724d034b23c042",
+        "performance_sha256": "6372548a7be4359774a6693a232c0d3359761a1d2b922df079dc71a098b2a9b4",
         "precision_casts": "preserve eager BF16 rounding during compilation",
         "state_layout": "existing-nine-slot",
         "target_head": "full BF16 with qualified M4-pair dispatch",
@@ -185,9 +191,17 @@
           "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
           "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
           "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+        },
+        "prefill_alignment": {
+          "attention": "same per-query TILE16, M1 split boundaries and FP32 merge order as decode",
+          "output_projections": "four contiguous 128-coefficient-aligned K ranges; ordered FP32 merge then BF16",
+          "final_normalization": "qualified M1 residual normalization for prefill and decode",
+          "attention_binary_sha256": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+          "projection_binary_sha256": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+          "snapshot_compatibility": "previous prefill states must be rebuilt; token histories remain valid"
         }
       },
-      "arithmetic_evidence_scope": "Native M1/prefill norm consistency and independent operator checks; older full-model alignment is historical.",
+      "arithmetic_evidence_scope": "Pinned single-R9700 prefill/decode forced-token samples and independent operator checks; not a universal proof or loop-rate measurement.",
       "admission_changes": [
         {
           "file": "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/stock_m1_attention.py",
@@ -236,7 +250,7 @@
         "sha256": "808774acdb7e305f5a4eb4cc3744907ed7629fdc4b70a37215bc4358d9811974",
         "scope": "320 forced decode rows and prefill; full-vocabulary hashes; no universal proof"
       },
-      "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260924-norm-consistency-v2",
+      "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260927-prefill-alignment-v2",
       "attention_precision": {
         "build": "/qualification/diagnostics/attention-precision-v1/build",
         "build_sha256": "29ca302b2acda366b46a02536f7aceea7008d24db75bec6e64a57947d30e43ab",
@@ -279,6 +293,34 @@
           "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
           "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
           "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+        }
+      },
+      "prefill_alignment": {
+        "qualification": "/qualification/diagnostics/prefill-alignment-v1/qualification.json",
+        "qualification_sha256": "ce635037f0fb55d81d40d51990d53af0f3793bd64f895fbb390a6c96eb61d8e3",
+        "sources": {
+          "prefill_attention_alignment.py": "46a930b44a658ac990e16a7acc7692a2306413756e1573bde101cabcab3cf376",
+          "prefill_gemm_alignment.py": "94622757665f8430a58091e2bce11b048ee8958fcf6a140405e96ee2b9cf1d56",
+          "prefill_alignment_runtime.py": "46988b9fffe558c8c6bbda3c9a7ee54e2393443a890cc9057fafe230af32eebe",
+          "optimized_stock_norm.py": "68d045bb7e38ac0c65f744644f9b0bb661a368a574f781c50be47fdf5ecf823a",
+          "optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
+          "optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5"
+        },
+        "attention": {
+          "build": "/qualification/diagnostics/prefill-alignment-v1/attention",
+          "build_sha256": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8"
+        },
+        "projection": {
+          "build": "/qualification/diagnostics/prefill-alignment-v1/projection",
+          "build_sha256": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623"
+        },
+        "contract": {
+          "attention": "same per-query TILE16, M1 split boundaries and FP32 merge order as decode",
+          "output_projections": "four contiguous 128-coefficient-aligned K ranges; ordered FP32 merge then BF16",
+          "final_normalization": "qualified M1 residual normalization for prefill and decode",
+          "attention_binary_sha256": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+          "projection_binary_sha256": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+          "snapshot_compatibility": "previous prefill states must be rebuilt; token histories remain valid"
         }
       }
     },
@@ -432,7 +474,7 @@
     "load_failure_policy": "fail",
     "content_hashes_cross_restart": true,
     "writes": "temporary-file-plus-atomic-rename",
-    "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+    "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
     "data_contract": {
       "schema": "qwen-radiance-release-data-v1",
       "image_digest": "sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
@@ -516,8 +558,8 @@
         "binary_sha256": "8b04f207868a4e800f5865e248a0f18396c1ec75dfb1fbd3ed696db97d28243a"
       },
       "optimized_arithmetic": {
-        "repair_sha256": "e342fcbd813559a9dc1b19e792322e53509888691d3504eadcaadb311bd3b7f5",
-        "performance_sha256": "3ac64300dd57b59cc6d1f151a868068c5f3e954b2684402cf4f2ebbc5890e01e",
+        "repair_sha256": "64295d52dafeb4e9231157c925e329c78f07303cf67efc2cc7724d034b23c042",
+        "performance_sha256": "6372548a7be4359774a6693a232c0d3359761a1d2b922df079dc71a098b2a9b4",
         "precision_casts": "preserve eager BF16 rounding during compilation",
         "state_layout": "existing-nine-slot",
         "target_head": "full BF16 with qualified M4-pair dispatch",
@@ -547,10 +589,18 @@
           "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
           "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
           "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+        },
+        "prefill_alignment": {
+          "attention": "same per-query TILE16, M1 split boundaries and FP32 merge order as decode",
+          "output_projections": "four contiguous 128-coefficient-aligned K ranges; ordered FP32 merge then BF16",
+          "final_normalization": "qualified M1 residual normalization for prefill and decode",
+          "attention_binary_sha256": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+          "projection_binary_sha256": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+          "snapshot_compatibility": "previous prefill states must be rebuilt; token histories remain valid"
         }
       }
     },
-    "previous_data_abi": "333d2702fbcd55c63ee868b65df97246ad2121a84dea747b6b98567aa0ccfff1",
+    "previous_data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
     "migration": "retain previous ABI for rollback; rebuild each resumed chat once",
     "chat_snapshots": {
       "isolation": "session identity and compaction generation cache_salt",

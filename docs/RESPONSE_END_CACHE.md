@@ -140,12 +140,20 @@ difference also occurs with response-end reuse disabled. The cache-copy oracle
 passed. No numerical kernel or sampling change was made to force this comparison
 to pass, and the failing cold-prefill comparison remains in the evidence.
 
-`--mode tool` deliberately checks that stronger, currently failing cold-prefill
+`--mode tool` deliberately checks that stronger cold-prefill
 equivalence. `--mode tool-repeat` checks independent executions with the same
 prefill/decode boundaries, including production sampling (temperature 1,
 top-p 0.95, top-k 40). Its result must not be substituted for the cold comparison.
 The repair preserves the processed native state; it does not claim that all
 alternative ways of computing that state have identical floating-point results.
+
+The subsequent [prefill arithmetic repair](PREFILL_ALIGNMENT.md) addresses this
+separate numerical failure. The original six tool-continuation cases now pass
+with both the full BF16 head and production Global-512. Full hidden/logit vectors
+also match in 2,320 forced-token positions across short, 60K and 200K contexts.
+That repair changes the snapshot arithmetic identity; the response-end copying
+mechanism and its physical state layout are unchanged. The historical failing
+comparison above remains evidence of the original defect.
 
 Aggregate results, installed source identities, negative controls and limitations
 are in [the qualification record](../benchmarks/results/response-end-cache-20260927.json).

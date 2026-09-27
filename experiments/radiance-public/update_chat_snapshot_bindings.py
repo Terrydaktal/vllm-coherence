@@ -92,6 +92,9 @@ if profile.get("optimized_d7"):
     if profile["optimized_d7"].get("attention_precision"):
         for name in profile["optimized_d7"]["attention_precision"]["sources"]:
             manifest["runtime"]["release_files"][name] = sha(BASE / name)
+    if profile["optimized_d7"].get("prefill_alignment"):
+        for name in profile["optimized_d7"]["prefill_alignment"]["sources"]:
+            manifest["runtime"]["release_files"][name] = sha(BASE / name)
     if profile["optimized_d7"].get("target_head", {}).get("mode") in (
         "global256",
         "global512",

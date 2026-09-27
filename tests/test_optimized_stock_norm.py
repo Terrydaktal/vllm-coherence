@@ -12,7 +12,8 @@ from qwen_r9700_lab.conformance_instrumentation import HookSet
 torch = pytest.importorskip("torch")
 
 
-def test_compiled_binding_retains_opaque_small_rows_and_original_prefill(monkeypatch):
+@pytest.mark.parametrize("prefill_aligned", [False, True])
+def test_compiled_binding_retains_opaque_small_rows_and_original_prefill(monkeypatch, prefill_aligned):
     calls = []
 
     class NativeNorm:
@@ -77,6 +78,7 @@ def test_compiled_binding_retains_opaque_small_rows_and_original_prefill(monkeyp
         model,
         types.SimpleNamespace(manifest={"norm_build": "test-build"}, hooks=hooks),
         residual_build="fast-residual-build",
+        prefill_aligned=prefill_aligned,
     )
     assert receipt["norm_modules"] == 161 and receipt["gdn_norm_modules"] == 48
     graphs = []
@@ -92,10 +94,12 @@ def test_compiled_binding_retains_opaque_small_rows_and_original_prefill(monkeyp
     x = torch.ones(8, 5120)
     a, b = norm(x, x)
     assert torch.equal(a, x + 20) and torch.equal(b, x + 30)
-    for rows in (1, 9):
+    for rows in (1, 9, 257):
         x = torch.ones(rows, 5120)
         a, b = norm(x, x)
-        assert torch.equal(a, x + 5) and torch.equal(b, x + 6)
+        use_aligned = prefill_aligned and rows > 8
+        assert torch.equal(a, x + (20 if use_aligned else 5))
+        assert torch.equal(b, x + (30 if use_aligned else 6))
     gated = next(item for name, item in inventory if "linear_attn.norm" in name)
     compiled_gdn = torch.compile(gated.forward, backend=backend, fullgraph=True)
     for rows, expected in ((48, 9), (384, 6), (432, 9)):
@@ -103,7 +107,7 @@ def test_compiled_binding_retains_opaque_small_rows_and_original_prefill(monkeyp
         assert torch.equal(compiled_gdn(x, x), torch.full_like(x, expected))
     assert ("norm", 8) in calls and ("gdn", 384) in calls
     assert ("fast-residual", 8) in calls
-    assert all(1 < rows <= 8 for kind, rows in calls if kind == "fast-residual")
+    assert all(1 < rows <= (2048 if prefill_aligned else 8) for kind, rows in calls if kind == "fast-residual")
     assert all(rows <= 8 for kind, rows in calls if kind == "norm")
     assert any("qwen_d7_qualified" in str(g.graph) for g in graphs)
 

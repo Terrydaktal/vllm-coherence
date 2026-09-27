@@ -149,12 +149,45 @@ export function fileOperations(fileOps) {
   return { readFiles, modifiedFiles, suffix };
 }
 
+const SAFE_ENDPOINT_ERRORS = new Map([
+  ["Radiance backend was updated. Exit Pi and resume the same chat with pi-opsec --workspace <your-workspace> --continue. /reload cannot refresh the cache identity. Your transcript is retained.",
+    "snapshot identity mismatch; exit Pi and resume with pi-opsec --workspace <your-workspace> --continue. If Pi was already restarted, the host inference relay needs its configuration refreshed"],
+  ["Radiance configuration is unavailable", "the host inference relay cannot read its Radiance configuration"],
+  ["invalid or unsupported inference request", "the VM inference relay rejected the request format"],
+]);
+
+async function safeEndpointError(response) {
+  const reader = response.body?.getReader();
+  if (!reader) return undefined;
+  // Error bodies can echo prompts. Expose only known static relay errors, and
+  // never wait indefinitely or buffer an unbounded body to find one.
+  const timer = setTimeout(() => { void reader.cancel().catch(() => {}); }, 1_000);
+  try {
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 4_096) return undefined;
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    return typeof value?.error === "string" ? SAFE_ENDPOINT_ERRORS.get(value.error) : undefined;
+  } catch { return undefined; }
+  finally { clearTimeout(timer); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
+
 export async function postJson(url, body, headers, signal, fetcher = fetch) {
   signal?.throwIfAborted();
   const response = await fetcher(url, { method: "POST", headers, body: JSON.stringify(body), signal });
   if (!response.ok) {
-    await response.body?.cancel();
-    throw new Error(`compaction endpoint returned HTTP ${response.status}`);
+    const detail = await safeEndpointError(response);
+    signal?.throwIfAborted();
+    throw new Error(`compaction endpoint returned HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
   }
   return response;
 }

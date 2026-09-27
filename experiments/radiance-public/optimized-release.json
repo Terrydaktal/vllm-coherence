@@ -1,13 +1,13 @@
 {
   "schema": "urn:qwen:optimized-pi-release:v1",
-  "host_root": "/home/lewis/tasks/qwen/artifacts/norm-consistency-deploy-20260924/payload",
+  "host_root": "/home/lewis/.local/share/qwen-r9700/optimized-pi/20260927-prefill-alignment-v2",
   "container_root": "/qualification",
   "state_layout": "existing-nine-slot",
   "target_head": "global512",
   "repair": "/qualification/preflight/d7-stock-repair-bundle-003.json",
-  "repair_sha256": "392ff62ca444f542838d51e8c578024d1cf7fc0cb3b4b7742744d704b1b044aa",
+  "repair_sha256": "66c7f9bb79ed5d8c1c582c9885230b8b72f3b2d2eb6efa49b6ff56947cfa2363",
   "performance": "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json",
-  "performance_sha256": "aff6a623cb1225af1b616934763f8068314affb73cfe1c9efe971e9393994a16",
+  "performance_sha256": "fb64352331d7a3b7fc6dccae312b69cfae05693449d46ea1ff96fa450dabf241",
   "pythonpath": [
     "/qualification/preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime",
     "/qualification/preflight/d7-rotary-intervention-v1/src",
@@ -96,6 +96,16 @@
     "diagnostics/packed-gdn-build-001/packed_convolution.py": "73b55c8491429f28f762db0b037625d1319f388de3668d8ceee708cb38726f69",
     "diagnostics/packed-gdn-build-001/packed_recurrent.py": "3c39a534ffa8c91576c9e66fa177ee7349a8fa7db9c4f944696b0699ac3bd646",
     "diagnostics/packed-gdn-probe-001/result.json": "9357a8412526e4ce14ece03e535c82d796b22e1bdf4fce7e8b714ff42f87c7f3",
+    "diagnostics/prefill-alignment-v1/attention/aligned-prefill.hip": "0ee923f59560de53a3f96668d0a75e829268dc32d369851144ee101a92326e3e",
+    "diagnostics/prefill-alignment-v1/attention/build.json": "e5dcfff85426a49e12f72b7d1fbe9273a2233b228ef3aa79c44d8414328cdd0e",
+    "diagnostics/prefill-alignment-v1/attention/candidate.so": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+    "diagnostics/prefill-alignment-v1/attention/r4d.h": "c71bb6946f912d85afeab7fdd1410a368a87aa0e6479ac9641d68905d810bb1c",
+    "diagnostics/prefill-alignment-v1/attention/r4d_common.h": "16db14fa42e7377c39641a3abea6d2ca524bb3a33e2a8afc55e9ccd3f5c0bacd",
+    "diagnostics/prefill-alignment-v1/attention/r4d_dt16.h": "b61525f1dbb6b272642e0e1410a3d753d1136ed87eb07cefca512843096c4c24",
+    "diagnostics/prefill-alignment-v1/projection/aligned-prefill-gemm.hip": "654c414b1be64aaa6879656d64762a72153c668a0bd9d8e48c64d09e9fa09746",
+    "diagnostics/prefill-alignment-v1/projection/build.json": "a77c55a414db0ed7cbbcd852fd81a0a876a14be7ea4abb7b71d3a0143133ad98",
+    "diagnostics/prefill-alignment-v1/projection/candidate.so": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+    "diagnostics/prefill-alignment-v1/qualification.json": "ce635037f0fb55d81d40d51990d53af0f3793bd64f895fbb390a6c96eb61d8e3",
     "diagnostics/stock-m1-norm-build-004/build.json": "9d8d4f4e96ba5d3257af2f624362d96a02303a5d8aa49c44f9caa1c4152c6d73",
     "diagnostics/stock-m1-norm-build-004/candidate.so": "b9dc169e0f75f9f21e0e6d6e361e8dc18687781863f5ee4105f88cdfcf6ac5c6",
     "diagnostics/stock-m1-norm-build-004/stock_m1_gemma_norm.hip": "e987085f5488e62f4946135f7b13246a40e05c4a0cf12c17c5c588d0c0024ce2",
@@ -146,10 +156,10 @@
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/gdn_intermediate_trace.py": "22ac81a11b5f37c665d480e091a7f7b184e67c75bc23675986ffccb6ec58b14e",
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/isolated_d7_capture.py": "becf4f5b80970b96b48645f4944e40179a6e319559765dd5bf2762b0244d1f1d",
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/mxfp4_lookup_reference.py": "68de527d9d4d2b78a7e3bd2159d2737b3e861990b482e82952157e39ebb535dd",
-    "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_d7_performance.py": "c7e7408878375ca26395a923decb1a7fd852bfbf070f93acb437ba0bb3ec0e79",
+    "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_d7_startup.py": "555ef8b0c8620d8885412158d078553d932044c4afaf4d3a6b3181c7c6c118bc",
-    "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_d7_worker.py": "7b7041f60a2acfe6c4afa74ff4060197caa280f25b89ec23d4859915f0e1e238",
-    "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad",
+    "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5",
+    "preflight/d7-rotary-intervention-v1/experiments/radiance-public/optimized_stock_norm.py": "68d045bb7e38ac0c65f744644f9b0bb661a368a574f781c50be47fdf5ecf823a",
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/packed_gdn_transport.py": "4d693caf67be2b3c28c1d18f2069637b651544a9f09e2bedd710ec9f22be4613",
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/parallel_ordered_reference.py": "e06f821ba97877d9729ea664390f5dcc2144b1c15ee6f7ae22cece927d6ae8ad",
     "preflight/d7-rotary-intervention-v1/experiments/radiance-public/patch_causal_conv_product_precision.py": "e3bfad7e1e1bfc936b0fe6d919338488cb8d925758c1b3f9b5ede470d120d300",
@@ -395,7 +405,7 @@
     "preflight/d7-rotary-intervention-v1/src/qwen_r9700_lab/tree_runtime.py": "41325d702629211f45cae69399cf3e16a20a01d3748c416d1615b9d6a3429950",
     "preflight/d7-rotary-intervention-v1/src/qwen_r9700_lab/vllm_model_output_fingerprint.py": "1f728362c14631b0056efa1331fe13d21a6b028299577f6d0ee3f75155c1a048",
     "preflight/d7-rotary-intervention-v1/src/qwen_r9700_lab/vllm_repetition_escape_runtime.py": "bd55ba66b6cac4f4dd802c14b2bdfbbc829a70000b4cab2bbf74b1902cedc1bc",
-    "preflight/d7-stock-repair-bundle-003.json": "392ff62ca444f542838d51e8c578024d1cf7fc0cb3b4b7742744d704b1b044aa",
+    "preflight/d7-stock-repair-bundle-003.json": "66c7f9bb79ed5d8c1c582c9885230b8b72f3b2d2eb6efa49b6ff56947cfa2363",
     "preflight/mxfp4-dispatch-v1/build-v2/build.json": "bae3f2c325442850c9194eabf650f5f17b2098d6c85e650626aa1c288f216136",
     "preflight/mxfp4-dispatch-v1/build-v2/candidate/radiance_mxfp4.py": "e1c6333cce1d880e9bd0993dd63634c84b02557e06dd299aa137f6bd2f1dc9a9",
     "preflight/mxfp4-dispatch-v1/build-v2/candidate/radiance_mxfp4_fp8.hip": "0507fbdfef3c348266b011069bd55222f5cd3a8adeea4e1f272c154dd45a5f79",
@@ -579,7 +589,7 @@
     "preflight/stock-gdn-model-v22/runtime/qwen_radiance_fair_scheduler.py": "31cc3b73c7f69d15da7062768522c94d59e7c45fc4a26e7b2046312826bcfe1c",
     "preflight/stock-gdn-model-v22/runtime/sitecustomize.py": "6bced60b9e460f91a19b5ef97578cbe098bbc66bf850c3e2e33647f8716eed7c",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/launch.json": "47347a1315fcc9f5a94e11695459e08722385887509b03c4b9bbf53d9752be1d",
-    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json": "aff6a623cb1225af1b616934763f8068314affb73cfe1c9efe971e9393994a16",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/performance.json": "fb64352331d7a3b7fc6dccae312b69cfae05693449d46ea1ff96fa450dabf241",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/analyze_attention_decode_transition.py": "2489a3de238c06afd7c2aedd3885375ac62c73573d66c48fd5e28e186306de12",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/analyze_d7_stage_profile.py": "4e91f78cccb34f23ca2aaed3e9e6cafd13fbfa1877fef7b4297143458e5874cf",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/analyze_gdn_decode_transition.py": "421eebf3094d5b1bf0301c942eb4ae0f37a2a3d9be5431c03ed1c2491b12f9f8",
@@ -636,11 +646,11 @@
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/mxfp4_dispatch.py": "6ef806970c431022cc9f451a3f35c861fb243585149f2e77711dcff42341b8b6",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/mxfp4_fold_precision.py": "842e367491460b343aa834094ac417c3ed2f083be82f01714df2ec3d06c0418d",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/mxfp4_lookup_reference.py": "68de527d9d4d2b78a7e3bd2159d2737b3e861990b482e82952157e39ebb535dd",
-    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_d7_performance.py": "ad7afb367a1a2dbaea9db7b0887108a4a5978e6dfb7052ec0bc5cb90d44dbe44",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_d7_startup.py": "9b2151cb31d3bf68c7dfbf012560e5151dba8f8a5709d98309616fd47ab876dd",
-    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_d7_worker.py": "5db719402aeb46aff55ce2920c13e182da0f2822ff16baf39e3504a22439ec5b",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_prefill_scan.py": "089f819b48cc98bf55dc604632961539793a29a66201129b2a3c5c21db27ddad",
-    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_stock_norm.py": "cc077e30e57fd19c3c414e4b7656c8b93ceb922f44d6559110305eae09ee70ad",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/optimized_stock_norm.py": "68d045bb7e38ac0c65f744644f9b0bb661a368a574f781c50be47fdf5ecf823a",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/packed_gdn_transport.py": "4d693caf67be2b3c28c1d18f2069637b651544a9f09e2bedd710ec9f22be4613",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/parallel_ordered_reference.py": "e06f821ba97877d9729ea664390f5dcc2144b1c15ee6f7ae22cece927d6ae8ad",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/patch_causal_conv_product_precision.py": "e3bfad7e1e1bfc936b0fe6d919338488cb8d925758c1b3f9b5ede470d120d300",
@@ -662,6 +672,9 @@
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/pi_prefill_admission.py": "8f9c57a3665e27c4a8dc31cc68e976a5869f85360468e9c3c4636ba5940e26d3",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/pilot_certified_head.py": "a563ab9da56714d3aa5620c05801e6d8370648e6e3940977d3fe072122552531",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prefill_activation_tiles.py": "956c2aed38eb03ac8be45553dae682d497ce623cc32ea421ad523b44e0abd38d",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prefill_alignment_runtime.py": "46988b9fffe558c8c6bbda3c9a7ee54e2393443a890cc9057fafe230af32eebe",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prefill_attention_alignment.py": "46a930b44a658ac990e16a7acc7692a2306413756e1573bde101cabcab3cf376",
+    "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prefill_gemm_alignment.py": "94622757665f8430a58091e2bce11b048ee8958fcf6a140405e96ee2b9cf1d56",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prefill_tiles_admission.py": "74bff6d04b7ee9762e721bd1f6ac3d069a69566d8012ef433d50c83e8959cc5f",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prepare_certified_head_captures.py": "4e2a0f128a4cb4a520fe9c235f8f6877ff95513c17089b99793e410a22713e66",
     "preflight/tp1-lazy-backport-v1/bundle-existing-v1/runtime/prepare_loop_counterfactuals.py": "d3b7aa371f64f954662f1cf54644c8ef9cbf17f546e285166d95b1014a3387ca",
@@ -767,7 +780,7 @@
     "preflight/tp1-lazy-backport-v1/fp8-build-v5/stock_fp8_epilogue.hip": "12123cc8c1e5b837551782ba4affb8238f65969df6531bbceb7139d79a728ec0",
     "preflight/tp1-lazy-backport-v1/fp8-final/result.json": "4dab6a4bca30f6f04d75c9028da37f941d5d4df565ad09e84af9170c70654fff"
   },
-  "parent_manifest_sha256": "2f2aacca421c70719f1e389d678d2d2ae3c878e975387d4cb465312ba1408baf",
+  "parent_manifest_sha256": "fc55bf713b95b1d6bc308954d2fffc23b0445875b2eff09f7dc633b4146ddc3f",
   "attention_boundary_qualification": {
     "path": "/qualification/diagnostics/attention-page-boundary-v1/pi-comparison.json",
     "sha256": "afeed5c1f6216dbe45a273bce72e4a5b707d23133322b71d32779fabc9114dd2",
@@ -836,6 +849,34 @@
       "gdn_norm": "M1 four-adjacent-components per lane; final BF16 boundary",
       "norm_binary_sha256": "3398d352ea865686c6f4724fa1c26647d4ab93f79ebbe5fd956492f29d37afe5",
       "gdn_source_sha256": "75d1cafebf59ce444508f49a4c19a3eee47442d6eb2c20a5efc8b0042f73218c"
+    }
+  },
+  "prefill_alignment": {
+    "qualification": "/qualification/diagnostics/prefill-alignment-v1/qualification.json",
+    "qualification_sha256": "ce635037f0fb55d81d40d51990d53af0f3793bd64f895fbb390a6c96eb61d8e3",
+    "sources": {
+      "prefill_attention_alignment.py": "46a930b44a658ac990e16a7acc7692a2306413756e1573bde101cabcab3cf376",
+      "prefill_gemm_alignment.py": "94622757665f8430a58091e2bce11b048ee8958fcf6a140405e96ee2b9cf1d56",
+      "prefill_alignment_runtime.py": "46988b9fffe558c8c6bbda3c9a7ee54e2393443a890cc9057fafe230af32eebe",
+      "optimized_stock_norm.py": "68d045bb7e38ac0c65f744644f9b0bb661a368a574f781c50be47fdf5ecf823a",
+      "optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
+      "optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5"
+    },
+    "attention": {
+      "build": "/qualification/diagnostics/prefill-alignment-v1/attention",
+      "build_sha256": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8"
+    },
+    "projection": {
+      "build": "/qualification/diagnostics/prefill-alignment-v1/projection",
+      "build_sha256": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623"
+    },
+    "contract": {
+      "attention": "same per-query TILE16, M1 split boundaries and FP32 merge order as decode",
+      "output_projections": "four contiguous 128-coefficient-aligned K ranges; ordered FP32 merge then BF16",
+      "final_normalization": "qualified M1 residual normalization for prefill and decode",
+      "attention_binary_sha256": "0b3c3d15141fef544a6e3629820ef2d834ade7c0491ebdffcfa5b6de5c01ba1c",
+      "projection_binary_sha256": "35a81d707a2512cfc69b3f52fcc2f841d9cf089e2c001b9cc8fbc7067b7563a2",
+      "snapshot_compatibility": "previous prefill states must be rebuilt; token histories remain valid"
     }
   }
 }

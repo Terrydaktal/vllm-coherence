@@ -200,6 +200,7 @@ class OptimizedWorker(Worker):
                 self.model_runner.model,
                 self._qwen_persistent_repairs,
                 residual_build=residual,
+                prefill_aligned=bool(self._qwen_performance_repairs and self._qwen_performance_repairs.manifest.get("prefill_alignment")),
             )
             self._qwen_compiled_dispatch["gdn_reference_dispatch"] = dispatch
             if self._qwen_performance_repairs is not None:

@@ -32,6 +32,7 @@ async def run(args):
         "mode": args.mode,
         "expect_rebuild": args.expect_rebuild,
         "sampling": "T=1,p=0.95,k=40,seed=0" if args.sampled else "greedy",
+        "target_head_policy": "full-bf16" if getattr(args, "full_bf16_head", False) else "production",
         "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "installed_sources": {
             name: hashlib.sha256((package / name).read_bytes()).hexdigest()
@@ -58,6 +59,8 @@ async def run(args):
         suite = Suite(args, client)
         if args.sampled:
             suite.sampling = {"temperature": 1.0, "top_p": 0.95, "top_k": 40, "seed": 0}
+        elif getattr(args, "full_bf16_head", False):
+            suite.sampling = {"temperature": 0, "top_k": 129, "seed": 0}
 
         async def consume(chat, next_prompt, expected, minimum, label):
             resumed = suite.stream(label, next_prompt, len(expected), chat)
@@ -433,6 +436,7 @@ def main():
     )
     p.add_argument("--fixture", type=Path)
     p.add_argument("--sampled", action="store_true")
+    p.add_argument("--full-bf16-head", action="store_true", help="Greedy diagnostics: request top_k=129 to select the qualified full-vocabulary head")
     p.add_argument(
         "--expect-rebuild",
         action="store_true",
@@ -444,6 +448,8 @@ def main():
     p.add_argument("--continue-tokens", type=int, default=64)
     p.add_argument("--output-tokens", type=int, default=192)
     args = p.parse_args()
+    if args.sampled and args.full_bf16_head:
+        p.error("--full-bf16-head is restricted to greedy comparisons")
     args.observe = False
     args.case_group = "response-end"
     if args.mode in {"prepare", "restore"} and args.fixture is None:

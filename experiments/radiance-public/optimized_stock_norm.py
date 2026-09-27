@@ -45,7 +45,7 @@ def prepare_native_gdn_norms(model):
     }
 
 
-def install_compiled_norms(model, repairs, *, residual_build=None):
+def install_compiled_norms(model, repairs, *, residual_build=None, prefill_aligned=False):
     from stock_m1_gdn_norm import StockM1GdnNorm
     from stock_m1_norm import StockM1Norm
 
@@ -74,7 +74,7 @@ def install_compiled_norms(model, repairs, *, residual_build=None):
         x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor, eps: float, key: str
     ) -> tuple[torch.Tensor, torch.Tensor]:
         calls[f"residual/{x.shape[0]}"] += 1
-        if 1 < x.shape[0] <= 8:
+        if 1 < x.shape[0] <= 8 or (prefill_aligned and 8 < x.shape[0] <= 2048):
             return residual_candidate(x, residual, weight, eps)
         return originals[key](x, residual)
 
@@ -145,7 +145,7 @@ def install_compiled_norms(model, repairs, *, residual_build=None):
         "gdn_norm_modules": gdns,
         "norm_build": candidate.manifest["sha256"],
         "residual_norm_build": residual_candidate.manifest["sha256"],
-        "arithmetic": "qualified M1 arithmetic contract; original large-prefill operators",
+        "arithmetic": "qualified M1 arithmetic contract; aligned prefill residual norm" if prefill_aligned else "qualified M1 arithmetic contract; original large-prefill operators",
         "compiler_binding": "torch.library.custom_op with fresh fake outputs",
         "runtime_calls_including_graph_capture": calls,
     }

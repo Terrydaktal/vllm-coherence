@@ -71,3 +71,21 @@ wrapper already rejects them before a GPU launch.
 
 Any adopted arithmetic repair needs a new snapshot identity and fresh relevant
 qualification. The earlier 10K full-model table cannot qualify these changes.
+
+## Prefill follows the decode reduction topology
+
+The [prefill alignment release](PREFILL_ALIGNMENT.md) additionally binds these
+choices in its executable release manifest and snapshot arithmetic identity:
+
+- Each attention query uses the corrected decode TILE16 sequence, its own causal
+  context length, the same split boundaries and the same FP32 split-merge order.
+  Batching queries may share loads but must not change that query's arithmetic.
+- Down/output MXFP4 projections use four contiguous K ranges aligned to
+  128 coefficients. Their FP32 partials merge in decode order before scaling and
+  the final BF16 result. Row tiling does not change K partitions.
+- Final residual normalization uses the same qualified reduction for prefill
+  widths 9–2,048 as for decode, including its residual rounding boundary.
+
+These are concrete implementation choices that the earlier real-number formulas
+alone did not specify. Exact sampled checks cover their composition; this is
+not a proof for every arithmetic input or an independently proved full model.

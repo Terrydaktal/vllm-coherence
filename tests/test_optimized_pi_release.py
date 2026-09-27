@@ -85,6 +85,20 @@ def test_attention_repair_cannot_reuse_an_old_arithmetic_identity(tmp_path):
     assert env["QWEN_ATTENTION_PRECISION_BUILD"] == entry["build"]
 
 
+def test_prefill_alignment_requires_new_snapshot_arithmetic(tmp_path):
+    root, _, manifest = payload(tmp_path)
+    entry = {"contract": {"attention": "M1 per-query split/merge", "projection": "ordered split-K4"}}
+    manifest["prefill_alignment"] = entry
+    profile = publish(tmp_path, manifest)
+    env = {}
+    with pytest.raises(ValueError, match="snapshot arithmetic identity"):
+        release.configure(profile, tmp_path, root=root, environ=env)
+    assert env == {}
+    profile["optimized_d7"].update(prefill_alignment=entry, arithmetic={"prefill_alignment": entry["contract"]})
+    release.configure(profile, tmp_path, root=root, environ=env)
+    assert env["TORCHINDUCTOR_EMULATE_PRECISION_CASTS"] == "1"
+
+
 @pytest.mark.parametrize(
     "key,value",
     [("RADIANCE_GDN_LAZY", "1"), ("TORCHINDUCTOR_EMULATE_PRECISION_CASTS", "0")],

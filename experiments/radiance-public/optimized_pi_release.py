@@ -99,6 +99,11 @@ def configure(profile, patches, *, root=Path("/qualification"), environ=None):
         raise ValueError(
             "normalization repair requires its own snapshot arithmetic identity"
         )
+    if manifest.get("prefill_alignment") and (
+        entry.get("prefill_alignment") != manifest["prefill_alignment"]
+        or entry.get("arithmetic", {}).get("prefill_alignment") != manifest["prefill_alignment"]["contract"]
+    ):
+        raise ValueError("prefill alignment requires its own snapshot arithmetic identity")
     environ.update(env)
     if manifest.get("attention_precision"):
         environ["QWEN_ATTENTION_PRECISION_BUILD"] = manifest["attention_precision"][
