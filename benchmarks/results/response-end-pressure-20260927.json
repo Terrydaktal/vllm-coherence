@@ -1,0 +1,563 @@
+{
+  "schema": "urn:coherence:response-end-pressure-qualification:v1",
+  "date": "2026-09-27",
+  "status": "PASS_FOR_DECLARED_SCOPE",
+  "scope": "Synthetic allocator liveness, exact warm and cancelled continuation checks on the pinned compiled synchronous TP1 DFlash backend. Not an independent model arithmetic oracle.",
+  "runtime_abi": "ee48c7ffe67e2a2f907b19317bb06b3f2cbe1b93b302f920e8954b653c1d3105",
+  "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+  "installed_sources": {
+    "qwen_radiance_response_end.py": "e9a65ddd4e7f9d71f15af3dccb59ead8b039f63542c2d5fdc92bf8c8552331d0",
+    "qwen_radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+    "qwen_radiance_fair_scheduler.py": "5be695c56cb8512907fd2e4f7c1cccffd5a2cd3e41fd8a6b53c88fa623ade43a",
+    "qwen_radiance_chat_tier.py": "3e52176850476f62a4b1144c0d8ef163c61f1f6a5057c4a2094e95bbd1f4eb78",
+    "qwen_radiance_cache.py": "a54764b22b576efbe4094cca6322b55c2c65d8325032162c69aa1f76f61d0243",
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "vllm/v1/core/kv_cache_utils.py": "d354339f814ee84c729a6224e027d63165b17db770f57aaa1c471769f0591208",
+    "vllm/v1/core/sched/scheduler.py": "278e7f15a307cbcee0906e258838114cbf7df9933ad4fac80d4f48a3d6f54da1",
+    "vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py": "6b19840194524b39234c50f2c310e839d8a4d737ae21cfdfa243cd65c8675a99"
+  },
+  "runner_sha256": "65eb8078cb5fb9e3799924fb1ce3ca8dea7d8c4a82cd8b90855fe9d160a255e1",
+  "negative_control": {
+    "samples": [
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 234016,
+        "preemptions": 0,
+        "free_blocks": 23,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      },
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 235664,
+        "preemptions": 0,
+        "free_blocks": 14,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      },
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 237312,
+        "preemptions": 0,
+        "free_blocks": 5,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      },
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 234016,
+        "preemptions": 1,
+        "free_blocks": 23,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      },
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 235664,
+        "preemptions": 1,
+        "free_blocks": 14,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      },
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 237312,
+        "preemptions": 1,
+        "free_blocks": 5,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      },
+      {
+        "input_tokens": 239720,
+        "computed_tokens": 234016,
+        "preemptions": 2,
+        "free_blocks": 23,
+        "endpoint_tokens": 233182,
+        "endpoint_pins": 292
+      }
+    ],
+    "received_tokens": 0,
+    "repeated_preemption": true
+  },
+  "capacity_cases": [
+    {
+      "case": "repaired-compaction-size",
+      "tokens": 1024,
+      "sha256": "471887529d3875633f877060909680244ac0fa7eeb4d423ad175aa7a723e00a8",
+      "finish": "length",
+      "seconds": 18.868186627019895,
+      "usage": {
+        "prompt_tokens": 239720,
+        "total_tokens": 240744,
+        "completion_tokens": 1024,
+        "prompt_tokens_details": {
+          "cached_tokens": 233182
+        }
+      },
+      "samples": [
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 234016,
+          "preemptions": 0,
+          "free_blocks": 23,
+          "endpoint_tokens": 233182,
+          "endpoint_pins": 292
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 235664,
+          "preemptions": 0,
+          "free_blocks": 14,
+          "endpoint_tokens": 233182,
+          "endpoint_pins": 292
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 237312,
+          "preemptions": 0,
+          "free_blocks": 5,
+          "endpoint_tokens": 233182,
+          "endpoint_pins": 292
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 238960,
+          "preemptions": 0,
+          "free_blocks": 19,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 239720,
+          "preemptions": 0,
+          "free_blocks": 14,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 239808,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 239888,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 239968,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240048,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240128,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240208,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240288,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240368,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240448,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240528,
+          "preemptions": 0,
+          "free_blocks": 15,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240608,
+          "preemptions": 0,
+          "free_blocks": 12,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 239720,
+          "computed_tokens": 240688,
+          "preemptions": 0,
+          "free_blocks": 6,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        }
+      ],
+      "first_data_seconds": 12.104143321019365
+    },
+    {
+      "case": "near-model-limit",
+      "tokens": 512,
+      "sha256": "964e20c392a4b9254b0adfc14e7d4efca208eb5a752fc4c6974d77d1adfc3fca",
+      "finish": "length",
+      "seconds": 23.78476416299236,
+      "usage": {
+        "prompt_tokens": 252000,
+        "total_tokens": 252512,
+        "completion_tokens": 512,
+        "prompt_tokens_details": {
+          "cached_tokens": 240744
+        }
+      },
+      "samples": [
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 242256,
+          "preemptions": 0,
+          "free_blocks": 12,
+          "endpoint_tokens": 240744,
+          "endpoint_pins": 303
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 243904,
+          "preemptions": 0,
+          "free_blocks": 3,
+          "endpoint_tokens": 240744,
+          "endpoint_pins": 303
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 245552,
+          "preemptions": 0,
+          "free_blocks": 11,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 247200,
+          "preemptions": 0,
+          "free_blocks": 3,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 248848,
+          "preemptions": 0,
+          "free_blocks": 7,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 250496,
+          "preemptions": 0,
+          "free_blocks": 5,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252000,
+          "preemptions": 0,
+          "free_blocks": 0,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252088,
+          "preemptions": 0,
+          "free_blocks": 1,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252160,
+          "preemptions": 0,
+          "free_blocks": 4,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252240,
+          "preemptions": 0,
+          "free_blocks": 4,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252320,
+          "preemptions": 0,
+          "free_blocks": 4,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252400,
+          "preemptions": 0,
+          "free_blocks": 4,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        },
+        {
+          "input_tokens": 252000,
+          "computed_tokens": 252480,
+          "preemptions": 0,
+          "free_blocks": 4,
+          "endpoint_tokens": 0,
+          "endpoint_pins": 0
+        }
+      ],
+      "first_data_seconds": 20.377608768991195
+    }
+  ],
+  "last_pressure_reclaim": {
+    "schema": "urn:coherence:cache-pressure:v1",
+    "pid": 629,
+    "updated_at": 1790510598.6755195,
+    "computed_tokens": 252136,
+    "freed_blocks": 12,
+    "free_blocks": 13,
+    "protected_transfer_blocks": 0
+  },
+  "warm_continuations": [
+    {
+      "case": "warm",
+      "continuation_tokens": 64,
+      "same_tokens": true,
+      "first_difference": null,
+      "expected_sha256": "c7b5406b8eb1d54d100932aa2cdeacc19e034ec6ad1b8bb53ebc63af89e35385",
+      "observed_sha256": "c7b5406b8eb1d54d100932aa2cdeacc19e034ec6ad1b8bb53ebc63af89e35385",
+      "cached_tokens": 1670,
+      "prompt_tokens": 1675,
+      "uncached_tokens": 5,
+      "first_data_seconds": 0.5187666839919984,
+      "seconds": 1.2069970669981558,
+      "backend": {
+        "input_tokens": 1675,
+        "computed_tokens": 1742,
+        "cached_tokens": 1670,
+        "timings_ms": {
+          "admission": 0.433,
+          "cache_update": 0.261,
+          "cache_lookup": 0.73,
+          "prefill": 110.185,
+          "generate": 1090.021,
+          "complete": 0.003
+        },
+        "response_end_tokens": 1739,
+        "local_response_end_tokens": 1670
+      },
+      "context_tokens": 1651,
+      "split_output_tokens": 19,
+      "appended_tokens": 5,
+      "producer_finish": "length"
+    },
+    {
+      "case": "warm",
+      "continuation_tokens": 64,
+      "same_tokens": true,
+      "first_difference": null,
+      "expected_sha256": "6d96cdd3559fbc683d8f2321148e089b341a54e365bf986bc73f44750d365486",
+      "observed_sha256": "6d96cdd3559fbc683d8f2321148e089b341a54e365bf986bc73f44750d365486",
+      "cached_tokens": 1713,
+      "prompt_tokens": 1719,
+      "uncached_tokens": 6,
+      "first_data_seconds": 0.2747473540075589,
+      "seconds": 0.8803901670034975,
+      "backend": {
+        "input_tokens": 1719,
+        "computed_tokens": 1787,
+        "cached_tokens": 1713,
+        "timings_ms": {
+          "admission": 0.526,
+          "cache_update": 0.332,
+          "cache_lookup": 0.764,
+          "prefill": 52.039,
+          "generate": 821.407,
+          "complete": 0.003
+        },
+        "response_end_tokens": 1783,
+        "local_response_end_tokens": 1713
+      },
+      "context_tokens": 1651,
+      "split_output_tokens": 63,
+      "appended_tokens": 5,
+      "producer_finish": "length"
+    }
+  ],
+  "cancelled_continuations": [
+    {
+      "case": "cancel",
+      "continuation_tokens": 64,
+      "same_tokens": true,
+      "first_difference": null,
+      "expected_sha256": "c7b5406b8eb1d54d100932aa2cdeacc19e034ec6ad1b8bb53ebc63af89e35385",
+      "observed_sha256": "c7b5406b8eb1d54d100932aa2cdeacc19e034ec6ad1b8bb53ebc63af89e35385",
+      "cached_tokens": 1670,
+      "prompt_tokens": 1675,
+      "uncached_tokens": 5,
+      "first_data_seconds": 0.048587953991955146,
+      "seconds": 0.5656786549952812,
+      "backend": {
+        "input_tokens": 1675,
+        "computed_tokens": 1742,
+        "cached_tokens": 1670,
+        "timings_ms": {
+          "admission": 0.548,
+          "cache_lookup": 0.79,
+          "prefill": 41.797,
+          "generate": 514.142,
+          "complete": 0.003
+        },
+        "response_end_tokens": 1739,
+        "local_response_end_tokens": 1670
+      },
+      "context_tokens": 1651,
+      "split_output_tokens": 19,
+      "appended_tokens": 5,
+      "producer_finish": "length"
+    },
+    {
+      "case": "cancel",
+      "continuation_tokens": 64,
+      "same_tokens": true,
+      "first_difference": null,
+      "expected_sha256": "6d96cdd3559fbc683d8f2321148e089b341a54e365bf986bc73f44750d365486",
+      "observed_sha256": "6d96cdd3559fbc683d8f2321148e089b341a54e365bf986bc73f44750d365486",
+      "cached_tokens": 1713,
+      "prompt_tokens": 1719,
+      "uncached_tokens": 6,
+      "first_data_seconds": 0.06480293200002052,
+      "seconds": 0.5335849539842457,
+      "backend": {
+        "input_tokens": 1719,
+        "computed_tokens": 1787,
+        "cached_tokens": 1713,
+        "timings_ms": {
+          "admission": 0.745,
+          "cache_lookup": 0.814,
+          "prefill": 56.981,
+          "generate": 469.887,
+          "complete": 0.003
+        },
+        "response_end_tokens": 1783,
+        "local_response_end_tokens": 1713
+      },
+      "context_tokens": 1651,
+      "split_output_tokens": 63,
+      "appended_tokens": 5,
+      "producer_finish": "length"
+    }
+  ],
+  "repairs": [
+    "Release the superseded endpoint under allocation pressure only after the successor has advanced and worker processing is complete; keep it for cancellation/retry while space allows.",
+    "Drop optional historical GDN snapshot references older than the native working set; retain active/speculative state and pending transfer readers, then retry allocation once.",
+    "Do not require temporary endpoint/copy buffers to coexist with all future prompt blocks during exact local endpoint admission; enforce every per-step allocation check.",
+    "Filter internal endpoint and host-memory-policy diagnostics out of Pi v2 public records, preserving their native diagnostic files and live round/three-second acceptance displays."
+  ],
+  "regression_caught_during_development": {
+    "case": "Unconditional early endpoint release made one cancellation/retry lose its local checkpoint and cold-prefill 1719 tokens.",
+    "observed_first_token_difference": 30,
+    "final_policy": "Retain the previous endpoint until memory pressure requires eviction; both cancellation cases now reuse it and match all 64 continuation tokens."
+  },
+  "cpu_checks": {
+    "passed": 307,
+    "failed": 0,
+    "command": "UV_CACHE_DIR=/data/.cache/uv uv run pytest -q tests/test_response_end_cache.py tests/test_radiance_fair_scheduler.py tests/test_radiance_cache_residency.py tests/test_radiance_chat_cache.py tests/test_backend_telemetry_target.py tests/test_radiance_public_snapshot_patch.py tests/test_coherence_release.py tests/test_qualified_speed_release.py"
+  },
+  "pi_javascript_checks": {
+    "passed": 57,
+    "failed": 0
+  },
+  "limitations": [
+    "No private chat contents were read. User compaction itself was not replayed by the qualification.",
+    "Capacity cases use synthetic prompts; first-data timings are not a promise for arbitrary user prompts or cold disk restoration.",
+    "Pressure can evict an old GPU restore point. The prior complete durable disk head remains valid; an older or missing disk endpoint can require replay after cancellation.",
+    "Separate cold-prefill versus decode-produced-state numerical differences remain documented in response-end-cache-20260927.json."
+  ],
+  "telemetry_exporter_sha256": "bf22ffb0d3c3768913b546a4f399c4de82b0c9c4afea501848de918231bfafaa",
+  "telemetry_live_validation": [
+    {
+      "client": "host Pi",
+      "samples": 37,
+      "distinct_pairs": 35,
+      "display": "round 36.7 ms \u2022 acceptance 53.8%",
+      "transient_errors": [
+        "no generation stats yet"
+      ]
+    },
+    {
+      "client": "VM bridge exporter",
+      "samples": 37,
+      "distinct_pairs": 37,
+      "display": "round 36.7 ms \u2022 acceptance 53.3%",
+      "transient_errors": [
+        "no generation stats yet"
+      ]
+    },
+    {
+      "client": "installed VM Pi parser",
+      "samples": 7,
+      "distinct_pairs": 1,
+      "display": "round 36.7 ms \u2022 acceptance 51.3%",
+      "transient_errors": [
+        "invalid or stale scheduler telemetry sample",
+        "no generation stats yet"
+      ]
+    }
+  ],
+  "telemetry_live_validation_scope": "Fresh generation samples parsed by the unchanged host parser and its identical installed VM copy. Initial startup/no-generation samples were rejected until valid generation statistics arrived. Display values are telemetry checks, not throughput benchmarks.",
+  "operational_incidents": [
+    {
+      "issue": "Production startup correctly rejected insufficient durable snapshot headroom after synthetic pressure qualification.",
+      "action": "Removed the isolated test snapshot data after preserving reports, synchronized filesystem accounting, then started production successfully. User snapshots were retained."
+    }
+  ]
+}

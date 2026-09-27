@@ -1,0 +1,64 @@
+{
+  "schema": "urn:coherence:focused-verification:v1",
+  "scope": "Pinned synchronous TP1 DFlash V2 response-end cache",
+  "requirements": [
+    {
+      "id": "END-PROCESSED",
+      "contract": "Only processed, visible positions are reusable; no bonus token or rejected suffix is committed.",
+      "checks": [
+        "test_every_d7_accept_width_and_boundary",
+        "test_prefill_end_and_bonus_not_counted",
+        "test_stop_within_accepted_suffix_selects_visible_state",
+        "test_truncated_in_place_aligned_window_is_not_falsely_reused"
+      ],
+      "native": "qualify_response_end.py --mode warm"
+    },
+    {
+      "id": "END-IDENTITY",
+      "contract": "Reuse requires an unchanged token prefix and cache namespace.",
+      "checks": [
+        "test_exact_tail_identity_rejects_changed_token_namespace_and_chain",
+        "test_changed_tail_or_too_short_prompt_cannot_acquire_state",
+        "test_endpoint_rejects_invalid_or_incompatible_metadata"
+      ]
+    },
+    {
+      "id": "END-OWNERSHIP",
+      "contract": "Source, destination and shared prefix remain owned until their last reader/copy completes.",
+      "checks": [
+        "test_pins_survive_producer_free_and_are_released_once",
+        "test_reset_before_copy_cannot_recycle_its_destination",
+        "test_cancelled_request_does_not_replace_complete_end",
+        "test_terminal_request_without_successful_step_never_resolves_unallocated_bank"
+      ],
+      "native": "qualify_response_end.py --mode cancel; qualify_speed_lifecycle.py --case-group all"
+    },
+    {
+      "id": "END-STATE",
+      "contract": "Canonical convolution and recurrent state are exact copies of the accepted state, without arithmetic changes or writes to other blocks.",
+      "checks": [
+        "test_canonical_copy_preserves_bits_and_does_not_write_other_blocks"
+      ],
+      "native": "qualify_response_end.py --mode warm, handover, eviction, restore; qualify_response_end_state.py (test-only byte oracle; cold-prefill disagreement remains explicit)"
+    },
+    {
+      "id": "END-PUBLICATION",
+      "contract": "A replacement head and its exact endpoint are published together only after all dependencies verify; failed writes retain the previous head.",
+      "checks": [
+        "test_endpoint_dependency_set_retains_full_kv_and_only_current_recurrence",
+        "test_endpoint_lookup_requires_every_dependency_and_matching_prefix",
+        "test_exact_endpoint_publishes_atomically_and_rolls_back_with_its_blocks"
+      ],
+      "native": "qualify_response_end.py --mode prepare; clean restart; --mode restore"
+    },
+    {
+      "id": "END-LATENCY",
+      "contract": "An extending prompt reuses the complete processed endpoint instead of replaying full blocks.",
+      "checks": [
+        "native cached_tokens assertion"
+      ],
+      "native": "qualify_response_end.py --contexts 60001 200001 --splits 19"
+    }
+  ],
+  "limits": "Finite tests and source analysis, not proof of arbitrary inputs, numerical reference correctness or all interleavings. Unsupported cases must use the safe older prefix."
+}

@@ -144,6 +144,9 @@ def test_deployment_receipt_matches_current_sources_and_qualification():
     for installed, source in (
         ("speed_candidate_worker.py", "speed_candidate_worker.py"),
         ("qwen_radiance_fair_scheduler.py", "radiance_fair_scheduler.py"),
+        ("qwen_radiance_response_end.py", "radiance_response_end.py"),
+        ("qwen_radiance_response_offload.py", "radiance_response_offload.py"),
+        ("qwen_radiance_chat_tier.py", "radiance_chat_tier.py"),
     ):
         assert receipt["installed_source_hashes"][installed] == release.digest(
             BASE / source

@@ -2437,5 +2437,6 @@
   "current_snapshot_confirmations": "benchmarks/results/snapshot-lifecycle-20260925.json",
   "capture_base_commit": "840c329ebb063db574cde9c7cf0de2241f8e89b2",
   "current_qualification_document": "docs/SPEED_INVESTIGATION_20260925.md",
-  "current_deployment": "benchmarks/results/qualified-speed-deployment-20260926.json"
+  "current_deployment": "benchmarks/results/response-end-deployment-20260927.json",
+  "current_response_end_qualification": "benchmarks/results/response-end-cache-20260927.json"
 }

@@ -278,6 +278,36 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             ):
                 state["failed"] = True
 
+    @synchronized
+    def set_response_end_head(self, status, endpoint):
+        from qwen_radiance_response_offload import endpoint_dependencies
+
+        state = self._chat_requests.get(status.req_context.req_id)
+        if state is None or state["failed"]:
+            return
+        required, changing = endpoint_dependencies(status, endpoint)
+        changing = {object_key(key) for key in changing}
+        if len(changing) > self._tail_block_limit:
+            raise ValueError("exact response tail exceeds the qualified RAM block limit")
+        state["head"] = ([object_key(key) for key in required], endpoint["tokens"])
+        state["tail_keys"] = changing
+        state["response_end"] = endpoint
+
+    @synchronized
+    def response_end_head(self, context):
+        state = self._chat_requests.get(context.req_id)
+        if state is None:
+            return None
+        store = state["store"]
+        key = (store.chat["id"], store.chat["generation"])
+        ram = self._tail_heads.get(key)
+        if ram is not None:
+            return ram.get("response_end")
+        metadata = store.metadata()
+        if metadata.get("generation") == store.chat["generation"]:
+            return metadata.get("response_end")
+        return None
+
     def _store(self, state, keys, offsets):
         view = self._primary_kv_view.cast("B")
         disk_blocks = []
@@ -430,6 +460,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             "durable_tokens": durable_tokens if isinstance(durable_tokens, int) else 0,
             "tail_keys": set(tail_names),
             "tail_blocks": {name: ram[name] for name in tail_names if name in ram},
+            "response_end": state.get("response_end"),
             "sequence": state["sequence"],
             "force": force or state["force_flush"],
             "last_access": time.monotonic(),
@@ -459,7 +490,8 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             if self._tail_heads.get(key) is not record or self._states_for_chat(key[0]):
                 return None
             if not store.publish(
-                record["keys"], record["tokens"], self._block_size, prepared=prepared
+                record["keys"], record["tokens"], self._block_size, prepared=prepared,
+                response_end=record.get("response_end"),
             ):
                 logger.warning("Chat snapshot rejected; previous head retained: %s", key[0])
                 del self._tail_heads[key]

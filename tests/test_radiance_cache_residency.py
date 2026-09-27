@@ -9,6 +9,8 @@ from qwen_r9700_lab.radiance_cache_residency import (
     RoundAcceptance,
     ResidencyProbe,
     legacy_sample,
+    public_request_phases,
+    public_worker_status,
     restore_last_round_acceptance,
 )
 
@@ -519,6 +521,29 @@ def test_phase_file_notifications_wake_the_shared_probe_without_faster_polling(t
         thread.join()
         changes.close()
     assert changes.fd == -1
+
+
+def test_public_phases_keep_round_counters_without_exporting_checkpoint_keys():
+    row = {"last_round_ms": 43.7, "acceptance_rate_3s": 0.61,
+           "response_end_tokens": None, "local_response_end_tokens": 233181}
+    source = {"schema": "urn:qwen-r9700:request-phases:v2",
+              "requests": [row], "recent": [{**row, "response_end_tokens": 239001}]}
+    public = public_request_phases(source)
+    for section in ("requests", "recent"):
+        assert public[section] == [{"last_round_ms": 43.7, "acceptance_rate_3s": 0.61}]
+        assert "response_end_tokens" in source[section][0]
+    assert public_request_phases(None) is None
+
+
+def test_public_worker_keeps_residency_without_exporting_memory_policy():
+    source = {"pid": 1234, "allocated_bytes": 100,
+              "host_page_policy": "no_hugepage_promotion", "host_page_policy_bytes": 4096,
+              "residency": {"active": None, "images": []}}
+    public = public_worker_status(source)
+    assert public == {"pid": 1234, "allocated_bytes": 100,
+                      "residency": {"active": None, "images": []}}
+    assert source["host_page_policy_bytes"] == 4096
+    assert public_worker_status(None) is None
 
 
 def test_round_acceptance_restores_last_numeric_round_after_target_only_phase(tmp_path):

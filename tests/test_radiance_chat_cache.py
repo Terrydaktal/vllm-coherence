@@ -38,6 +38,26 @@ def store(tmp_path, name="one", generation="initial"):
     return result
 
 
+def test_exact_endpoint_publishes_atomically_and_rolls_back_with_its_blocks(tmp_path):
+    current = store(tmp_path)
+    endpoint = {"schema": "urn:coherence:response-end:v1", "tokens": 1701,
+                "prefix_sha256": "d" * 64, "block_size": 1648, "hash_size": 1648, "groups": 1}
+    current.write(FIRST, memoryview(BLOCK))
+    assert current.publish([FIRST], 1701, len(BLOCK), response_end=endpoint)
+    assert current.metadata()["response_end"] == endpoint
+    replacement = {**endpoint, "tokens": 1811, "prefix_sha256": "e" * 64}
+    assert not current.publish([SECOND], 1811, len(BLOCK), response_end=replacement)
+    assert current.metadata()["response_end"] == endpoint
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
+    current.write(SECOND, memoryview(BLOCK))
+    assert current.publish([SECOND], 1811, len(BLOCK), response_end=replacement)
+    assert current.metadata()["response_end"] == replacement
+    assert not current.path(FIRST).exists()
+    # A subsequent ordinary head cannot inherit stale endpoint identity.
+    assert current.publish([SECOND], 1811, len(BLOCK))
+    assert current.metadata()["response_end"] is None
+
+
 @pytest.mark.parametrize("data", [BLOCK, os.urandom(65536), b"\0" * 1024])
 def test_codec_is_lossless_and_detects_damage(data):
     encoded = cache.encode_block(data)

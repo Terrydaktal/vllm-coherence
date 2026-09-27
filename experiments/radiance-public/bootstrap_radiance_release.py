@@ -74,6 +74,11 @@ def main():
     runpy.run_path(str(source / "patch_streaming_snapshot.py"))
     os.environ.pop("QWEN_SNAPSHOT_SCHEDULER")
     install(package, source / "radiance_cache.py", source / "radiance_chat_tier.py")
+    from patch_dflash_response_cache import install as install_dflash_response_cache
+
+    install_dflash_response_cache(package)
+    shutil.copyfile(source / "radiance_response_end.py", package / "qwen_radiance_response_end.py")
+    shutil.copyfile(source / "radiance_response_offload.py", package / "qwen_radiance_response_offload.py")
     if profile.get("optimized_d7", {}).get("target_head", {}).get("mode") in (
         "global256",
         "global512",

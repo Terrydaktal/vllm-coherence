@@ -196,6 +196,8 @@ class RequestPhases:
             "input_tokens": request.num_prompt_tokens,
             "computed_tokens": request.num_computed_tokens,
             "cached_tokens": value.get("cached_tokens"),
+            "response_end_tokens": (getattr(request, "qwen_response_end", None) or {}).get("tokens"),
+            "local_response_end_tokens": getattr(request, "qwen_response_end_local", 0),
             "elapsed_ms": round(max(0, (now - value["started"]) * 1000), 3),
             "phase_elapsed_ms": round(elapsed, 3),
             "first_token_ms": value["first_token_ms"],
@@ -634,6 +636,27 @@ class CacheBanks:
         self.owners = {}
         self.unallocated = set()
         self.active = None
+        self.pressure_handler = None
+
+    def allocate_slots(self, request, *args, **kwargs):
+        manager = self.manager(request)
+        lease = getattr(request, "_qwen_response_end_lease", None)
+        endpoint = getattr(manager, "qwen_response_end", None)
+        if (
+            lease is not None and endpoint is not None and endpoint.entry is lease
+            and request.num_computed_tokens == 0
+            and kwargs.get("num_new_computed_tokens") == lease["tokens"]
+        ):
+            # The first step temporarily needs the old endpoint plus CoW
+            # scratch. After completion pressure can release that old ownership;
+            # it need not coexist with the *entire future prompt*. Per-step
+            # allocation checks still apply, in this single-response bank.
+            kwargs = {**kwargs, "full_sequence_must_fit": False}
+        result = manager.allocate_slots(request, *args, **kwargs)
+        if result is None and self.pressure_handler is not None:
+            if self.pressure_handler(manager, request):
+                result = manager.allocate_slots(request, *args, **kwargs)
+        return result
 
     def register_owner(self, request_id, key):
         self.owners[request_id] = key
@@ -665,6 +688,10 @@ class CacheBanks:
         ]
 
     def reset_prefix_cache(self):
+        for manager in self.managers.values():
+            end_cache = getattr(manager, "qwen_response_end", None)
+            if end_cache is not None:
+                end_cache.clear()
         return all(manager.reset_prefix_cache() for manager in self.managers.values())
 
     def take_events(self):
@@ -769,6 +796,11 @@ class FairScheduler(Scheduler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         config = (self.vllm_config.additional_config or {}).get("qwen_fair", {})
+        speculative = self.vllm_config.speculative_config
+        self.response_end_enabled = bool(
+            config.get("response_end_reuse", True)
+            and speculative is not None and speculative.method == "dflash"
+        )
         if (
             self.max_num_running_reqs != 2
             or self.scheduler_config.async_scheduling
@@ -804,7 +836,7 @@ class FairScheduler(Scheduler):
                 max_model_len=self.max_model_len,
                 max_in_flight_tokens=self.vllm_config.max_in_flight_tokens,
                 enable_caching=self.cache_config.enable_prefix_caching,
-                use_eagle=self.use_eagle,
+                use_eagle=self.use_eagle and speculative.method != "dflash",
                 log_stats=self.log_stats,
                 enable_kv_cache_events=self.enable_kv_cache_events,
                 dcp_world_size=self.dcp_world_size,
@@ -817,6 +849,7 @@ class FairScheduler(Scheduler):
             )
 
         self.banks = CacheBanks(self.kv_cache_manager, make_manager)
+        self.banks.pressure_handler = self._reclaim_cache_pressure
         self.kv_cache_manager = self.banks
         self.parked = {}
         self.bankless_finished = set()
@@ -890,7 +923,9 @@ class FairScheduler(Scheduler):
     def _cache_wait(self, request):
         connector = getattr(getattr(self, "connector", None), "connector_scheduler", None)
         states = getattr(connector, "_req_status", {})
-        if getattr(connector, "_snapshot_settled_tail_only", False):
+        if getattr(connector, "_snapshot_settled_tail_only", False) and not getattr(
+            request, "qwen_response_end_local", 0
+        ):
             for rid, state in states.items():
                 if rid != request.request_id and state.req.is_finished():
                     return "cache_update"
@@ -908,8 +943,9 @@ class FairScheduler(Scheduler):
             self._phase(request, self._cache_wait(request))
             result = lookup(request, computed_tokens)
             if result[0] is not None and request.request_id in self.request_phases.live:
-                self.request_phases.live[request.request_id]["cached_tokens"] = (
-                    computed_tokens + result[0]
+                self.request_phases.live[request.request_id]["cached_tokens"] = max(
+                    computed_tokens + result[0],
+                    getattr(request, "qwen_response_end_local", 0),
                 )
             if result[0]:
                 self._phase(request, "cache_restore")
@@ -919,11 +955,63 @@ class FairScheduler(Scheduler):
 
     def _get_local_prefix_cache_hit(self, request):
         self._phase(request, self._cache_wait(request))
-        result = super()._get_local_prefix_cache_hit(request)
+        end_cache = self._response_end_cache(request)
+        result = end_cache.lookup(request) if end_cache is not None else None
+        if result is None:
+            result = super()._get_local_prefix_cache_hit(request)
         phases = getattr(self, "request_phases", None)
         if phases is not None and request.request_id in phases.live:
             phases.live[request.request_id]["cached_tokens"] = result[1]
         return result
+
+    def _reclaim_cache_pressure(self, manager, request):
+        if not getattr(self, "response_end_enabled", False):
+            return False
+        from qwen_radiance_response_end import reclaim_snapshot_history
+
+        connector = getattr(getattr(self, "connector", None), "connector_scheduler", None)
+        pending = getattr(connector, "_block_id_to_pending_jobs", {})
+        protected = {block for block, jobs in pending.items() if jobs}
+        before = manager.block_pool.get_num_free_blocks()
+        end_cache = getattr(manager, "qwen_response_end", None)
+        if end_cache is not None:
+            end_cache.release_after_progress(request)
+        reclaim_snapshot_history(manager, request, protected)
+        freed = manager.block_pool.get_num_free_blocks() - before
+        if freed:
+            # Separate numeric diagnostic, not an incompatible Pi wire-schema
+            # extension. Never record tokens, prompts or raw request IDs.
+            write_status(self.status_path + "-cache-pressure.json", {
+                "schema": "urn:coherence:cache-pressure:v1",
+                "pid": os.getpid(), "updated_at": time.time(),
+                "computed_tokens": request.num_computed_tokens,
+                "freed_blocks": freed,
+                "free_blocks": manager.block_pool.get_num_free_blocks(),
+                "protected_transfer_blocks": len(protected),
+            })
+        return bool(freed)
+
+    def _response_end_cache(self, request):
+        if not getattr(self, "response_end_enabled", False):
+            return None
+        from qwen_radiance_response_end import ResponseEndCache
+
+        manager = self.banks.manager(request)
+        if not hasattr(manager, "qwen_response_end"):
+            manager.qwen_response_end = ResponseEndCache(manager)
+        return manager.qwen_response_end
+
+    def _free_request(self, request, delay_free_blocks=False):
+        # Called after acceptance and stop trimming, before allocator free.
+        # Cancellation has no completed-step record and never publishes an end.
+        step = getattr(self, "_response_end_steps", {}).get(request.request_id)
+        if step is not None and request.status.name in {"FINISHED_STOPPED", "FINISHED_LENGTH_CAPPED"}:
+            # A queued cancellation has no allocated bank. Do not resolve or
+            # create a checkpoint owner until a successful execution exists.
+            end_cache = self._response_end_cache(request)
+            if end_cache is not None:
+                end_cache.remember(request, step)
+        return super()._free_request(request, delay_free_blocks=delay_free_blocks)
 
     def _refresh_request_phases(self):
         if not hasattr(self, "request_phases"):
@@ -1340,6 +1428,10 @@ class FairScheduler(Scheduler):
             "max_banks": self.max_banks,
             "status_path": self.status_path,
         }
+        manager = self.banks.managers.get(self.banks.active)
+        end_cache = getattr(manager, "qwen_response_end", None)
+        if end_cache is not None:
+            value["response_end_copies"] = end_cache.take_copies()
         # Carry only the previous completed round's numeric latency into the
         # worker boundary. The adaptive queue recovery uses this to detect a
         # mode switch without reading prompts, tokens or model output.
@@ -1362,7 +1454,30 @@ class FairScheduler(Scheduler):
     def update_from_output(self, scheduler_output, model_runner_output):
         before = len(self.requests)
         tracked = list(self.requests.values()) if hasattr(self, "request_phases") else []
+        metadata = getattr(scheduler_output, "qwen_fair", None) or {}
+        if metadata.get("response_end_copies"):
+            manager = self.banks.managers.get(metadata["bank"])
+            if manager is not None:
+                manager.qwen_response_end.copies_complete()
+        # Save the raw sampler count before vLLM truncates its list on EOS or
+        # max_tokens. num_computed_tokens was advanced by schedule(), but has
+        # not yet had this round's rejected proposals subtracted.
+        steps = {}
+        if getattr(self, "response_end_enabled", False):
+            sampled_rows = getattr(model_runner_output, "sampled_token_ids", None) or []
+            for rid, index in model_runner_output.req_id_to_index.items():
+                request = self.requests.get(rid)
+                scheduled = scheduler_output.num_scheduled_tokens.get(rid, 0)
+                if request is not None and scheduled and index < len(sampled_rows):
+                    steps[rid] = {
+                        "start": request.num_computed_tokens - scheduled,
+                        "scheduled": scheduled,
+                        "draft": len(scheduler_output.scheduled_spec_decode_tokens.get(rid, ())),
+                        "generated": len(sampled_rows[index]),
+                    }
+        self._response_end_steps = steps
         result = super().update_from_output(scheduler_output, model_runner_output)
+        self._response_end_steps = {}
         # vLLM has already resolved speculative acceptance by this point. Read
         # the same scheduler-side counts used by its commit path so the public
         # status feed can show exact cumulative acceptance without touching the
@@ -1865,6 +1980,10 @@ def before_forward(runner, scheduler_output):
     if changed or metadata["barrier"]:
         worker_phase("handover")
     runner.qwen_banks.before(metadata)
+    if metadata.get("response_end_copies"):
+        from qwen_radiance_response_end import copy_response_end
+
+        copy_response_end(runner, metadata["response_end_copies"])
     _sync_decode_transition(runner, scheduler_output, metadata)
     scheduler = _phase_scheduler() if _phase_scheduler is not None else None
     if scheduler is not None and not metadata["barrier"]:

@@ -471,13 +471,22 @@ class ChatStore:
             self._record_io({"verification_file_bytes": verified_bytes})
             return result
 
-    def publish(self, keys: list[str], tokens: int, block_size: int, *, prepared=None) -> bool:
+    def publish(self, keys: list[str], tokens: int, block_size: int, *, prepared=None,
+                response_end=None) -> bool:
         """Commit a complete head or roll back its abandoned writes, then collect.
 
         The caller must first drain every request and disk job for this chat.
         A rejected successor cannot be repaired after those jobs have finished;
         retain the previous head and discard the failed candidate instead.
         """
+        if response_end is not None and (
+            not isinstance(response_end, dict)
+            or response_end.get("schema") != "urn:coherence:response-end:v1"
+            or response_end.get("tokens") != tokens
+            or not isinstance(response_end.get("prefix_sha256"), str)
+            or not ID.fullmatch(response_end["prefix_sha256"])
+        ):
+            raise ValueError("invalid exact response-end manifest")
         if prepared is None:
             with self.lock():
                 if not self.current():
@@ -518,6 +527,7 @@ class ChatStore:
                     verified_head=prepared["verified"],
                     verified_block_size=block_size,
                     fallback=None,
+                    response_end=response_end,
                 )
                 self._verified = {
                     (key, block_size): value for key, value in prepared["verified"].items()

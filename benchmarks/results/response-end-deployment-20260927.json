@@ -1,0 +1,175 @@
+{
+  "schema": "urn:coherence:qualified-speed-deployment:v1",
+  "time": 1790511094.3868697,
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "image": "docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
+  "runtime_abi": "ee48c7ffe67e2a2f907b19317bb06b3f2cbe1b93b302f920e8954b653c1d3105",
+  "data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "5be695c56cb8512907fd2e4f7c1cccffd5a2cd3e41fd8a6b53c88fa623ade43a",
+    "qwen_radiance_response_end.py": "e9a65ddd4e7f9d71f15af3dccb59ead8b039f63542c2d5fdc92bf8c8552331d0",
+    "qwen_radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+    "qwen_radiance_chat_tier.py": "3e52176850476f62a4b1144c0d8ef163c61f1f6a5057c4a2094e95bbd1f4eb78",
+    "qwen_radiance_cache.py": "a54764b22b576efbe4094cca6322b55c2c65d8325032162c69aa1f76f61d0243",
+    "vllm/v1/attention/backends/gdn_attn.py": "f1007fa33e1fb7d182cb588f11f0f7314cc076ebd87961b5d523dd54c4e1f6cc",
+    "vllm/v1/core/kv_cache_utils.py": "d354339f814ee84c729a6224e027d63165b17db770f57aaa1c471769f0591208",
+    "vllm/v1/core/sched/scheduler.py": "278e7f15a307cbcee0906e258838114cbf7df9933ad4fac80d4f48a3d6f54da1",
+    "vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py": "6b19840194524b39234c50f2c310e839d8a4d737ae21cfdfa243cd65c8675a99"
+  },
+  "qualification_manifest_sha256": "7f22d3da389003b7065f096c9fbf04e0ba5089b14047c420f774e799b9183e5f",
+  "features": {
+    "target_full_graph": true,
+    "target_gemm": "local_split",
+    "draft_attention": "unit_w4_s1_occ2",
+    "global_topk": 512,
+    "dflash_trailing_rule": true,
+    "exact_response_end": true,
+    "response_end_pressure_reclamation": true
+  },
+  "verification": {
+    "kind": "Authenticated startup, installed sources, compiled graph capture, mapped qualified GEMM binary and live exact response-end continuation. Graph selection is verified through the authenticated worker and startup; production development RPC is disabled.",
+    "development_rpc_enabled": false,
+    "worker_initialization_selects_candidate_graphs": true,
+    "target_full_graph_captured": true,
+    "qualified_gemm_binary_mapped": true,
+    "optimized_arithmetic_installed_before_capture": true
+  },
+  "compilation_config": {
+    "cudagraph_mode": "FULL_AND_PIECEWISE",
+    "cudagraph_capture_sizes": [
+      1,
+      2,
+      4,
+      8
+    ]
+  },
+  "startup_evidence": {
+    "qualification": "Qualified speed release: {\"worker\": \"speed_candidate_worker.SpeedCandidateWorker\", \"compilation_config\": {\"cudagraph_mode\": \"FULL_AND_PIECEWISE\", \"cudagraph_capture_sizes\": [1, 2, 4, 8]}, \"manifest_sha256\": \"7f22d3da389003b7065f096c9fbf04e0ba5089b14047c420f774e799b9183e5f\"}",
+    "target_graph_capture_complete": "Capturing CUDA graphs (FULL): 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 1/1 [00:00<00:00,  1.75it/s]",
+    "capture_complete": "(EngineCore pid=946) INFO 09-27 12:10:06 [model_runner.py:909] Graph capturing finished in 4 secs, took 0.62 GiB",
+    "mapped_gemm": [
+      "/work/gemm-tuning-v9/local_split/radiance_mxfp4_fp8.so"
+    ],
+    "optimized_startup_receipt_sha256": "83e1cdf306e3f7ce93def59835e89998b31980a39a1696087fdb3d6ee05c60a1"
+  },
+  "smoke": [
+    {
+      "kind": "normal_pi_warmup",
+      "output_tokens": 91,
+      "finish": "stop",
+      "seconds": 2.6724492800130975
+    },
+    {
+      "kind": "normal_pi_warmup",
+      "output_tokens": 96,
+      "finish": "length",
+      "seconds": 2.425414322002325
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "1ba68d20cf49385af48e5b083d8f5c9d523f18c6e01012df573675eb8eb1e0fc"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "1ba68d20cf49385af48e5b083d8f5c9d523f18c6e01012df573675eb8eb1e0fc"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "output_tokens": 17,
+      "output_sha256": "1ba68d20cf49385af48e5b083d8f5c9d523f18c6e01012df573675eb8eb1e0fc"
+    }
+  ],
+  "response_end_smoke": {
+    "schema": "urn:coherence:response-end-qualification:v1",
+    "status": "PASS_FOR_DECLARED_SCOPE",
+    "cases": [
+      {
+        "case": "warm",
+        "continuation_tokens": 64,
+        "same_tokens": true,
+        "first_difference": null,
+        "expected_sha256": "c7b5406b8eb1d54d100932aa2cdeacc19e034ec6ad1b8bb53ebc63af89e35385",
+        "observed_sha256": "c7b5406b8eb1d54d100932aa2cdeacc19e034ec6ad1b8bb53ebc63af89e35385",
+        "cached_tokens": 1670,
+        "prompt_tokens": 1675,
+        "uncached_tokens": 5,
+        "first_data_seconds": 0.7472314790065866,
+        "seconds": 1.2931501120037865,
+        "backend": {
+          "input_tokens": 1675,
+          "computed_tokens": 1742,
+          "cached_tokens": 1670,
+          "timings_ms": {
+            "admission": 0.673,
+            "cache_update": 0.429,
+            "cache_lookup": 1.024,
+            "prefill": 529.42,
+            "generate": 738.445,
+            "complete": 0.003
+          },
+          "response_end_tokens": 1739,
+          "local_response_end_tokens": 1670
+        },
+        "context_tokens": 1651,
+        "split_output_tokens": 19,
+        "appended_tokens": 5,
+        "producer_finish": "length"
+      },
+      {
+        "case": "warm",
+        "continuation_tokens": 64,
+        "same_tokens": true,
+        "first_difference": null,
+        "expected_sha256": "6d96cdd3559fbc683d8f2321148e089b341a54e365bf986bc73f44750d365486",
+        "observed_sha256": "6d96cdd3559fbc683d8f2321148e089b341a54e365bf986bc73f44750d365486",
+        "cached_tokens": 1713,
+        "prompt_tokens": 1719,
+        "uncached_tokens": 6,
+        "first_data_seconds": 0.2585585950000677,
+        "seconds": 0.6970336970116477,
+        "backend": {
+          "input_tokens": 1719,
+          "computed_tokens": 1787,
+          "cached_tokens": 1713,
+          "timings_ms": {
+            "admission": 0.566,
+            "cache_update": 0.388,
+            "cache_lookup": 0.675,
+            "prefill": 149.809,
+            "generate": 540.218,
+            "complete": 0.003
+          },
+          "response_end_tokens": 1783,
+          "local_response_end_tokens": 1713
+        },
+        "context_tokens": 1651,
+        "split_output_tokens": 63,
+        "appended_tokens": 5,
+        "producer_finish": "length"
+      }
+    ],
+    "mode": "warm",
+    "expect_rebuild": false,
+    "sampling": "greedy",
+    "source_sha256": "65eb8078cb5fb9e3799924fb1ce3ca8dea7d8c4a82cd8b90855fe9d160a255e1",
+    "installed_sources": {
+      "qwen_radiance_response_end.py": "e9a65ddd4e7f9d71f15af3dccb59ead8b039f63542c2d5fdc92bf8c8552331d0",
+      "qwen_radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+      "qwen_radiance_fair_scheduler.py": "5be695c56cb8512907fd2e4f7c1cccffd5a2cd3e41fd8a6b53c88fa623ade43a",
+      "qwen_radiance_chat_tier.py": "3e52176850476f62a4b1144c0d8ef163c61f1f6a5057c4a2094e95bbd1f4eb78",
+      "qwen_radiance_cache.py": "a54764b22b576efbe4094cca6322b55c2c65d8325032162c69aa1f76f61d0243",
+      "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+      "vllm/v1/core/kv_cache_utils.py": "d354339f814ee84c729a6224e027d63165b17db770f57aaa1c471769f0591208",
+      "vllm/v1/core/sched/scheduler.py": "278e7f15a307cbcee0906e258838114cbf7df9933ad4fac80d4f48a3d6f54da1",
+      "vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py": "6b19840194524b39234c50f2c310e839d8a4d737ae21cfdfa243cd65c8675a99"
+    }
+  },
+  "response_end_qualification": "benchmarks/results/response-end-cache-20260927.json",
+  "scope": "Authenticated production startup and synthetic API/response-end continuation after the cache-pressure repair. The user compaction was not replayed. GPU pressure/liveness and cancellation were qualified separately on this installed source identity.",
+  "health_status": 200,
+  "smoke_status": "PASS",
+  "response_end_pressure_qualification": "benchmarks/results/response-end-pressure-20260927.json"
+}

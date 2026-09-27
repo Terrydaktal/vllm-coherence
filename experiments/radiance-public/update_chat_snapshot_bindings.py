@@ -48,6 +48,9 @@ manifest["runtime"] = {
             "radiance_request_guard.py",
             "patch_verify_head_memory.py",
             "patch_dflash_sampling_rng.py",
+            "patch_dflash_response_cache.py",
+            "radiance_response_end.py",
+            "radiance_response_offload.py",
             "patch_draft_head_initialization.py",
             "patch_gdn_initial_prefill.py",
             "patch_gdn_extreme_decay.py",
@@ -137,6 +140,17 @@ manifest["runtime"]["chat_storage"] = {
             BASE / "patch_chat_snapshot.py",
         )
     },
+}
+manifest["runtime"]["response_end_reuse"] = {
+    "schema": "urn:coherence:response-end:v1",
+    "scope": "synchronous V2 DFlash; token-only TP1; full/sliding attention and aligned Mamba",
+    "contract": (
+        "Reuse only the exact processed visible prefix. Pin immutable attention tails; "
+        "copy accepted GDN/conv state to a canonical endpoint. Exclude an emitted-but-unprocessed "
+        "token and decline an overwritten early-stop state. Persist domain-separated endpoint "
+        "keys with complete-prefix dependencies; retain the prior disk head until verification. "
+        "Unchanged physical layout, quantization and numerical kernels."
+    ),
 }
 manifest["runtime"]["memory_report"] = {
     "schema": "urn:qwen-r9700:radiance-memory:v1",

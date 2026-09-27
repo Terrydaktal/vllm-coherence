@@ -6,6 +6,7 @@ import errno
 import importlib.util
 import json
 import mmap
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -63,12 +64,98 @@ def new_scheduler(module):
     return instance
 
 
+@pytest.mark.parametrize("reclaimed", [False, True])
+def test_bank_allocation_retries_only_after_reclaiming_space(monkeypatch, reclaimed):
+    module = load_module(monkeypatch)
+    calls = []
+    def allocate(req, n, **kwargs):
+        calls.append((req, n, kwargs))
+        return "allocated" if len(calls) > 1 else None
+    manager = SimpleNamespace(allocate_slots=allocate)
+    banks = module.CacheBanks(manager, lambda: manager)
+    banks.pressure_handler = lambda m, r: reclaimed
+    request = SimpleNamespace(request_id="synthetic")
+    assert banks.allocate_slots(request, 8, num_lookahead_tokens=7) == (
+        "allocated" if reclaimed else None
+    )
+    assert len(calls) == (2 if reclaimed else 1)
+    assert all(call == (request, 8, {"num_lookahead_tokens": 7}) for call in calls)
+
+
+def test_successful_allocation_keeps_endpoint_for_cancellation_retry(monkeypatch):
+    module = load_module(monkeypatch)
+    manager = SimpleNamespace(allocate_slots=lambda *a, **kw: "allocated")
+    banks = module.CacheBanks(manager, lambda: manager)
+    banks.pressure_handler = lambda *a: pytest.fail("no memory pressure")
+    assert banks.allocate_slots(SimpleNamespace(request_id="synthetic"), 8) == "allocated"
+
+
+def test_pressure_releases_endpoint_and_optional_history_before_retry(monkeypatch):
+    module = load_module(monkeypatch)
+    scheduler = new_scheduler(module)
+    scheduler.response_end_enabled = True
+    scheduler.status_path = "/unused"
+    free = [0]
+    calls = []
+    request = SimpleNamespace(num_computed_tokens=239720)
+    def release(req):
+        assert req is request
+        calls.append("endpoint")
+        free[0] += 9
+    def reclaim(manager, req, protected):
+        assert req is request and protected == {42}
+        calls.append("history")
+        free[0] += 12
+        return 12
+    endpoint = SimpleNamespace(release_after_progress=release)
+    manager = SimpleNamespace(qwen_response_end=endpoint,
+                              block_pool=SimpleNamespace(get_num_free_blocks=lambda: free[0]))
+    scheduler.connector = SimpleNamespace(connector_scheduler=SimpleNamespace(
+        _block_id_to_pending_jobs={42: {"transfer"}, 43: set()}))
+    stub = ModuleType("qwen_radiance_response_end")
+    stub.reclaim_snapshot_history = reclaim
+    monkeypatch.setitem(sys.modules, stub.__name__, stub)
+    records = []
+    monkeypatch.setattr(module, "write_status", lambda path, value: records.append(value))
+    assert scheduler._reclaim_cache_pressure(manager, request)
+    assert calls == ["endpoint", "history"]
+    assert records[0]["freed_blocks"] == 21
+    assert records[0]["protected_transfer_blocks"] == 1
+
+
+@pytest.mark.parametrize("current_lease", [False, True])
+def test_exact_endpoint_admission_does_not_reserve_temporary_copies_for_whole_prompt(
+    monkeypatch, current_lease
+):
+    module = load_module(monkeypatch)
+    entry = {"tokens": 240744}
+    calls = []
+    manager = SimpleNamespace(
+        qwen_response_end=SimpleNamespace(entry=entry),
+        allocate_slots=lambda r, n, **kw: calls.append(kw) or "allocated",
+    )
+    banks = module.CacheBanks(manager, lambda: manager)
+    request = SimpleNamespace(
+        request_id="synthetic", num_computed_tokens=0,
+        _qwen_response_end_lease=entry if current_lease else dict(entry),
+    )
+    assert banks.allocate_slots(
+        request, 984, num_new_computed_tokens=240744, full_sequence_must_fit=True
+    ) == "allocated"
+    assert calls[0]["full_sequence_must_fit"] is (not current_lease)
+    assert calls[0]["num_new_computed_tokens"] == 240744
+
+
 @pytest.mark.parametrize("lookahead", [None, 1])
-def test_new_chat_bank_preserves_release_prefill_lookahead(monkeypatch, lookahead):
+@pytest.mark.parametrize("method", ["dflash", "eagle", "mtp"])
+def test_new_chat_bank_preserves_release_prefill_lookahead(monkeypatch, lookahead, method):
     module = load_module(monkeypatch)
 
     def initialize(self):
-        self.vllm_config = SimpleNamespace(additional_config={}, max_in_flight_tokens=2048)
+        self.vllm_config = SimpleNamespace(
+            additional_config={}, max_in_flight_tokens=2048,
+            speculative_config=SimpleNamespace(method=method),
+        )
         self.scheduler_config = SimpleNamespace(async_scheduling=False, watermark=0.01)
         self.parallel_config = SimpleNamespace(world_size=1)
         self.max_num_running_reqs = 2
@@ -94,6 +181,7 @@ def test_new_chat_bank_preserves_release_prefill_lookahead(monkeypatch, lookahea
     scheduler.banks.activate(BANK_A)
     scheduler.banks.activate(BANK_B)
     manager = scheduler.banks.managers[BANK_B]
+    assert manager["use_eagle"] is (method != "dflash")
     if lookahead is None:
         assert "num_prefill_lookahead" not in manager
     else:
@@ -819,6 +907,26 @@ def test_missing_previously_admitted_bank_is_not_treated_as_empty(monkeypatch):
         banks.free(SimpleNamespace(request_id="active-a"))
 
 
+@pytest.mark.parametrize("status,step", [("FINISHED_ABORTED", None), ("FINISHED_ABORTED", {"scheduled": 8}), ("FINISHED_STOPPED", None)])
+def test_terminal_request_without_successful_step_never_resolves_unallocated_bank(monkeypatch, status, step):
+    module = load_module(monkeypatch)
+    scheduler = new_scheduler(module)
+    request = SimpleNamespace(request_id="unadmitted", status=SimpleNamespace(name=status))
+    scheduler._response_end_steps = {request.request_id: step} if step else {}
+
+    def no_bank(_request):
+        raise AssertionError("an unadmitted/cancelled request has no endpoint bank")
+
+    scheduler._response_end_cache = no_bank
+    calls = []
+    def upstream_free(self, value, delay_free_blocks=False):
+        calls.append((value, delay_free_blocks))
+        return "released"
+    monkeypatch.setattr(module.Scheduler, "_free_request", upstream_free, raising=False)
+    assert scheduler._free_request(request, delay_free_blocks=True) == "released"
+    assert calls == [(request, True)]
+
+
 def test_cancel_unadmitted_request_clears_ownership_after_connector_cleanup(monkeypatch):
     module = load_module(monkeypatch)
     scheduler = new_scheduler(module)
@@ -1247,6 +1355,61 @@ def phase_fixture(module, tmp_path):
     return scheduler, request
 
 
+def test_response_end_diagnostics_do_not_hide_pi_round_and_acceptance(tmp_path, monkeypatch):
+    from qwen_r9700_lab.radiance_cache_residency import public_request_phases, public_worker_status
+
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    request.qwen_response_end_local = 150790
+    request.qwen_response_end = {"tokens": 150799}
+    scheduler.request_phases.set(request, "generate")
+    scheduler._publish_status(force=True)
+    worker = module.WorkerBanks.__new__(module.WorkerBanks)
+    worker.__dict__.update(
+        status_path=scheduler.status_path, images={}, active=BANK_A, stage=None,
+        capacity=32, stage_capacity=8, free_buffers=[], allocated_bytes=0,
+        reserved_capacity_bytes=40, switches=0, transferred_bytes=0,
+        transfer_seconds=0.0, allocation_events=0, allocation_seconds=0.0,
+        generation_replacements=0,
+    )
+    worker._publish_status()
+    native_worker = json.loads(Path(scheduler.status_path + "-worker.json").read_text())
+    native_scheduler = json.loads(Path(scheduler.status_path + "-scheduler.json").read_text())
+    native = json.loads(Path(scheduler.status_path + "-phases.json").read_text())
+    native["requests"][0].update(last_round_ms=44.2, acceptance_rate_3s=4 / 7)
+    exported = {
+        "phases": public_request_phases(native),
+        "nativeWorker": native_worker,
+        "schedulerSample": {
+            "schema": "urn:qwen-r9700:scheduler-telemetry:v2",
+            "observed_at_ms": round(native["updated_at"] * 1000),
+            "backend": {"scheduler": native_scheduler, "worker": public_worker_status(native_worker)},
+        },
+    }
+    parser = ROOT / "integrations/pi/qwen-radiance-scheduler-telemetry.mjs"
+    code = """
+        import {readFileSync} from 'node:fs';
+        import assert from 'node:assert/strict';
+        const {parseSchedulerSample, parseRequestPhases, formatGenerationStats} = await import(process.argv[1]);
+        const sample = JSON.parse(readFileSync(0, 'utf8'));
+        const now = sample.schedulerSample.observed_at_ms;
+        assert.throws(() => parseSchedulerSample(JSON.stringify({
+            ...sample.schedulerSample, backend: {...sample.schedulerSample.backend, worker: sample.nativeWorker}
+        }), now), /worker telemetry payload/);
+        const scheduler = parseSchedulerSample(JSON.stringify(sample.schedulerSample), now);
+        const parsed = parseRequestPhases(JSON.stringify(sample.phases), scheduler.pid, now);
+        process.stdout.write(formatGenerationStats({requestPhase: parsed.requests[0]}));
+    """
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", code, parser.as_uri()],
+        input=json.dumps(exported), text=True, capture_output=True, check=True,
+    )
+    assert result.stdout == "round 44.2 ms • acceptance 57.1%"
+    assert native["requests"][0]["local_response_end_tokens"] == 150790
+    assert native["requests"][0]["response_end_tokens"] == 150799
+    assert native_worker["host_page_policy"] == "unallocated"
+
+
 def test_running_transition_is_published_immediately_but_counters_are_throttled(
     tmp_path, monkeypatch
 ):
@@ -1339,6 +1502,19 @@ def test_decode_round_log_rotates_before_it_exceeds_bounded_size(tmp_path, monke
     assert path.exists()
     assert path.with_name("rounds.jsonl.1").read_bytes() == first
     assert json.loads(path.read_text())["round"] == 2
+
+
+def test_exact_gpu_endpoint_is_not_rounded_down_in_prefill_telemetry(tmp_path, monkeypatch):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    request.qwen_response_end_local = 150123
+    scheduler.connector = SimpleNamespace(
+        connector_scheduler=SimpleNamespace(_req_status={}, _snapshot_settled_tail_only=True),
+        get_num_new_matched_tokens=lambda *_: (0, False),
+    )
+    scheduler._install_phase_hooks()
+    assert scheduler.connector.get_num_new_matched_tokens(request, 149968) == (0, False)
+    assert scheduler.request_phases.row(request)["cached_tokens"] == 150123
 
 
 def test_cache_update_lookup_and_restore_keep_separate_durations_and_return_values(

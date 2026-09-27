@@ -344,6 +344,38 @@ class RoundAcceptance:
         return sum(row[3] for row in eligible) / draft_tokens
 
 
+def public_worker_status(worker):
+    """Keep host-memory policy diagnostics in native records, not Pi v2."""
+    if not isinstance(worker, dict):
+        return worker
+    return {
+        name: value for name, value in worker.items()
+        if name not in {"host_page_policy", "host_page_policy_bytes"}
+    }
+
+
+def public_request_phases(phases):
+    """Keep internal checkpoint diagnostics out of the stable Pi v2 wire schema.
+
+    Already-running Pi/VM readers validate exact keys. Backend-only additions
+    must not discard the entire phase row, including round time and acceptance.
+    Preserve the original diagnostic record for native qualification consumers.
+    """
+    if not isinstance(phases, dict):
+        return phases
+    result = dict(phases)
+    internal = {"response_end_tokens", "local_response_end_tokens"}
+    for key in ("requests", "recent"):
+        rows = phases.get(key)
+        if isinstance(rows, list):
+            result[key] = [
+                {name: value for name, value in row.items() if name not in internal}
+                if isinstance(row, dict) else row
+                for row in rows
+            ]
+    return result
+
+
 def restore_last_round_acceptance(phases, round_acceptance):
     """Attach weighted three-second acceptance from the numeric round feed."""
     if not isinstance(phases, dict) or not hasattr(round_acceptance, "rolling_rate"):
@@ -667,14 +699,14 @@ def main():
         tail = optional_json("/dev/shm/qwen-radiance-snapshot-tail.json")
         scheduler = observe_idle_scheduler(scheduler, tail)
         round_acceptance.read()
-        phases = restore_last_round_acceptance(phases, round_acceptance)
+        phases = restore_last_round_acceptance(public_request_phases(phases), round_acceptance)
         coverage = (
             probe.sample(scheduler, worker, tail, disk_inventory=disk_inventory) if probe else None
         )
         print(
             "\t".join(
                 json.dumps(value, separators=(",", ":"))
-                for value in (scheduler, worker, legacy_sample(coverage), coverage, phases)
+                for value in (scheduler, public_worker_status(worker), legacy_sample(coverage), coverage, phases)
             ),
             flush=True,
         )
