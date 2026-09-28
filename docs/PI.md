@@ -70,6 +70,13 @@ uncached tokens have separate labels and timers. Waiting for admission does not
 mean a cached prompt is empty; reuse is reported once observed. If telemetry is
 missing, the display says the wait is unknown rather than guessing.
 
+Prefill progress is published after each completed GPU chunk, using the same
+phase feed for ordinary turns and compaction. A chunk that has only been
+scheduled is not counted as processed. Pi reads the feed every 100 ms; the count
+stays still while a chunk runs, then advances by the completed amount. Bulk cache
+and scheduler snapshots retain their half-second cadence. None of these updates
+adds GPU synchronization or interpolates an estimated processed-token count.
+
 During generation, `x t/s, y t/s avg` means a three-second rolling rate followed
 by the average after first data. The rate clock excludes observed waits for
 another chat, while elapsed time continues to show the full wait. `first data`

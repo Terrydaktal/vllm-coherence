@@ -1,0 +1,271 @@
+{
+  "schema": "urn:coherence:deployment:v1",
+  "time": "2026-09-28T14:27:47.689793+00:00",
+  "scope": "Storage retention and completed-prefill telemetry deployment; same frozen prefill-speed v4 numerical kernels and snapshot data ABI. API and numeric-progress smoke checks only; numerical and lifecycle evidence retained from the previous qualified deployment.",
+  "previous_deployment": "benchmarks/results/prefill-speed-deployment-20260928.json",
+  "container_id": "7adc16c61ee80e32f9c113cc4bcf3c2dd4240d9c50c50af35bbd261dce948666",
+  "runtime_abi": "b2a822d4033f39bd0f8eccf1c8c26a1009caaac05353674f9b86dfaccb17c35a",
+  "runtime_abi_source": "Mounted snapshot namespace and current worker startup receipt",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "health_status": 200,
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "max_num_batched_tokens": 4096,
+  "installed_source_paths": {
+    "speed_candidate_worker.py": "/opt/vllm/lib/python3.12/site-packages/speed_candidate_worker.py",
+    "qwen_radiance_fair_scheduler.py": "/opt/vllm/lib/python3.12/site-packages/qwen_radiance_fair_scheduler.py",
+    "qwen_radiance_response_end.py": "/opt/vllm/lib/python3.12/site-packages/qwen_radiance_response_end.py",
+    "qwen_radiance_response_offload.py": "/opt/vllm/lib/python3.12/site-packages/qwen_radiance_response_offload.py",
+    "qwen_radiance_chat_tier.py": "/opt/vllm/lib/python3.12/site-packages/qwen_radiance_chat_tier.py",
+    "qwen_radiance_cache.py": "/opt/vllm/lib/python3.12/site-packages/qwen_radiance_cache.py"
+  },
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "a31f73d5dca1ee1d9b2715bdda82ec6501c123f2df8bacb9b358637a310976ba",
+    "qwen_radiance_response_end.py": "e9a65ddd4e7f9d71f15af3dccb59ead8b039f63542c2d5fdc92bf8c8552331d0",
+    "qwen_radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+    "qwen_radiance_chat_tier.py": "6df820db27b15bb502959b081c2b9e54821a300fd2a290c898b9819edcb45d1a",
+    "qwen_radiance_cache.py": "0597bbace19be39be20ed5d5cbcf8b14fc67d0121b9034be7139d993d44e57cb"
+  },
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "frozen_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+  "prefill_qualification": "benchmarks/results/prefill-speed-qualification-20260928.json",
+  "lifecycle_qualification": "benchmarks/results/prefill-speed-lifecycle-20260928.json",
+  "startup_evidence": {
+    "dispatch": {
+      "arithmetic": "qualified M1 arithmetic contract; aligned prefill residual norm",
+      "compiler_binding": "torch.library.custom_op with fresh fake outputs",
+      "gdn_norm_modules": 48,
+      "gdn_reference_dispatch": {
+        "modules": 48,
+        "previous_entry_points": {
+          "forward_native": 48
+        },
+        "reason": "preserve qualified numerical reference",
+        "selected": "forward_hip"
+      },
+      "norm_build": "20c8bc8291cbeb5e70d282f92a83f98ae67e13165302cdde849b4119b2c7cb9d",
+      "norm_modules": 161,
+      "residual_norm_build": "c66157655dcf5f599f9f913a6384a41d535e1d29d28fb5884b02b59ff5aafa7b",
+      "runtime_calls_including_graph_capture": {}
+    },
+    "installed_before_compile_and_capture": true,
+    "performance": {
+      "activation_tiles": {
+        "fallback": 0,
+        "rows": [
+          1000,
+          1648,
+          2048
+        ],
+        "shapes": [
+          [
+            5120,
+            6144
+          ],
+          [
+            5120,
+            17408
+          ],
+          [
+            16384,
+            5120
+          ],
+          [
+            34816,
+            5120
+          ]
+        ],
+        "tiled": 0
+      },
+      "calls": {},
+      "gdn_norm_quant": {
+        "decode": 0,
+        "prefill": 0,
+        "sites": 48
+      },
+      "gemm_dispatch": {
+        "binary_sha256": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676",
+        "build_sha256": "0bd820287579a1ee29d4dc5654baf098a158abb8b7abff2e92a8bb73be326a72",
+        "scope": "TP1 operator samples; M1 precision repairs",
+        "scratch_bytes": 37748736
+      },
+      "lazy_gdn": null,
+      "manifest": "b38330b02257689d56678b5c6e2ade963a0e6ea59f972ccdb22e86de46a24071",
+      "prefill_alignment": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prefill_scan": {
+        "chronological_arithmetic": "unchanged",
+        "spatial_tiles": [
+          8,
+          16
+        ]
+      },
+      "tp1_fp8": {
+        "bf16_auxiliary_taps": [
+          6,
+          20,
+          34,
+          48,
+          62
+        ],
+        "norm": 0,
+        "prefill": 0,
+        "silu": 0,
+        "silu_enabled": false
+      }
+    },
+    "repair": {
+      "bundle": "a474a2cceded5291110cc3cf5afed5c19200bb0405c3d1329be76140143fe022",
+      "convolution_calls": 0,
+      "installed_sources_changed": false,
+      "prefill_calls": 0,
+      "prefill_rows": 0,
+      "recurrent_calls": 0,
+      "recurrent_rows": 0,
+      "sha256": "fee249b085cee30827106a1cebf3e4f564c4dba740a4e31709bc2be840b8ea2a",
+      "target_arithmetic": {
+        "gdn_norm_calls": 0,
+        "gdn_norm_mode": "one-row-workgroups",
+        "gdn_norm_rows": 0,
+        "head_calls": 0,
+        "head_mode": "groups-4",
+        "head_rows": 0,
+        "norm_build": "20c8bc8291cbeb5e70d282f92a83f98ae67e13165302cdde849b4119b2c7cb9d",
+        "norm_calls": 0,
+        "norm_mode": "fixed-m1-kernel",
+        "norm_rows": 0,
+        "scope": "Target batches of 1 through 8; larger prefill batches unchanged."
+      },
+      "target_attention": {
+        "calls": 0,
+        "mode": "independent-m1-query-workgroups",
+        "rows": 0,
+        "scope": "Single active sequence; D7 widths 2 through 8, paged FP8/BF16 KV."
+      }
+    },
+    "sha256": "73e6f2ebeda35e7601a907c9b360567d384b352ff5d8475db0ee57104d235068"
+  },
+  "smoke": [
+    {
+      "kind": "normal_pi_warmup",
+      "http_status": 200,
+      "output_tokens": 91,
+      "finish": "stop",
+      "seconds": 2.666,
+      "output_sha256": "0a6669efda0875ba8e794b836aae02b122acc980df663074c77d38727a0fe435"
+    },
+    {
+      "kind": "normal_pi_warmup",
+      "http_status": 200,
+      "output_tokens": 96,
+      "finish": "length",
+      "seconds": 21.2,
+      "output_sha256": "5f127001ca9476d54469e9fc5a99f2092a4138016902aec521494848891fbd03"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "http_status": 200,
+      "output_tokens": 17,
+      "finish": "length",
+      "seconds": 1.786,
+      "output_sha256": "d409a393d0e4a245c50e1ad4a3a165a5e5ff3aabe1d352547fc869f1c270e3e0"
+    },
+    {
+      "kind": "completed_prefill_progress",
+      "http_status": 200,
+      "output_tokens": 17,
+      "finish": "length",
+      "seconds": 2.231,
+      "output_sha256": "abe4ee7a105042f73b12b1f1a28788522d2f253445a475a94ab4d6e1f7b0ec52"
+    },
+    {
+      "kind": "fresh_one_token_prompt",
+      "http_status": 200,
+      "output_tokens": 17,
+      "finish": "length",
+      "seconds": 0.411,
+      "output_sha256": "d409a393d0e4a245c50e1ad4a3a165a5e5ff3aabe1d352547fc869f1c270e3e0"
+    }
+  ],
+  "prefill_progress": [
+    {
+      "phase": "handover",
+      "computed_tokens": 0,
+      "input_tokens": 5000,
+      "cached_tokens": null
+    },
+    {
+      "phase": "prefill",
+      "computed_tokens": 0,
+      "input_tokens": 5000,
+      "cached_tokens": 0
+    },
+    {
+      "phase": "prefill",
+      "computed_tokens": 3296,
+      "input_tokens": 5000,
+      "cached_tokens": 0
+    },
+    {
+      "phase": "generate",
+      "computed_tokens": 5000,
+      "input_tokens": 5000,
+      "cached_tokens": 0
+    },
+    {
+      "phase": "generate",
+      "computed_tokens": 5005,
+      "input_tokens": 5000,
+      "cached_tokens": 0
+    },
+    {
+      "phase": "generate",
+      "computed_tokens": 5010,
+      "input_tokens": 5000,
+      "cached_tokens": 0
+    },
+    {
+      "phase": "generate",
+      "computed_tokens": 5015,
+      "input_tokens": 5000,
+      "cached_tokens": 0
+    }
+  ],
+  "smoke_status": "PASS",
+  "client_checks": {
+    "vm_models_http_status": 200,
+    "vm_synthetic_completion": {
+      "status": 200,
+      "completion_tokens": 2,
+      "finish_reason": "stop",
+      "seconds": 0.148
+    },
+    "vm_telemetry_available": true
+  },
+  "cache_preservation": {
+    "tails_flushed_before_restart": 2,
+    "verified_flushed_tokens": [
+      85945,
+      152764
+    ],
+    "data_abi_changed": false
+  }
+}

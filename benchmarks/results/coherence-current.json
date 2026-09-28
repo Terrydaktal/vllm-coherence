@@ -2437,7 +2437,7 @@
   "current_snapshot_confirmations": "benchmarks/results/snapshot-lifecycle-20260925.json",
   "capture_base_commit": "840c329ebb063db574cde9c7cf0de2241f8e89b2",
   "current_qualification_document": "docs/SPEED_INVESTIGATION_20260925.md",
-  "current_deployment": "benchmarks/results/prefill-speed-deployment-20260928.json",
+  "current_deployment": "benchmarks/results/cache-retention-progress-deployment-20260928.json",
   "current_response_end_qualification": "benchmarks/results/response-end-cache-20260927.json",
   "prefill_alignment_note": "**The demonstrated cold-prefill/continuation discrepancy is repaired.** Attention reduction, output-projection K partitions and final residual normalization now follow the same arithmetic as decode. At 60K context, top-1 agreement improved from 987/1,000 to 1,000/1,000; top-20 set/order agreement improved from 362/1,000 and 3/1,000 to 1,000/1,000 for both. All 2,320 sampled positions across short, 60K and 200K contexts now have identical full hidden and BF16-logit vectors. The original tool-suffix regression passes with both full BF16 and Global-512 heads. This costs additional prefill work and requires a new snapshot ABI; universal equivalence and an effect on loop frequency are not established. [Measurements, causes and costs](docs/PREFILL_ALIGNMENT.md).",
   "prefill_alignment_evidence": "benchmarks/results/prefill-alignment-20260927.json",

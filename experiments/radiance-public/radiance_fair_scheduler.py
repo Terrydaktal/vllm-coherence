@@ -180,6 +180,21 @@ class RequestPhases:
         if events:
             self._round_events[0:0] = events
 
+    def scheduled(self, output, requests):
+        # vLLM advances num_computed_tokens in schedule(), before execution.
+        # Keep that prospective count out of both Pi feeds while a chunk runs.
+        for rid, count in (getattr(output, "num_scheduled_tokens", None) or {}).items():
+            request = requests.get(rid)
+            if count > 0 and request is not None and rid in self.live:
+                self.live[rid]["computed_tokens"] = max(0, request.num_computed_tokens - count)
+
+    def completed(self, request):
+        if request.request_id in self.live:
+            self.live[request.request_id]["computed_tokens"] = request.num_computed_tokens
+
+    def computed_tokens(self, request):
+        return self.live.get(request.request_id, {}).get("computed_tokens", request.num_computed_tokens)
+
     def row(self, request):
         value = self.live.get(request.request_id)
         if value is None:
@@ -194,7 +209,7 @@ class RequestPhases:
                 for key in ("chat_id", "generation", "request_id", "phase", "blocker")
             },
             "input_tokens": request.num_prompt_tokens,
-            "computed_tokens": request.num_computed_tokens,
+            "computed_tokens": self.computed_tokens(request),
             "cached_tokens": value.get("cached_tokens"),
             "response_end_tokens": (getattr(request, "qwen_response_end", None) or {}).get("tokens"),
             "local_response_end_tokens": getattr(request, "qwen_response_end_local", 0),
@@ -1309,6 +1324,8 @@ class FairScheduler(Scheduler):
             self.response_request = self.running[0]
             self.tool_handover.select(self.response_request)
             self.last_served[self.banks.active] = time.monotonic()
+        if hasattr(self, "request_phases"):
+            self.request_phases.scheduled(output, self.requests)
         self._refresh_request_phases()
         self._attach_decode_sync_key(output, metadata)
         self._publish_status()
@@ -1491,6 +1508,8 @@ class FairScheduler(Scheduler):
         sampled_per_step = max(1, int(getattr(self, "num_sampled_tokens_per_step", 1)))
         observed_at = time.monotonic()
         for request in tracked:
+            if request.request_id in (getattr(scheduler_output, "num_scheduled_tokens", None) or {}):
+                self.request_phases.completed(request)
             if request.num_output_tokens:
                 self._phase(request, "generate")
                 draft = scheduled_drafts.get(request.request_id) or ()
@@ -1507,9 +1526,9 @@ class FairScheduler(Scheduler):
             if request.is_finished():
                 self.request_phases.finish(request)
         self.tool_handover.finish()
-        # Normal progress is rate-limited to two tmpfs writes per second. A
-        # completion forces one final empty status so the UI cannot pin a chat
-        # as running after its HTTP response has finished.
+        # Bulk status stays at two writes/second. Small numeric phase updates
+        # follow completed prefill chunks and generation rounds. Completion
+        # forces a final status so the UI cannot pin a finished chat as running.
         self._publish_status(force=len(self.requests) != before)
         return result
 
@@ -1559,7 +1578,10 @@ class FairScheduler(Scheduler):
                     "chat_id": key.split(":")[0],
                     "generation": key.split(":")[1],
                     "state": state,
-                    "computed_tokens": request.num_computed_tokens,
+                    "computed_tokens": (
+                        self.request_phases.computed_tokens(request)
+                        if hasattr(self, "request_phases") else request.num_computed_tokens
+                    ),
                     "input_tokens": request.num_prompt_tokens,
                 }
             )
@@ -1581,7 +1603,7 @@ class FairScheduler(Scheduler):
         ):
             # Keep the scheduler/worker status cadence at two writes per
             # second, while letting the small phase feed follow each completed
-            # generation round.  This is content-free numeric telemetry and
+            # generation round or completed prefill chunk. This is numeric telemetry and
             # remains on tmpfs; it does not synchronize or inspect the GPU.
             if phase_signature != getattr(self, "_last_phase_signature", None):
                 self._write_phase_status(phase_rows, time.time(), phase_signature)
@@ -1624,6 +1646,8 @@ class FairScheduler(Scheduler):
                 row["request_id"],
                 row["phase"],
                 row["blocker"],
+                row["computed_tokens"],
+                row["cached_tokens"],
                 row["last_round_ms"],
                 row["last_acceptance_rate"],
                 row["generation_rounds"],

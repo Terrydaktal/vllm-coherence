@@ -1487,6 +1487,51 @@ def test_generation_phase_counters_publish_each_round_without_rewriting_schedule
     assert rounds[1]["round_ms"] == pytest.approx(43.7)
 
 
+def test_prefill_publishes_each_completed_chunk_without_claiming_scheduled_work(tmp_path, monkeypatch):
+    module = load_module(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    scheduler, request = phase_fixture(module, tmp_path)
+    phases = scheduler.request_phases
+    phases.set(request, "prefill")
+    phases.live[request.request_id]["cached_tokens"] = 10000
+    request.num_computed_tokens = 10000
+    scheduler._publish_status(force=True)
+    status_path = Path(scheduler.status_path + "-scheduler.json")
+    phases_path = Path(scheduler.status_path + "-phases.json")
+    previous_status = status_path.read_bytes()
+    for _ in range(3):
+        completed = request.num_computed_tokens
+        # vLLM increments its scheduler counter before the GPU runs this chunk.
+        request.num_computed_tokens += 3296
+        output = SimpleNamespace(num_scheduled_tokens={request.request_id: 3296})
+        phases.scheduled(output, scheduler.requests)
+        clock[0] += 0.02
+        scheduler._publish_status()
+        assert phases.row(request)["computed_tokens"] == completed
+        phases.completed(request)
+        clock[0] += 0.08
+        scheduler._publish_status()
+        published = json.loads(phases_path.read_text())["requests"][0]
+        assert published["computed_tokens"] == request.num_computed_tokens
+        assert published["cached_tokens"] == 10000
+        assert status_path.read_bytes() == previous_status
+
+
+def test_prefill_completion_hook_runs_before_phase_publication(tmp_path, monkeypatch):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    request.num_computed_tokens = 3296
+    scheduler.request_phases.set(request, "prefill")
+    output = SimpleNamespace(num_scheduled_tokens={request.request_id: 3296})
+    scheduler.request_phases.scheduled(output, scheduler.requests)
+    scheduler._publish_status(force=True)
+    assert scheduler.request_phases.row(request)["computed_tokens"] == 0
+    scheduler.update_from_output(output, SimpleNamespace(finish=False))
+    published = json.loads(Path(scheduler.status_path + "-phases.json").read_text())
+    assert published["requests"][0]["computed_tokens"] == 3296
+
+
 def test_decode_round_log_rotates_before_it_exceeds_bounded_size(tmp_path, monkeypatch):
     module = load_module(monkeypatch)
     path = tmp_path / "rounds.jsonl"
