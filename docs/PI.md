@@ -82,6 +82,30 @@ Reasoning counts appear only when a positive count is known. Backend wait/tool
 states replace the generation-rate display when the model is no longer emitting
 output.
 
+## Purge earlier thinking, retain future thinking
+
+This is useful when runaway thinking has poisoned a chat with repetitive
+reasoning that later turns keep echoing. Purging those earlier thinking blocks
+removes that loop-reinforcing history from future model inputs while retaining
+new thinking.
+
+Run `/purge-thinking` while the chat is idle to exclude its current thinking
+blocks from subsequent prompts. New thinking is retained from that point on,
+including across later user messages. The command overrides
+`preserve_thinking=false` for this chat branch without changing the global model
+configuration or whether the model generates fresh thinking. Use
+`/purge-thinking status` to inspect the saved policy; running the purge again
+excludes thinking accumulated since the previous purge.
+
+The cutoff is saved as session entry IDs, so it survives restart, resume and
+compaction. Normal requests and checkpoint generation apply the same filter.
+Prose, tool calls, tool results and user messages remain in context. Original
+thinking remains in the saved transcript; existing compaction summaries are not
+rewritten. Navigating to a branch before the purge restores that branch's policy.
+The next request may need to prefill the suffix after the first removed thinking
+block. Later requests can reuse the new prefix normally. No backend restart is
+required.
+
 ## Compaction transaction
 
 Manual `/compact` and automatic compaction use the same checked transaction:

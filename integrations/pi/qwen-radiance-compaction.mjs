@@ -11,6 +11,7 @@ import {
 } from "./qwen-radiance-cache.mjs";
 import { appendCompactionTiming, startCompactionProgress, getCompactionProgress, clearCompactionProgress } from "./qwen-radiance-compaction-progress.mjs";
 import { BACKEND_ERROR_ENTRY, backendErrorMessage, reportBackendFailure } from "./qwen-radiance-errors.mjs";
+import { purgeContextThinking, preserveFutureThinking } from "./qwen-radiance-thinking.mjs";
 
 // This is a Pi-only adapter. It does not change the serving/snapshot ABI, model
 // sampling in ordinary turns, or the old fixed-slot compaction implementation.
@@ -483,13 +484,13 @@ export function installRadianceCompaction(pi, {
       if (tools.some((tool) => !tool)) throw new Error("active tool schema missing during compaction");
       let payload;
       const captured = await streamSimpleOpenAICompletions(model, {
-        systemPrompt: ctx.getSystemPrompt(), messages: convertToLlm(ctx.sessionManager.buildSessionContext().messages), tools,
+        systemPrompt: ctx.getSystemPrompt(), messages: convertToLlm(purgeContextThinking(ctx.sessionManager.buildSessionContext().messages, ctx)), tools,
       }, { ...auth, reasoning: pi.getThinkingLevel(), maxTokens: 1, signal: event.signal,
         onPayload: (value) => { payload = value; throw new Error(CAPTURE); },
         fetch: () => { throw new Error("unexpected provider network call during compaction payload capture"); },
       }).result();
       if (!payload || captured.errorMessage !== CAPTURE) throw new Error("could not capture Pi's canonical provider prompt");
-      payload = withRadianceChat(payload, ctx);
+      payload = withRadianceChat(preserveFutureThinking(payload, ctx), ctx);
       const headers = { "Content-Type": "application/json", ...(auth.apiKey ? { Authorization: `Bearer ${auth.apiKey}` } : {}),
         ...Object.fromEntries(Object.entries(auth.headers ?? {}).filter(([, value]) => value != null)) };
       const compaction = await compactFromPayload({ payload, preparation: event.preparation, policy,

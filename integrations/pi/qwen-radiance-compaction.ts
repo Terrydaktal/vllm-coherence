@@ -5,8 +5,10 @@ import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/compat";
 import { Text } from "@earendil-works/pi-tui";
 import { installRadianceCompaction } from "./qwen-radiance-compaction.mjs";
 import { installRadianceErrors } from "./qwen-radiance-errors.mjs";
+import { installThinkingPurge } from "./qwen-radiance-thinking.mjs";
 
 export default function radianceCompaction(pi) {
   installRadianceErrors(pi, { Text });
+  installThinkingPurge(pi, { Text });
   installRadianceCompaction(pi, { convertToLlm, streamSimpleOpenAICompletions });
 }

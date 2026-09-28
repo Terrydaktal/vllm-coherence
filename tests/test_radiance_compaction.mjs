@@ -373,7 +373,7 @@ test("Pi hook commits through Pi only; capture cannot hit network and errors can
     modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "local" }) },
     getSystemPrompt: () => "exact system",
     sessionManager: { getLeafId: () => "leaf", getSessionFile: () => "one-session",
-      getSessionId: () => "session-id", getEntries: () => [], getCwd: () => "/work",
+      getSessionId: () => "session-id", getEntries: () => [], getBranch: () => [], getCwd: () => "/work",
       getSessionName: () => "Synthetic",
       buildSessionContext: () => ({ messages: good.input.payload.messages }) },
     ui: { notify: (message) => notices.push(message), setWidget: (_key, lines) => assert.equal(lines, undefined),
