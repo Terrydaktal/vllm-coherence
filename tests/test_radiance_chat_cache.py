@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import importlib.util
+import json
 import os
 import sys
 import time
@@ -642,6 +644,144 @@ def test_tail_interval_keeps_old_head_until_replacement_verifies(tmp_path, monke
     assert current.metadata()["head"] == sorted([FIRST, SECOND])
     assert current.metadata()["tokens"] == 8292
     assert not tier._tail_heads
+
+
+@pytest.mark.parametrize("tokens", [98239, 185687, 186000])
+def test_context_replacement_flushes_without_waiting_to_outgrow_old_head(tmp_path, monkeypatch, tokens):
+    module = load_tier(monkeypatch)
+    tier = new_tier(module)
+    current = store(tmp_path)
+    current.write(FIRST, memoryview(BLOCK))
+    current.publish([FIRST], 185687, len(BLOCK))
+    current.save_metadata({**current.metadata(), "immutable_head": [FIRST]})
+    current.write(SECOND, memoryview(BLOCK))
+    tier._block_size = len(BLOCK)
+    tier._chat_requests = {"replacement": {
+        "store": current, "jobs": set(), "finished": True, "failed": False,
+        "head": ([SECOND, THIRD], tokens), "tail_keys": {THIRD},
+        "tail_blocks": {THIRD: BLOCK}, "force_flush": False, "sequence": 1,
+    }}
+    prepare = current.prepare_publication
+
+    def verify_before_retiring(keys, block_size):
+        assert current.read(FIRST, block_size) == BLOCK
+        return prepare(keys, block_size)
+
+    monkeypatch.setattr(current, "prepare_publication", verify_before_retiring)
+    tier._publish_ready()
+    assert current.metadata()["tokens"] == tokens
+    assert current.metadata()["head"] == sorted([SECOND, THIRD])
+    assert current.metadata()["immutable_head"] == [SECOND]
+    assert not current.path(FIRST).exists()
+    assert not tier._tail_heads
+
+
+def test_shrink_with_same_keys_is_due_but_short_append_still_buffers(tmp_path, monkeypatch):
+    module = load_tier(monkeypatch)
+    tier = new_tier(module)
+    assert tier._record_due({"force": False, "tokens": 98239, "durable_tokens": 185687})
+    assert not tier._record_due({"force": False, "tokens": 186000, "durable_tokens": 185687})
+
+
+def namespace_store(root, abi, name="one"):
+    data = root / "snapshots" / abi / "data"
+    data.mkdir(parents=True)
+    item = store(data, name)
+    (item.managed / ".engine.lock").touch()
+    item.write(FIRST, memoryview(BLOCK))
+    item.publish([FIRST], 100, len(BLOCK))
+    return item
+
+
+def test_namespace_retirement_removes_old_versions_but_not_current_alias_or_benchmarks(tmp_path):
+    current = namespace_store(tmp_path, "a" * 64)
+    old = namespace_store(tmp_path, "b" * 64)
+    older = namespace_store(tmp_path, "c" * 64)
+    benchmark = namespace_store(tmp_path / "benchmarks" / "retained", "d" * 64)
+    alias = tmp_path / "snapshots" / ("e" * 64)
+    alias.mkdir()
+    (alias / "data").symlink_to(current.root, target_is_directory=True)
+    old_io = old.io_totals()
+    plan = cache.retire_incompatible_snapshots(current.root)
+    assert len(plan["chats"]) == 2
+    assert old.path(FIRST).exists() and older.path(FIRST).exists()
+    result = cache.retire_incompatible_snapshots(alias / "data", apply=True)
+    assert result["removed_file_bytes"] == sum(row["file_bytes"] for row in plan["chats"])
+    assert not old.directory.exists() and not older.directory.exists()
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
+    assert benchmark.read(FIRST, len(BLOCK)) == BLOCK
+    assert (alias / "data").is_symlink()
+    ledger = json.loads((tmp_path / "snapshot-retirements.json").read_text())
+    entry = ledger["entries"][f"{'b' * 64}/{old.chat['id']}"]
+    assert entry["status"] == "complete" and entry["io"] == old_io
+    assert cache.retire_incompatible_snapshots(current.root, apply=True)["removed_file_bytes"] == 0
+
+
+def test_namespace_retirement_never_collects_a_live_other_engine(tmp_path):
+    current = namespace_store(tmp_path, "a" * 64)
+    active = namespace_store(tmp_path, "b" * 64)
+    with (active.managed / ".engine.lock").open("r+") as engine:
+        fcntl.flock(engine, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = cache.retire_incompatible_snapshots(current.root, apply=True)
+        assert result["removed_file_bytes"] == 0
+        assert result["skipped"][0]["reason"] == "BlockingIOError"
+        assert active.read(FIRST, len(BLOCK)) == BLOCK
+    assert cache.retire_incompatible_snapshots(current.root, apply=True)["removed_file_bytes"] > 0
+
+
+@pytest.mark.parametrize("unsafe", ["symlink", "unknown_file", "wrong_id", "no_lease"])
+def test_namespace_retirement_refuses_unowned_material(tmp_path, unsafe):
+    current = namespace_store(tmp_path, "a" * 64)
+    old = namespace_store(tmp_path, "b" * 64)
+    if unsafe == "symlink":
+        (old.generation / "g0-ab.qkv").symlink_to(current.path(FIRST))
+    elif unsafe == "unknown_file":
+        (old.directory / "keep.txt").write_text("not a cache object")
+    elif unsafe == "wrong_id":
+        old.save_metadata({**old.metadata(), "id": "f" * 64})
+    else:
+        (old.managed / ".engine.lock").unlink()
+    if unsafe == "no_lease":
+        result = cache.retire_incompatible_snapshots(current.root, apply=True)
+        assert result["skipped"][0]["reason"] == "FileNotFoundError"
+    else:
+        with pytest.raises(ValueError):
+            cache.retire_incompatible_snapshots(current.root, apply=True)
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
+    assert old.path(FIRST).exists()
+
+
+def test_namespace_retirement_can_limit_operator_cleanup_to_known_chats(tmp_path):
+    current = namespace_store(tmp_path, "a" * 64)
+    old = namespace_store(tmp_path, "b" * 64)
+    other = store(old.root, "other")
+    other.write(FIRST, memoryview(BLOCK))
+    cache.retire_incompatible_snapshots(current.root, apply=True, chat_ids={current.chat["id"]})
+    assert not old.directory.exists()
+    assert other.read(FIRST, len(BLOCK)) == BLOCK
+
+
+def test_namespace_retirement_recovers_interrupted_payload_deletion(tmp_path, monkeypatch):
+    current = namespace_store(tmp_path, "a" * 64)
+    old = namespace_store(tmp_path, "b" * 64)
+    original_io = old.io_totals()
+    remove = cache.shutil.rmtree
+
+    def interrupted(path):
+        remove(path)
+        raise OSError("injected interruption after payload deletion")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(cache.shutil, "rmtree", interrupted)
+        with pytest.raises(OSError, match="injected"):
+            cache.retire_incompatible_snapshots(current.root, apply=True)
+    assert old.metadata()["id"] == old.chat["id"]
+    cache.retire_incompatible_snapshots(current.root, apply=True)
+    assert not old.directory.exists()
+    ledger = json.loads((tmp_path / "snapshot-retirements.json").read_text())
+    entry = ledger["entries"][f"{'b' * 64}/{old.chat['id']}"]
+    assert entry["status"] == "complete" and entry["io"] == original_io
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
 
 
 def test_tmpfs_control_request_waits_for_backend_tail_publication(tmp_path, monkeypatch):

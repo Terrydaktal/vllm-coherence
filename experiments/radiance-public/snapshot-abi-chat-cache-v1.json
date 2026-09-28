@@ -115,10 +115,9 @@
       "optimized_stock_norm.py": "6a84b3fd0fdc37adfb1ef598f61b77f2fac23bad884d91de1e5ec5e9943366d4",
       "optimized_d7_performance.py": "06281ecd15cd3d5cd337961a63836a35004d1436ee03c7000e3e518bebe9f456",
       "optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5",
-      "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
-      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138",
       "stock_gdn_norm_quant.py": "24bb94804e803f49a21e2a88ddcf30f060a6a133a42cb0d0b94af04bc6d6ac9e",
-      "probe_stock_gdn_norm_quant.py": "b34f3e8c63df39a4f4cf24a99ddbf5433b8818de6ae698316f6653e02b5ec5e9"
+      "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
+      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
     },
     "draft_head_initialization": {
       "installer": "patch_draft_head_initialization.py",
@@ -394,9 +393,9 @@
       "format": "qwen-chat-cache-v1",
       "tier": "qwen_chat_fs",
       "modules": {
-        "radiance_cache.py": "a54764b22b576efbe4094cca6322b55c2c65d8325032162c69aa1f76f61d0243",
+        "radiance_cache.py": "0597bbace19be39be20ed5d5cbcf8b14fc67d0121b9034be7139d993d44e57cb",
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
-        "radiance_chat_tier.py": "3e52176850476f62a4b1144c0d8ef163c61f1f6a5057c4a2094e95bbd1f4eb78",
+        "radiance_chat_tier.py": "6df820db27b15bb502959b081c2b9e54821a300fd2a290c898b9819edcb45d1a",
         "radiance_fair_scheduler.py": "5be695c56cb8512907fd2e4f7c1cccffd5a2cd3e41fd8a6b53c88fa623ade43a",
         "patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7"
       }
@@ -418,6 +417,7 @@
         "contract": "on-request allocator snapshot with include_traces=False; numeric segment/block sizes; best-effort fixed-root storage owners; no addresses, trace history or tensor values; separate private/default/unknown pools; bounded analysis and overwritten tmpfs output"
       },
       "compatible_runtime_abis": [
+        "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
         "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01"
       ]
@@ -469,7 +469,7 @@
     "language_model_only": true,
     "max_model_len": 253792,
     "max_num_seqs": 2,
-    "max_num_batched_tokens": 4096,
+    "max_num_batched_tokens": 2048,
     "kv_cache_memory_bytes": 10000000000,
     "kv_cache_dtype": "fp8",
     "attention_backend": "R4D",
@@ -631,26 +631,20 @@
       }
     },
     "previous_data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
-    "migration": "retain previous ABI for rollback; rebuild each resumed chat once",
+    "migration": "reuse compatible data across runtime commits; retire inactive incompatible chat snapshots; rebuild resumed chats after numerical or layout changes",
     "chat_snapshots": {
       "isolation": "session identity and compaction generation cache_salt",
       "compression": "lossless Zstd level 1; raw fallback; SHA256 verification",
-      "retention": "latest complete head plus its prior verified fallback until a successor is published",
+      "retention": "current context only; previous compatible head only during verified replacement; retire incompatible data-ABI copies under engine lifetime locks",
       "failed_publication": "retain previous head; collect abandoned writes; persist failure metadata",
       "garbage_collection": "durable intent; retry failed deletion; recover on engine startup",
       "compaction": "force old-generation tail flush before commit; activate successor; retain prior complete generation until successor publication",
       "tail_journal": "at most 15 changing blocks per chat in system RAM; 8192-token automatic flush; 6-GiB/5-chat bound",
-      "forced_tail_flush": "RAM eviction, clean backend shutdown, compaction, and explicit request",
+      "forced_tail_flush": "context shrink or immutable-prefix replacement, RAM eviction, clean backend shutdown, compaction, and explicit request",
       "stale_generation": "retain isolated cache salt; bypass durable tier without reactivation or engine failure",
       "publication_transaction": "previous disk head remains authoritative through tail write and full-head verification",
       "write_accounting": "persistent per-chat lower-bound counters plus backing-drive SMART telemetry",
       "legacy": "unlabelled requests bypass the durable snapshot tier"
-    },
-    "prefill_batch_compatibility": {
-      "previous_max_num_batched_tokens": 2048,
-      "current_max_num_batched_tokens": 4096,
-      "qualification_sha256": "692cea689c2dc2a8422ac35c1c447d1c0763f81389a245e107100511cebf2309",
-      "contract": "Retain the corrected arithmetic reference and physical snapshot format. The older data_contract row limit describes the reference build; runtime admission is 4096, qualified by full-state/logit samples and separately checked snapshot restoration."
     }
   }
 }

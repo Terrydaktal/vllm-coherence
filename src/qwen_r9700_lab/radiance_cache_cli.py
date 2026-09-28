@@ -551,10 +551,14 @@ def tail_residency(report, chat_id):
     if not status.get("available"):
         return None
     rows = [row for row in status.get("chats", []) if row["chat_id"] == chat_id]
+    replacing_head = any(row["tokens"] < row["durable_tokens"] for row in rows)
     return {
         "bytes": sum(row["bytes"] for row in rows),
         "blocks": sum(row["blocks"] for row in rows),
-        "dirty_tokens": max((row["tokens"] - row["durable_tokens"] for row in rows), default=0),
+        "dirty_tokens": None if replacing_head else max(
+            (row["tokens"] - row["durable_tokens"] for row in rows), default=0
+        ),
+        "replacing_head": replacing_head,
         "generations": [row["generation"] for row in rows],
     }
 
@@ -823,10 +827,14 @@ def render(report, *, selector=None, details=False, audit_view=False):
             if tail is None:
                 print("  Snapshot tail RAM: telemetry unavailable")
             else:
+                pending = (
+                    "replacement of an older, larger disk head pending"
+                    if tail["replacing_head"] else
+                    f"{number(tail['dirty_tokens'])} tokens newer than the disk head"
+                )
                 print(
                     f"  Snapshot tail RAM: {human(tail['bytes'])} in "
-                    f"{number(tail['blocks'])} blocks; {number(tail['dirty_tokens'])} "
-                    "tokens newer than the disk head"
+                    f"{number(tail['blocks'])} blocks; {pending}"
                 )
             if io.get("available"):
                 print(

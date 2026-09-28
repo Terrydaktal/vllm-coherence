@@ -23,6 +23,7 @@ from qwen_radiance_cache import (
     identity,
     private_control_directory,
     real_directory,
+    retire_incompatible_snapshots,
 )
 from vllm.v1.kv_offload.base import OffloadPolicy, get_offload_block_hash, get_offload_group_idx
 from vllm.v1.kv_offload.tiering.base import JobResult
@@ -148,6 +149,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         self._tail_status_signature = None
         self._tail_status_written = 0.0
         self._last_tail_flush = None
+        self._next_namespace_collection = 0.0
         for path in self._control_directory.iterdir():
             if CONTROL_FILE.fullmatch(path.name):
                 if path.is_symlink() or not path.is_file():
@@ -200,6 +202,11 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             try:
                 self._publish_ready()
                 self._process_control_requests()
+                if time.monotonic() >= self._next_namespace_collection:
+                    # Old formats cannot restore this engine. Collect away from
+                    # the scheduler, including chats not resumed after an upgrade.
+                    self._next_namespace_collection = time.monotonic() + 60
+                    retire_incompatible_snapshots(self._root, apply=True)
             except Exception:
                 logger.exception("Chat snapshot publication worker failed; retrying")
 
@@ -269,6 +276,13 @@ class ChatFileSystemTierManager(FileSystemTierManager):
                 )
             state["head"] = ([object_key(key) for key in head_keys(status, num_tokens)], num_tokens)
             state["tail_keys"] = changing
+            state["full_attention_groups"] = {
+                get_offload_group_idx(group.offload_keys[0])
+                for config, group in zip(
+                    status.config.kv_group_configs, status.group_states, strict=True
+                )
+                if config.sliding_window_size_in_chunks is None and group.offload_keys
+            }
             params = status.req_context.kv_transfer_params or {}
             state["force_flush"] = params.get("qwen_snapshot_force_flush") is True
             # A cancelled request must never supersede a complete earlier head.
@@ -452,17 +466,30 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         missing = [name for name in tail_names if name not in ram and not on_disk[name]]
         if missing:
             raise ValueError(f"settled snapshot tail is missing {len(missing)} RAM blocks")
-        durable_tokens = state["store"].metadata().get("tokens", 0)
+        previous = state["store"].metadata()
+        durable_tokens = previous.get("tokens", 0)
+        immutable = set(keys) - set(tail_names)
+        prior_immutable = previous.get("immutable_head")
+        if prior_immutable is None:
+            # One-time migration of older manifests. Derive group roles from
+            # vLLM's configuration, never fixed model-specific group numbers.
+            groups = state.get("full_attention_groups", set())
+            prior_immutable = [
+                name for name in previous.get("head", [])
+                if int(name.split("-", 1)[0][1:]) in groups
+            ]
+        replaced = not set(prior_immutable).issubset(keys)
         return {
             "store": state["store"],
             "keys": list(keys),
             "tokens": tokens,
             "durable_tokens": durable_tokens if isinstance(durable_tokens, int) else 0,
             "tail_keys": set(tail_names),
+            "immutable_keys": sorted(immutable),
             "tail_blocks": {name: ram[name] for name in tail_names if name in ram},
             "response_end": state.get("response_end"),
             "sequence": state["sequence"],
-            "force": force or state["force_flush"],
+            "force": force or state["force_flush"] or replaced,
             "last_access": time.monotonic(),
             "retry_after": 0.0,
         }
@@ -470,6 +497,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
     def _record_due(self, record):
         return time.monotonic() >= record.get("retry_after", 0) and (
             record["force"]
+            or record["tokens"] < record["durable_tokens"]
             or record["tokens"] - record["durable_tokens"] >= self._tail_flush_tokens
         )
 
@@ -492,6 +520,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             if not store.publish(
                 record["keys"], record["tokens"], self._block_size, prepared=prepared,
                 response_end=record.get("response_end"),
+                immutable_keys=record.get("immutable_keys"),
             ):
                 logger.warning("Chat snapshot rejected; previous head retained: %s", key[0])
                 del self._tail_heads[key]

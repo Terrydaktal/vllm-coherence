@@ -838,7 +838,6 @@ def snapshot_tail_status(path=TAIL_STATUS_PATH):
                     not isinstance(row.get(field), int) or row[field] < 0
                     for field in ("tokens", "durable_tokens", "blocks", "bytes")
                 )
-                or row["durable_tokens"] > row["tokens"]
                 for row in chats
             )
         ):

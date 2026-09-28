@@ -176,6 +176,8 @@ manifest["runtime"]["memory_report"] = {
         ),
     },
     "compatible_runtime_abis": [
+        # Storage-only retention repair; same numerical kernels and data ABI.
+        "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
         # Candidate-only M1 bootstrap support does not alter the current serving
         # profile. A future M1 deployment changes data_abi and cannot reuse this
@@ -303,7 +305,8 @@ manifest["storage"]["previous_data_abi"] = (
     else prior_storage.get("data_abi", previous_data_abi)
 )
 manifest["storage"]["migration"] = (
-    "retain previous ABI for rollback; rebuild each resumed chat once"
+    "reuse compatible data across runtime commits; retire inactive incompatible chat snapshots; "
+    "rebuild resumed chats after numerical or layout changes"
 )
 manifest["storage"]["recurrent_publication_contract"] = (
     "complete-window-plus-eagle-page; retain-three-prior-aligned-mamba-states-until-offload; "
@@ -316,7 +319,8 @@ manifest["storage"]["chat_snapshots"] = {
     "isolation": "session identity and compaction generation cache_salt",
     "compression": "lossless Zstd level 1; raw fallback; SHA256 verification",
     "retention": (
-        "latest complete head plus its prior verified fallback until a successor is published"
+        "current context only; previous compatible head only during verified replacement; "
+        "retire incompatible data-ABI copies under engine lifetime locks"
     ),
     "failed_publication": (
         "retain previous head; collect abandoned writes; persist failure metadata"
@@ -330,7 +334,10 @@ manifest["storage"]["chat_snapshots"] = {
         "at most 15 changing blocks per chat in system RAM; 8192-token automatic flush; "
         "6-GiB/5-chat bound"
     ),
-    "forced_tail_flush": "RAM eviction, clean backend shutdown, compaction, and explicit request",
+    "forced_tail_flush": (
+        "context shrink or immutable-prefix replacement, RAM eviction, clean backend shutdown, "
+        "compaction, and explicit request"
+    ),
     "stale_generation": (
         "retain isolated cache salt; bypass durable tier without reactivation or engine failure"
     ),

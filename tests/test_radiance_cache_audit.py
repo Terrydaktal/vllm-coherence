@@ -178,7 +178,8 @@ def test_legacy_worker_telemetry_marks_per_chat_ram_unknown(tmp_path):
     assert cli.handover_cell({"scheduler": result}, "1" * 64) == "?"
 
 
-def test_snapshot_tail_status_reports_only_bounded_content_free_residency(tmp_path):
+@pytest.mark.parametrize("current_tokens", [18_000, 9_000])
+def test_snapshot_tail_status_reports_only_bounded_content_free_residency(tmp_path, current_tokens):
     path = tmp_path / "tail.json"
     path.write_text(
         json.dumps(
@@ -193,7 +194,7 @@ def test_snapshot_tail_status_reports_only_bounded_content_free_residency(tmp_pa
                     {
                         "chat_id": "1" * 64,
                         "generation": "2" * 64,
-                        "tokens": 18_000,
+                        "tokens": current_tokens,
                         "durable_tokens": 12_000,
                         "blocks": 15,
                         "bytes": 8000,
@@ -215,7 +216,9 @@ def test_snapshot_tail_status_reports_only_bounded_content_free_residency(tmp_pa
     assert result["last_flush"]["reason"] == "token_interval"
     report = {"tail_journal": result}
     assert cli.tail_cell(report, "1" * 64) == "7.8 KiB"
-    assert cli.tail_residency(report, "1" * 64)["dirty_tokens"] == 6000
+    residency = cli.tail_residency(report, "1" * 64)
+    assert residency["dirty_tokens"] == (6000 if current_tokens == 18000 else None)
+    assert residency["replacing_head"] == (current_tokens < 12000)
     assert cli.tail_cell(report, "5" * 64) == "0.0 B"
 
 

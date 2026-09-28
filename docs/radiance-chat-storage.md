@@ -78,8 +78,13 @@ once under their content-addressed names. The changing settled recurrent/draft t
 contains at most 15 blocks and stays in a private system-RAM journal. A newer
 complete tail replaces the older RAM copy; incomplete or failed requests cannot
 supersede it. The tier flushes and publishes that tail after at least 8,192 newer
-tokens. It also forces a flush before its 6 GiB / five-chat RAM journal evicts a
-chat, during clean backend shutdown, before compaction commits, and for an explicit
+tokens. This growth interval applies only to an extension of the same immutable
+prefix. A shorter context or a rewritten prefix forces publication as soon as
+the request and its disk jobs finish; it never waits for the shortened chat to
+outgrow its previous size. The verified manifest records the immutable prefix
+separately from the changing tail. It also forces a flush before its 6 GiB /
+five-chat RAM journal evicts a chat, during clean backend shutdown, before
+compaction commits, and for an explicit
 `/cache flush` request. The general 18 GiB CPU offload cache may evict independently;
 the journal keeps its own acknowledged copy so eviction does not require another
 GPU prefill.
@@ -103,6 +108,24 @@ unpublished RAM tail, so normal recovery computes at most about one 8K interval.
 At the current block sizes, the policy is intended to reduce a 250K chat to roughly
 15–20 GiB of snapshot payload traffic instead of rewriting a tail after every tool
 call; an end-to-end 250K measurement is still required to confirm that projection.
+
+Retention is for the current context, not a history of cache versions. Runtime
+and Git changes that preserve the arithmetic and layout share the same data ABI
+and reuse its files. On an incompatible data-ABI change, the background storage
+worker retires managed chat snapshots in inactive sibling data namespaces.
+It obtains each namespace's engine lifetime lock before deleting anything;
+another live backend's namespace and symlinks to the current data are excluded.
+There is no permanent rollback-cache archive. Numeric I/O totals and cleanup
+receipts survive in `snapshot-retirements.json`, without retaining KV payloads.
+Benchmark directories outside that production namespace are unaffected.
+
+A completed publication keeps only the objects required by its latest head.
+During replacement, the preceding compatible head remains valid until the new
+files verify and publication commits; this temporary transaction can occupy more
+than one head's space. It is not a historical version-retention policy or a hard
+byte quota. Compression and the required recurrent/draft state also mean that
+256K tokens is not a fixed byte count. The backend context limit remains the
+bound on the logical prefix being saved.
 
 The primary offload arena is 18 GiB, enough for roughly two current long-chat
 snapshots at the measured tensor sizes. It remains an LRU cache and does not add

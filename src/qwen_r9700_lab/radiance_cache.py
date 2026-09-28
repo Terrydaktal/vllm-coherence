@@ -472,13 +472,15 @@ class ChatStore:
             return result
 
     def publish(self, keys: list[str], tokens: int, block_size: int, *, prepared=None,
-                response_end=None) -> bool:
+                response_end=None, immutable_keys=None) -> bool:
         """Commit a complete head or roll back its abandoned writes, then collect.
 
         The caller must first drain every request and disk job for this chat.
         A rejected successor cannot be repaired after those jobs have finished;
         retain the previous head and discard the failed candidate instead.
         """
+        if immutable_keys is not None and not set(immutable_keys).issubset(keys):
+            raise ValueError("immutable snapshot prefix differs from publication candidate")
         if response_end is not None and (
             not isinstance(response_end, dict)
             or response_end.get("schema") != "urn:coherence:response-end:v1"
@@ -528,6 +530,7 @@ class ChatStore:
                     verified_block_size=block_size,
                     fallback=None,
                     response_end=response_end,
+                    immutable_head=sorted(set(immutable_keys)) if immutable_keys is not None else None,
                 )
                 self._verified = {
                     (key, block_size): value for key, value in prepared["verified"].items()
@@ -587,6 +590,144 @@ class ChatStore:
             if failure is not None:
                 info = {**info, "status": "incomplete", "publication": {"result": failure}}
             return self._collect(info)
+
+
+def retire_incompatible_snapshots(data_root: Path, *, apply=False, chat_ids=None) -> dict:
+    """Retire owned snapshots in inactive, incompatible data namespaces.
+
+    Runtime aliases of the current data directory are not copies. Other live
+    engines retain their namespaces. The per-engine lock is held throughout
+    deletion; a momentarily idle chat lock alone cannot prove safety. Only the
+    production root's managed chat directories are eligible, never benchmark
+    subdirectories, unknown files, or unlabelled legacy cache objects.
+    """
+    data_root = Path(data_root).resolve(strict=True)
+    real_directory(data_root)
+    namespace = data_root.parent
+    snapshots = namespace.parent
+    result = {"current_data_abi": namespace.name, "applied": apply,
+              "removed_file_bytes": 0, "chats": [], "skipped": []}
+    if data_root.name != "data" or snapshots.name != "snapshots" or not ID.fullmatch(namespace.name):
+        return result
+    if chat_ids is not None and any(not ID.fullmatch(value) for value in chat_ids):
+        raise ValueError("invalid retirement chat identity")
+    ledger_path = snapshots.parent / "snapshot-retirements.json"
+    if ledger_path.is_symlink():
+        raise ValueError("snapshot retirement ledger is a symlink")
+    # One maintenance worker or operator at a time, without blocking a startup.
+    lock_fd = os.open(snapshots.parent / ".snapshot-retirement.lock",
+                      os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            result["skipped"].append({"reason": "retirement_busy"})
+            return result
+        ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {
+            "schema": "urn:coherence:snapshot-retirements:v1", "entries": {}
+        }
+        for old in sorted(snapshots.iterdir()):
+            if old == namespace or not ID.fullmatch(old.name) or old.is_symlink():
+                continue
+            old_data = old / "data"
+            if old_data.is_symlink() or not old_data.is_dir():
+                continue
+            managed = old_data / FORMAT
+            if not managed.exists():
+                continue
+            real_directory(managed)
+            engine_fd = None
+            try:
+                # Older/unknown layouts without a lifetime lease require an
+                # explicit migration; do not infer ownership from file ages.
+                engine_fd = os.open(managed / ".engine.lock", os.O_RDWR | os.O_NOFOLLOW)
+                fcntl.flock(engine_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (OSError, ValueError) as error:
+                if engine_fd is not None:
+                    os.close(engine_fd)
+                result["skipped"].append({"abi": old.name, "reason": type(error).__name__})
+                continue
+            try:
+                for directory in sorted(managed.iterdir()):
+                    if not ID.fullmatch(directory.name) or (
+                        chat_ids is not None and directory.name not in chat_ids
+                    ):
+                        continue
+                    real_directory(directory)
+                    meta_path = directory / "chat.json"
+                    if meta_path.is_symlink() or not meta_path.is_file():
+                        key = f"{old.name}/{directory.name}"
+                        pending = ledger["entries"].get(key, {})
+                        if apply and pending.get("status") == "pending" and not any(directory.iterdir()):
+                            # Crash after metadata unlink but before final rmdir.
+                            directory.rmdir()
+                            sync_directory(managed)
+                            pending["status"] = "complete"
+                            atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+                            continue
+                        result["skipped"].append({"abi": old.name, "chat_id": directory.name,
+                                                  "reason": "unknown_metadata"})
+                        continue
+                    info = json.loads(meta_path.read_text())
+                    if info.get("id") != directory.name or info.get("format") != FORMAT:
+                        raise ValueError("retirement metadata identity mismatch")
+                    store = ChatStore(old_data, info)
+                    with store.lock(exclusive=True):
+                        # Refuse unexpected material instead of recursively
+                        # deleting something this cache implementation does not own.
+                        files = []
+                        for path in directory.rglob("*"):
+                            relative = path.relative_to(directory)
+                            if path.is_symlink():
+                                raise ValueError("symlink in retired snapshot")
+                            if path.is_dir():
+                                if relative.parts[0] != "generations" or len(relative.parts) > 2:
+                                    raise ValueError("unknown directory in retired snapshot")
+                                if len(relative.parts) == 2 and not ID.fullmatch(path.name):
+                                    raise ValueError("unknown retired generation")
+                            elif path.is_file() and (
+                                (len(relative.parts) == 1 and path.name in
+                                 {"chat.json", "io.json", ".lock", ".io.lock"})
+                                or (len(relative.parts) == 3 and relative.parts[0] == "generations"
+                                    and ID.fullmatch(relative.parts[1])
+                                    and (KEY.fullmatch(path.name) or path.name.startswith(".pending-")))
+                                or (len(relative.parts) == 1 and path.name.startswith(".pending-"))
+                            ):
+                                files.append(path)
+                            else:
+                                raise ValueError("unknown file in retired snapshot")
+                        entry = {"abi": old.name, "chat_id": directory.name,
+                                 "tokens": info.get("tokens", 0),
+                                 "file_bytes": sum(path.stat().st_size for path in files),
+                                 "files": len(files), "replaced_by": namespace.name}
+                        result["chats"].append(entry)
+                        if apply:
+                            key = f"{old.name}/{directory.name}"
+                            # Keep numeric write-traffic history, not old KV payloads.
+                            prior_entry = ledger["entries"].get(key, {})
+                            entry["io"] = prior_entry.get("io", store.io_totals())
+                            ledger["entries"][key] = {**entry, "status": "pending"}
+                            atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+                            # Keep ownership metadata until all payload removal
+                            # succeeds, so a crash/ENOSPC retry can still identify
+                            # and collect the remaining files.
+                            for generation in store.generations.iterdir():
+                                shutil.rmtree(generation)
+                            store.generations.rmdir()
+                            for path in directory.iterdir():
+                                if path != meta_path:
+                                    path.unlink()
+                            meta_path.unlink()
+                            directory.rmdir()
+                            sync_directory(managed)
+                            ledger["entries"][key]["status"] = "complete"
+                            atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+                            result["removed_file_bytes"] += entry["file_bytes"]
+            finally:
+                os.close(engine_fd)
+        return result
+    finally:
+        os.close(lock_fd)
 
 
 def report(data_root: Path) -> dict:
