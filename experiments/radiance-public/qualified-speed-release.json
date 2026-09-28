@@ -10,7 +10,7 @@
       8
     ]
   },
-  "parent_manifest_sha256": "c9f2765545996f0dffb0f8d8ab126cd4f3c3e5b3a4d7c167f56b618193d68cf2",
+  "parent_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
   "worker_sha256": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
   "qualification_sha256": "6c2f8986561cfb9d11cc8a1bd0c47b7e6f02107a4c7138a00a9a94043060e1b4",
   "files": {

@@ -46,6 +46,21 @@ def collect(args):
         ),
     }
     entry = {"sources": report["sources"]}
+    maximum = getattr(args, "max_prefill_rows", 2048)
+    if maximum != 2048:
+        report["max_prefill_rows"] = entry["max_prefill_rows"] = maximum
+    for name, path in (
+        ("prepared_scan", args.scan_evidence),
+        ("input_tiles", args.input_evidence),
+        ("dynamic_conv", args.conv_evidence),
+    ):
+        if path:
+            report[name] = read(path)
+            entry[name] = True
+    if entry.get("input_tiles"):
+        entry["input_binary_sha256"] = report["input_tiles"]["binary_sha256"]
+    if entry.get("dynamic_conv"):
+        entry["conv_native_sha256"] = report["dynamic_conv"]["native_source_sha256"]
     for name, root in (("attention", args.attention), ("projection", args.projection)):
         build = read(root / "build.json")
         authenticate(build)
@@ -92,6 +107,9 @@ def collect(args):
         *args.comparisons,
         *args.baselines,
         *args.tool_evidence,
+        *([args.scan_evidence] if args.scan_evidence else []),
+        *([args.input_evidence] if args.input_evidence else []),
+        *([args.conv_evidence] if args.conv_evidence else []),
     ]:
         # Run name and digest identify the preserved capture, without exporting
         # filesystem roots, prompt IDs or activation payloads.
@@ -128,4 +146,10 @@ if __name__ == "__main__":
     for name in ("comparisons", "baselines", "tool-evidence"):
         parser.add_argument("--" + name, type=Path, nargs="+", required=True)
     parser.add_argument("--installation-parent", type=Path)
+    parser.add_argument("--scan-evidence", type=Path)
+    parser.add_argument("--input-evidence", type=Path)
+    parser.add_argument("--conv-evidence", type=Path)
+    parser.add_argument(
+        "--max-prefill-rows", type=int, choices=(2048, 4096), default=2048
+    )
     print(json.dumps(collect(parser.parse_args())))

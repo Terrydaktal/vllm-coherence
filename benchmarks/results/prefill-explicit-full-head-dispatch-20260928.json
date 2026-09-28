@@ -1,0 +1,26 @@
+{
+  "before": {
+    "enabled": true,
+    "global_topk": 512,
+    "armed": true,
+    "failed": false,
+    "fast_steps": 3,
+    "full_head_steps": 709,
+    "global_calls": 3,
+    "full_head_calls": 710,
+    "fallback": "installed corrected full head"
+  },
+  "after": {
+    "enabled": true,
+    "global_topk": 512,
+    "armed": true,
+    "failed": false,
+    "fast_steps": 3,
+    "full_head_steps": 1083,
+    "global_calls": 3,
+    "full_head_calls": 1084,
+    "fallback": "installed corrected full head"
+  },
+  "global_calls_added": 0,
+  "full_head_calls_added": 374
+}

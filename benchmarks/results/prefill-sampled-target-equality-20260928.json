@@ -1,0 +1,63 @@
+{
+  "target_comparison": {
+    "positions": 244,
+    "first_position": 2048,
+    "last_position": 2291,
+    "hidden_exact_rows": 244,
+    "hidden_different_elements": 0,
+    "hidden_elements": 1249280,
+    "hidden_max_absolute_error": 0.0,
+    "hidden_rmse": 0.0,
+    "hidden_relative_l2": 0.0,
+    "logits": {
+      "positions": 244,
+      "full_logits_exact": 244,
+      "1": {
+        "set_exact": 244,
+        "ranked_exact": 244,
+        "inclusive_tie_set_exact": 244,
+        "reference_boundary_tied": 5,
+        "candidate_boundary_tied": 5,
+        "retained_scores_exact": 244,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 1.0,
+        "mean_overlap_percent": 100.0
+      },
+      "10": {
+        "set_exact": 244,
+        "ranked_exact": 244,
+        "inclusive_tie_set_exact": 244,
+        "reference_boundary_tied": 69,
+        "candidate_boundary_tied": 69,
+        "retained_scores_exact": 244,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 10.0,
+        "mean_overlap_percent": 100.0
+      },
+      "20": {
+        "set_exact": 244,
+        "ranked_exact": 244,
+        "inclusive_tie_set_exact": 244,
+        "reference_boundary_tied": 110,
+        "candidate_boundary_tied": 110,
+        "retained_scores_exact": 244,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 20.0,
+        "mean_overlap_percent": 100.0
+      }
+    },
+    "head": "same qualified full BF16 M8 head applied to both captured hidden tensors"
+  },
+  "first_differing_draft_proposal": {
+    "round_start_position": 2056,
+    "proposal_position": 2059
+  },
+  "matched_round_starts": 67,
+  "round_counts_before_sample_difference": [
+    68,
+    67
+  ]
+}

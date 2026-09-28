@@ -1,0 +1,106 @@
+[
+  {
+    "positions": 321,
+    "first_position": 2048,
+    "last_position": 2368,
+    "hidden_exact_rows": 321,
+    "hidden_different_elements": 0,
+    "hidden_elements": 1643520,
+    "hidden_max_absolute_error": 0.0,
+    "hidden_rmse": 0.0,
+    "hidden_relative_l2": 0.0,
+    "logits": {
+      "positions": 321,
+      "full_logits_exact": 321,
+      "1": {
+        "set_exact": 321,
+        "ranked_exact": 321,
+        "inclusive_tie_set_exact": 321,
+        "reference_boundary_tied": 5,
+        "candidate_boundary_tied": 5,
+        "retained_scores_exact": 321,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 1.0,
+        "mean_overlap_percent": 100.0
+      },
+      "10": {
+        "set_exact": 321,
+        "ranked_exact": 321,
+        "inclusive_tie_set_exact": 321,
+        "reference_boundary_tied": 91,
+        "candidate_boundary_tied": 91,
+        "retained_scores_exact": 321,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 10.0,
+        "mean_overlap_percent": 100.0
+      },
+      "20": {
+        "set_exact": 321,
+        "ranked_exact": 321,
+        "inclusive_tie_set_exact": 321,
+        "reference_boundary_tied": 136,
+        "candidate_boundary_tied": 136,
+        "retained_scores_exact": 321,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 20.0,
+        "mean_overlap_percent": 100.0
+      }
+    },
+    "head": "same qualified full BF16 M8 head applied to both captured hidden tensors"
+  },
+  {
+    "positions": 321,
+    "first_position": 4096,
+    "last_position": 4416,
+    "hidden_exact_rows": 321,
+    "hidden_different_elements": 0,
+    "hidden_elements": 1643520,
+    "hidden_max_absolute_error": 0.0,
+    "hidden_rmse": 0.0,
+    "hidden_relative_l2": 0.0,
+    "logits": {
+      "positions": 321,
+      "full_logits_exact": 321,
+      "1": {
+        "set_exact": 321,
+        "ranked_exact": 321,
+        "inclusive_tie_set_exact": 321,
+        "reference_boundary_tied": 7,
+        "candidate_boundary_tied": 7,
+        "retained_scores_exact": 321,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 1.0,
+        "mean_overlap_percent": 100.0
+      },
+      "10": {
+        "set_exact": 321,
+        "ranked_exact": 321,
+        "inclusive_tie_set_exact": 321,
+        "reference_boundary_tied": 93,
+        "candidate_boundary_tied": 93,
+        "retained_scores_exact": 321,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 10.0,
+        "mean_overlap_percent": 100.0
+      },
+      "20": {
+        "set_exact": 321,
+        "ranked_exact": 321,
+        "inclusive_tie_set_exact": 321,
+        "reference_boundary_tied": 147,
+        "candidate_boundary_tied": 147,
+        "retained_scores_exact": 321,
+        "set_exact_percent": 100.0,
+        "ranked_exact_percent": 100.0,
+        "mean_overlap_tokens": 20.0,
+        "mean_overlap_percent": 100.0
+      }
+    },
+    "head": "same qualified full BF16 M8 head applied to both captured hidden tensors"
+  }
+]

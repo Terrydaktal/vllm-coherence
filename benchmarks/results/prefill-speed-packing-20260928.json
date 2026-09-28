@@ -1,0 +1,249 @@
+{
+  "status": "SAMPLE_CHECKED",
+  "binary_sha256": "d8cc959724c8fbf29ce17b552b4190320ca4c3fe02f4c405d7767dc9bef67676",
+  "probe_sha256": "741bf389d51fa2df818e21ac0b7fd6b7121f8e24e6b49403925d88aabca007df",
+  "pack_sha256": "eed3dcde2790b2afade99f36bb67593aa740560e7954dcce6fc0fc203c544a5f",
+  "wrapper_sha256": "aa803855534f5e8328684d65efb95a0d0672e5723694e34a9a1f369ccb8535b9",
+  "private_chat_read": false,
+  "cases": [
+    {
+      "modules": [
+        "mlp.gate_proj",
+        "mlp.up_proj"
+      ],
+      "M": 1000,
+      "N": 34816,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 34816000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 2.108309268951416,
+      "tiled_including_reorder_ms": 1.7057387828826904,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.gate_proj",
+        "mlp.up_proj"
+      ],
+      "M": 1648,
+      "N": 34816,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 57376768,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 3.583282709121704,
+      "tiled_including_reorder_ms": 2.853425979614258,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.gate_proj",
+        "mlp.up_proj"
+      ],
+      "M": 2048,
+      "N": 34816,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 71303168,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 4.39101505279541,
+      "tiled_including_reorder_ms": 3.0968470573425293,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.down_proj"
+      ],
+      "M": 1000,
+      "N": 5120,
+      "K": 17408,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 5120000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 1.030157208442688,
+      "tiled_including_reorder_ms": 0.894116997718811,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.down_proj"
+      ],
+      "M": 1648,
+      "N": 5120,
+      "K": 17408,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 8437760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 1.8230291604995728,
+      "tiled_including_reorder_ms": 1.539203405380249,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "mlp.down_proj"
+      ],
+      "M": 2048,
+      "N": 5120,
+      "K": 17408,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 10485760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 2.24995493888855,
+      "tiled_including_reorder_ms": 1.6518137454986572,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z"
+      ],
+      "M": 1000,
+      "N": 16384,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 16384000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.928301990032196,
+      "tiled_including_reorder_ms": 0.8179267644882202,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z"
+      ],
+      "M": 1648,
+      "N": 16384,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 27000832,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 1.6673537492752075,
+      "tiled_including_reorder_ms": 1.408683180809021,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.in_proj_qkv",
+        "linear_attn.in_proj_z"
+      ],
+      "M": 2048,
+      "N": 16384,
+      "K": 5120,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 33554432,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 2.0748348236083984,
+      "tiled_including_reorder_ms": 1.5068533420562744,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.out_proj"
+      ],
+      "M": 1000,
+      "N": 5120,
+      "K": 6144,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1000,
+      "total_elements": 5120000,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.3371707499027252,
+      "tiled_including_reorder_ms": 0.30799075961112976,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.out_proj"
+      ],
+      "M": 1648,
+      "N": 5120,
+      "K": 6144,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 1648,
+      "total_elements": 8437760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.6035463809967041,
+      "tiled_including_reorder_ms": 0.5549763441085815,
+      "adapter_exact": true
+    },
+    {
+      "modules": [
+        "linear_attn.out_proj"
+      ],
+      "M": 2048,
+      "N": 5120,
+      "K": 6144,
+      "layout_bytes_equal": true,
+      "unequal_elements": 0,
+      "equal_rows": 2048,
+      "total_elements": 10485760,
+      "finite": true,
+      "canaries": true,
+      "ordinary_ms": 0.7708417773246765,
+      "tiled_including_reorder_ms": 0.6015663743019104,
+      "adapter_exact": true
+    }
+  ],
+  "negative_control_detected": true,
+  "consumer_calls": {
+    "tiled": 12,
+    "fallback": 0,
+    "rows": [
+      1000,
+      1648,
+      2048
+    ],
+    "shapes": [
+      [
+        5120,
+        6144
+      ],
+      [
+        5120,
+        17408
+      ],
+      [
+        16384,
+        5120
+      ],
+      [
+        34816,
+        5120
+      ]
+    ]
+  },
+  "elapsed_seconds": 7.476690432988107
+}

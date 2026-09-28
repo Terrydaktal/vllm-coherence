@@ -74,7 +74,7 @@ def install_compiled_norms(model, repairs, *, residual_build=None, prefill_align
         x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor, eps: float, key: str
     ) -> tuple[torch.Tensor, torch.Tensor]:
         calls[f"residual/{x.shape[0]}"] += 1
-        if 1 < x.shape[0] <= 8 or (prefill_aligned and 8 < x.shape[0] <= 2048):
+        if 1 < x.shape[0] <= 8 or (prefill_aligned and 8 < x.shape[0] <= 4096):
             return residual_candidate(x, residual, weight, eps)
         return originals[key](x, residual)
 

@@ -1,0 +1,118 @@
+{
+  "baseline_speed": false,
+  "candidate_only": true,
+  "cases": [
+    {
+      "backend_timings_ms": {
+        "admission": 8.854,
+        "cache_lookup": 18.092,
+        "complete": 0.004,
+        "generate": 0.491,
+        "handover": 56.279,
+        "prefill": 206950.696
+      },
+      "context": 200000,
+      "finish": "length",
+      "first_data_seconds": 207.33734059298877,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+      "repeat": 0,
+      "seconds": 207.33765719801886,
+      "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+      "tokens": 1,
+      "tokens_per_second": 964.611581435337,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "variant": "candidate"
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 841.214,
+        "cache_lookup": 17.108,
+        "complete": 0.003,
+        "generate": 0.572,
+        "handover": 9.075,
+        "prefill": 210744.778
+      },
+      "context": 200000,
+      "finish": "length",
+      "first_data_seconds": 211.76955164497485,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+      "repeat": 1,
+      "seconds": 211.7698279399774,
+      "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+      "tokens": 1,
+      "tokens_per_second": 944.4228334359127,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "variant": "candidate"
+    }
+  ],
+  "driver_sha256": "a822c219615f032f162d4c9463fd50540e8ad9137740161aff332fc0801b3ac3",
+  "fixture_sha256": "3f52c482fd685444bd3d195d738b56fd07f5471cabdc55fe1c03a85e18b5e530",
+  "schema": "urn:coherence:paired-prefill-speed:v1",
+  "scope": "Unprofiled cold synthetic prefill plus one first token; same process, fresh chat generations",
+  "sha256": "ad84e37f806bff0df32d5648c9301a15b7513c4a6030a526f93364434a7e30e6",
+  "sources": {
+    "candidate_sources": {
+      "prefill_activation_tiles.py": "eed3dcde2790b2afade99f36bb67593aa740560e7954dcce6fc0fc203c544a5f",
+      "prefill_alignment_runtime.py": "5b06a985c8eea2d12097d2c0ef65fa3dab87f3f50284f0ab21af98d8d9170f97",
+      "prefill_attention_alignment.py": "9342dd68eb180b9abaf2afb74419a19298eb846f561f84ec8c9515616c2cd8e4",
+      "prefill_dynamic_conv.py": "df5afb93747bda97eb6ad367c8c7c93560e8a5f7b9e7b75e16e36962b23601a0",
+      "prefill_gemm_alignment.py": "f3352144584eb9307888a5460c5c67e294f287d38abd741585f3b7f20f9793b4",
+      "prepared_prefill_scan.py": "96e2ababcba1bec21272caed31c716c6d81b216485be39961cfe7e053b3a6ea0"
+    }
+  },
+  "status": "MEASURED"
+}

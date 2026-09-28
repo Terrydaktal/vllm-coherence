@@ -67,7 +67,7 @@ def fused(x, z, weight, eps):
         or x.stride(1) != 128
         or z.stride(1) != 128
         or any(t.stride(-1) != 1 for t in (x, z, weight))
-        or not 1 <= x.shape[0] <= 2048
+        or not 1 <= x.shape[0] <= 4096
     ):
         raise ValueError("GDN norm/quant outside qualified TP1 shape/precision")
     q = torch.empty((x.shape[0], 6144), dtype=torch.float8_e4m3fn, device=x.device)

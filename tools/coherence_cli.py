@@ -488,7 +488,11 @@ def serving_command(args, connection):
         "--max-num-seqs",
         "2",
         "--max-num-batched-tokens",
-        "2048",
+        str(
+            profile["optimized_d7"]
+            .get("prefill_alignment", {})
+            .get("max_prefill_rows", 2048)
+        ),
         "--attention-backend",
         "R4D",
         "--speculative-config",

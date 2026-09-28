@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=41e9d7f7ac88a7ad9dafe0245d8f76b8896875cc92b2925e84425ab256e3f839
+readonly abi_id=09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0
 readonly data_abi=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
@@ -14,7 +14,7 @@ readonly port=${QWEN_QUALIFICATION_PORT:-8080}
 readonly image=docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc
 readonly required_shm_bytes=19327352832
 readonly required_snapshot_free_bytes=12884901888
-readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260927-prefill-alignment-v2
+readonly optimized_root=/home/lewis/.local/share/qwen-r9700/optimized-pi/20260928-prefill-speed-v4
 readonly speed_root=/home/lewis/.local/share/qwen-r9700/qualified-speed/20260926
 
 cd "$launcher_root"
@@ -231,7 +231,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	--host 0.0.0.0 --port "$port" --kv-cache-dtype fp8 --tensor-parallel-size 1 \
 	--shutdown-timeout 60 \
 	--gpu-memory-utilization 0.97 --kv-cache-memory 10000000000 \
-	--max-model-len 253792 --max-num-seqs 2 --max-num-batched-tokens 2048 \
+	--max-model-len 253792 --max-num-seqs 2 --max-num-batched-tokens 4096 \
 	--attention-backend R4D --speculative-config "$speculative_config" \
 	--no-async-scheduling --language-model-only --skip-mm-profiling \
 	--scheduler-cls qwen_radiance_fair_scheduler.FairScheduler --additional-config "$fair_config" \

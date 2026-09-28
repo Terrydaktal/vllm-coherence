@@ -9,10 +9,10 @@ import triton
 import triton.language as tl
 
 
-@triton.jit
-def _pack(source, target, m: tl.constexpr, k: tl.constexpr, block: tl.constexpr):
+@triton.jit(do_not_specialize=["m"])
+def _pack(source, target, m, k: tl.constexpr, block: tl.constexpr):
     i = tl.program_id(0) * block + tl.arange(0, block)
-    size = triton.cdiv(m, 16) * 16 * k
+    size = ((m + 15) // 16) * 16 * k
     row = (i // (16 * k)) * 16 + (i // 8) % 16
     col = ((i // 256) % (k // 16)) * 16 + ((i // 128) % 2) * 8 + i % 8
     value = tl.load(source + row * k + col, (i < size) & (row < m), 0)

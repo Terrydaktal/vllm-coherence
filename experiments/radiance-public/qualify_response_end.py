@@ -60,7 +60,9 @@ async def run(args):
         if args.sampled:
             suite.sampling = {"temperature": 1.0, "top_p": 0.95, "top_k": 40, "seed": 0}
         elif getattr(args, "full_bf16_head", False):
-            suite.sampling = {"temperature": 0, "top_k": 129, "seed": 0}
+            # Greedy admission ignores top_k, so a large k does not force the
+            # full head. Log-probability requests explicitly disable it.
+            suite.sampling = {"temperature": 0, "top_k": 129, "seed": 0, "logprobs": 1}
 
         async def consume(chat, next_prompt, expected, minimum, label):
             resumed = suite.stream(label, next_prompt, len(expected), chat)
@@ -436,7 +438,7 @@ def main():
     )
     p.add_argument("--fixture", type=Path)
     p.add_argument("--sampled", action="store_true")
-    p.add_argument("--full-bf16-head", action="store_true", help="Greedy diagnostics: request top_k=129 to select the qualified full-vocabulary head")
+    p.add_argument("--full-bf16-head", action="store_true", help="Greedy diagnostics: request log probabilities to select the qualified full-vocabulary head")
     p.add_argument(
         "--expect-rebuild",
         action="store_true",

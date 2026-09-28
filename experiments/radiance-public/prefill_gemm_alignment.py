@@ -18,7 +18,13 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def source_for_prefill(source):
+def source_for_prefill(source, window=256, tn=2, slab=64, register_partials=False):
+    if (
+        window not in (128, 256, 512, 1024, 2048)
+        or tn not in (2, 4)
+        or slab not in (64, 128)
+    ):
+        raise ValueError("unsupported prefill projection geometry")
     source = source[
         : source.index(
             "// ---------------------------------------------------------------- decode path"
@@ -36,6 +42,48 @@ def source_for_prefill(source):
         begin = source.index("void " + name + "(")
         end = source.index("\n}\n", begin) + 2
         body = source[begin:end]
+        if register_partials:
+            # Keep all four independently rounded accumulators and their
+            # ordered FP32 merge, but eliminate the global partial matrices.
+            acc_start = body.index("  floatx8 acc[TM][TN];")
+            tail = body.index(epilogue)
+            loop = f"  for (int k0 = 0; k0 < K; k0 += {loop_step}) {{"
+            compute = body[acc_start:tail]
+            if compute.count(loop) != 1:
+                raise ValueError("prefill GEMM K-loop changed")
+            compute = compute.replace(
+                loop,
+                f"  const int first_k = split * span, end_k = min(K, first_k + span);\n"
+                f"  for (int k0 = first_k; k0 < end_k; k0 += {loop_step}) {{",
+            )
+            body = (
+                body[:acc_start]
+                + """
+  floatx8 merged[TM][TN];
+  #pragma unroll
+  for (int i = 0; i < TM; ++i)
+    #pragma unroll
+    for (int j = 0; j < TN; ++j)
+      #pragma unroll
+      for (int e = 0; e < 8; ++e) merged[i][j][e] = 0.0f;
+  const int span = ((K / 128 + 3) / 4) * 128;
+  #pragma unroll 1
+  for (int split = 0; split < 4; ++split) {
+"""
+                + compute
+                + """
+    #pragma unroll
+    for (int i = 0; i < TM; ++i)
+      #pragma unroll
+      for (int j = 0; j < TN; ++j)
+        #pragma unroll
+        for (int e = 0; e < 8; ++e) merged[i][j][e] += acc[i][j][e];
+  }
+"""
+                + body[tail:].replace("acc[", "merged[")
+            )
+            source = source[:begin] + body + source[end:]
+            continue
         body = body.replace("__bf16 *__restrict__ C", "float *__restrict__ C")
         loop = f"  for (int k0 = 0; k0 < K; k0 += {loop_step}) {{"
         if body.count(loop) != 1:
@@ -89,8 +137,8 @@ template<bool WP> void coherence_prefill_project_window(const unsigned char* a, 
 template<bool WP> void coherence_prefill_project(const unsigned char* a, const unsigned char* w,
     const unsigned char* ws, const unsigned char* ref, const float* scale, __bf16* out,
     float* partials, int M, int N, int K, bool tiled, hipStream_t stream) {
-  // 256 is a whole number of 16-row activation tiles. Reuse 20 MiB rather
-  // than retaining four full-prompt FP32 matrices at the context limit.
+  // Bound the workspace by a whole number of 16-row activation tiles.
+  // Register-partial builds write final BF16 results directly, without scratch.
   for (int first = 0; first < M; first += 256)
     coherence_prefill_project_window<WP>(a + size_t(first)*K, w, ws, ref,
         scale + first, out + size_t(first)*N, partials,
@@ -99,7 +147,7 @@ template<bool WP> void coherence_prefill_project(const unsigned char* a, const u
 extern "C" int coherence_prefill_gemm(const void* a, const void* w, const void* ws,
     const void* ref, const void* scale, void* out, void* partials, int M, int N, int K,
     int tiled, int wp, void* stream) {
-  if (!a || !w || !ws || !ref || !scale || !out || !partials || M < 1 || M > 2048 || N != 5120 || K < 128 || K % 128 || (wp != 0 && wp != 1) || (tiled != 0 && tiled != 1)) return -1;
+  if (!a || !w || !ws || !ref || !scale || !out || !partials || M < 1 || M > 4096 || N != 5120 || K < 128 || K % 128 || (wp != 0 && wp != 1) || (tiled != 0 && tiled != 1)) return -1;
   if (wp)
     coherence_prefill_project<true>((const unsigned char*)a,(const unsigned char*)w,(const unsigned char*)ws,
       (const unsigned char*)ref,(const float*)scale,(__bf16*)out,(float*)partials,M,N,K,tiled,(hipStream_t)stream);
@@ -109,16 +157,41 @@ extern "C" int coherence_prefill_gemm(const void* a, const void* w, const void* 
   return int(hipGetLastError());
 }
 """
+    source = source.replace("BNF_OF(2)", f"BNF_OF({tn})")
+    source = source.replace(
+        "radiance_mxfp4_fp8_gemm_atiled<2,WP>",
+        f"radiance_mxfp4_fp8_gemm_atiled<{tn},WP,{slab}>",
+    )
+    source = source.replace(
+        "radiance_mxfp4_fp8_gemm_folded<2,WP,false>",
+        f"radiance_mxfp4_fp8_gemm_folded<{tn},WP,false>",
+    )
+    source = source.replace("first += 256", f"first += {window}")
+    source = source.replace("min(256, M-first)", f"min({window}, M-first)")
+    if register_partials:
+        source = source.replace("/ BMF, 4);", "/ BMF, 1);")
+        source = source.replace(
+            ">(a,w,ws,ref,scale,partials,M,N,K);",
+            ">(a,w,ws,ref,scale,out,M,N,K);",
+        )
+        source = source.replace(
+            "  coherence_prefill_reduce<<<dim3((size_t(M)*N+255)/256),dim3(256),0,stream>>>(partials,ref,scale,out,M,N);\n",
+            "",
+        )
     return source
 
 
-def build(parent, output, expected_sha256):
+def build(
+    parent, output, expected_sha256, window=256, tn=2, slab=64, register_partials=False
+):
     parent, output = Path(parent), Path(output)
     if digest(parent) != expected_sha256:
         raise ValueError("parent GEMM source differs from the declared release")
     output.mkdir(mode=0o700)
     source = output / "aligned-prefill-gemm.hip"
-    source.write_text(source_for_prefill(parent.read_text()))
+    source.write_text(
+        source_for_prefill(parent.read_text(), window, tn, slab, register_partials)
+    )
     command = [
         "/opt/rocm/bin/hipcc",
         "-O3",
@@ -140,8 +213,11 @@ def build(parent, output, expected_sha256):
         {
             "status": "BUILT_UNTESTED",
             "kernel_abi": "coherence-prefill-m1-gemm-v2",
-            "window": 256,
-            "scratch_bytes": 4 * 256 * 5120 * 4,
+            "window": window,
+            "tn": tn,
+            "slab": slab,
+            "register_partials": register_partials,
+            "scratch_bytes": 4 if register_partials else 4 * window * 5120 * 4,
             "parent_sha256": expected_sha256,
             "generator_sha256": digest(__file__),
             "command": command,
@@ -163,7 +239,16 @@ class AlignedPrefillGemm:
         authenticate(self.manifest)
         if (
             self.manifest["kernel_abi"] != "coherence-prefill-m1-gemm-v2"
-            or self.manifest.get("window") != 256
+            or self.manifest.get("window") not in (128, 256, 512, 1024, 2048)
+            or self.manifest.get("tn", 2) not in (2, 4)
+            or self.manifest.get("slab", 64) not in (64, 128)
+            or type(self.manifest.get("register_partials", False)) is not bool
+            or self.manifest.get("scratch_bytes")
+            != (
+                4
+                if self.manifest.get("register_partials")
+                else 4 * self.manifest["window"] * 5120 * 4
+            )
         ):
             raise ValueError("unknown prefill projection ABI")
         for name, expected in self.manifest["files"].items():
@@ -186,7 +271,7 @@ class AlignedPrefillGemm:
             q.device.type == "cuda"
             and q.dtype == torch.float8_e4m3fn
             and q.is_contiguous()
-            and 1 <= m <= 2048
+            and 1 <= m <= 4096
             and n == 5120
             and k >= 128
             and k % 128 == 0
@@ -212,7 +297,11 @@ class AlignedPrefillGemm:
         a = pack(q) if tiled else q
         out = torch.empty((m, n), device=q.device, dtype=torch.bfloat16)
         partials = torch.empty(
-            (4, min(m, 256), n), device=q.device, dtype=torch.float32
+            (1,)
+            if self.manifest.get("register_partials")
+            else (4, min(m, self.manifest["window"]), n),
+            device=q.device,
+            dtype=torch.float32,
         )
         code = self.launch(
             a.data_ptr(),
@@ -241,5 +330,23 @@ if __name__ == "__main__":
     parser.add_argument("--parent", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-sha256", required=True)
+    parser.add_argument(
+        "--window", type=int, default=256, choices=(128, 256, 512, 1024, 2048)
+    )
+    parser.add_argument("--tn", type=int, default=2, choices=(2, 4))
+    parser.add_argument("--slab", type=int, default=64, choices=(64, 128))
+    parser.add_argument("--register-partials", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(build(args.parent, args.output, args.expected_sha256)))
+    print(
+        json.dumps(
+            build(
+                args.parent,
+                args.output,
+                args.expected_sha256,
+                args.window,
+                args.tn,
+                args.slab,
+                args.register_partials,
+            )
+        )
+    )

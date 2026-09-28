@@ -1321,7 +1321,7 @@ def render_cache_state_equivalence(data):
     """Keep cache-path equality and latency attached to their original captures."""
     alignment_path = data["prefill_alignment_evidence"]
     alignment = json.loads((ROOT / alignment_path).read_text())
-    deployment_path = data["current_deployment"]
+    deployment_path = data.get("prefill_alignment_deployment", data["current_deployment"])
     deployment = json.loads((ROOT / deployment_path).read_text())
     cache_path = data["current_response_end_qualification"]
     cache = json.loads((ROOT / cache_path).read_text())
@@ -1520,11 +1520,13 @@ def render_cache_state_equivalence(data):
     )
     return [
         "### Cache-state equivalence and prefill/restore timings", "",
-        "**Before / after refers to the prefill arithmetic repair introduced in this commit.** "
-        "The table distinguishes exact state bytes, hidden/logit equality and generated-token replay. "
-        "**Aligned release** is the repaired September 27 build; **earlier cache/pressure/snapshot release** "
-        "is the baseline. Where a path was not rerun or a baseline was not captured, that is explicit. "
-        "All workloads here are synthetic, and each source retains its tested identities.", "",
+        (
+            "**Before / after refers to the prefill arithmetic repair introduced on September 27.** "
+            "The table distinguishes exact state bytes, hidden/logit equality and generated-token replay. "
+            "**Aligned release** is the repaired September 27 build; **earlier cache/pressure/snapshot release** "
+            "is the baseline. Where a path was not rerun or a baseline was not captured, that is explicit. "
+            "All workloads here are synthetic, and each source retains its tested identities."
+        ), "",
         "| State / execution comparison | Workload and cache coverage | Correctness before | Correctness after | Speed / latency before | Speed / latency after | Capture |",
         "| --- | --- | --- | --- | --- | --- | --- |",
         *rows, "",
@@ -1543,6 +1545,103 @@ def render_cache_state_equivalence(data):
         "These finite checks do not prove arbitrary-input correctness, exhaustive scheduling interleavings "
         "or completeness of the approximate Global-512 head.",
     ]
+
+
+def render_prefill_speed(data):
+    """Keep later prefill optimization measurements separate from decode tables."""
+    if not data.get("prefill_speed_timing"):
+        return []
+    timing = json.loads((ROOT / data["prefill_speed_timing"]).read_text())
+    qualification = json.loads((ROOT / data["prefill_speed_evidence"]).read_text())
+    rows = {}
+    for row in timing["cases"]:
+        rows.setdefault((row["context"], row["variant"]), []).append(row)
+    checks = {row["first_position"]: row for row in qualification["model_comparisons"]}
+    lines = [
+        "### Prefill speed recovery, September 28",
+        "",
+        (
+            "The September 28 build preserves the corrected arithmetic while packing attention work and sharing loads, "
+            "retaining projection partials in registers, preparing GDN inputs once and reusing compiled "
+            "kernels across changing prompt lengths. A qualified 4,096-row admission limit lets the scheduler "
+            "use 3,296-row chunks instead of 1,648. The existing decode kernels, Global-512 head and "
+            "corrected snapshot data format are unchanged."
+        ),
+        "",
+        "| Cold context | Older, numerically inconsistent prefill | Corrected before optimization | Current corrected prefill | Full hidden/logit equality against corrected decode |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ]
+    first_data = []
+    ranges = []
+    for context in (60000, 200000):
+        before, after = (rows[context, name] for name in ("baseline", "candidate"))
+        b, a = (
+            sum(row["backend_timings_ms"]["prefill"] for row in group)
+            / len(group)
+            / 1000
+            for group in (before, after)
+        )
+        check = checks[context]
+        if (
+            check["hidden_exact_rows"] != check["positions"]
+            or check["hidden_different_elements"]
+        ):
+            raise ValueError("prefill speed evidence has a hidden-state divergence")
+        n = check["positions"]
+        if check["logits"]["full_logits_exact"] != n or any(
+            check["logits"][str(k)][metric] != n
+            for k in (1, 10, 20)
+            for metric in ("set_exact", "ranked_exact")
+        ):
+            raise ValueError("prefill speed evidence has a logit divergence")
+        old = next(
+            row
+            for row in timing["earlier_uncorrected_control"]["cases"]
+            if row["context"] == context
+        )
+        old_seconds = old["backend_timings_ms"]["prefill"] / 1000
+        lines.append(
+            f"| {context:,} tokens | {old_seconds:.2f} s | {b:.2f} s | **{a:.2f} s** | "
+            f"**{n:,}/{n:,}**, including top-1/10/20 sets and ordering |"
+        )
+        values = [row["backend_timings_ms"]["prefill"] / 1000 for row in after]
+        ranges.append(f"{min(values):.2f}–{max(values):.2f} s")
+        first_data.append(
+            f"{sum(row['first_data_seconds'] for row in after) / len(after):.2f} s"
+        )
+    lines += [
+        "",
+        "Current values are the means of two unprofiled cold requests per context; their ranges were "
+        + " / ".join(ranges)
+        + ". The older columns retain one request per context from the recorded control runs, "
+        "using synthetic prefixes. Current prefixes have matching hashes against the older inconsistent controls; "
+        "the initial corrected record did not retain per-prompt hashes, so that historical comparison is indicative. "
+        "All requests reused zero prompt tokens and generated one token "
+        "using greedy sampling. Current mean request-to-first-data times were "
+        + " / ".join(first_data)
+        + ". "
+        "The "
+        f"[measurement]({data['prefill_speed_timing']}) is a prefill test, not a generation-throughput benchmark.",
+        "",
+        "This recovers approximately the old prefill speed: 60K is about 3.1% faster than the old control; "
+        "the 200K mean is about 0.9% slower, with individual repeats spanning the old time. "
+        "The reduction from the initial corrected path is about 26.5% / 25.5%. "
+        "These few measurements do not establish a speedup for every workload. No arithmetic relaxation was used. "
+        "The [initial corrected comparison](benchmarks/results/prefill-speed-initial-timings-20260928.json) "
+        "and [packed-kernel comparison](benchmarks/results/prefill-packed-timings-20260928.json) remain available separately.",
+        "",
+        (
+            f"[Qualification]({data['prefill_speed_evidence']}) also covers complete operator outputs and recurrent state, "
+            "plus twelve exact cached tool continuations. The frozen build passed "
+            f"[six corrected-parent snapshot restores and nine greedy/control cancellation/scheduling cases]({data['prefill_speed_lifecycle']}). "
+            "A seeded stochastic replay differed; follow-up captures matched all 244 target hidden/logit rows "
+            "through the first different sample while draft proposals differed. "
+            "These are exact sampled checks, not an arbitrary-input proof. See "
+            f"[implementation and scope]({data['prefill_speed_document']})."
+        ),
+        "",
+    ]
+    return lines
 
 
 def render(data):
@@ -1637,6 +1736,7 @@ def render(data):
         "",
         *render_cache_state_equivalence(data),
         "",
+        *render_prefill_speed(data),
         (
             (f"The expandable layer and kernel tables use the same {retained_cycles:,} retained "
              f"60K cycles as the main table ({detail['date']}). GPU activity crossing a worker "

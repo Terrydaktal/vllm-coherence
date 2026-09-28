@@ -10,6 +10,281 @@ from pathlib import Path
 
 
 class PrefillDivergenceProbe:
+    def qwen_prefill_conv_speed_probe(self, source_root, options):
+        import importlib.util
+        import sys
+
+        root = Path(source_root).resolve()
+        if not root.is_relative_to("/prefill-diagnosis"):
+            raise ValueError("isolated source mount required")
+        if not Path(options["output"]).resolve().is_relative_to("/prefill-diagnosis"):
+            raise ValueError("isolated output required")
+        for name in ("prefill_dynamic_conv", "benchmark_prefill_conv"):
+            spec = importlib.util.spec_from_file_location(name, root / (name + ".py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules[name] = module
+        report = module.run(options)
+        return {
+            "status": report["status"],
+            "native_source_sha256": report["native_source_sha256"],
+            "cases": report["cases"],
+        }
+
+    def qwen_prefill_input_projection_probe(self, rows, destination):
+        import statistics
+        from types import SimpleNamespace
+
+        import torch
+        from prefill_activation_tiles import pack
+
+        import radiance_mxfp4 as gemm
+
+        path = Path(destination).resolve()
+        if not path.is_relative_to("/prefill-diagnosis") or path.exists():
+            raise ValueError("new isolated result path required")
+        model = getattr(
+            self.model_runner.model, "language_model", self.model_runner.model
+        )
+        selected = {}
+        for name, layer in model.named_modules():
+            if hasattr(layer, "_rad_w"):
+                layer = SimpleNamespace(
+                    weight=layer._rad_w,
+                    weight_scale=layer._rad_ws,
+                    radiance_wref=layer._rad_wref,
+                )
+            weight, scale, ref = (
+                getattr(layer, n, None)
+                for n in ("weight", "weight_scale", "radiance_wref")
+            )
+            if weight is None or scale is None or ref is None or weight.ndim != 2:
+                continue
+            n, k = weight.shape[0], weight.shape[1] * 2
+            if (
+                5120 < n <= 50000
+                and weight.dtype == torch.uint8
+                and ref.numel() == n
+                and k == 5120
+            ):
+                selected.setdefault((n, k), (name, layer))
+        if not selected:
+            raise ValueError("no native input projections found")
+        if not rows:
+            return {
+                "projection_shapes": [
+                    {"N": n, "K": k, "module": name}
+                    for (n, k), (name, _) in sorted(selected.items())
+                ]
+            }
+        report = {
+            "status": "RUNNING",
+            "cases": [],
+            "binary_sha256": hashlib.sha256(
+                Path(gemm._ext.__file__).read_bytes()
+            ).hexdigest(),
+            "pack_source_sha256": hashlib.sha256(
+                Path(pack.__code__.co_filename).read_bytes()
+            ).hexdigest(),
+        }
+        torch.manual_seed(902731)
+        for (n, k), (name, layer) in sorted(selected.items()):
+            for m in rows:
+                q = (torch.randn((m, k), device="cuda") * 8).to(torch.float8_e4m3fn)
+                scale = torch.rand(m, device="cuda") * 0.1 + 0.0001
+                tiled = pack(q)
+                buffers = [
+                    torch.full((m * n + 1024,), 42, device="cuda", dtype=torch.bfloat16)
+                    for _ in range(2)
+                ]
+                outputs = [x[512:-512].view(m, n) for x in buffers]
+
+                def launch(
+                    packed,
+                    q=q,
+                    tiled=tiled,
+                    layer=layer,
+                    scale=scale,
+                    outputs=outputs,
+                    m=m,
+                    n=n,
+                    k=k,
+                ):
+                    if packed:
+                        pack(q, tiled)
+                    (gemm._ext.launch_at if packed else gemm._ext.launch)(
+                        (tiled if packed else q).data_ptr(),
+                        layer.weight.data_ptr(),
+                        layer.weight_scale.data_ptr(),
+                        layer.radiance_wref.data_ptr(),
+                        scale.data_ptr(),
+                        outputs[int(packed)].data_ptr(),
+                        m,
+                        n,
+                        k,
+                        torch.cuda.current_stream().cuda_stream,
+                    )
+
+                launch(False)
+                launch(True)
+                actual, expected = outputs[1], outputs[0]
+                # count_nonzero on a large GPU boolean tensor can materialize
+                # an int64 reduction temporary. Compare on the host so the
+                # checker stays bounded beside a context-sized KV allocation.
+                actual_cpu, expected_cpu = actual.cpu(), expected.cpu()
+                different = int(
+                    torch.count_nonzero(
+                        actual_cpu.view(torch.int16) != expected_cpu.view(torch.int16)
+                    ).item()
+                )
+                case = {
+                    "module": name,
+                    "M": m,
+                    "N": n,
+                    "K": k,
+                    "different": different,
+                    "elements": actual.numel(),
+                    "finite": bool(torch.isfinite(actual_cpu).all()),
+                    "canaries": all(
+                        bool((x[:512] == 42).all() and (x[-512:] == 42).all())
+                        for x in buffers
+                    ),
+                }
+                report["cases"].append(case)
+                if different or not case["finite"] or not case["canaries"]:
+                    report["status"] = "MISMATCH"
+                    path.write_text(json.dumps(report, indent=2) + "\n")
+                    raise RuntimeError(
+                        "tiled input projection changed arithmetic or memory bounds"
+                    )
+                samples = {"ordinary": [], "tiled": []}
+                for iteration in range(11):
+                    for packed in (
+                        (False, True) if iteration % 2 == 0 else (True, False)
+                    ):
+                        begin, end = (
+                            torch.cuda.Event(enable_timing=True) for _ in range(2)
+                        )
+                        begin.record()
+                        launch(packed)
+                        end.record()
+                        end.synchronize()
+                        samples["tiled" if packed else "ordinary"].append(
+                            begin.elapsed_time(end)
+                        )
+                case["median_ms"] = {
+                    key: statistics.median(value) for key, value in samples.items()
+                }
+                case["samples_ms"] = samples
+                del (
+                    launch,
+                    buffers,
+                    outputs,
+                    actual,
+                    expected,
+                    actual_cpu,
+                    expected_cpu,
+                    q,
+                    scale,
+                    tiled,
+                )
+        report["status"] = "SAMPLE_CHECKED"
+        path.write_text(json.dumps(report, indent=2) + "\n")
+        return {
+            "status": report["status"],
+            "cases": [
+                {key: c[key] for key in ("M", "N", "K", "different", "median_ms")}
+                for c in report["cases"]
+            ],
+        }
+
+    def qwen_prefill_scan_speed_probe(self, source_root, options):
+        import importlib.util
+
+        root = Path(source_root).resolve()
+        if not root.is_relative_to("/prefill-diagnosis"):
+            raise ValueError("isolated source mount required")
+        spec = importlib.util.spec_from_file_location(
+            "prefill_scan_benchmark", root / "benchmark_prefill_scan.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        report = module.run(options)
+        return {
+            "status": report["status"],
+            "sha256": report["sha256"],
+            "cases": [
+                {"rows": c["rows"], "median_ms": c.get("median_ms")}
+                for c in report["cases"]
+            ],
+        }
+
+    def qwen_prefill_kernel_profile(self, destination=None):
+        """Content-free kernel attribution; never use its wall time as throughput."""
+        import torch
+
+        profiler = getattr(self, "_prefill_kernel_profiler", None)
+        if destination is not None:
+            if profiler is not None:
+                raise ValueError("kernel profiler already active")
+            path = Path(destination).resolve()
+            if not path.is_relative_to("/prefill-diagnosis") or path.exists():
+                raise ValueError("new isolated result path required")
+            profiler = torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ],
+                record_shapes=False,
+                profile_memory=False,
+                with_stack=False,
+            )
+            torch.cuda.synchronize()
+            profiler.start()
+            self._prefill_kernel_profiler = (profiler, path)
+            return {"status": "STARTED"}
+        if profiler is None:
+            raise ValueError("kernel profiler not active")
+        profiler, path = profiler
+        torch.cuda.synchronize()
+        profiler.stop()
+        self._prefill_kernel_profiler = None
+        profiler.export_chrome_trace(str(path))
+        return {"status": "SAVED", "bytes": path.stat().st_size}
+
+    def qwen_prefill_operator_speed_probe(self, source_root, options):
+        """Run synthetic attention checks using this isolated worker's allocator."""
+        import importlib.util
+        from types import SimpleNamespace
+
+        if getattr(self, "_prefill_capture", None) is not None:
+            raise ValueError("cannot benchmark during a capture")
+        root = Path(source_root).resolve()
+        if not root.is_relative_to("/prefill-diagnosis"):
+            raise ValueError("isolated source mount required")
+        options = dict(options)
+        for key in ("baseline", "output"):
+            options[key] = Path(options[key])
+        options["candidates"] = [Path(p) for p in options["candidates"]]
+        if not options["output"].resolve().is_relative_to("/prefill-diagnosis"):
+            raise ValueError("isolated result path required")
+        kind = options.pop("kind", "attention")
+        if kind not in ("attention", "projection"):
+            raise ValueError("unknown prefill operator benchmark")
+        spec = importlib.util.spec_from_file_location(
+            "prefill_operator_benchmark", root / f"benchmark_prefill_{kind}.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.run(SimpleNamespace(**options))
+        report = json.loads(options["output"].read_text())
+        return {
+            "status": report["status"],
+            "sha256": report["sha256"],
+            "cases": len(report["cases"]),
+            "timings": report["timings"],
+        }
+
     def qwen_prefill_restore_original(self):
         if getattr(self, "_prefill_capture", None) is not None:
             raise ValueError("cannot change a live capture")
@@ -36,7 +311,37 @@ class PrefillDivergenceProbe:
                 op.register_kernel("cuda", op._backend_fns.get(None, op._init_fn))
         return {"production_baseline_restored": True}
 
-    def qwen_prefill_install_runtime(self, attention_build, projection_build):
+    def qwen_prefill_load_candidate_sources(self, source_root):
+        """Load isolated candidate adapters without mutating the serving artifact."""
+        import importlib.util
+        import sys
+
+        if getattr(self, "_prefill_capture", None) is not None:
+            raise ValueError("cannot change sources during a capture")
+        root = Path(source_root).resolve()
+        if not root.is_relative_to("/prefill-diagnosis"):
+            raise ValueError("candidate sources must be in the isolated test mount")
+        self.qwen_prefill_restore_original()
+        hashes = {}
+        for name in (
+            "prefill_activation_tiles",
+            "prefill_attention_alignment",
+            "prefill_gemm_alignment",
+            "prepared_prefill_scan",
+            "prefill_dynamic_conv",
+            "prefill_alignment_runtime",
+        ):
+            path = root / (name + ".py")
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules[name] = module
+            hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        return {"candidate_sources": hashes}
+
+    def qwen_prefill_install_runtime(
+        self, attention_build, projection_build, speed=False
+    ):
         from prefill_alignment_runtime import install
 
         from qwen_r9700_lab.conformance_instrumentation import HookSet
@@ -47,10 +352,32 @@ class PrefillDivergenceProbe:
         entry = {
             "attention": {"build": attention_build},
             "projection": {"build": projection_build},
+            "prepared_scan": bool(speed),
+            "input_tiles": bool(speed),
+            "dynamic_conv": bool(speed),
         }
+        if speed:
+            import inspect
+
+            from prefill_dynamic_conv import native_module
+
+            entry["conv_native_sha256"] = hashlib.sha256(
+                inspect.getsource(
+                    native_module()._causal_conv1d_update_kernel.fn
+                ).encode()
+            ).hexdigest()
         result = install(entry, hooks, verify=False)
         self._prefill_candidate_hooks = hooks
+        self._prefill_candidate_status = result
         return result
+
+    def qwen_prefill_legacy_timing(self):
+        """Isolated speed control only: restore the pre-alignment prefill math."""
+        self.qwen_prefill_restore_original()
+        self._qwen_performance_repairs.prefill_hooks.close()
+        return {
+            "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        }
 
     def qwen_prefill_attention_matrix(self, build, capture, cases, destination):
         """Independent M1 workgroups, scrambled physical pages and long contexts."""
@@ -419,6 +746,9 @@ class PrefillDivergenceProbe:
             "gemm_tiled_launch": repr(gemm._ext.launch_at),
             "scan": str(type(scan)),
             "scan_source": inspect.getsourcefile(type(scan)),
+            "scan_run_source": inspect.getsourcefile(scan.run),
+            "scan_instance_override": "run" in scan.__dict__,
+            "candidate": getattr(self, "_prefill_candidate_status", None),
             "tiled_min_m": gemm.A_TILED_MIN_M,
             "gemm_probe_calls": getattr(self, "_prefill_gemm_calls", {}),
         }

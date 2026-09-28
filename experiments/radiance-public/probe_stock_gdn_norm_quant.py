@@ -118,9 +118,10 @@ def run(args):
                 {"site": site, "width": width, "matching_rows": good}
             )
         save()
-    for width in (9, 320, 1000, 1648, 2048):
-        xx = x.repeat((3, 1, 1))[:width].contiguous()
-        zz = z.repeat((3, 1, 1))[:width].contiguous()
+    for width in (9, 320, 1000, 1648, 2048, 2049, 2560, 3295, 3296, 3297, 4095, 4096):
+        repetitions = (width + len(x) - 1) // len(x)
+        xx = x.repeat((repetitions, 1, 1))[:width].contiguous()
+        zz = z.repeat((repetitions, 1, 1))[:width].contiguous()
         a, b = reference(xx, zz, weights[0]), fused(xx, zz, weights[0], 1e-6)
         ok = all(equal(i, j) for i, j in zip(a, b, strict=True))
         report["checks"].append({"prefill_width": width, "equal": ok})

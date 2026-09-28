@@ -1,0 +1,248 @@
+{
+  "schema": "urn:coherence:prefill-speed-timing:v1",
+  "status": "MEASURED",
+  "frozen_manifest_sha256": "3c9719dda5ed1984837381ed3fc029a968a3817d90b19fc3bf828bfe180bfe73",
+  "scope": "One unprofiled cold request per variant at each context in the same restarted server; synthetic fixture; no reused prompt tokens; one BF16-head output token. Not a decode throughput benchmark. First-use compilation is not artificially subtracted.",
+  "current_source_sha256": "75ebd34419ca85e900cb0ac00a60aeb32284327bf8babd2c75a73e996046abca",
+  "driver_source_sha256": "05c9eca56ac3e959db715e7118a3b50391cdbff66ad8e6c62d72f2f13b4921fb",
+  "runtime_sources": {
+    "candidate_sources": {
+      "prefill_activation_tiles.py": "eed3dcde2790b2afade99f36bb67593aa740560e7954dcce6fc0fc203c544a5f",
+      "prefill_alignment_runtime.py": "74ded3f0da95fa44ea3a998ea007ea91e5bfd18ece1c30fc0c314c4a8ad254e3",
+      "prefill_attention_alignment.py": "b02aeea5c80119f4f9749420597ef3302b6fe2332b6945a4e177f79d54f4ed94",
+      "prefill_dynamic_conv.py": "33abea9b6c9bee4e7c4092e0355f8a40aa20809be8c12d1a849c43dc4c00833f",
+      "prefill_gemm_alignment.py": "c675d0d8e44a91fd468fd854519c766166481c162666deae6add7fbc4cbcb438",
+      "prepared_prefill_scan.py": "de0d9dfdd52695a4c65728c4dace7c227631f0c882f374e02083b6a07e8a1f55"
+    }
+  },
+  "cases": [
+    {
+      "context": 60000,
+      "repeat": 0,
+      "variant": "baseline",
+      "first_data_seconds": 49.1679351819912,
+      "tokens_per_second": 1220.307498737028,
+      "tokens": 1,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "finish": "length",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "backend_timings_ms": {
+        "admission": 5.25,
+        "cache_lookup": 6.05,
+        "complete": 0.003,
+        "generate": 0.953,
+        "handover": 470.586,
+        "prefill": 48299.604
+      },
+      "installed": {
+        "attention_build": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8",
+        "calls": {
+          "attention_prefill": 0,
+          "projection_prefill": 0
+        },
+        "projection_build": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623",
+        "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 71696384
+      }
+    },
+    {
+      "context": 60000,
+      "repeat": 0,
+      "variant": "candidate",
+      "first_data_seconds": 40.18550135198166,
+      "tokens_per_second": 1493.0758104636968,
+      "tokens": 1,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "finish": "length",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "backend_timings_ms": {
+        "admission": 842.641,
+        "cache_lookup": 4.385,
+        "complete": 0.003,
+        "generate": 0.874,
+        "handover": 6.027,
+        "prefill": 39274.88
+      },
+      "installed": {
+        "attention_build": "4c7b4ea152fefe89728fa9d0e39e0f69c1e48bdc2c0f81d76a39f9c6b493541d",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "2b8db2b8c6fb8bda2a97482496d0ee8df207b2513186a173cea7f551be9ab947",
+        "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      }
+    },
+    {
+      "context": 200000,
+      "repeat": 0,
+      "variant": "baseline",
+      "first_data_seconds": 282.7470420880127,
+      "tokens_per_second": 707.3460380807259,
+      "tokens": 1,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "finish": "length",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "backend_timings_ms": {
+        "admission": 1083.614,
+        "cache_lookup": 17.425,
+        "complete": 0.003,
+        "generate": 0.852,
+        "handover": 891.871,
+        "prefill": 280404.021
+      },
+      "installed": {
+        "attention_build": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8",
+        "calls": {
+          "attention_prefill": 0,
+          "projection_prefill": 0
+        },
+        "projection_build": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623",
+        "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 71696384
+      }
+    },
+    {
+      "context": 200000,
+      "repeat": 0,
+      "variant": "candidate",
+      "first_data_seconds": 238.7562349990185,
+      "tokens_per_second": 837.6744590599789,
+      "tokens": 1,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "finish": "length",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "backend_timings_ms": {
+        "admission": 1036.696,
+        "cache_lookup": 15.566,
+        "complete": 0.003,
+        "generate": 0.79,
+        "handover": 104.064,
+        "prefill": 237448.38
+      },
+      "installed": {
+        "attention_build": "4c7b4ea152fefe89728fa9d0e39e0f69c1e48bdc2c0f81d76a39f9c6b493541d",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "2b8db2b8c6fb8bda2a97482496d0ee8df207b2513186a173cea7f551be9ab947",
+        "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      }
+    }
+  ],
+  "earlier_uncorrected_control": {
+    "source_sha256": "9d3a0a5331b03b5aae6543e21886f796041423c1c90e356b1fc1b0d6439c368e",
+    "scope": "Earlier same-fixture timing with pre-alignment attention and projection. Different numerical arithmetic; not an admissible deployment. Not repeated in the frozen-release timing run.",
+    "cases": [
+      {
+        "context": 60000,
+        "repeat": 0,
+        "variant": "legacy",
+        "first_data_seconds": 36.54555147298379,
+        "tokens_per_second": 1641.7866903542242,
+        "tokens": 1,
+        "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+        "finish": "length",
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 60000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 60001
+        },
+        "backend_timings_ms": {
+          "admission": 4.67,
+          "cache_lookup": 3.88,
+          "complete": 0.004,
+          "generate": 0.437,
+          "handover": 5.167,
+          "prefill": 36433.005
+        },
+        "installed": {
+          "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        }
+      },
+      {
+        "context": 200000,
+        "repeat": 0,
+        "variant": "legacy",
+        "first_data_seconds": 208.58642957700067,
+        "tokens_per_second": 958.8351476440084,
+        "tokens": 1,
+        "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+        "finish": "length",
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 200000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 200001
+        },
+        "backend_timings_ms": {
+          "admission": 866.245,
+          "cache_lookup": 13.927,
+          "complete": 0.003,
+          "generate": 0.399,
+          "handover": 5.196,
+          "prefill": 207538.582
+        },
+        "installed": {
+          "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        }
+      }
+    ]
+  }
+}

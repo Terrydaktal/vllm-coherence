@@ -1,0 +1,347 @@
+{
+  "schema": "urn:coherence:prefill-speed-summary:v1",
+  "status": "PASS_FOR_DECLARED_SCOPE",
+  "scope": "Two cold synthetic requests per current context, one historical control per context; separate runs, not a simultaneous paired test. Prefill phases exclude stage profiling. Exact correctness is recorded separately.",
+  "baseline_description": "Initial corrected arithmetic before speed optimizations",
+  "candidate_description": "Packed corrected attention, prepared GDN inputs, register projection partials, dynamic convolution, qualified 4096-row admission; actual chunks 3296",
+  "frozen_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+  "cases": [
+    {
+      "context": 60000,
+      "repeat": 0,
+      "variant": "baseline",
+      "first_data_seconds": 49.1679351819912,
+      "tokens_per_second": 1220.307498737028,
+      "tokens": 1,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "finish": "length",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "backend_timings_ms": {
+        "admission": 5.25,
+        "cache_lookup": 6.05,
+        "complete": 0.003,
+        "generate": 0.953,
+        "handover": 470.586,
+        "prefill": 48299.604
+      },
+      "installed": {
+        "attention_build": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8",
+        "calls": {
+          "attention_prefill": 0,
+          "projection_prefill": 0
+        },
+        "projection_build": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623",
+        "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 71696384
+      }
+    },
+    {
+      "context": 200000,
+      "repeat": 0,
+      "variant": "baseline",
+      "first_data_seconds": 282.7470420880127,
+      "tokens_per_second": 707.3460380807259,
+      "tokens": 1,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "finish": "length",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "backend_timings_ms": {
+        "admission": 1083.614,
+        "cache_lookup": 17.425,
+        "complete": 0.003,
+        "generate": 0.852,
+        "handover": 891.871,
+        "prefill": 280404.021
+      },
+      "installed": {
+        "attention_build": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8",
+        "calls": {
+          "attention_prefill": 0,
+          "projection_prefill": 0
+        },
+        "projection_build": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623",
+        "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 71696384
+      }
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 52.612,
+        "cache_lookup": 3.344,
+        "complete": 0.003,
+        "generate": 0.494,
+        "handover": 5.614,
+        "prefill": 35448.033
+      },
+      "context": 60000,
+      "finish": "length",
+      "first_data_seconds": 35.56484945700504,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "e3d15b84e7adf3598265634bb229f0e6a341a6b83d076689619918698b17e691",
+      "repeat": 0,
+      "seconds": 35.56520804401953,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "tokens": 1,
+      "tokens_per_second": 1687.0590179928931,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "variant": "candidate"
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 537.161,
+        "cache_lookup": 3.979,
+        "complete": 0.003,
+        "generate": 0.677,
+        "handover": 6.115,
+        "prefill": 35552.52
+      },
+      "context": 60000,
+      "finish": "length",
+      "first_data_seconds": 36.15093092501047,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "e3d15b84e7adf3598265634bb229f0e6a341a6b83d076689619918698b17e691",
+      "repeat": 1,
+      "seconds": 36.15132023199112,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "tokens": 1,
+      "tokens_per_second": 1659.7082969857884,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "variant": "candidate"
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 8.854,
+        "cache_lookup": 18.092,
+        "complete": 0.004,
+        "generate": 0.491,
+        "handover": 56.279,
+        "prefill": 206950.696
+      },
+      "context": 200000,
+      "finish": "length",
+      "first_data_seconds": 207.33734059298877,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+      "repeat": 0,
+      "seconds": 207.33765719801886,
+      "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+      "tokens": 1,
+      "tokens_per_second": 964.611581435337,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "variant": "candidate"
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 841.214,
+        "cache_lookup": 17.108,
+        "complete": 0.003,
+        "generate": 0.572,
+        "handover": 9.075,
+        "prefill": 210744.778
+      },
+      "context": 200000,
+      "finish": "length",
+      "first_data_seconds": 211.76955164497485,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+      "repeat": 1,
+      "seconds": 211.7698279399774,
+      "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+      "tokens": 1,
+      "tokens_per_second": 944.4228334359127,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "variant": "candidate"
+    }
+  ],
+  "earlier_uncorrected_control": {
+    "scope": "Earlier numerically inconsistent timing-only controls; never deploy. Prompt hashes match current requests.",
+    "cases": [
+      {
+        "backend_timings_ms": {
+          "admission": 83.077,
+          "cache_lookup": 3.602,
+          "complete": 0.003,
+          "generate": 0.525,
+          "handover": 5.085,
+          "prefill": 36636.148
+        },
+        "context": 60000,
+        "finish": "length",
+        "first_data_seconds": 36.86948507302441,
+        "installed": {
+          "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        },
+        "prompt_sha256": "e3d15b84e7adf3598265634bb229f0e6a341a6b83d076689619918698b17e691",
+        "repeat": 0,
+        "seconds": 36.86978280902258,
+        "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+        "tokens": 1,
+        "tokens_per_second": 1627.3620280067066,
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 60000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 60001
+        },
+        "variant": "legacy"
+      },
+      {
+        "backend_timings_ms": {
+          "admission": 1387.981,
+          "cache_lookup": 14.68,
+          "complete": 0.003,
+          "generate": 0.529,
+          "handover": 4.838,
+          "prefill": 207077.546
+        },
+        "context": 200000,
+        "finish": "length",
+        "first_data_seconds": 208.6452100489987,
+        "installed": {
+          "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        },
+        "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+        "repeat": 0,
+        "seconds": 208.6455173350114,
+        "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+        "tokens": 1,
+        "tokens_per_second": 958.5650202706861,
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 200000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 200001
+        },
+        "variant": "legacy"
+      }
+    ]
+  },
+  "sources": [
+    "benchmarks/results/prefill-speed-initial-timings-20260928.json",
+    "benchmarks/results/prefill-packed-timings-20260928.json",
+    "benchmarks/results/prefill-wide-timing-60k-20260928.json",
+    "benchmarks/results/prefill-wide-timing-200k-20260928.json"
+  ]
+}
