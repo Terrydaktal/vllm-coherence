@@ -81,7 +81,7 @@
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
       "patch_dflash_response_cache.py": "65b63fb943d42ae0e7661fee72abaf37d174c1eee3ce08cfe26b851f4a51b1b0",
-      "radiance_response_end.py": "e9a65ddd4e7f9d71f15af3dccb59ead8b039f63542c2d5fdc92bf8c8552331d0",
+      "radiance_response_end.py": "9e5b62165c396548b93f859c24242ffacfe934df8b2f8c3b79ccbdd62a2c0fd7",
       "radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
       "patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5",
       "patch_gdn_initial_prefill.py": "08ee2400af3d35703d9ae9bef931d863c7cbf4009d479a5ce3346fbaae64c86a",
@@ -396,14 +396,15 @@
         "radiance_cache.py": "0597bbace19be39be20ed5d5cbcf8b14fc67d0121b9034be7139d993d44e57cb",
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
         "radiance_chat_tier.py": "6df820db27b15bb502959b081c2b9e54821a300fd2a290c898b9819edcb45d1a",
-        "radiance_fair_scheduler.py": "a31f73d5dca1ee1d9b2715bdda82ec6501c123f2df8bacb9b358637a310976ba",
+        "radiance_fair_scheduler.py": "1689b8bf3acf6014ef59cb1238fe102d7cf64c9f7eca3c3b21a6a6c0d5648198",
         "patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7"
       }
     },
     "response_end_reuse": {
       "schema": "urn:coherence:response-end:v1",
       "scope": "synchronous V2 DFlash; token-only TP1; full/sliding attention and aligned Mamba",
-      "contract": "Reuse only the exact processed visible prefix. Pin immutable attention tails; copy accepted GDN/conv state to a canonical endpoint. Exclude an emitted-but-unprocessed token and decline an overwritten early-stop state. Persist domain-separated endpoint keys with complete-prefix dependencies; retain the prior disk head until verification. Unchanged physical layout, quantization and numerical kernels."
+      "contract": "Reuse only the exact processed visible prefix. Pin immutable attention tails; copy accepted GDN/conv state to a canonical endpoint. Exclude an emitted-but-unprocessed token and decline an overwritten early-stop state. Persist domain-separated endpoint keys with complete-prefix dependencies; retain the prior disk head until verification. Unchanged physical layout, quantization and numerical kernels.",
+      "admission_pressure": "Release unused GPU endpoint references after a prefix miss if full-prompt admission cannot fit; preserve matching leases, in-flight work, pending copies and protected transfers; disk state and arithmetic unchanged."
     },
     "memory_report": {
       "schema": "urn:qwen-r9700:radiance-memory:v1",

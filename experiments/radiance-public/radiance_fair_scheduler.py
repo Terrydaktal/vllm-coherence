@@ -989,7 +989,9 @@ class FairScheduler(Scheduler):
         protected = {block for block, jobs in pending.items() if jobs}
         before = manager.block_pool.get_num_free_blocks()
         end_cache = getattr(manager, "qwen_response_end", None)
+        released_unused_endpoint = False
         if end_cache is not None:
+            released_unused_endpoint = end_cache.release_unused(request, protected)
             end_cache.release_after_progress(request)
         reclaim_snapshot_history(manager, request, protected)
         freed = manager.block_pool.get_num_free_blocks() - before
@@ -1003,6 +1005,7 @@ class FairScheduler(Scheduler):
                 "freed_blocks": freed,
                 "free_blocks": manager.block_pool.get_num_free_blocks(),
                 "protected_transfer_blocks": len(protected),
+                "released_unused_endpoint": released_unused_endpoint,
             })
         return bool(freed)
 

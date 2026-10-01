@@ -420,6 +420,69 @@ def test_terminal_successor_does_not_release_its_new_checkpoint(monkeypatch):
     assert c.entry is replacement
 
 
+@pytest.mark.parametrize("change", ["different_prefix", "shorter_prompt", "same_length"])
+def test_unused_endpoint_releases_only_its_pins_after_lookup_miss(monkeypatch, change):
+    c, old, step, pool, groups = fake_cache(monkeypatch)
+    assert c.remember(old, step)
+    pins = list(c.entry["pins"])
+    c.take_copies()
+    c.copies_complete()
+    for group in groups:
+        pool.free_blocks(group.req_to_blocks.pop("old"))
+    # A normal prefix hit or another owner may still share one of these pages.
+    pool.touch([pins[0]])
+    newer = SimpleNamespace(**vars(old))
+    newer.request_id = "new"
+    newer.num_computed_tokens = 0
+    if change == "different_prefix":
+        newer.block_hashes = [b"changed-prefix"]
+    else:
+        newer.num_tokens = 13 if change == "shorter_prompt" else 14
+    assert c.lookup(newer) is None
+    assert not c.release_after_progress(newer)
+    assert c.release_unused(newer)
+    assert c.entry is None
+    assert pins[0].ref_cnt == 1
+    assert all(b.ref_cnt == 0 for b in pins[1:])
+    assert not c.release_unused(newer)
+
+
+@pytest.mark.parametrize("guard", [
+    "no_lookup", "matching_lease", "other_lease", "local_hit", "computed",
+    "in_flight", "queued_copy", "in_flight_copy", "transfer",
+])
+def test_unused_endpoint_preserves_live_ownership_and_pending_work(monkeypatch, guard):
+    c, old, step, pool, _ = fake_cache(monkeypatch)
+    assert c.remember(old, step)
+    entry = c.entry
+    c.take_copies()
+    c.copies_complete()
+    newer = SimpleNamespace(**vars(old))
+    newer.num_computed_tokens = 0
+    newer._qwen_response_end_lease = None
+    protected = set()
+    if guard == "no_lookup":
+        del newer._qwen_response_end_lease
+    elif guard in {"matching_lease", "other_lease"}:
+        newer._qwen_response_end_lease = entry if guard == "matching_lease" else dict(entry)
+    elif guard == "local_hit":
+        newer.qwen_response_end_local = 14
+    elif guard == "computed":
+        newer.num_computed_tokens = 1
+    elif guard == "in_flight":
+        newer.num_in_flight_tokens = 1
+    elif guard == "queued_copy":
+        c.pending.append({"group": 1})
+    elif guard == "in_flight_copy":
+        c.copy_pins.append(entry["pins"][0])
+    elif guard == "transfer":
+        protected.add(entry["pins"][0].block_id)
+    refs = [b.ref_cnt for b in pool.blocks]
+    assert not c.release_unused(newer, protected)
+    assert c.entry is entry
+    assert [b.ref_cnt for b in pool.blocks] == refs
+
+
 @pytest.mark.parametrize("computed, first_required", [(48, 5), (49, 6)])
 def test_pressure_reclaim_preserves_current_speculative_and_transfer_state(
     monkeypatch, computed, first_required

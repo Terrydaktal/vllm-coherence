@@ -107,7 +107,10 @@ def test_pressure_releases_endpoint_and_optional_history_before_retry(monkeypatc
         calls.append("history")
         free[0] += 12
         return 12
-    endpoint = SimpleNamespace(release_after_progress=release)
+    endpoint = SimpleNamespace(
+        release_after_progress=release,
+        release_unused=lambda req, protected: False,
+    )
     manager = SimpleNamespace(qwen_response_end=endpoint,
                               block_pool=SimpleNamespace(get_num_free_blocks=lambda: free[0]))
     scheduler.connector = SimpleNamespace(connector_scheduler=SimpleNamespace(

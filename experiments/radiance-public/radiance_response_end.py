@@ -246,6 +246,31 @@ class ResponseEndCache:
         self.clear()
         return True
 
+    def release_unused(self, request, protected=()):
+        """Under admission pressure, evict an endpoint this request cannot use.
+
+        A changed/shortened prompt can miss both the exact endpoint and normal
+        prefix cache. Keeping the old endpoint pinned then prevents a large
+        replacement prompt from fitting, so it can never make the progress
+        required by release_after_progress. Drop only our optional references,
+        after lookup rejected reuse and while no copy/transfer depends on them.
+        Disk snapshots and ordinary prefix-cache entries remain intact.
+        """
+        entry = self.entry
+        if (
+            entry is None
+            or getattr(request, "_qwen_response_end_lease", entry) is not None
+            or getattr(request, "qwen_response_end_local", 0)
+            or request.num_computed_tokens
+            or request.num_in_flight_tokens
+            or self.pending
+            or self.copy_pins
+            or any(block.block_id in protected for block in entry["pins"])
+        ):
+            return False
+        self.clear()
+        return True
+
     def take_copies(self):
         copies, self.pending = self.pending, []
         return copies

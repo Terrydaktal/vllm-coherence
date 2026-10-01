@@ -249,6 +249,13 @@ Recorded EngineCore errors are attached as expandable diagnostics: `Ctrl+O`
 reveals the traceback, and `/backend-error` retrieves the latest recorded failure.
 A missing traceback is reported explicitly; a forced kill may leave none.
 
+An incompatible retained GPU endpoint can no longer prevent a replacement prompt
+from being admitted indefinitely at “Checking reusable context”. If allocation
+fails after endpoint reuse was rejected, the scheduler releases that optional
+checkpoint's pins and retries. Matching continuations, outstanding copies and
+transfer-owned pages stay protected; disk snapshots are unchanged. The numeric
+cache-pressure record identifies when an unused endpoint was released.
+
 Start `tools/coherence serve` on the GPU host if its API is unavailable. Retain
 failing artifacts when verification fails; prepare into a fresh `--state` rather
 than bypassing checks.
