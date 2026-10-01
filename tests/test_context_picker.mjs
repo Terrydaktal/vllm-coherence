@@ -79,6 +79,44 @@ test("restoring an interrupted call cannot synthesize a missing tool result", ()
   assert.deepEqual(filterContext(f.messages(), f.ctx, restored), [entries[0].message, entries[2].message]);
 });
 
+test("aborted and errored streamed calls cannot block a selected context or thinking purge", () => {
+  for (const stopReason of ["aborted", "error"]) {
+    const interrupted = call("interrupted");
+    interrupted.message.stopReason = stopReason;
+    for (const policy of [marker("selection", []), { id: "purge", type: "custom", customType: THINKING_PURGE_ENTRY,
+      data: { version: 1, entryIds: ["interrupted"], preserveFutureThinking: true } }]) {
+      const entries = [user("old"), interrupted, policy, user("continue")], original = structuredClone(entries), f = fixture(entries);
+      const filtered = filteredRequestContext(f.messages(), f.ctx);
+      assert.doesNotThrow(() => assertContextReady(f.ctx));
+      assert.equal(filtered.at(-1).role, "user");
+      assert.equal(filtered[1].stopReason, stopReason, "retain the attempt for Pi's normal provider transform to omit");
+      if (policy.customType === THINKING_PURGE_ENTRY) assert.ok(!filtered[1].content.some((b) => b.type === "thinking"));
+      assert.equal(filtered.filter((m) => m.role === "toolResult").length, 0, "never fabricate execution results");
+      assert.deepEqual(entries, original, "saved messages and selection metadata remain unchanged");
+    }
+  }
+});
+
+test("failed tool attempts have no tool dependency ownership or tool-identity requirements", () => {
+  const interrupted = call("interrupted");
+  interrupted.message.stopReason = "aborted";
+  interrupted.message.content.push({ type: "toolCall", id: "call", name: "lookup", arguments: {} });
+  const entries = [interrupted, call("complete"), result("executed"), marker("selection", [])], f = fixture(entries);
+  const excluded = changeSelection(contextRows(f.ctx), contextPolicy(f.ctx), ["interrupted"], "message", true);
+  assert.deepEqual([...excluded.excluded], ["interrupted"]);
+  assert.deepEqual(filterContext(f.messages(), f.ctx, excluded), entries.slice(1, 3).map((e) => e.message));
+  const completed = changeSelection(contextRows(f.ctx), contextPolicy(f.ctx), ["executed"], "message", true);
+  assert.deepEqual([...completed.excluded].sort(), ["complete", "executed"]);
+  assert.deepEqual(filterContext(f.messages(), f.ctx, completed), [interrupted.message]);
+});
+
+test("an aborted attempt cannot authorize an otherwise orphaned result", () => {
+  const interrupted = call("interrupted");
+  interrupted.message.stopReason = "aborted";
+  const f = fixture([interrupted, result("orphan"), marker("selection", [])]);
+  assert.throws(() => filterContext(f.messages(), f.ctx), /orphan tool result/);
+});
+
 test("a synthetic tool result injected by another hook cannot hide an incomplete saved call", () => {
   const entries = [call("a"), marker("policy", [])], f = fixture(entries);
   assert.throws(() => filteredRequestContext([...f.messages(), result("not-saved").message], f.ctx), /Unrecorded tool result/);

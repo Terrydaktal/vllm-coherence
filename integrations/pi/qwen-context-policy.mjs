@@ -10,6 +10,11 @@ const validId = (id) => typeof id === "string" && id.length > 0;
 const policyFailure = (message) => Object.assign(new Error(message), { code: "QWEN_CONTEXT_FILTER_FAILURE" });
 export const hasThinking = (message) => message?.role === "assistant" && Array.isArray(message.content) &&
   message.content.some((block) => block?.type === "thinking");
+// Pi's provider transform omits these attempts entirely. They may contain a
+// streamed call that never finished or executed, so it cannot require a result
+// or own another attempt's result in the selected provider context.
+const discardedAssistant = (message) => message?.role === "assistant" &&
+  ["aborted", "error"].includes(message.stopReason);
 
 export function contextPolicy(ctx) {
   const excluded = new Set(), thinking = new Set();
@@ -81,6 +86,7 @@ export function toolDependencies(entries) {
   for (const entry of entries) {
     if (!validId(entry.id)) throw new Error("Cannot identify context messages; context retained");
     const message = entry.message;
+    if (discardedAssistant(message)) continue;
     if (message?.role === "assistant") {
       const calls = Array.isArray(message.content) ? message.content.filter((b) => b?.type === "toolCall") : [];
       if (!calls.length) continue;
@@ -183,6 +189,7 @@ export function filterContext(messages, ctx, override) {
 function assertToolPairs(messages) {
   const pending = new Set();
   for (const message of messages) {
+    if (discardedAssistant(message)) continue;
     if (message.role === "assistant") {
       for (const block of Array.isArray(message.content) ? message.content : []) {
         if (block?.type === "toolCall") {
