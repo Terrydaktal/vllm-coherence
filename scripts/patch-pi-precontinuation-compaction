@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# ruff: noqa: E501
-"""Apply and authenticate Pi's compaction scheduling, editor and spinner patches."""
+"""Apply and authenticate Pi's compaction, editor, spinner and context-safety patches."""
 
 from __future__ import annotations
 
@@ -28,6 +27,52 @@ class FilePatch:
 
 
 PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js",
+        preimage_sha256="b39d59b8f86693b9aca15f13e14f367fce9a0ad8ed7ce9ad17950906f226951d",
+        old=b"""                        event: "before_provider_request",
+                        error: message,
+                        stack,
+                    });
+                }
+            }
+        }
+        return currentPayload;
+    }
+    async emitBeforeProviderHeaders(headers) {
+""",
+        new=b"""                        event: "before_provider_request",
+                        error: message,
+                        stack,
+                    });
+                    // Exclusion filters must fail closed. Continuing here would
+                    // silently send context the user explicitly excluded.
+                    if (err?.code === "QWEN_CONTEXT_FILTER_FAILURE") throw err;
+                }
+            }
+        }
+        return currentPayload;
+    }
+    async emitBeforeProviderHeaders(headers) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js",
+        preimage_sha256="b39d59b8f86693b9aca15f13e14f367fce9a0ad8ed7ce9ad17950906f226951d",
+        old=b"""            get mode() {
+                runner.assertActive();
+                return runner.mode;
+            },
+            get hasUI() {
+""",
+        new=b"""            get mode() {
+                runner.assertActive();
+                return runner.mode;
+            },
+            contextFilterErrorsPropagate: true,
+            get hasUI() {
+""",
+    ),
     FilePatch(
         relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
         preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",

@@ -1,0 +1,13 @@
+{
+  "schema": "urn:coherence:focused-verification:v1",
+  "scope": "Interactive /context selection on patched Pi 0.84.2; synthetic data only",
+  "requirements": [
+    { "id": "CTX-SELECT", "contract": "Select individual messages, whole turns and ranges; exclude or restore; cancel changes without affecting the input buffer", "tests": ["test_context_picker.mjs", "test_context_picker_sdk.mjs", "test_context_picker_tty.py"] },
+    { "id": "CTX-TOOLS", "contract": "Tool calls and their results form one exclusion unit, including reused call IDs and late results", "tests": ["test_context_picker.mjs", "test_context_picker_sdk.mjs"] },
+    { "id": "CTX-THINKING", "contract": "Exclude selected thinking, retain prose/tools/future thinking and restore legacy purges explicitly", "tests": ["test_context_picker.mjs", "test_radiance_thinking_sdk.mjs"] },
+    { "id": "CTX-PERSIST", "contract": "Persist only decisions and stable entry IDs; keep transcript bodies unchanged; preserve decisions across reload/resume/compaction and respect branch scope", "tests": ["test_context_picker.mjs", "test_context_picker_sdk.mjs"] },
+    { "id": "CTX-PREVIEW", "contract": "Show clearly estimated message counts and optional exact rendered-prompt token counts; tokenize without inference; failures cannot apply edits", "tests": ["test_context_picker.mjs", "test_context_picker_sdk.mjs"] },
+    { "id": "CTX-UNDO", "contract": "Undo pending changes and persisted changes in reverse order without deleting transcript entries", "tests": ["test_context_picker.mjs", "test_context_picker_sdk.mjs"] },
+    { "id": "CTX-FAIL-CLOSED", "contract": "Malformed policies, ambiguous tool IDs and filtering errors block the request rather than reintroducing excluded messages", "tests": ["test_context_picker.mjs", "test_context_picker_sdk.mjs"] }
+  ]
+}

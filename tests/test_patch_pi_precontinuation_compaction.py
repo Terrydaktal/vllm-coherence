@@ -73,7 +73,7 @@ def test_partially_patched_runtime_is_authenticated_before_upgrade(tmp_path: Pat
 
 def test_real_patch_compacts_at_the_inter_tool_boundary_and_fails_closed() -> None:
     api = load_api()
-    patch = api["PATCHES"][0]
+    patch = next(item for item in api["PATCHES"] if b"_installAgentNextTurnRefresh" in item.new)
 
     assert b'turn.message.stopReason === "toolUse"' in patch.new
     assert b"estimateMessagesTokens(turn.toolResults)" in patch.new
@@ -90,3 +90,5 @@ def test_real_patch_compacts_at_the_inter_tool_boundary_and_fails_closed() -> No
     assert b"this.activeStatusIndicator === undefined" in combined
     assert b"this.workingVisible && this.session.isStreaming" in combined
     assert b"this.showStatusIndicator(new WorkingStatusIndicator" in combined
+    assert b'if (err?.code === "QWEN_CONTEXT_FILTER_FAILURE") throw err' in combined
+    assert b"contextFilterErrorsPropagate: true" in combined

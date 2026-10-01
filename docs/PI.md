@@ -113,6 +113,57 @@ The next request may need to prefill the suffix after the first removed thinking
 block. Later requests can reuse the new prefix normally. No backend restart is
 required.
 
+## Choose what stays in context
+
+Run `/context` while the chat is idle to choose individual user or assistant
+messages, whole turns, or a range of older messages. This changes what the model
+receives without deleting anything from the saved transcript. Excluded messages
+remain visible in the picker so they can be restored.
+
+| Key | Action |
+| --- | --- |
+| Up/Down, Home/End, Page Up/Down | Move through messages, oldest first |
+| Space | Select or deselect the highlighted message |
+| `t` | Select or deselect the highlighted message's whole turn |
+| `r`, move, `r` | Select a range |
+| `o` | Select everything from the oldest message through the cursor |
+| `a`, `c` | Select all / clear the selection |
+| `e`, `s` | Exclude from context / restore to context |
+| `h`, `H` | Exclude / restore selected assistant thinking only |
+| `u` | Undo the last pending change |
+| `p` | Count the exact rendered prompt through the CPU tokenizer |
+| Enter, Escape | Save / cancel all pending changes |
+
+Actions use the highlighted message when none are selected. Selecting a tool call
+or result for exclusion includes its entire assistant message and all of that
+message's tool results. Restoring any member restores the group. Thinking-only
+changes leave the calls, results and prose intact. An explicit thinking restore
+can undo an earlier `/purge-thinking` decision for that message; purging again
+excludes it again. Future thinking remains retained on the Radiance provider.
+An interrupted call with missing recorded results must stay excluded until those
+results exist; the picker does not synthesize tool results to make it fit.
+
+The picker shows approximate message token counts, clearly excluding the system
+prompt, tool schemas and template. Press `p` for exact before/after prompt counts,
+including those components. Previewing performs tokenization without generation
+or GPU prefill. An unavailable tokenizer leaves selections unchanged.
+
+`/context undo` reverses the last saved picker change; repeat it to step back
+through earlier changes. `/context status` reports the current branch's active
+exclusions. Decisions are saved as entry IDs, survive reload/resume and apply to
+both ordinary requests and checkpoint generation. Navigating to an earlier
+branch uses that branch's decisions. Earlier history already represented by a
+compaction checkpoint is not available as individual messages in this picker;
+restoring an old decision cannot unpack an existing checkpoint.
+
+The first request after a change may need to rebuild the changed cache prefix.
+The input draft is not cleared. Invalid saved decisions or unsafe tool pairing
+block the provider request rather than silently restore excluded history.
+Restart Pi once after installing this feature to load its context-safety runtime
+patch; `/reload` alone cannot replace a running runtime. No backend restart is
+needed. On `pi-opsec`, exit Pi with `/quit` and reconnect; detaching its terminal
+leaves the old Pi process running.
+
 ## Compaction transaction
 
 Manual `/compact` and automatic compaction use the same checked transaction:

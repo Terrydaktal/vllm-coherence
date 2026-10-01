@@ -1,65 +1,26 @@
-import { createHash } from "node:crypto";
 import { getCompactionProgress } from "./qwen-radiance-compaction-progress.mjs";
+import { THINKING_PURGE_ENTRY, contextPolicy, filteredRequestContext, assertContextReady } from "./qwen-context-policy.mjs";
 
-export const THINKING_PURGE_ENTRY = "qwen-radiance-thinking-purge-v1";
+export { THINKING_PURGE_ENTRY };
 const MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate";
 const applies = (ctx) => ctx.model?.id === MODEL;
 const thinkingBlocks = (message) => message?.role === "assistant" && Array.isArray(message.content)
   ? message.content.filter((block) => block?.type === "thinking") : [];
 
 export function thinkingPurgePolicy(ctx) {
-  const entryIds = new Set();
-  let active = false;
-  if (!applies(ctx)) return { active, entryIds };
-  for (const entry of ctx.sessionManager.getBranch()) {
-    if (entry.type !== "custom" || entry.customType !== THINKING_PURGE_ENTRY) continue;
-    const data = entry.data;
-    if (data?.version !== 1 || data.preserveFutureThinking !== true || !Array.isArray(data.entryIds) ||
-        !data.entryIds.every((id) => typeof id === "string" && id.length > 0)) {
-      throw new Error("Invalid saved thinking purge; refusing to restore excluded thinking");
-    }
-    active = true;
-    for (const id of data.entryIds) entryIds.add(id);
-  }
-  if (active && typeof ctx.sessionManager.buildContextEntries !== "function") {
-    throw new Error("Thinking purge needs the patched Pi session-context API");
-  }
-  return { active, entryIds };
+  const policy = contextPolicy(ctx);
+  return { active: policy.preserveFutureThinking, entryIds: policy.thinking };
 }
 
-// Pi clones messages before the context hook, so object identity is unavailable.
-// Match against the compaction-aware entry list, in occurrence order. Excluding
-// thinking from the key makes filtering idempotent. Queues distinguish identical
-// assistant messages (even with identical timestamps) on opposite sides of a
-// purge. The persisted decision uses entry IDs, never a wall-clock cutoff.
-function messageKey(message) {
-  return createHash("sha256").update(JSON.stringify([
-    message.timestamp, message.api, message.provider, message.model, message.stopReason,
-    Array.isArray(message.content) ? message.content.filter((block) => block?.type !== "thinking") : message.content,
-  ])).digest("hex");
-}
-
+// Compatibility export: both ordinary turns and checkpoint capture now apply
+// the same complete policy, including reversible /context message exclusions.
 export function purgeContextThinking(messages, ctx) {
-  const policy = thinkingPurgePolicy(ctx);
-  if (!policy.active || policy.entryIds.size === 0) return messages;
-  const queues = new Map();
-  for (const entry of ctx.sessionManager.buildContextEntries()) {
-    if (entry.type !== "message" || entry.message?.role !== "assistant") continue;
-    const key = messageKey(entry.message);
-    if (!queues.has(key)) queues.set(key, { ids: [], offset: 0 });
-    queues.get(key).ids.push(entry.id);
-  }
-  return messages.map((message) => {
-    if (message.role !== "assistant") return message;
-    const queue = queues.get(messageKey(message));
-    const entryId = queue?.ids[queue.offset++];
-    if (!policy.entryIds.has(entryId) || thinkingBlocks(message).length === 0) return message;
-    return { ...message, content: message.content.filter((block) => block?.type !== "thinking") };
-  });
+  return filteredRequestContext(messages, ctx);
 }
 
 export function preserveFutureThinking(payload, ctx) {
-  if (!thinkingPurgePolicy(ctx).active) return payload;
+  assertContextReady(ctx);
+  if (!applies(ctx) || !thinkingPurgePolicy(ctx).active) return payload;
   return { ...payload, chat_template_kwargs: {
     ...payload.chat_template_kwargs, preserve_thinking: true,
     // Qwen's alias takes precedence if it was explicitly configured.
