@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { radianceBridgeRequest, radianceBridgeUrl } from "./qwen-radiance-bridge.mjs";
+import { TRANSPORT_ERROR, TRANSPORT_SCHEMA, transportDiagnosticLines } from "./qwen-transport-diagnostics.mjs";
 
 export const BACKEND_ERROR_ENTRY = "qwen-radiance-backend-error-v1";
+export const TRANSPORT_ERROR_ENTRY = "qwen-radiance-transport-error-v1";
 const SCHEMA = "urn:qwen-r9700:backend-error:v1";
 const MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate";
 const reporters = globalThis[Symbol.for("qwen.radiance.backend.errors")] ??= new WeakMap();
@@ -87,6 +89,8 @@ export function installRadianceErrors(pi, { Text, probe = fetchBackendError, now
   const pending = [], shown = new Set();
   pi.registerEntryRenderer(BACKEND_ERROR_ENTRY, (entry, { expanded, outputPad = 1 }, theme) =>
     new Text(theme.fg("error", diagnosticLines(entry.data, expanded).join("\n")), outputPad, 0));
+  pi.registerEntryRenderer(TRANSPORT_ERROR_ENTRY, (entry, { expanded, outputPad = 1 }, theme) =>
+    new Text(theme.fg("error", transportDiagnosticLines(entry.data, expanded).map(safeText).join("\n")), outputPad, 0));
 
   function start(ctx, { since, latest = false }) {
     const key = sessionKey(ctx), generation = epoch, until = now();
@@ -111,8 +115,20 @@ export function installRadianceErrors(pi, { Text, probe = fetchBackendError, now
   reporters.set(pi, { report: (ctx, options) => start(ctx, options)() });
   pi.on("message_end", (event, ctx) => {
     const message = event.message;
-    if (ctx.model?.id !== MODEL || message?.role !== "assistant" || message.stopReason !== "error" ||
-        !isBackendFailure(message.errorMessage)) return;
+    if (ctx.model?.id !== MODEL || message?.role !== "assistant" || message.stopReason !== "error") return;
+    const transport = message[TRANSPORT_ERROR];
+    if (transport?.schema === TRANSPORT_SCHEMA) {
+      const key = sessionKey(ctx), generation = epoch;
+      pending.push(async () => {
+        if (!active || generation !== epoch || sessionKey(ctx) !== key || shown.has(transport.id)) return false;
+        pi.appendEntry(TRANSPORT_ERROR_ENTRY, transport);
+        shown.add(transport.id);
+        if (shown.size > 32) shown.delete(shown.values().next().value);
+        return true;
+      });
+      return;
+    }
+    if (!isBackendFailure(message.errorMessage)) return;
     pending.push(start(ctx, { since: message.timestamp }));
     return { message: { ...message, errorMessage: backendErrorMessage(message.errorMessage) } };
   });

@@ -159,3 +159,39 @@ def test_patch_chain_accepts_only_a_terminal_newline_normalization(tmp_path: Pat
     api["run"](tmp_path, apply=True)
     assert target.read_bytes() == candidate + b"\n"
     api["run"](tmp_path, apply=False)
+
+
+def test_transport_upgrade_and_both_patch_verifiers_on_the_real_adapter(tmp_path: Path) -> None:
+    api = load_api()
+    runtime = Path.home() / ".local/share/qwen-r9700/pi/0.84.2"
+    relative = api["PATCHES"][0].relative_path
+    source = runtime / relative
+    if not source.exists():
+        pytest.skip("pinned Pi runtime unavailable")
+    data = source.read_bytes().removesuffix(b"\n")
+    applied = api["classify_chain"](data, api["PATCHES"])
+    for patch in reversed(api["PATCHES"][:applied]):
+        data = data.replace(patch.new, patch.old)
+    # Upgrade the previous complete release, then repeat --apply/--check.
+    for patch in api["PATCHES"][:-len(api["TRANSPORT_PATCHES"])]:
+        data = data.replace(patch.old, patch.new)
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True)
+    target.write_bytes(data)
+    with pytest.raises(api["PatchError"]):
+        api["run"](tmp_path, apply=False)
+    api["run"](tmp_path, apply=True)
+    api["run"](tmp_path, apply=False)
+    api["run"](tmp_path, apply=True)
+    assert api["classify_chain"](target.read_bytes(), api["PATCHES"]) == len(api["PATCHES"])
+    usage = runpy.run_path(str(USAGE_PATCHER))
+    assert usage["classify"](target.read_bytes(), usage["PATCHES"][0]) == "patched"
+    helper = target.with_name("qwen-transport-diagnostics.mjs")
+    assert helper.read_bytes() == (ROOT / "integrations/pi/qwen-transport-diagnostics.mjs").read_bytes()
+    helper.write_bytes(b"tampered")
+    with pytest.raises(api["PatchError"], match="helper is absent or outdated"):
+        api["run"](tmp_path, apply=False)
+    api["run"](tmp_path, apply=True)
+    target.write_bytes(target.read_bytes().replace(b"transport?.failure(error)", b"transport?.failure(null)"))
+    with pytest.raises(api["PatchError"], match="differs from both pinned patch states"):
+        api["run"](tmp_path, apply=True)

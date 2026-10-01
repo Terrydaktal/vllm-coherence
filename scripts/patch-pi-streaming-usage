@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import runpy
 import stat
 import tempfile
 from contextlib import suppress
@@ -229,6 +230,10 @@ def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
 def classify(data: bytes, patch: FilePatch) -> str:
     normalized = data
     if patch.relative_path == TOOL_CALL_INTEGRITY_RELATIVE:
+        transport = runpy.run_path(str(Path(__file__).with_name("patch-pi-tool-call-integrity")))
+        for transform in reversed(transport["TRANSPORT_PATCHES"]):
+            if normalized.count(transform.new) == 1:
+                normalized = normalized.replace(transform.new, transform.old)
         # npm publishes this generated adapter without a terminal newline.
         # Accept a source editor's single trailing LF as the sole permitted
         # textual normalization; all semantic bytes remain hash-pinned.

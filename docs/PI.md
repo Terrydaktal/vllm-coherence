@@ -256,6 +256,18 @@ checkpoint's pins and retries. Matching continuations, outstanding copies and
 transfer-owned pages stay protected; disk snapshots are unchanged. The numeric
 cache-pressure record identifies when an unused endpoint was released.
 
+Connection failures also retain an expandable report in the session. It captures
+the original transport error codes before the SDK replaces them with a generic
+`Request timed out.`, plus the endpoint, attempt duration, response-header timing
+and bounded cause chain. `Ctrl+O` shows those details automatically beneath the
+failed response. The report is a custom session entry, excluded from model context;
+it contains no request/response bodies, headers, URL credentials or free-form
+exception text. Local JSON inference requests retry one failed TCP connection
+before any HTTP request is sent. Header/stream timeouts, resets, HTTP errors and
+consumed request bodies are not replayed; cancellation also stops the retry.
+If both connections fail, the report retains both attempts. Restart Pi
+after installing the provider patch; `/reload` alone does not reload that module.
+
 Start `tools/coherence serve` on the GPU host if its API is unavailable. Retain
 failing artifacts when verification fails; prepare into a fresh `--state` rather
 than bypassing checks.

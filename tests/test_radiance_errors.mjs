@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BACKEND_ERROR_ENTRY, backendErrorMessage, diagnosticLines, installRadianceErrors,
+import { BACKEND_ERROR_ENTRY, TRANSPORT_ERROR_ENTRY, backendErrorMessage, diagnosticLines, installRadianceErrors,
   reportBackendFailure } from "../integrations/pi/qwen-radiance-errors.mjs";
+import { createTransportDiagnostics, TRANSPORT_ERROR } from "../integrations/pi/qwen-transport-diagnostics.mjs";
 
 const failure = "EngineCore encountered an issue. See stack trace (above) for the root cause.";
 const report = { schema: "urn:qwen-r9700:backend-error:v1", status: "found", backend: { ready: false, running: false },
@@ -112,4 +113,27 @@ test("a diagnostic persistence failure cannot bypass compaction cancellation", a
   const f = fixture();
   f.pi.appendEntry = () => { throw new Error("synthetic persistence failure"); };
   assert.equal(await reportBackendFailure(f.pi, f.ctx, failure, 10000), false);
+});
+
+test("connection diagnostics persist after the failed message without a remote lookup or model text", async () => {
+  const f = fixture();
+  const capture = createTransportDiagnostics({ fetch: async () => {
+    throw new TypeError("fetch failed", { cause: Object.assign(new Error(), { code: "UND_ERR_CONNECT_TIMEOUT" }) });
+  } });
+  await assert.rejects(capture.fetch("http://127.0.0.1:18080/v1/chat/completions", {}));
+  const failure = { ...message(), errorMessage: "Request timed out.", [TRANSPORT_ERROR]: capture.failure(new Error("Request timed out.")) };
+  f.emit("message_end", { message: failure });
+  assert.equal(f.entries.length, 0);
+  assert.doesNotMatch(JSON.stringify(failure), /UND_ERR_CONNECT_TIMEOUT/);
+  await f.emit("turn_end");
+  await f.emit("agent_settled");
+  assert.equal(f.probes.length, 0);
+  assert.equal(f.entries.length, 1);
+  assert.equal(f.entries[0].customType, TRANSPORT_ERROR_ENTRY);
+  const render = f.renderers.get(TRANSPORT_ERROR_ENTRY), theme = { fg: (_color, value) => value };
+  assert.match(render(f.entries[0], { expanded: false }, theme).text, /UND_ERR_CONNECT_TIMEOUT.*ctrl\+o/);
+  assert.match(render(f.entries[0], { expanded: true }, theme).text, /Endpoint: http:\/\/127.0.0.1:18080/);
+  f.emit("message_end", { message: failure });
+  await f.emit("turn_end");
+  assert.equal(f.entries.length, 1);
 });

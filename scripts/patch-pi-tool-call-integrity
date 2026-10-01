@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Authenticate Pi's tool parsing, stream errors and uncapped Radiance output."""
+"""Authenticate Pi's tool parsing, transport diagnostics and Radiance output."""
 
 from __future__ import annotations
 
@@ -145,6 +145,37 @@ PATCHES = (
 )
 
 
+# Transport capture sits around fetch before the SDK can discard its cause.
+# Keep these transforms separate so the usage patch can authenticate them too.
+TRANSPORT_PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="61da67f40360bbedd785f1bf1ec8280bf9a09d60791835bb387c30268ff0873f",
+        old=b'import OpenAI from "openai";\n',
+        new=b'import OpenAI from "openai";\nimport { createTransportDiagnostics, TRANSPORT_ERROR } from "./qwen-transport-diagnostics.mjs";\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="911eacd1d3949153bdea0f050f55f08f1bdfe66bc5821c0bef24e1cead7d8ff7",
+        old=b'        try {\n            const apiKey = getClientApiKey(',
+        new=b'        const transport = model.provider === "qwen-r9700"\n            ? createTransportDiagnostics({ fetch: options?.fetch, signal: options?.signal }) : undefined;\n        try {\n            const apiKey = getClientApiKey(',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="23be192f390af56854c03209a597eddd23f9b54249334733c691d7fe3c3fe16f",
+        old=b'const client = createClient(model, context, apiKey, options?.headers, options?.fetch, cacheSessionId, compat);',
+        new=b'const client = createClient(model, context, apiKey, options?.headers, transport?.fetch ?? options?.fetch, cacheSessionId, compat);',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="9834daf75868e671bc75cc1e641fd9c574e4224c8b84bf215466287d2855284a",
+        old=b'            output.errorMessage = formatProviderError(normalizeProviderError(error));\n',
+        new=b'            output.errorMessage = formatProviderError(normalizeProviderError(error));\n            const transportFailure = transport?.failure(error);\n            if (transportFailure) output[TRANSPORT_ERROR] = transportFailure;\n',
+    ),
+)
+PATCHES += TRANSPORT_PATCHES
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -257,6 +288,21 @@ def validate_root(root: Path) -> None:
         raise PatchError(f"runtime root is not an owned real directory: {root}")
 
 
+def install_transport_helper(root: Path, *, apply: bool) -> None:
+    helper_source = Path(__file__).resolve().parents[1] / "integrations/pi/qwen-transport-diagnostics.mjs"
+    helper = root / "node_modules/@earendil-works/pi-ai/dist/api/qwen-transport-diagnostics.mjs"
+    expected, _ = stable_read(helper_source)
+    if helper.exists() or helper.is_symlink():
+        current, details = stable_read(helper)
+    else:
+        current = None
+        _, details = stable_read(root / PATCHES[0].relative_path)
+    if current != expected:
+        if not apply:
+            raise PatchError(f"transport diagnostic helper is absent or outdated: {helper}")
+        atomic_write(helper, expected, details)
+
+
 def run(root: Path, *, apply: bool) -> None:
     validate_root(root)
     chains: dict[str, list[FilePatch]] = defaultdict(list)
@@ -267,6 +313,8 @@ def run(root: Path, *, apply: bool) -> None:
         path = root / relative_path
         data, details = stable_read(path)
         applied = classify_chain(data, chain)
+        if any(patch == TRANSPORT_PATCHES[0] for patch in chain):
+            install_transport_helper(root, apply=apply)
         if applied != len(chain):
             if not apply:
                 raise PatchError(f"provider integrity/output patch is absent: {path}")
