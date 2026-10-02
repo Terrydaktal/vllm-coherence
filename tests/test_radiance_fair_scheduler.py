@@ -458,8 +458,8 @@ def constructed_worker(tmp_path, monkeypatch):
         device="cuda",
     )
 
-    def create():
-        return module.WorkerBanks(runner, {"max_banks": 2, "status_path": str(tmp_path / "fair")})
+    def create(max_banks=2):
+        return module.WorkerBanks(runner, {"max_banks": max_banks, "status_path": str(tmp_path / "fair")})
 
     return SimpleNamespace(create=create, memory=memory, allocations=allocations, gpu=gpu, module=module)
 
@@ -593,6 +593,42 @@ def test_second_chat_checks_current_ram_before_allocating_and_can_retry(construc
     fixture.memory["available"] = 0
     assert worker._ensure_buffers() == (0, 0.0)
     assert fixture.allocations == [32, 32]
+
+
+def test_worker_retains_two_ram_images_and_restores_all_three_chats(constructed_worker):
+    fixture = constructed_worker
+    worker = fixture.create(max_banks=3)
+    bank_c = f"{'c' * 64}:{'4' * 64}"
+    blocks = [0, 1, 2, 3]
+
+    def activate(bank):
+        worker.before({"bank": bank, "save_blocks": blocks, "drop_banks": [], "barrier": False})
+
+    activate(BANK_A)
+    assert fixture.allocations == []
+    activate(BANK_B)
+    fixture.gpu.data[:] = [100 + value for value in range(32)]
+    activate(bank_c)
+    fixture.gpu.data[:] = [200 + value for value in range(32)]
+
+    assert set(worker.images) == {BANK_A, BANK_B}
+    assert fixture.allocations == [32, 32, 32]
+    assert worker.allocated_bytes == worker.reserved_capacity_bytes == 96
+
+    for bank, first_byte, parked in (
+        (BANK_A, 0, {BANK_B, bank_c}),
+        (BANK_B, 100, {BANK_A, bank_c}),
+        (bank_c, 200, {BANK_A, BANK_B}),
+    ):
+        activate(bank)
+        assert worker.active == bank
+        assert set(worker.images) == parked
+        assert fixture.gpu.data[:16] == list(range(first_byte, first_byte + 16))
+        assert len({id(image["buffer"]) for image in worker.images.values()}) == 2
+        assert worker.free_buffers == []
+
+    assert worker.allocation_events == 1
+    assert fixture.allocations == [32, 32, 32]
 
 
 def test_worker_copies_each_unique_storage_region_into_one_ram_image(monkeypatch):

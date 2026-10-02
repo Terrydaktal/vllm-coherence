@@ -416,7 +416,7 @@ def serving_command(args, connection):
             "policy": "response_boundary",
             "tool_grace_seconds": 2,
             "max_tool_deferral_seconds": 30,
-            "max_cached_chats": 2,
+            "max_cached_chats": 3,
             "status_path": "/dev/shm/qwen-radiance-fair-public",
         }
     }

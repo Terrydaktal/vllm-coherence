@@ -49,6 +49,13 @@ Pi-opsec uses the same commands through its fixed host bridge; it needs no GPU
 host SSH access. Lifecycle control currently targets the legacy pinned Radiance
 deployment used by `pi-remote-qwen-radiance` and Pi-opsec.
 
+The backend retains up to three chat cache banks: one in VRAM and two in pinned
+system RAM. Idle time does not evict them. A fourth chat replaces the least
+recently used idle bank, and compaction replaces that chat's old generation.
+Restarting the backend clears memory residency; restarting Pi alone does not.
+RAM buffers are allocated at the first handover, with an 8 GiB system-memory
+headroom check; empty slots are filled as additional chats use the backend.
+
 ## Read the footer
 
 The footer is one continuous line that wraps to the available width. Its order is

@@ -78,6 +78,9 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path, head):
         ]
         == 2
     )
+    assert json.loads(command[command.index("--additional-config") + 1])["qwen_fair"][
+        "max_cached_chats"
+    ] == 3
 
 
 @pytest.mark.parametrize(

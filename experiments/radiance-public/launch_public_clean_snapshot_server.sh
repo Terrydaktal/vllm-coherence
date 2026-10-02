@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c
+readonly abi_id=9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247
 readonly data_abi=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
@@ -183,7 +183,7 @@ kv_transfer_config=$(jq -cn \
 	        }]
       }
 	    }')
-fair_config=$(jq -cn '{qwen_fair:{policy:"response_boundary",tool_grace_seconds:2,max_tool_deferral_seconds:30,max_cached_chats:2,status_path:"/dev/shm/qwen-radiance-fair-public"}}')
+fair_config=$(jq -cn '{qwen_fair:{policy:"response_boundary",tool_grace_seconds:2,max_tool_deferral_seconds:30,max_cached_chats:3,status_path:"/dev/shm/qwen-radiance-fair-public"}}')
 
 declare -a release_environment=()
 while IFS=$'\t' read -r key value; do

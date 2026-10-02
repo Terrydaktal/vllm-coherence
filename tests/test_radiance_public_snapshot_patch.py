@@ -408,6 +408,9 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         # The current arithmetic remains deployed while the M1 candidate is
         # qualified separately. Its later deployment must also change data_abi.
         "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
+        # Increasing residency to one GPU bank and two RAM banks preserves
+        # the predecessor's arithmetic and snapshot data contract.
+        "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c",
     ]
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (

@@ -420,7 +420,8 @@
       "compatible_runtime_abis": [
         "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
-        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01"
+        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
+        "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c"
       ]
     },
     "buffered_tool_usage": {
@@ -431,7 +432,7 @@
     "fair_scheduler": {
       "class": "qwen_radiance_fair_scheduler.FairScheduler",
       "policy": "uninterrupted responses; least-recently-served waiting chat at completion; handover overlaps client-side tool execution; reserve selected response through cache admission until completion or cancellation; swaps alone do not count as service; 2-second grace for completed tool calls; 30-second queue-age override at next boundary; equal priorities preserve this policy; higher priority 1 reserves the whole answer; higher priority 2 parks a response at the next safe synchronous step",
-      "maximum_cached_chats": 2,
+      "maximum_cached_chats": 3,
       "pinned_host_page_policy": "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership and existing snapshot data ABI",
       "runner_state_slots": 2,
       "maximum_dispatched_sequences": 1,
