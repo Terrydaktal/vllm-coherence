@@ -23,6 +23,12 @@ release path. The legacy `pi-remote-qwen-radiance` launcher retains its remote
 host, deployment and cache ABI; the portable Coherence launcher uses its own
 deployment. Both select the backend container explicitly for telemetry.
 
+The legacy launcher's `--reuse-existing` mode authenticates the pinned backend
+files on the GPU host and the running container. Local edits to backend source
+are not loaded by that mode and do not prevent attaching to the deployed release.
+Starting a backend also requires the local backend sources to match their release
+manifest. Both modes still authenticate the local ABI contract and Pi dependencies.
+
 ## Development, verification and publication
 
 1. Edit Coherence directly. Run focused CPU tests here with

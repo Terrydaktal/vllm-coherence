@@ -112,6 +112,8 @@ OPTIONS
 
     --reuse-existing
         Refuse to start a backend; attach only to an authenticated compatible lane.
+        Authenticate its deployed files on the GPU host. Unused local backend
+        source edits do not prevent reuse of that pinned runtime.
 
     --preflight-only
         Authenticate local and remote release inputs without starting the GPU.
@@ -496,18 +498,25 @@ done
 	die "project session history helper is missing or unsafe: $history_program"
 [[ $(sha256sum -- "$abi_source" | awk '{print $1}') == "$SNAPSHOT_ABI" ]] || die 'local snapshot ABI hash mismatch'
 [[ $(jq -r '.storage.data_abi' "$abi_source") == "$SNAPSHOT_DATA_ABI" ]] || die 'local snapshot data ABI mismatch'
-[[ $(sha256sum -- "$launcher_source" | awk '{print $1}') == "$REMOTE_LAUNCHER_SHA256" ]] || die 'local server launcher hash mismatch'
-[[ $(sha256sum -- "$patch_source" | awk '{print $1}') == "$SNAPSHOT_PATCH_SHA256" ]] || die 'local snapshot patch hash mismatch'
-for module in "$cache_module" "$memory_module" "$cache_tier_module" "$fair_scheduler_module" "$cache_patch_module"; do
-	[[ -f $module && ! -L $module ]] || die "missing chat storage module: $module"
-	expected=$(jq -r --arg name "${module##*/}" '.runtime.chat_storage.modules[$name]' "$abi_source")
-	[[ $(sha256sum "$module" | awk '{print $1}') == "$expected" ]] || die "chat storage module hash mismatch: $module"
-done
+# Reuse runs only the already-deployed backend, not these development sources.
+# Its complete remote file manifest and live container are still authenticated
+# below. Starting a backend also requires matching local release sources.
+if ((reuse_existing == 0)); then
+	[[ $(sha256sum -- "$launcher_source" | awk '{print $1}') == "$REMOTE_LAUNCHER_SHA256" ]] || die 'local server launcher hash mismatch'
+	[[ $(sha256sum -- "$patch_source" | awk '{print $1}') == "$SNAPSHOT_PATCH_SHA256" ]] || die 'local snapshot patch hash mismatch'
+	for module in "$cache_module" "$memory_module" "$cache_tier_module" "$fair_scheduler_module" "$cache_patch_module"; do
+		[[ -f $module && ! -L $module ]] || die "missing chat storage module: $module"
+		expected=$(jq -r --arg name "${module##*/}" '.runtime.chat_storage.modules[$name]' "$abi_source")
+		[[ $(sha256sum "$module" | awk '{print $1}') == "$expected" ]] || die "chat storage module hash mismatch: $module"
+	done
+fi
 declare -a release_preflight=()
 while IFS=$'\t' read -r module expected; do
 	path="${launcher_source%/*}/$module"
-	[[ -f $path && ! -L $path && $(sha256sum "$path" | awk '{print $1}') == "$expected" ]] ||
-		die "release integration hash mismatch: $module"
+	if ((reuse_existing == 0)); then
+		[[ -f $path && ! -L $path && $(sha256sum "$path" | awk '{print $1}') == "$expected" ]] ||
+			die "release integration hash mismatch: $module"
+	fi
 	release_preflight+=("$REMOTE_ROOT/radiance-vllm-mxfp4/$module" "$expected")
 done < <(jq -r '.runtime.release_files | to_entries[] | [.key, .value] | @tsv' "$abi_source")
 jq -e --arg model "$MODEL_ID" '

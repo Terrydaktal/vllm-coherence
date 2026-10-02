@@ -153,10 +153,10 @@ done
     return environment, home, project
 
 
-def test_omitted_radiance_port_stays_automatic_through_main_launcher(tmp_path: Path) -> None:
+def test_omitted_radiance_port_stays_automatic_when_reusing_through_main_launcher(tmp_path: Path) -> None:
     environment, _, project = _fake_environment(tmp_path)
     direct = subprocess.run(
-        [str(RADIANCE_LAUNCHER), "--dry-run"],
+        [str(RADIANCE_LAUNCHER), "--reuse-existing", "--dry-run"],
         cwd=project,
         env=environment,
         check=False,
@@ -164,7 +164,7 @@ def test_omitted_radiance_port_stays_automatic_through_main_launcher(tmp_path: P
         text=True,
     )
     delegated = subprocess.run(
-        [str(MAIN_LAUNCHER), "--model", "radiance-uncensored", "--dry-run"],
+        [str(MAIN_LAUNCHER), "--model", "radiance-uncensored", "--reuse-existing", "--dry-run"],
         cwd=project,
         env=environment,
         check=False,

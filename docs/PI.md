@@ -33,6 +33,22 @@ nesting tmux. SSH authentication must already work noninteractively. Supply
 search integration, including one specific to a VM. Terminal keybindings remain
 the terminal owner's configuration.
 
+## Control the backend from Pi
+
+`/backend` and `/backend status` report whether the pinned backend is stopped,
+starting, idle, or handling requests. `/backend start` verifies the deployed
+release, starts it and waits for the API to become ready. `/backend stop` waits
+for active requests to finish, flushes the buffered snapshot tails and sends a
+graceful shutdown signal. It never force-kills the model or deletes caches.
+These commands affect the shared backend used by all chats.
+
+Start and stop run on the host under one lock, even when multiple Pi windows
+request them. Pi reports progress; disconnecting the terminal does not cancel
+the host operation. `/backend status` can check its outcome after reconnecting.
+Pi-opsec uses the same commands through its fixed host bridge; it needs no GPU
+host SSH access. Lifecycle control currently targets the legacy pinned Radiance
+deployment used by `pi-remote-qwen-radiance` and Pi-opsec.
+
 ## Read the footer
 
 The footer is one continuous line that wraps to the available width. Its order is

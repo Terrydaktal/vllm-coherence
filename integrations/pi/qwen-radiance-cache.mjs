@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { appendCompactionTiming, getCompactionProgress } from "./qwen-radiance-compaction-progress.mjs";
 import { radianceBridgeRequest, radianceBridgeUrl } from "./qwen-radiance-bridge.mjs";
 import installPriority from "./qwen-radiance-priority.mjs";
+import installBackend from "./qwen-radiance-backend.mjs";
 
 const exec = promisify(execFile);
 const MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate";
@@ -152,6 +153,7 @@ export default function radianceCache(pi, {
   activity = { publish: publishActivity, remove: removeActivity },
 } = {}) {
   installPriority(pi, { identity: radianceChatIdentity });
+  installBackend(pi);
   const applies = (ctx) => ctx.model?.id === MODEL && process.env.QWEN_RADIANCE_CACHE_ABI;
   const durableGenerations = new Map();
   const refreshActivity = async (ctx) => {
