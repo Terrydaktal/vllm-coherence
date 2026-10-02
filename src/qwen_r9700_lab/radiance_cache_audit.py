@@ -71,14 +71,14 @@ def open_regular(path):
         yield stream
 
 
-def read_json(path):
+def read_json(path, *, limit=1024 * 1024):
     with open_regular(path) as stream:
-        data = stream.read(1024 * 1024 + 1)
-    if len(data) > 1024 * 1024:
-        raise ValueError("metadata exceeds 1 MiB")
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("metadata exceeds its size limit")
     value = json.loads(data)
     if not isinstance(value, dict):
-        raise ValueError("metadata must be an object")
+        raise ValueError("metadata must be an object")  # noqa: TRY004 -- invalid serialized metadata
     return value, hashlib.sha256(data).hexdigest()
 
 
@@ -623,7 +623,7 @@ def drive_health(cache_root):
             # Nonzero smartctl exit codes can also report an unhealthy drive;
             # parse its JSON health values rather than discarding that evidence.
             proc = subprocess.run(
-                ["smartctl", "-a", "-j", device], capture_output=True, text=True, timeout=4
+                ["smartctl", "-a", "-j", device], capture_output=True, text=True, timeout=4, check=False
             )
             smart = json.loads(proc.stdout).get("nvme_smart_health_information_log", {})
             if smart:
@@ -881,6 +881,119 @@ def snapshot_tail_status(path=TAIL_STATUS_PATH):
     return result
 
 
+def lifetime_traffic(root, problems):
+    """Sum durable per-chat high-water counters, including deleted namespaces.
+
+    Always covers the entire root, even when the visible table is ABI-filtered.
+    Runtime aliases are not additional data. The retirement ledger is copied
+    before deletion, so pending/live copies must be merged rather than added.
+    Reading these small metadata files adds no work to the backend write path.
+    """
+    records, live, untracked = {}, set(), set()
+    result = {"scope": "completed_snapshot_payload_io_lower_bound", "complete": True,
+              "ledger_path": str(root / "snapshot-retirements.json")}
+
+    def remember(key, counters):
+        if not isinstance(counters, dict):
+            raise ValueError("invalid traffic counters")  # noqa: TRY004 -- invalid serialized counters
+        if not counters.get("available"):
+            untracked.add(key)
+            return
+        if "epochs" in counters:
+            epochs = counters["epochs"]
+            if (not isinstance(epochs, dict) or not epochs or any(
+                    not isinstance(row, dict) or "epochs" in row or name != (row.get("since") or "legacy")
+                    for name, row in epochs.items())):
+                raise ValueError("invalid traffic epochs")
+            for value in epochs.values():
+                remember(key, value)
+            return
+        values = {name: counters.get(name, 0) for name in ("written_file_bytes", "written_blocks")}
+        if any(type(value) is not int or value < 0 for value in values.values()):
+            raise ValueError("invalid traffic counter values")
+        since = counters.get("since")
+        if since is not None and (not isinstance(since, str) or not since):
+            raise ValueError("invalid traffic start time")
+        epoch = (key, since or "legacy")
+        prior = records.get(epoch, {})
+        merged = {name: max(value, prior.get(name, 0)) for name, value in values.items()}
+        starts = [value for value in (counters.get("since"), prior.get("since")) if isinstance(value, str)]
+        if starts:
+            merged["since"] = min(starts)
+        records[epoch] = merged
+
+    ledger_path = root / "snapshot-retirements.json"
+    try:
+        ledger, _ = read_json(ledger_path, limit=8 * 1024 * 1024)
+        if ledger.get("schema") != "urn:coherence:snapshot-retirements:v1" or not isinstance(ledger.get("entries"), dict):
+            raise ValueError("invalid snapshot retirement ledger")
+        for key, entry in ledger["entries"].items():
+            try:
+                parts = key.split("/")
+                if (len(parts) != 2 or any(not ID.fullmatch(part) for part in parts)
+                        or not isinstance(entry, dict) or entry.get("abi") != parts[0]
+                        or entry.get("chat_id") != parts[1]
+                        or entry.get("status") not in {"pending", "complete"}):
+                    raise ValueError("invalid archived traffic identity")
+                remember(key, entry.get("io", {}))
+            except (ValueError, TypeError):
+                result["complete"] = False
+                problems.append(issue("TRAFFIC_HISTORY_INVALID", "Archived write history has an invalid entry", path=ledger_path))
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError):
+        result["complete"] = False
+        problems.append(issue("TRAFFIC_HISTORY_UNREADABLE", "Archived write history is unreadable; total is incomplete", path=ledger_path))
+
+    snapshots = root / "snapshots"
+    if snapshots.exists():
+        real_directory(snapshots)
+        for namespace in sorted(snapshots.iterdir()):
+            data = namespace / "data"
+            if (not ID.fullmatch(namespace.name) or namespace.is_symlink()
+                    or not namespace.is_dir() or data.is_symlink() or not data.is_dir()):
+                continue
+            managed = data / FORMAT
+            if not managed.exists():
+                continue
+            try:
+                real_directory(managed)
+                for directory in sorted(managed.iterdir()):
+                    if not ID.fullmatch(directory.name):
+                        continue
+                    key = f"{namespace.name}/{directory.name}"
+                    try:
+                        real_directory(directory)
+                        info, _ = read_json(directory / "chat.json")
+                        if info.get("format") != FORMAT or info.get("id") != directory.name:
+                            raise ValueError("invalid traffic chat identity")
+                        if info.get("status") != "purged":
+                            live.add(key)
+                        try:
+                            counters, _ = read_json(directory / "io.json")
+                            remember(key, counters)
+                        except FileNotFoundError:
+                            untracked.add(key)
+                    except (OSError, ValueError):
+                        result["complete"] = False
+                        problems.append(issue("TRAFFIC_COUNTERS_UNREADABLE", "Chat write history is unreadable; total is incomplete", path=directory))
+            except (OSError, ValueError):
+                result["complete"] = False
+                problems.append(issue("TRAFFIC_COUNTERS_UNREADABLE", "Namespace write history is unreadable", path=managed))
+    identities = {key for key, epoch in records}
+    deleted = {key for key in records if key[0] not in live}
+    starts = [row["since"] for row in records.values() if row.get("since")]
+    result.update(
+        written_file_bytes=sum(row["written_file_bytes"] for row in records.values()),
+        written_blocks=sum(row["written_blocks"] for row in records.values()),
+        deleted_written_file_bytes=sum(records[key]["written_file_bytes"] for key in deleted),
+        deleted_written_blocks=sum(records[key]["written_blocks"] for key in deleted),
+        tracked_chats=len(identities), deleted_chats=len(identities - live),
+        untracked_chats=len(untracked - identities), since=min(starts) if starts else None,
+    )
+    return result
+
+
 def scan(cache_root, *, abi=None, stale_after=300, verify=False):
     root = Path(cache_root).expanduser().absolute()
     real_directory(root)
@@ -973,7 +1086,15 @@ def scan(cache_root, *, abi=None, stale_after=300, verify=False):
                             row = scan_chat(
                                 directory, namespace.name, stale_after=stale_after, verify=verify
                             )
-                            output["chats"].append(row)
+                            if (row["metadata"].get("status") == "purged" and row["consistent"]
+                                    and not row["objects"] and not row["issues"]):
+                                # Keep tiny deletion markers in storage accounting,
+                                # without bringing removed test chats back into the UI.
+                                for category, amounts in row["storage"].items():
+                                    for key, value in amounts.items():
+                                        output["storage"][category][key] += value
+                            else:
+                                output["chats"].append(row)
                             counted.add(directory)
                         except (OSError, ValueError) as error:
                             problems.append(
@@ -1071,6 +1192,7 @@ def scan(cache_root, *, abi=None, stale_after=300, verify=False):
         "untracked_chats": len(output["chats"]) - len(tracked),
         "written_file_bytes": sum(item.get("written_file_bytes", 0) for item in tracked),
         "written_blocks": sum(item.get("written_blocks", 0) for item in tracked),
+        "lifetime": lifetime_traffic(root, problems),
     }
     return output
 

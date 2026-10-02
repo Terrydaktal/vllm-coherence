@@ -101,7 +101,7 @@
     "experiments/radiance-public/stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b",
     "experiments/radiance-public/gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
     "experiments/radiance-public/qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-    "src/qwen_r9700_lab/radiance_cache.py": "0597bbace19be39be20ed5d5cbcf8b14fc67d0121b9034be7139d993d44e57cb",
+    "src/qwen_r9700_lab/radiance_cache.py": "b342dfa882bf52b977d130da6cb1e9a705104c75cb09e8a8b90055cd009b368d",
     "src/qwen_r9700_lab/radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600"
   },
   "support_files": {

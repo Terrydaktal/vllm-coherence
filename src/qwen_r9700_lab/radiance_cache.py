@@ -16,6 +16,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import struct
 import subprocess
 import tempfile
@@ -36,6 +37,8 @@ CONTROL_DIRECTORY = Path("/dev/shm/qwen-radiance-snapshot-control-v1")
 CONTROL_SCHEMA = "urn:qwen-r9700:radiance-snapshot-control:v1"
 CONTROL_FILE = re.compile(r"([0-9a-f]{32})\.(request|response)\.json\Z")
 _WRITE_LOCKS = tuple(threading.Lock() for _ in range(64))
+RETIREMENT_SCHEMA = "urn:coherence:snapshot-retirements:v1"
+TEST_CHAT_TITLES = {"Synthetic release smoke", "Synthetic relay probe"}
 
 
 class RetiredGenerationError(ValueError):
@@ -592,6 +595,306 @@ class ChatStore:
             return self._collect(info)
 
 
+def _maintenance_json(path: Path, *, limit=8 * 1024 * 1024) -> dict:
+    """Read bounded regular metadata without following links or opening pipes."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("cache metadata is not a regular file")
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("cache metadata exceeds its size limit")
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        raise ValueError("cache metadata must be an object")  # noqa: TRY004 -- invalid serialized metadata
+    return value
+
+
+def _retirement_ledger(path: Path) -> dict:
+    try:
+        ledger = _maintenance_json(path)
+    except FileNotFoundError:
+        ledger = {"schema": RETIREMENT_SCHEMA, "entries": {}}
+    if ledger.get("schema") != RETIREMENT_SCHEMA or not isinstance(ledger.get("entries"), dict):
+        raise ValueError("invalid snapshot retirement ledger")
+    for key, entry in ledger["entries"].items():
+        parts = key.split("/")
+        if (len(parts) != 2 or any(not ID.fullmatch(part) for part in parts)
+                or not isinstance(entry, dict) or entry.get("abi") != parts[0]
+                or entry.get("chat_id") != parts[1]
+                or entry.get("status") not in {"pending", "complete"}):
+            raise ValueError("invalid archived snapshot identity")
+        counters = entry.get("io", {})
+        if not isinstance(counters, dict):
+            raise ValueError("invalid archived snapshot counters")  # noqa: TRY004 -- invalid serialized counters
+        _merge_io_history({}, counters)
+    return ledger
+
+
+def _merge_io_history(prior: dict, current: dict) -> dict:
+    # A pending deletion overlaps the still-present io.json. These are high-water
+    # copies of the same counter, not two independent transfers. A test identity
+    # reused with a new generation retains io.json and continues this same counter.
+    def epochs(value):
+        since = value.get("since")
+        if since is not None and (not isinstance(since, str) or not since):
+            raise ValueError("invalid snapshot traffic start time")
+        if "epochs" in value:
+            result = value["epochs"]
+            if (not isinstance(result, dict) or not result or any(
+                    not isinstance(key, str) or not isinstance(row, dict) or "epochs" in row
+                    or key != (row.get("since") or "legacy")
+                    for key, row in result.items())):
+                raise ValueError("invalid snapshot traffic epochs")
+            return result
+        return {since or "legacy": value} if value.get("available") else {}
+
+    previous, latest = epochs(prior), epochs(current)
+    if len(set(previous) | set(latest)) > 1 or "epochs" in prior or "epochs" in current:
+        combined = {key: _merge_io_history(previous.get(key, {}), latest.get(key, {}))
+                    for key in set(previous) | set(latest)}
+        # Recreating a retired data ABI can restart io.json. Keep separate epochs
+        # so its new writes are added, while a pending deletion is deduplicated.
+        merged = {**prior, **current, "epochs": combined, "available": True}
+        for key in ("written_file_bytes", "written_raw_bytes", "written_blocks", "reused_blocks",
+                    "verification_file_bytes", "write_failures", "compression_seconds"):
+            if any(key in row for row in combined.values()):
+                merged[key] = sum(row.get(key, 0) for row in combined.values())
+        starts = [row["since"] for row in combined.values() if row.get("since")]
+        if starts:
+            merged["since"] = min(starts)
+        return merged
+    merged = {**prior, **current}
+    for key in ("written_file_bytes", "written_raw_bytes", "written_blocks", "reused_blocks",
+                "verification_file_bytes", "write_failures", "compression_seconds"):
+        if key in prior or key in current:
+            values = (prior.get(key, 0), current.get(key, 0))
+            if any(type(value) not in (int, float) or not 0 <= value < float("inf") for value in values):
+                raise ValueError("invalid snapshot traffic counters")
+            merged[key] = max(values)
+    merged["available"] = bool(prior.get("available") or current.get("available"))
+    starts = [value for value in (prior.get("since"), current.get("since")) if value]
+    if starts:
+        merged["since"] = min(starts)
+    return merged
+
+
+def _test_chats_in_use(prefix: Path, tail_path: Path) -> set[str] | None:
+    """Fail closed for a live namespace if its activity metadata is unavailable."""
+    protected = set()
+    samples = []
+    for path, kind in ((Path(str(prefix) + "-scheduler.json"), "scheduler"),
+                       (Path(str(prefix) + "-worker.json"), "worker"), (tail_path, "tail")):
+        try:
+            value = _maintenance_json(path, limit=1024 * 1024)
+            samples.append(value)
+            # Scheduler/worker records change at admission/handover, so they can
+            # be old while an idle engine is healthy. The tail reporter supplies
+            # the heartbeat; matching PIDs bind the event records to that engine.
+            if kind == "tail" and not 0 <= time.time() - float(value["updated_at"]) <= 10:
+                return None
+            if kind == "scheduler":
+                rows = value.get("requests", [])
+            elif kind == "worker":
+                residency = value["residency"]
+                rows = [residency.get("active"), *residency.get("images", [])]
+            else:
+                rows = value.get("chats", [])
+            for row in rows:
+                if row is None:
+                    continue
+                chat_id = row.get("chat_id", "")
+                if not isinstance(chat_id, str) or not ID.fullmatch(chat_id):
+                    return None
+                protected.add(chat_id)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return None
+    pid = samples[-1].get("pid")
+    if type(pid) is not int or pid <= 0 or any(value.get("pid") != pid for value in samples):
+        return None
+    return protected
+
+
+def _owned_test_files(directory: Path) -> list[Path]:
+    files = []
+    for path in directory.rglob("*"):
+        relative = path.relative_to(directory)
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            if relative.parts[0] != "generations" or len(relative.parts) > 2:
+                raise ValueError("unknown directory in test snapshot")
+            if len(relative.parts) == 2 and not ID.fullmatch(path.name):
+                raise ValueError("unknown test generation")
+        elif stat.S_ISREG(mode) and (
+            (len(relative.parts) == 1 and path.name in {"chat.json", "io.json", ".lock", ".io.lock"})
+            or (len(relative.parts) == 1 and path.name.startswith(".pending-"))
+            or (len(relative.parts) == 3 and relative.parts[0] == "generations"
+                and ID.fullmatch(relative.parts[1])
+                and (KEY.fullmatch(path.name) or path.name.startswith(".pending-")))
+        ):
+            files.append(path)
+        else:
+            raise ValueError("unknown file or symlink in test snapshot")
+    return files
+
+
+def purge_test_chats(cache_root: Path, *, abi=None, dry_run=False,
+                     status_prefix=Path("/dev/shm/qwen-radiance-fair-public"),
+                     tail_path=Path("/dev/shm/qwen-radiance-snapshot-tail.json")) -> dict:
+    """Remove only labelled qualification snapshots, retaining traffic and tombstones.
+
+    An exclusive chat lock drains readers/writers. A durable replacement generation
+    and retired-generation list then stop late writes even in a live namespace.
+    The tiny lock, deletion marker and io.json remain; their counters continue if a
+    future test uses the same chat ID. No transcript or model payload is read.
+    """
+    root = Path(cache_root).expanduser().absolute()
+    if abi is not None and (not isinstance(abi, str) or not ID.fullmatch(abi)):
+        raise ValueError("invalid snapshot ABI")
+    real_directory(root)
+    if root.resolve() != root:
+        raise ValueError("cache root must not contain symlinks")
+    snapshots = root / "snapshots"
+    real_directory(snapshots)
+    result = {"schema": "urn:coherence:cache-purge-tests:v1", "dry_run": dry_run,
+              "removed_file_bytes": 0, "chats": [], "skipped": []}
+    ledger_path = root / "snapshot-retirements.json"
+    ledger = _retirement_ledger(ledger_path)
+    roots = [snapshots / abi] if abi else sorted(snapshots.iterdir())
+    lock_fd = None
+    if not dry_run:
+        lock_fd = os.open(root / ".snapshot-retirement.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(lock_fd)
+            result["skipped"].append({"reason": "retirement_busy"})
+            return result
+    try:
+        if not dry_run:
+            # The ledger may have changed while the maintenance lock was acquired.
+            ledger = _retirement_ledger(ledger_path)
+        for namespace in roots:
+            if not ID.fullmatch(namespace.name) or namespace.is_symlink():
+                continue
+            real_directory(namespace)
+            data = namespace / "data"
+            if abi and (data.is_symlink() or not data.is_dir()):
+                manifest = _maintenance_json(namespace / "abi.json")
+                data_abi = manifest.get("storage", {}).get("data_abi", "")
+                if not isinstance(data_abi, str) or not ID.fullmatch(data_abi):
+                    raise ValueError("invalid snapshot data ABI reference")
+                namespace = snapshots / data_abi
+                real_directory(namespace)
+                data = namespace / "data"
+            if data.is_symlink() or not data.is_dir():
+                continue  # Runtime aliases are not additional copies.
+            real_directory(data)
+            managed = data / FORMAT
+            if not managed.exists():
+                continue
+            real_directory(managed)
+            engine_fd = None
+            protected = None
+            try:
+                engine_fd = os.open(managed / ".engine.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+                if not stat.S_ISREG(os.fstat(engine_fd).st_mode):
+                    raise ValueError("invalid engine lease")
+                try:
+                    fcntl.flock(engine_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    protected = set()
+                except BlockingIOError:
+                    protected = _test_chats_in_use(status_prefix, tail_path)
+            except (OSError, ValueError):
+                pass
+            try:
+                for directory in sorted(managed.iterdir()):
+                    if not ID.fullmatch(directory.name):
+                        continue
+                    real_directory(directory)
+                    try:
+                        info = _maintenance_json(directory / "chat.json", limit=1024 * 1024)
+                    except (OSError, ValueError):
+                        result["skipped"].append({"abi": namespace.name, "chat_id": directory.name,
+                                                  "reason": "metadata_unreadable"})
+                        continue
+                    if (info.get("title") not in TEST_CHAT_TITLES
+                            or info.get("cwd") not in {"/qualification", "/workspace/qualification"}):
+                        continue
+                    item = {"abi": namespace.name, "chat_id": directory.name, "title": info["title"]}
+                    if protected is None or directory.name in protected:
+                        result["skipped"].append({**item, "reason": "activity_unknown" if protected is None else "test_in_use"})
+                        continue
+                    descriptor = None
+                    try:
+                        descriptor = os.open(directory / ".lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+                        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                            raise ValueError("invalid chat lock")
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        info = _maintenance_json(directory / "chat.json", limit=1024 * 1024)
+                        if (info.get("id") != directory.name or info.get("format") != FORMAT
+                                or info.get("title") != item["title"]
+                                or info.get("cwd") not in {"/qualification", "/workspace/qualification"}):
+                            raise ValueError("test snapshot identity changed")
+                        identity(info)
+                        files = _owned_test_files(directory)
+                        payloads = [path for path in files if path.parent != directory or path.name.startswith(".pending-")]
+                        key = f"{namespace.name}/{directory.name}"
+                        if info.get("status") == "purged" and not payloads and ledger["entries"].get(key, {}).get("status") == "complete":
+                            continue
+                        try:
+                            current_io = _maintenance_json(directory / "io.json", limit=1024 * 1024)
+                        except FileNotFoundError:
+                            current_io = {"available": False}
+                        item.update(tokens=info.get("tokens", 0), file_bytes=sum(p.stat().st_size for p in payloads), files=len(payloads))
+                        if dry_run:
+                            result["chats"].append(item)
+                            continue
+                        prior = ledger["entries"].get(key, {})
+                        entry = {**item, "reason": "purged_test", "status": "pending",
+                                 "retired_at": datetime.now(UTC).isoformat(),
+                                 "io": _merge_io_history(prior.get("io", {}), current_io)}
+                        ledger["entries"][key] = entry
+                        atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+                        generations = directory / "generations"
+                        real_directory(generations)
+                        if info.get("status") != "purged":
+                            retired = set(info.get("retired_generations", [])) | {info["generation"]}
+                            retired.update(p.name for p in generations.iterdir())
+                            tombstone = hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+                            (generations / tombstone).mkdir(mode=0o700)
+                            sync_directory(generations)
+                            marker = {**identity(info), "generation": tombstone, "format": FORMAT,
+                                      "status": "purged", "tokens": 0, "head": [],
+                                      "retired_generations": sorted(retired), "purged_at": entry["retired_at"]}
+                            atomic_write(directory / "chat.json", json.dumps(marker, sort_keys=True).encode())
+                            info = marker
+                        for generation in generations.iterdir():
+                            if generation.name != info["generation"]:
+                                shutil.rmtree(generation)
+                        for path in payloads:
+                            if path.parent == directory:
+                                path.unlink()
+                        sync_directory(generations)
+                        sync_directory(directory)
+                        entry["status"] = "complete"
+                        atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+                        result["removed_file_bytes"] += item["file_bytes"]
+                        result["chats"].append(item)
+                    except (OSError, ValueError, TypeError) as error:
+                        result["skipped"].append({**item, "reason": type(error).__name__})
+                    finally:
+                        if descriptor is not None:
+                            os.close(descriptor)
+            finally:
+                if engine_fd is not None:
+                    os.close(engine_fd)
+        return result
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)
+
+
 def retire_incompatible_snapshots(data_root: Path, *, apply=False, chat_ids=None) -> dict:
     """Retire owned snapshots in inactive, incompatible data namespaces.
 
@@ -623,9 +926,7 @@ def retire_incompatible_snapshots(data_root: Path, *, apply=False, chat_ids=None
         except BlockingIOError:
             result["skipped"].append({"reason": "retirement_busy"})
             return result
-        ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {
-            "schema": "urn:coherence:snapshot-retirements:v1", "entries": {}
-        }
+        ledger = _retirement_ledger(ledger_path)
         for old in sorted(snapshots.iterdir()):
             if old == namespace or not ID.fullmatch(old.name) or old.is_symlink():
                 continue
@@ -705,7 +1006,7 @@ def retire_incompatible_snapshots(data_root: Path, *, apply=False, chat_ids=None
                             key = f"{old.name}/{directory.name}"
                             # Keep numeric write-traffic history, not old KV payloads.
                             prior_entry = ledger["entries"].get(key, {})
-                            entry["io"] = prior_entry.get("io", store.io_totals())
+                            entry["io"] = _merge_io_history(prior_entry.get("io", {}), store.io_totals())
                             ledger["entries"][key] = {**entry, "status": "pending"}
                             atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
                             # Keep ownership metadata until all payload removal
@@ -803,6 +1104,9 @@ def main(argv: list[str] | None = None) -> int:
     flush = sub.add_parser("flush", help="force the live backend to publish a chat's buffered tail")
     flush.add_argument("--identity-json", required=True)
     flush.add_argument("--timeout", type=float, default=120.0)
+    purge = sub.add_parser("purge-tests", help="remove labelled qualification snapshots, preserving lifetime traffic")
+    purge.add_argument("--dry-run", action="store_true")
+    purge.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     if args.host not in ("local", "localhost", "127.0.0.1"):
         remote_args = ["--host", "local", "--cache-root", args.cache_root]
@@ -814,6 +1118,11 @@ def main(argv: list[str] | None = None) -> int:
             remote_args += ["--identity-json", args.identity_json]
         if args.command == "flush":
             remote_args += ["--timeout", str(args.timeout)]
+        if args.command == "purge-tests":
+            if args.dry_run:
+                remote_args.append("--dry-run")
+            if args.json:
+                remote_args.append("--json")
         return subprocess.run(
             [
                 "ssh",
@@ -842,6 +1151,24 @@ def main(argv: list[str] | None = None) -> int:
         result = ChatStore(snapshots / args.abi / "data", json.loads(args.identity_json)).activate()
         print(json.dumps(result))
         return 0
+    if args.command == "purge-tests":
+        try:
+            result = purge_test_chats(Path(args.cache_root), abi=args.abi, dry_run=args.dry_run)
+        except (OSError, ValueError) as error:
+            print(json.dumps({"error": str(error)}))
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            verb = "Would purge" if args.dry_run else "Purged"
+            size = sum(row["file_bytes"] for row in result["chats"]) if args.dry_run else result["removed_file_bytes"]
+            print(f"{verb} {len(result['chats'])} labelled test cache(s): {human(size)}")
+            for row in result["chats"]:
+                print(f"  {row['chat_id'][:12]}/{row['abi'][:8]}  {row['title']}  {human(row['file_bytes'])}")
+            for row in result["skipped"]:
+                print(f"  Skipped {row.get('chat_id', row.get('abi', 'maintenance'))[:12]}: {row['reason']}")
+            print("Lifetime write counters and tiny deletion markers are retained; transcripts are untouched.")
+        return 2 if result["skipped"] else 0
     roots = [snapshots / args.abi] if args.abi else sorted(snapshots.iterdir())
     reports = [report(root / "data") for root in roots if (root / "data").is_dir()]
     if args.json:

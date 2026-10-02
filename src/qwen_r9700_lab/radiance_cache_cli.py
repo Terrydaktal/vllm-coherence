@@ -34,6 +34,7 @@ SYNOPSIS
     qwen-radiance-cache [OPTIONS] watch [--interval SECONDS] [--count N]
     qwen-radiance-cache [OPTIONS] list [--json]
     qwen-radiance-cache [OPTIONS] flush --identity-json JSON [--timeout SECONDS]
+    qwen-radiance-cache [OPTIONS] purge-tests [--dry-run] [--json]
     qwen-radiance-cache [OPTIONS] memory [--refresh | --map] [--json]
 
 DESCRIPTION
@@ -60,9 +61,13 @@ OPTIONS
     --refresh             Refresh the memory buffer inventory; wait up to 5 seconds.
     --map                 Request an allocator map with free block sizes and owners.
                           Requests within 10 seconds share the latest map.
+    --dry-run             Preview purge-tests without changing the cache.
     -h, --help            Show this help.
 
 OPERATION
+    Lifetime disk traffic includes deleted chats and retired data ABIs.
+    purge-tests removes labelled Synthetic release smoke/relay probe snapshots,
+    skips tests still in use and preserves deletion markers and write counters.
     status is the default. show expands a chat's generations, tensor groups,
     missing blocks and diagnostic paths. audit highlights issues and returns a
     nonzero status for warnings/errors. watch repeats the same read-only scan.
@@ -85,6 +90,8 @@ EXAMPLES
     qwen-radiance-cache watch --interval 5
     qwen-radiance-cache --abi SHA256 flush --identity-json '{...}'
     qwen-radiance-cache --host local --cache-root /path/to/cache status
+    qwen-radiance-cache purge-tests --dry-run
+    qwen-radiance-cache purge-tests
     qwen-radiance-cache memory
     qwen-radiance-cache memory --refresh --json
     qwen-radiance-cache memory --map
@@ -92,6 +99,8 @@ EXAMPLES
 FILES
     snapshots/<ABI>/data/qwen-chat-cache-v1/<CHAT>/chat.json
     snapshots/<ABI>/data/qwen-chat-cache-v1/<CHAT>/generations/<GEN>/*.qkv
+    snapshots/<ABI>/data/qwen-chat-cache-v1/<CHAT>/io.json
+    snapshot-retirements.json: lifetime numeric write history for deleted caches
     Local Pi sessions: <PROJECT>/.pi/sessions/*.jsonl
     Legacy Pi sessions: agent-<PORT>/sessions/<PROJECT>/*.jsonl
     Active Pi markers: agent-<PORT>/radiance-active/<PID>.json
@@ -150,7 +159,7 @@ def parser():
     common.add_argument("--json", action="store_true")
     result = Parser(parents=[common])
     sub = result.add_subparsers(dest="command")
-    for name in ("status", "show", "audit", "watch", "list", "compact", "flush", "memory"):
+    for name in ("status", "show", "audit", "watch", "list", "compact", "flush", "memory", "purge-tests"):
         command = sub.add_parser(name, parents=[common])
         if name == "show":
             command.add_argument("selector")
@@ -166,6 +175,8 @@ def parser():
             action = command.add_mutually_exclusive_group()
             action.add_argument("--refresh", action="store_true")
             action.add_argument("--map", action="store_true")
+        if name == "purge-tests":
+            command.add_argument("--dry-run", action="store_true")
     return result
 
 
@@ -632,11 +643,16 @@ def render(report, *, selector=None, details=False, audit_view=False):
         )
     )
     io = report.get("io", {})
+    lifetime = io.get("lifetime", io)
     print(
-        f"Disk traffic: {human(io.get('written_file_bytes', 0))} in "
-        f"{number(io.get('written_blocks', 0))} blocks; tracking "
-        f"{number(io.get('tracked_chats', 0))}/{number(len(report.get('chats', [])))} chats"
+        f"Disk traffic (lifetime): {human(lifetime.get('written_file_bytes', 0))} in "
+        f"{number(lifetime.get('written_blocks', 0))} blocks; "
+        f"{human(lifetime.get('deleted_written_file_bytes', 0))} from "
+        f"{number(lifetime.get('deleted_chats', 0))} deleted chat cache(s); "
+        f"{number(lifetime.get('tracked_chats', 0))} tracked chat/ABI identities"
     )
+    if lifetime.get("untracked_chats") or lifetime.get("complete") is False:
+        print("Write history is incomplete; the lifetime figure includes only recorded completed payload writes.")
     tail = report.get("tail_journal", {})
     if tail.get("available"):
         tail_bytes = sum(row["bytes"] for row in tail["chats"])
@@ -779,7 +795,7 @@ def render(report, *, selector=None, details=False, audit_view=False):
     )
     print(
         "DISK TRAFFIC = cumulative completed snapshot payload writes since tracking began, "
-        "including subsequently deleted blocks; excludes metadata and incomplete writes."
+        "including deleted blocks/chats and retired ABIs; excludes metadata and incomplete writes."
     )
     print(
         "HANDOVER RAM = useful bytes in a chat's pinned handover image; GPU marks the active "
@@ -1142,7 +1158,7 @@ def main(argv=None):
             else:
                 print("Radiance GPU memory inspection failed", file=sys.stderr)
             return 2
-    if args.command in ("list", "compact", "flush"):
+    if args.command in ("list", "compact", "flush", "purge-tests"):
         from .radiance_cache import main as legacy_main
 
         legacy = ["--host", args.host, "--cache-root", args.cache_root]
@@ -1153,8 +1169,11 @@ def main(argv=None):
             legacy += ["--identity-json", args.identity_json]
             if args.command == "flush":
                 legacy += ["--timeout", str(args.timeout)]
-        elif args.json:
-            legacy.append("--json")
+        else:
+            if args.json:
+                legacy.append("--json")
+            if args.command == "purge-tests" and args.dry_run:
+                legacy.append("--dry-run")
         return legacy_main(legacy)
     if args.command == "watch" and (not 1 <= args.interval <= 60 or args.count < 0):
         cli.error("watch requires --interval between 1 and 60 and nonnegative --count")

@@ -210,6 +210,8 @@ On the GPU host, inspect storage with:
 ```sh
 tools/coherence cache -- status --details
 tools/coherence cache -- audit
+qwen-radiance-cache purge-tests --dry-run
+qwen-radiance-cache purge-tests
 tools/coherence cache -- watch --interval 5
 ```
 
@@ -217,6 +219,21 @@ The inventory separates current disk usage from cumulative **disk traffic**, and
 shows saved token/block coverage, handover/buffered-tail RAM, active Pi processes
 and ports. Audit exposes incomplete/duplicate snapshots and failed cleanup. Its
 `--help` documents explicit flush and generation-cleanup operations.
+
+`purge-tests` removes snapshots labelled **Synthetic release smoke** or
+**Synthetic relay probe** in a qualification directory. It skips tests with
+active requests, a GPU/RAM bank or a pending snapshot tail, as well as busy chat
+locks; real chat snapshots and transcripts are preserved. A tiny deletion marker,
+lock and write counter prevent late writes from recreating purged generations.
+An interrupted purge can be retried safely.
+
+The header reports **lifetime disk traffic** across every data ABI, including
+deleted chats. It combines each chat's durable `io.json` counter with numeric
+history in `snapshot-retirements.json`, counting overlapping copies only once.
+Deleting a test cache, retiring an ABI or compacting a chat does not reset this
+total. Counts start when write tracking began, exclude metadata/unfinished writes,
+and cannot recover unrecorded history from a cache deleted manually. Reading the
+history adds no new recording or synchronization to backend generation rounds.
 
 ## Concurrent chats and priority
 
