@@ -249,6 +249,43 @@ Recorded EngineCore errors are attached as expandable diagnostics: `Ctrl+O`
 reveals the traceback, and `/backend-error` retrieves the latest recorded failure.
 A missing traceback is reported explicitly; a forced kill may leave none.
 
+Completed backend requests also append one content-free termination record to
+`/dev/shm/qwen-radiance-fair-public-stops.jsonl` on the GPU host. It captures the
+core status before cleanup: EOS, configured stop token/string, output/context
+limit, abort, error, repetition, or an explicit unknown cause. Records contain
+hashed request/chat/generation identities, the completion timestamp, token
+counts, limits, sampling settings and final round/acceptance counts. They never
+contain token IDs, stop strings, prompts, answers or tool arguments.
+
+To inspect recent terminations without opening a transcript:
+
+```sh
+jq -s '.[-10:] | map({finished_at_ms, request_id, chat_id, cause,
+  finish_reason, output_tokens, total_tokens, generation_rounds, sampling})' \
+  /dev/shm/qwen-radiance-fair-public-stops.jsonl
+```
+
+The last termination per generation is also in the completion-only
+`qwen-radiance-fair-public-stops-status.json` file, with at most 16 generations.
+Its hashed request ID and `finished_at_ms` correlate with
+the existing round log to establish whether a response ended before another chat
+took the GPU. This explains the backend's stop decision; it does not establish
+why the model chose EOS or whether an answer is semantically complete. `aborted`
+is the core status and can include an upstream stop-string decision, not only a
+client cancellation. API/detokenizer-only causes and a crash before request
+cleanup are not inferred from a missing record.
+
+The recorder does no per-token work, GPU readback, synchronization or filesystem
+sync. It writes only at completion, using existing CPU metadata. The RAM-backed
+log rotates at 1 MiB, retains one previous file and creates files with mode 0600;
+it is not durable across reboot. Pending records are bounded to 64. If a capture
+or write fails, inference continues and the stop-status file reports
+`stop_capture_failures` or `stop_log_dropped`; failed writes do not trigger retry
+work on subsequent generation rounds. The existing phase feed remains unchanged,
+so currently running Pi and VM readers keep their round/acceptance counters.
+A running backend needs the normal
+runtime-package update and restart to load this recorder; Pi needs no reload.
+
 An incompatible retained GPU endpoint can no longer prevent a replacement prompt
 from being admitted indefinitely at “Checking reusable context”. If allocation
 fails after endpoint reuse was rejected, the scheduler releases that optional

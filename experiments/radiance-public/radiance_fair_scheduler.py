@@ -37,6 +37,10 @@ _phase_scheduler = None
 PHASE_SCHEMA = "urn:qwen-r9700:request-phases:v2"
 ROUND_LOG_SCHEMA = "urn:qwen-r9700:decode-rounds:v1"
 ROUND_LOG_MAX_BYTES = 8 * 1024 * 1024
+STOP_LOG_SCHEMA = "urn:qwen-r9700:request-stops:v1"
+STOP_STATUS_SCHEMA = "urn:qwen-r9700:request-stops-status:v1"
+STOP_LOG_MAX_BYTES = 1024 * 1024
+STOP_LOG_MAX_PENDING = 64
 # The qualified DFlash decode path schedules at most eight model tokens per
 # execution. A larger batch is a prompt-prefill execution and must not be
 # treated as the first decode boundary.
@@ -51,12 +55,161 @@ DECODE_SYNC_SLOW_RATIO = 0.08
 DECODE_SYNC_LATENCY_WARMUP_ROUNDS = 4
 
 
+def _stop_count(value):
+    return value if type(value) is int and 0 <= value <= 2**63 - 1 else None
+
+
+def _stop_number(value):
+    if type(value) in (int, float) and math.isfinite(value):
+        return value
+    return None
+
+
+def request_stop_metadata(request, max_model_len=None):
+    """Read terminal CPU bookkeeping, never serialize token IDs or stop text.
+
+    This records EngineCore's decision, not an inferred answer-quality verdict.
+    In particular, an upstream detokenizer stop can abort a still-running core
+    request; FINISHED_ABORTED alone does not prove client cancellation.
+    """
+    finish_reasons = {
+        "FINISHED_STOPPED": "stop",
+        "FINISHED_LENGTH_CAPPED": "length",
+        "FINISHED_ABORTED": "abort",
+        "FINISHED_IGNORED": "length",
+        "FINISHED_ERROR": "error",
+        "FINISHED_REPETITION": "repetition",
+    }
+    status = getattr(getattr(request, "status", None), "name", None)
+    status = status if status in finish_reasons else "UNKNOWN"
+    params = getattr(request, "sampling_params", None)
+    sampling = {
+        name: _stop_number(getattr(params, name, None))
+        for name in (
+            "temperature",
+            "top_p",
+            "top_k",
+            "min_p",
+            "repetition_penalty",
+            "presence_penalty",
+            "frequency_penalty",
+        )
+    }
+    for name in ("min_tokens", "max_tokens"):
+        sampling[name] = _stop_count(getattr(params, name, None))
+    ignore_eos = getattr(params, "ignore_eos", None)
+    sampling["ignore_eos"] = ignore_eos if type(ignore_eos) is bool else None
+    for source, name in (
+        ("stop_token_ids", "stop_token_count"),
+        ("stop", "stop_string_count"),
+    ):
+        value = getattr(params, source, None)
+        sampling[name] = (
+            len(value)
+            if type(value) in (list, tuple)
+            else (0 if value is None else None)
+        )
+
+    output = _stop_count(getattr(request, "num_output_tokens", None))
+    total = _stop_count(getattr(request, "num_tokens", None))
+    output_limit = _stop_count(getattr(request, "max_tokens", None))
+    context_limit = _stop_count(max_model_len)
+    output_reached = (
+        output >= output_limit
+        if output is not None and output_limit is not None
+        else None
+    )
+    context_reached = (
+        total >= context_limit
+        if total is not None and context_limit is not None
+        else None
+    )
+
+    # The list is already in host memory. Read just the final element; do not
+    # copy a history, read a device tensor, decode text, or emit the token value.
+    last_token = None
+    if output:
+        token_ids = getattr(request, "output_token_ids", ())
+        if token_ids:
+            last_token = token_ids[-1]
+    eos = getattr(params, "eos_token_id", None)
+    eos_match = (
+        last_token == eos if type(last_token) is int and type(eos) is int else None
+    )
+    stops = getattr(params, "stop_token_ids", None)
+    stop_match = (
+        last_token in stops
+        if type(last_token) is int and type(stops) in (list, tuple)
+        else None
+    )
+    reason = getattr(request, "stop_reason", None)
+    reason_kind = (
+        "none"
+        if reason is None
+        else (
+            "token"
+            if type(reason) is int
+            else "string"
+            if type(reason) is str
+            else "unsupported"
+        )
+    )
+
+    cause = {
+        "FINISHED_ABORTED": "aborted",
+        "FINISHED_IGNORED": "ignored",
+        "FINISHED_ERROR": "error",
+        "FINISHED_REPETITION": "repetition",
+    }.get(status, "unknown")
+    if status == "FINISHED_STOPPED":
+        if reason_kind == "token":
+            cause = "stop_token"
+        elif reason_kind == "string":
+            cause = "stop_string"
+        elif reason is None and eos_match and ignore_eos is not True:
+            cause = "eos"
+        else:
+            cause = "stopped_unknown"
+    elif status == "FINISHED_LENGTH_CAPPED":
+        cause = (
+            "context_and_output_limit"
+            if context_reached and output_reached
+            else "context_limit"
+            if context_reached
+            else "output_limit"
+            if output_reached
+            else "length_unknown"
+        )
+    return {
+        "finished_at_ms": int(time.time() * 1000),
+        "status": status,
+        "finish_reason": finish_reasons.get(status),
+        "cause": cause,
+        "stop_reason_kind": reason_kind,
+        "last_token_is_eos": eos_match,
+        "last_token_is_configured_stop": stop_match,
+        "input_tokens": _stop_count(getattr(request, "num_prompt_tokens", None)),
+        "output_tokens": output,
+        "total_tokens": total,
+        "computed_tokens": _stop_count(getattr(request, "num_computed_tokens", None)),
+        "context_limit_tokens": context_limit,
+        "effective_output_limit_tokens": output_limit,
+        "output_limit_reached": output_reached,
+        "context_limit_reached": context_reached,
+        "sampling": sampling,
+    }
+
+
 class RequestPhases:
     """Bounded numeric timings; never retain prompts, token IDs or tool data."""
 
-    def __init__(self):
+    def __init__(self, max_model_len=None):
         self.live = {}
         self.recent = {}
+        self.max_model_len = max_model_len
+        self._stop_events = []
+        self.stop_log_dropped = 0
+        self.stop_capture_failures = 0
         # Completed-round events are flushed to a separate bounded JSONL feed
         # by FairScheduler._write_phase_status. Keeping this queue here means
         # a failed telemetry write can be retried without losing a round.
@@ -233,11 +386,58 @@ class RequestPhases:
             "timings_ms": timings,
         }
 
+    def capture_stop(self, request):
+        value = self.live.get(request.request_id)
+        if value is None or "termination" in value:
+            return
+        try:
+            value["termination"] = request_stop_metadata(request, self.max_model_len)
+        except Exception:  # noqa: BLE001 - diagnostics must not prevent cleanup
+            # No exception message/repr: custom metadata could contain text.
+            # Losing diagnostic detail must never prevent request cleanup.
+            self.stop_capture_failures += 1
+            value["termination"] = {
+                "finished_at_ms": int(time.time() * 1000),
+                "status": "UNKNOWN",
+                "cause": "unknown",
+                "capture_failed": True,
+            }
+
+    def take_stop_events(self):
+        events, self._stop_events = self._stop_events, []
+        return events
+
     def finish(self, request):
         if request.request_id not in self.live:
             return
+        self.capture_stop(request)
         self.set(request, "complete")
         row = self.row(request)
+        row["termination"] = self.live[request.request_id]["termination"]
+        if len(self._stop_events) >= STOP_LOG_MAX_PENDING:
+            self._stop_events.pop(0)
+            self.stop_log_dropped += 1
+        self._stop_events.append(
+            {
+                "schema": STOP_LOG_SCHEMA,
+                "pid": os.getpid(),
+                **{
+                    key: row[key]
+                    for key in (
+                        "chat_id",
+                        "generation",
+                        "request_id",
+                        "elapsed_ms",
+                        "first_token_ms",
+                        "generation_rounds",
+                        "draft_tokens",
+                        "accepted_tokens",
+                        "timings_ms",
+                    )
+                },
+                **row["termination"],
+            }
+        )
         key = (row["chat_id"], row["generation"])
         # Only the most recent response per generation, at most 16 generations.
         self.recent.pop(key, None)
@@ -593,7 +793,7 @@ def write_status(path, data):
     temporary.replace(path)
 
 
-def append_round_log(path, events):
+def append_round_log(path, events, *, max_bytes=None):
     """Append numeric decode-round events without syncing the filesystem."""
     if not events:
         return
@@ -602,7 +802,10 @@ def append_round_log(path, events):
         (json.dumps(event, separators=(",", ":"), allow_nan=False) + "\n").encode()
         for event in events
     )
-    if path.exists() and path.stat().st_size + len(payload) > ROUND_LOG_MAX_BYTES:
+    limit = ROUND_LOG_MAX_BYTES if max_bytes is None else max_bytes
+    if max_bytes is not None and len(payload) > limit:
+        raise ValueError("request-stop telemetry batch exceeds its byte limit")
+    if path.exists() and path.stat().st_size + len(payload) > limit:
         rotated = path.with_name(path.name + ".1")
         try:
             rotated.unlink()
@@ -886,7 +1089,7 @@ class FairScheduler(Scheduler):
         self.last_handover_seconds = 0.0
         self._step_worker_metadata = None
         self._decode_sync_epochs = {}
-        self.request_phases = RequestPhases()
+        self.request_phases = RequestPhases(max_model_len=self.max_model_len)
         # The full scheduler feed remains rate-limited, but generation phase
         # counters are published whenever a completed engine round changes
         # them.  Pi watches the phase file separately, so round latency and
@@ -1020,6 +1223,9 @@ class FairScheduler(Scheduler):
         return manager.qwen_response_end
 
     def _free_request(self, request, delay_free_blocks=False):
+        phases = getattr(self, "request_phases", None)
+        if phases is not None:
+            phases.capture_stop(request)
         # Called after acceptance and stop trimming, before allocator free.
         # Cancellation has no completed-step record and never publishes an end.
         step = getattr(self, "_response_end_steps", {}).get(request.request_id)
@@ -1675,6 +1881,49 @@ class FairScheduler(Scheduler):
                 logging.getLogger(__name__).warning(
                     "decode-round telemetry write failed: %s", type(exc).__name__
                 )
+        stops = self.request_phases.take_stop_events()
+        if stops:
+            try:
+                append_round_log(
+                    self.status_path + "-stops.jsonl",
+                    stops,
+                    max_bytes=STOP_LOG_MAX_BYTES,
+                )
+            except Exception as exc:  # noqa: BLE001 - diagnostics must not abort inference
+                # No retry work on each generation round, and no growing queue
+                # if tmpfs is full. Recent status still retains the terminal
+                # metadata, with an explicit lost-log-record count.
+                self.request_phases.stop_log_dropped += len(stops)
+                logging.getLogger(__name__).warning(
+                    "request-stop telemetry write failed: %s",
+                    type(exc).__name__,
+                )
+            try:
+                write_status(
+                    self.status_path + "-stops-status.json",
+                    {
+                        "schema": STOP_STATUS_SCHEMA,
+                        "pid": os.getpid(),
+                        "updated_at": published_at,
+                        "stop_log_dropped": self.request_phases.stop_log_dropped,
+                        "stop_capture_failures": self.request_phases.stop_capture_failures,
+                        "recent": [
+                            {
+                                **{
+                                    key: row[key]
+                                    for key in ("chat_id", "generation", "request_id")
+                                },
+                                **row["termination"],
+                            }
+                            for row in self.request_phases.recent.values()
+                        ],
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 - diagnostics must not abort inference
+                logging.getLogger(__name__).warning(
+                    "request-stop status write failed: %s",
+                    type(exc).__name__,
+                )
         write_status(
             self.status_path + "-phases.json",
             {
@@ -1682,7 +1931,13 @@ class FairScheduler(Scheduler):
                 "pid": os.getpid(),
                 "updated_at": published_at,
                 "requests": rows,
-                "recent": list(self.request_phases.recent.values()),
+                # Keep the existing native/Pi wire schema unchanged, including
+                # for already-running VM telemetry readers. Stop diagnostics
+                # have their own completion-only files and no new poller.
+                "recent": [
+                    {key: value for key, value in row.items() if key != "termination"}
+                    for row in self.request_phases.recent.values()
+                ],
             },
         )
         self._last_phase_signature = signature

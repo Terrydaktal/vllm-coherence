@@ -1358,6 +1358,399 @@ def phase_fixture(module, tmp_path):
     return scheduler, request
 
 
+def terminal_request(request, **changes):
+    request.__dict__.update(
+        status=SimpleNamespace(name="FINISHED_STOPPED"),
+        is_finished=lambda: True,
+        num_output_tokens=5,
+        num_tokens=request.num_prompt_tokens + 5,
+        num_computed_tokens=request.num_prompt_tokens + 4,
+        max_tokens=100,
+        output_token_ids=[31337],
+        stop_reason=None,
+        sampling_params=SimpleNamespace(
+            temperature=1.0,
+            top_p=0.95,
+            top_k=40,
+            min_p=0.0,
+            repetition_penalty=1.0,
+            presence_penalty=0.0,
+            frequency_penalty=0.0,
+            min_tokens=0,
+            max_tokens=100,
+            ignore_eos=False,
+            eos_token_id=31337,
+            stop_token_ids=[424242],
+            stop=[],
+        ),
+    )
+    request.__dict__.update(changes)
+    return request
+
+
+@pytest.mark.parametrize(
+    "status,reason,last,output,limit,context,expected",
+    [
+        ("FINISHED_STOPPED", None, 31337, 5, 100, 253792, "eos"),
+        ("FINISHED_STOPPED", 424242, 424242, 5, 100, 253792, "stop_token"),
+        ("FINISHED_STOPPED", "private stop text", 12345, 5, 100, 253792, "stop_string"),
+        ("FINISHED_STOPPED", None, 12345, 5, 100, 253792, "stopped_unknown"),
+        ("FINISHED_LENGTH_CAPPED", None, 12345, 100, 100, 253792, "output_limit"),
+        ("FINISHED_LENGTH_CAPPED", None, 12345, 5, 100, 150805, "context_limit"),
+        (
+            "FINISHED_LENGTH_CAPPED",
+            None,
+            12345,
+            5,
+            5,
+            150805,
+            "context_and_output_limit",
+        ),
+        ("FINISHED_LENGTH_CAPPED", None, 12345, 5, 100, 253792, "length_unknown"),
+        ("FINISHED_ABORTED", None, 12345, 0, 100, 253792, "aborted"),
+        ("FINISHED_ERROR", "private error text", 12345, 5, 100, 253792, "error"),
+        ("FINISHED_IGNORED", None, 12345, 0, 100, 253792, "ignored"),
+        (
+            "FINISHED_REPETITION",
+            "repetition_detected",
+            12345,
+            5,
+            100,
+            253792,
+            "repetition",
+        ),
+        (
+            "private unknown status",
+            "private error text",
+            12345,
+            5,
+            100,
+            253792,
+            "unknown",
+        ),
+    ],
+)
+def test_request_stop_classification_uses_terminal_cpu_metadata(
+    monkeypatch,
+    tmp_path,
+    status,
+    reason,
+    last,
+    output,
+    limit,
+    context,
+    expected,
+):
+    module = load_module(monkeypatch)
+    _, request = phase_fixture(module, tmp_path)
+    terminal_request(
+        request,
+        status=SimpleNamespace(name=status),
+        stop_reason=reason,
+        output_token_ids=[last],
+        num_output_tokens=output,
+        num_tokens=request.num_prompt_tokens + output,
+        max_tokens=limit,
+    )
+    record = module.request_stop_metadata(request, context)
+    assert record["cause"] == expected
+    assert record["output_tokens"] == output
+    assert record["context_limit_tokens"] == context
+    assert record["output_limit_reached"] == (output >= limit)
+    assert record["context_limit_reached"] == (request.num_tokens >= context)
+    assert "private" not in json.dumps(record)
+
+
+def test_request_stop_does_not_infer_eos_when_ignored_or_unobserved(
+    monkeypatch, tmp_path
+):
+    module = load_module(monkeypatch)
+    _, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+    request.sampling_params.ignore_eos = True
+    assert module.request_stop_metadata(request)["cause"] == "stopped_unknown"
+    request.output_token_ids = []
+    assert module.request_stop_metadata(request)["last_token_is_eos"] is None
+    assert module.request_stop_metadata(request)["cause"] == "stopped_unknown"
+    request.sampling_params.eos_token_id = None
+    request.output_token_ids = [31337]
+    assert module.request_stop_metadata(request)["last_token_is_eos"] is None
+
+
+def test_request_stop_reads_only_last_host_token_and_never_retains_content(
+    monkeypatch, tmp_path
+):
+    module = load_module(monkeypatch)
+    _, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+    accesses = []
+
+    class HostTokens:
+        def __bool__(self):
+            return True
+
+        def __getitem__(self, index):
+            accesses.append(index)
+            assert index == -1
+            return 31337
+
+        def __iter__(self):
+            raise AssertionError("no history scan or token copy")
+
+    request.output_token_ids = HostTokens()
+    request.prompt = request.tool_arguments = "private chat text"
+    request.sampling_params.extra_args = {"private": "private chat text"}
+    request.sampling_params.stop = ["private stop string"]
+    request.sampling_params.temperature = float("nan")
+    request.sampling_params.top_p = float("inf")
+    record = module.request_stop_metadata(request, 253792)
+    assert accesses == [-1]
+    assert record["sampling"]["stop_string_count"] == 1
+    assert record["sampling"]["temperature"] is None
+    assert record["sampling"]["top_p"] is None
+    encoded = json.dumps(record, allow_nan=False)
+    assert all(secret not in encoded for secret in ("private", "31337", "424242"))
+
+
+def test_stop_is_captured_before_free_but_published_after_final_round(
+    monkeypatch, tmp_path
+):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+    scheduler.request_phases.max_model_len = 253792
+    wall = [1000.0]
+    monkeypatch.setattr(module.time, "time", lambda: wall[0])
+
+    def upstream_free(self, value, delay_free_blocks=False):
+        assert delay_free_blocks
+        assert (
+            self.request_phases.live[value.request_id]["termination"]["cause"] == "eos"
+        )
+        assert not self.request_phases._stop_events
+        # Simulate cleanup of transient stop data. The captured cause survives.
+        value.output_token_ids = []
+        value.stop_reason = "private cleanup detail"
+        self.requests.pop(value.request_id)
+        wall[0] += 0.01
+        return "released"
+
+    def upstream_update(self, output, model):
+        return self._free_request(request, delay_free_blocks=True)
+
+    monkeypatch.setattr(module.Scheduler, "_free_request", upstream_free, raising=False)
+    monkeypatch.setattr(module.Scheduler, "update_from_output", upstream_update)
+    output = SimpleNamespace(
+        num_scheduled_tokens={request.request_id: 8},
+        scheduled_spec_decode_tokens={request.request_id: [0] * 7},
+    )
+    model = SimpleNamespace(
+        req_id_to_index={request.request_id: 0}, sampled_token_ids=[[0] * 5]
+    )
+    assert scheduler.update_from_output(output, model) == "released"
+    record = json.loads(Path(scheduler.status_path + "-stops.jsonl").read_text())
+    assert record["finished_at_ms"] == 1000000
+    assert record["cause"] == "eos"
+    assert record["schema"] == module.STOP_LOG_SCHEMA
+    assert record["generation_rounds"] == 1
+    assert record["draft_tokens"] == 7
+    assert record["accepted_tokens"] == 4
+    assert record["output_tokens"] == 5
+    assert (
+        record["request_id"]
+        == module.hashlib.sha256(request.request_id.encode()).hexdigest()
+    )
+    assert record["chat_id"] == CHAT_A
+    assert record["generation"] == GEN_A
+    assert record["sampling"]["top_k"] == 40
+    assert "synthetic-only" not in json.dumps(record)
+    from qwen_r9700_lab.radiance_cache_residency import public_request_phases
+
+    native = json.loads(Path(scheduler.status_path + "-phases.json").read_text())
+    exported = public_request_phases(native)
+    assert "termination" not in native["recent"][0]
+    assert "termination" not in exported["recent"][0]
+    assert set(exported) == {"schema", "pid", "updated_at", "requests", "recent"}
+    parser = ROOT / "integrations/pi/qwen-radiance-scheduler-telemetry.mjs"
+    code = """
+        import {readFileSync} from 'node:fs';
+        const {parseRequestPhases} = await import(process.argv[1]);
+        const sample = JSON.parse(readFileSync(0, 'utf8'));
+        parseRequestPhases(JSON.stringify(sample), sample.pid, sample.updated_at * 1000);
+    """
+    subprocess.run(
+        ["node", "--input-type=module", "-e", code, parser.as_uri()],
+        input=json.dumps(exported),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    scheduler.request_phases.finish(request)
+    scheduler._publish_status(force=True)
+    assert (
+        len(Path(scheduler.status_path + "-stops.jsonl").read_text().splitlines()) == 1
+    )
+
+
+def test_cancelled_queued_request_gets_one_stop_record(monkeypatch, tmp_path):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    terminal_request(
+        request, num_output_tokens=0, num_computed_tokens=0, output_token_ids=[]
+    )
+    scheduler.banks.unallocated = set()
+    scheduler._response_end_cache = lambda _: pytest.fail(
+        "no checkpoint on cancellation"
+    )
+
+    def upstream_free(self, value, delay_free_blocks=False):
+        self.requests.pop(value.request_id)
+
+    def upstream_cancel(self, rid):
+        request.status = SimpleNamespace(name="FINISHED_ABORTED")
+        self._free_request(request)
+        return [request]
+
+    monkeypatch.setattr(module.Scheduler, "_free_request", upstream_free, raising=False)
+    monkeypatch.setattr(
+        module.Scheduler, "finish_requests", upstream_cancel, raising=False
+    )
+    assert scheduler.finish_requests(request.request_id) == [request]
+    record = json.loads(Path(scheduler.status_path + "-stops.jsonl").read_text())
+    assert record["cause"] == "aborted"
+    assert record["output_tokens"] == record["generation_rounds"] == 0
+    assert record["last_token_is_eos"] is None
+
+
+def test_stop_capture_failure_never_blocks_upstream_cleanup(monkeypatch, tmp_path):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+
+    def broken_metadata(*args):
+        raise RuntimeError("private diagnostic detail")
+
+    monkeypatch.setattr(module, "request_stop_metadata", broken_metadata)
+    monkeypatch.setattr(
+        module.Scheduler, "_free_request", lambda *args, **kw: "released", raising=False
+    )
+    assert scheduler._free_request(request) == "released"
+    scheduler.request_phases.finish(request)
+    scheduler._publish_status(force=True)
+    record = json.loads(Path(scheduler.status_path + "-stops.jsonl").read_text())
+    assert record["cause"] == "unknown"
+    assert record["capture_failed"] is True
+    status = json.loads(Path(scheduler.status_path + "-stops-status.json").read_text())
+    assert status["stop_capture_failures"] == 1
+    assert "private" not in json.dumps(status)
+
+
+@pytest.mark.parametrize(
+    "error", [OSError(errno.ENOSPC, "private path"), ValueError("private detail")]
+)
+def test_stop_log_failure_is_reported_without_retrying_each_round(
+    monkeypatch, tmp_path, caplog, error
+):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+    scheduler.request_phases.finish(request)
+    scheduler.requests.clear()
+    calls = []
+
+    def broken_log(*args, **kw):
+        calls.append(args)
+        raise error
+
+    monkeypatch.setattr(module, "append_round_log", broken_log)
+    scheduler._publish_status(force=True)
+    scheduler._publish_status(force=True)
+    assert len(calls) == 1
+    assert not scheduler.request_phases._stop_events
+    status = json.loads(Path(scheduler.status_path + "-stops-status.json").read_text())
+    assert status["stop_log_dropped"] == 1
+    assert status["recent"][0]["cause"] == "eos"
+    assert "private" not in caplog.text
+
+
+def test_stop_status_failure_does_not_abort_completion_or_modify_pi_feed(
+    monkeypatch, tmp_path, caplog,
+):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+    scheduler.request_phases.finish(request)
+    writer = module.write_status
+
+    def broken_stop_status(path, data):
+        if path.endswith("-stops-status.json"):
+            raise OSError(errno.ENOSPC, "private path")
+        writer(path, data)
+
+    monkeypatch.setattr(module, "write_status", broken_stop_status)
+    scheduler._publish_status(force=True)
+    assert (
+        json.loads(Path(scheduler.status_path + "-stops.jsonl").read_text())["cause"]
+        == "eos"
+    )
+    phases = json.loads(Path(scheduler.status_path + "-phases.json").read_text())
+    assert set(phases) == {"schema", "pid", "updated_at", "requests", "recent"}
+    assert "termination" not in phases["recent"][0]
+    assert "private" not in caplog.text
+
+
+def test_pending_stop_records_and_rotated_files_are_bounded(monkeypatch, tmp_path):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+    terminal_request(request)
+    monkeypatch.setattr(module, "STOP_LOG_MAX_PENDING", 2)
+    for index in range(5):
+        request.request_id = f"synthetic-{index}"
+        scheduler.request_phases.set(request, "generate")
+        scheduler.request_phases.finish(request)
+    events = scheduler.request_phases.take_stop_events()
+    assert len(events) == 2
+    assert scheduler.request_phases.stop_log_dropped == 3
+    path = tmp_path / "stops.jsonl"
+    size = len((json.dumps(events[0], separators=(",", ":")) + "\n").encode())
+    for event in events:
+        module.append_round_log(path, [event], max_bytes=size + 100)
+    assert len(list(tmp_path.glob("stops.jsonl*"))) == 2
+    assert path.stat().st_size <= size + 100
+    assert path.with_name("stops.jsonl.1").stat().st_size <= size + 100
+    assert path.stat().st_mode & 0o777 == 0o600
+    with pytest.raises(ValueError):
+        module.append_round_log(path, events, max_bytes=size)
+
+
+def test_stop_log_refuses_to_follow_symlink(monkeypatch, tmp_path):
+    module = load_module(monkeypatch)
+    target = tmp_path / "private"
+    target.write_text("untouched")
+    path = tmp_path / "stops.jsonl"
+    path.symlink_to(target)
+    with pytest.raises(OSError):
+        module.append_round_log(path, [{"cause": "eos"}], max_bytes=1024)
+    assert target.read_text() == "untouched"
+
+
+def test_generation_without_completion_does_not_capture_or_write_stop(
+    monkeypatch, tmp_path
+):
+    module = load_module(monkeypatch)
+    scheduler, request = phase_fixture(module, tmp_path)
+
+    def forbidden(*args):
+        pytest.fail("stop capture is not part of generation")
+
+    monkeypatch.setattr(module, "request_stop_metadata", forbidden)
+    scheduler.request_phases.observe_generation(
+        request, draft_tokens=7, accepted_tokens=3
+    )
+    scheduler._publish_status(force=True)
+    assert not Path(scheduler.status_path + "-stops.jsonl").exists()
+
+
 def test_response_end_diagnostics_do_not_hide_pi_round_and_acceptance(tmp_path, monkeypatch):
     from qwen_r9700_lab.radiance_cache_residency import public_request_phases, public_worker_status
 

@@ -396,7 +396,7 @@
         "radiance_cache.py": "0597bbace19be39be20ed5d5cbcf8b14fc67d0121b9034be7139d993d44e57cb",
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
         "radiance_chat_tier.py": "6df820db27b15bb502959b081c2b9e54821a300fd2a290c898b9819edcb45d1a",
-        "radiance_fair_scheduler.py": "1689b8bf3acf6014ef59cb1238fe102d7cf64c9f7eca3c3b21a6a6c0d5648198",
+        "radiance_fair_scheduler.py": "7c78e053fd291bc52ad5c0b95027e170b373651a1689a1b460926f3a43c5d446",
         "patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7"
       }
     },
@@ -463,6 +463,15 @@
         "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
         "retention": "last numeric response timings plus cumulative generation-round and draft/accepted counters per generation; at most 16 generations",
         "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
+      },
+      "request_stop_telemetry": {
+        "schema": "urn:qwen-r9700:request-stops:v1",
+        "status_schema": "urn:qwen-r9700:request-stops-status:v1",
+        "path": "/dev/shm/qwen-radiance-fair-public-stops.jsonl",
+        "max_file_bytes": 1048576,
+        "rotated_files": 1,
+        "maximum_pending_records": 64,
+        "contract": "one CPU-only terminal record per completed EngineCore request; capture before cleanup and publish after final round accounting; hashed identities, stop category, counts and whitelisted sampling; no text, token IDs, device reads, GPU fences or per-token hooks; bounded loss counters; stable existing Pi phase wire format"
       }
     }
   },
