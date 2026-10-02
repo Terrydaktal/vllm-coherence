@@ -614,9 +614,12 @@ def test_cli_exit_status_json_help_and_legacy_compatibility(tmp_path):
 
 
 def test_watch_is_bounded_and_json_is_one_record_per_refresh(tmp_path):
-    result = run_cli(tmp_path, "watch", "--interval", "1", "--count", "2", "--json")
+    result = run_cli(tmp_path, "watch", "--interval", "0.1", "--count", "2", "--json",
+                     "--telemetry-state", str(tmp_path / "unused-telemetry"))
     assert result.returncode == 0, result.stderr
-    assert len([json.loads(line) for line in result.stdout.splitlines()]) == 2
+    frames = [json.loads(line) for line in result.stdout.splitlines()]
+    assert len(frames) == 2
+    assert all(frame["schema"] == "urn:qwen-r9700:cache-live:v1" for frame in frames)
 
 
 def test_single_chat_selection_handles_ambiguity_and_terminal_control_characters(tmp_path):

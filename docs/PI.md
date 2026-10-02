@@ -205,14 +205,16 @@ Compaction supersedes the old generation rather than accumulating generations
 indefinitely. Stale requests cannot reactivate retired generations, and the old
 GPU bank is discarded without a redundant save to handover RAM.
 
-On the GPU host, inspect storage with:
+Inspect storage with:
 
 ```sh
-tools/coherence cache -- status --details
-tools/coherence cache -- audit
+qwen-radiance-cache
+qwen-radiance-cache --once
+qwen-radiance-cache show CHAT
 qwen-radiance-cache purge-tests --dry-run
 qwen-radiance-cache purge-tests
-tools/coherence cache -- watch --interval 5
+tools/coherence cache
+tools/coherence cache -- audit
 ```
 
 The inventory separates current disk usage from cumulative **disk traffic**, and
@@ -234,6 +236,26 @@ Deleting a test cache, retiring an ABI or compacting a chat does not reset this
 total. Counts start when write tracking began, exclude metadata/unfinished writes,
 and cannot recover unrecorded history from a cache deleted manually. Reading the
 history adds no new recording or synchronization to backend generation rounds.
+
+In a terminal, `qwen-radiance-cache` opens a full-screen dashboard. It reads the
+same shared `telemetry-v1.json` snapshot as Pi every **100 ms**, displaying each
+chat's GPU/RAM/disk/cold token counts, scheduler phase, latest round time and
+three-second acceptance, plus the shared GPU temperatures and fan percentage.
+It registers as another consumer of Pi's existing locked monitors, so opening
+several dashboards and Pi windows does not multiply scheduler or hardware probes.
+Cache and temperature source timestamps retain their original cadence; a faster
+screen refresh does not make those probes run more frequently.
+
+Disk sizes, disk-traffic totals, Pi process metadata and audit results refresh
+in one background scan every **30 seconds**, with their age shown. This scan
+does not block the live display, read model tensors or change any snapshots.
+Press **q/Escape** to exit, **arrow/Page keys** to scroll rows and columns,
+**r** to request an inventory refresh, or **i** to expand audit issues.
+`--once`, `--json` without `watch`, and redirected output retain a single report.
+For a live JSON stream use `watch --json`; `--telemetry-state PATH` selects an
+explicit Pi telemetry directory, and `--interval` can slow the default 100 ms read.
+The portable `tools/coherence cache` entry point selects the same deployment and
+telemetry directory as `tools/coherence pi`.
 
 ## Concurrent chats and priority
 

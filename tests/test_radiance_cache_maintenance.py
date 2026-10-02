@@ -12,6 +12,7 @@ import pytest
 from qwen_r9700_lab import radiance_cache as cache
 from qwen_r9700_lab import radiance_cache_audit as audit
 from qwen_r9700_lab import radiance_cache_cli as cli
+from qwen_r9700_lab import radiance_cache_live as live
 
 ABI = "a" * 64
 OTHER_ABI = "b" * 64
@@ -298,8 +299,24 @@ def test_cli_preview_and_purge_json_are_installed_commands(tmp_path, capsys):
     assert cli.main([*common, "purge-tests", "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert not result["dry_run"] and result["removed_file_bytes"] > 0
-    assert cli.main([*common, "status"]) == 0
+    assert cli.main([*common, "--once"]) == 0
     assert "Disk traffic (lifetime):" in capsys.readouterr().out
+
+
+def test_live_dashboard_keeps_lifetime_total_after_last_test_is_purged(tmp_path):
+    store = fixture(tmp_path)
+    traffic_bytes = store.io_totals()["written_file_bytes"]
+    cache.purge_test_chats(tmp_path)
+    report = audit.scan(tmp_path)
+    report["unsnapshotted_chats"] = []  # Added by the CLI's metadata correlation pass.
+    assert report["io"]["written_file_bytes"] == 0
+    inventory = SimpleNamespace(completed_at=time.monotonic(), error=None, thread=None)
+    args = SimpleNamespace(host="local", interval=0.1, inventory_interval=30, chat=None, abi=None)
+    lines, _, _ = live.dashboard_lines(report, None, None, inventory, args)
+    output = "\n".join(lines)
+    assert f"lifetime disk traffic {cli.human(traffic_bytes)}" in output
+    assert f"{cli.human(traffic_bytes)} from deleted chats" in output
+    assert "Synthetic release smoke" not in output
 
 
 def test_remote_purge_sends_tested_standalone_source_and_only_requested_args(monkeypatch):

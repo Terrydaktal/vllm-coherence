@@ -25,7 +25,7 @@ ACTIVITY_SCHEMA = "urn:qwen-r9700:radiance-active-pi:v1"
 HISTORY_SCHEMA = "urn:qwen-r9700:pi-project-history:v1"
 AGENT_DIRECTORY = re.compile(r"agent-([1-9][0-9]{0,4})")
 HELP = """NAME
-    qwen-radiance-cache - inspect chat snapshot coverage, RAM tails, disk use, and cleanup
+    qwen-radiance-cache - live chat cache dashboard and snapshot inspection
 
 SYNOPSIS
     qwen-radiance-cache [OPTIONS] [status]
@@ -54,23 +54,39 @@ OPTIONS
     --stale-after SECONDS Flag old unreferenced blocks (default: 300 seconds).
     --verify              Stream/decompress payloads and check SHA-256 checksums.
     --json                Emit structured JSON; watch emits one object per line.
-    --interval SECONDS    Watch refresh interval, 1-60 seconds (default: 5).
+    --once                Print one snapshot instead of the terminal dashboard.
+    --interval SECONDS    Live display/read interval, 0.1-60 seconds (default: 0.1).
     --count N             Stop watch after N refreshes; zero means until Ctrl-C.
+    --inventory-interval SECONDS
+                          Background disk audit interval, at least 5 seconds (default: 30).
+    --telemetry-state PATH
+                          Use this Pi shared telemetry directory instead of host discovery.
     --identity-json JSON  Exact chat/generation identity for a mutating hook.
     --timeout SECONDS     Wait up to this long for a live backend tail flush.
+    --dry-run             Preview purge-tests without changing the cache.
     --refresh             Refresh the memory buffer inventory; wait up to 5 seconds.
     --map                 Request an allocator map with free block sizes and owners.
                           Requests within 10 seconds share the latest map.
-    --dry-run             Preview purge-tests without changing the cache.
     -h, --help            Show this help.
 
 OPERATION
-    Lifetime disk traffic includes deleted chats and retired data ABIs.
-    purge-tests removes labelled Synthetic release smoke/relay probe snapshots,
-    skips tests still in use and preserves deletion markers and write counters.
-    status is the default. show expands a chat's generations, tensor groups,
+    On a terminal, status opens a full-screen live dashboard. q or Escape exits;
+    arrow/Page keys scroll rows and columns, r refreshes disk inventory, and i
+    shows audit issues. --once, --json, or redirected output prints one snapshot.
+    show expands a chat's generations, tensor groups,
     missing blocks and diagnostic paths. audit highlights issues and returns a
-    nonzero status for warnings/errors. watch repeats the same read-only scan.
+    nonzero status for warnings/errors. watch uses Pi's existing singleton telemetry
+    and reads it every 100 ms. Scheduler/round events retain their native cadence;
+    Disk-head checks and temperature probes retain their existing 1-second cadence.
+    Disk sizes, cumulative traffic, local Pi metadata and audit issues refresh on
+    a separate background timer; their inventory age is shown explicitly.
+    Lifetime disk traffic includes deleted chats and old data ABIs, using durable
+    counters and the retirement ledger. It is not reset by a purge or compaction.
+    purge-tests removes Synthetic release smoke and Synthetic relay probe caches
+    labelled with a qualification directory. It skips tests still in use and keeps
+    tiny deletion markers/write counters. It never removes Pi transcripts.
+    watch --json emits cache-live:v1 records containing telemetry, inventory and
+    derived chat counters. It does not launch an SSH command on each display tick.
     Fast scans check headers under brief non-blocking chat locks. Busy chats are
     labelled BUSY. Full verification runs outside these locks and reports races.
     Block coverage measures the published manifest, not an exact token restore
@@ -84,14 +100,15 @@ OPERATION
 
 EXAMPLES
     qwen-radiance-cache
+    qwen-radiance-cache --once
     qwen-radiance-cache show drainer
     qwen-radiance-cache audit
     qwen-radiance-cache audit --verify --json
-    qwen-radiance-cache watch --interval 5
-    qwen-radiance-cache --abi SHA256 flush --identity-json '{...}'
-    qwen-radiance-cache --host local --cache-root /path/to/cache status
+    qwen-radiance-cache watch --interval 0.1
     qwen-radiance-cache purge-tests --dry-run
     qwen-radiance-cache purge-tests
+    qwen-radiance-cache --abi SHA256 flush --identity-json '{...}'
+    qwen-radiance-cache --host local --cache-root /path/to/cache status
     qwen-radiance-cache memory
     qwen-radiance-cache memory --refresh --json
     qwen-radiance-cache memory --map
@@ -100,11 +117,13 @@ FILES
     snapshots/<ABI>/data/qwen-chat-cache-v1/<CHAT>/chat.json
     snapshots/<ABI>/data/qwen-chat-cache-v1/<CHAT>/generations/<GEN>/*.qkv
     snapshots/<ABI>/data/qwen-chat-cache-v1/<CHAT>/io.json
-    snapshot-retirements.json: lifetime numeric write history for deleted caches
+    snapshot-retirements.json: durable numeric traffic history for deleted caches
     Local Pi sessions: <PROJECT>/.pi/sessions/*.jsonl
     Legacy Pi sessions: agent-<PORT>/sessions/<PROJECT>/*.jsonl
     Active Pi markers: agent-<PORT>/radiance-active/<PID>.json
     Tail residency: /dev/shm/qwen-radiance-snapshot-tail.json
+    Shared Pi telemetry: $XDG_RUNTIME_DIR/qwen-radiance-gpu-temperature/<HOST-HASH>/
+    Combined live snapshot: telemetry-v1.json
     Flush control: /dev/shm/qwen-radiance-snapshot-control-v1/
     Memory report/control: /dev/shm/qwen-radiance-memory-v1/
 
@@ -117,7 +136,10 @@ PATHS
       ~/tasks/*/.pi/sessions
 
 SECURITY NOTES
-    status/show/audit/watch never delete, repair, or create cache files. SSH sends
+    status/show/audit/watch never delete, repair, or create cache files. The live
+    dashboard registers an owner-only heartbeat with Pi's existing telemetry
+    monitors; monitors and hardware probes remain shared across all windows.
+    SSH sends
     the inspector source, not model payloads. Symlinks are skipped/reported. Payload
     verification requires zstd on the storage host. Duplicate candidates use
     recorded content hashes; --verify checks the actual decoded bytes. Allocated
@@ -157,15 +179,17 @@ def parser():
     common.add_argument("--stale-after", type=float)
     common.add_argument("--verify", action="store_true")
     common.add_argument("--json", action="store_true")
+    common.add_argument("--once", action="store_true")
+    common.add_argument("--interval", type=float)
+    common.add_argument("--count", type=int)
+    common.add_argument("--inventory-interval", type=float)
+    common.add_argument("--telemetry-state")
     result = Parser(parents=[common])
     sub = result.add_subparsers(dest="command")
     for name in ("status", "show", "audit", "watch", "list", "compact", "flush", "memory", "purge-tests"):
         command = sub.add_parser(name, parents=[common])
         if name == "show":
             command.add_argument("selector")
-        if name == "watch":
-            command.add_argument("--interval", type=float, default=5)
-            command.add_argument("--count", type=int, default=0)
         if name == "compact":
             command.add_argument("--identity-json", required=True)
         if name == "flush":
@@ -490,6 +514,7 @@ def collect(args):
             text=True,
             capture_output=True,
             check=False,
+            timeout=45,
         )
         if completed.returncode:
             raise ValueError(
@@ -1135,6 +1160,11 @@ def main(argv=None):
         "stale_after": 300,
         "verify": False,
         "json": False,
+        "once": False,
+        "interval": 0.1,
+        "count": 0,
+        "inventory_interval": 30.0,
+        "telemetry_state": None,
     }
     for key, value in defaults.items():
         if not hasattr(args, key):
@@ -1144,6 +1174,10 @@ def main(argv=None):
         cli.error("--abi must be a SHA256 identifier")
     if args.stale_after < 0 or not args.stale_after < float("inf"):
         cli.error("--stale-after must be finite and nonnegative")
+    if not 0.1 <= args.interval <= 60 or args.count < 0:
+        cli.error("live view requires --interval between 0.1 and 60 and nonnegative --count")
+    if not 5 <= args.inventory_interval < float("inf"):
+        cli.error("--inventory-interval must be finite and at least 5 seconds")
     if args.command == "memory":
         try:
             report = collect_memory(args)
@@ -1175,55 +1209,59 @@ def main(argv=None):
             if args.command == "purge-tests" and args.dry_run:
                 legacy.append("--dry-run")
         return legacy_main(legacy)
-    if args.command == "watch" and (not 1 <= args.interval <= 60 or args.count < 0):
-        cli.error("watch requires --interval between 1 and 60 and nonnegative --count")
+    live = not args.once and not args.verify and (
+        args.command == "watch" or (
+            args.command == "status" and not args.json and sys.stdout.isatty() and sys.stdin.isatty()
+        )
+    )
+    if live:
+        from .radiance_cache_live import watch
+
+        try:
+            return watch(args, collect)
+        except KeyboardInterrupt:
+            return 130
+        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+            print(f"qwen-radiance-cache: {clean(error)}", file=sys.stderr)
+            return 2
     selector = getattr(args, "selector", None) or args.chat
-    iteration = 0
     try:
-        while True:
-            report = collect(args)
-            rows, missing = selected(report, selector)
-            if (
-                args.command == "show"
-                and len({r["id"] for r in rows} | {s["id"] for s in missing}) > 1
-            ):
-                raise ValueError("Chat selector is ambiguous; use the chat ID prefix from status")
-            if args.json:
-                if selector:
-                    report = {
-                        **report,
-                        "chats": rows,
-                        "unsnapshotted_chats": missing,
-                        "scope": {
-                            **report["scope"],
-                            "chat": selector,
-                            "storage_totals": "whole scanned root",
-                        },
-                    }
-                print(json.dumps(report, indent=None if args.command == "watch" else 2), flush=True)
-            else:
-                if args.command == "watch" and sys.stdout.isatty():
-                    print("\033[2J\033[H", end="")
-                render(
-                    report,
-                    selector=selector,
-                    details=args.command == "show",
-                    audit_view=args.command == "audit",
-                )
-                sys.stdout.flush()
-            problems = [*report["issues"], *(p for row in rows for p in row["issues"])]
-            if args.command != "watch":
-                return int(
-                    args.command == "audit"
-                    and any(p["severity"] in ("warning", "error") for p in problems)
-                )
-            iteration += 1
-            if args.count and iteration >= args.count:
-                return 0
-            time.sleep(args.interval)
+        report = collect(args)
+        rows, missing = selected(report, selector)
+        if (
+            args.command == "show"
+            and len({r["id"] for r in rows} | {s["id"] for s in missing}) > 1
+        ):
+            raise ValueError("Chat selector is ambiguous; use the chat ID prefix from status")
+        if args.json:
+            if selector:
+                report = {
+                    **report,
+                    "chats": rows,
+                    "unsnapshotted_chats": missing,
+                    "scope": {
+                        **report["scope"],
+                        "chat": selector,
+                        "storage_totals": "whole scanned root",
+                    },
+                }
+            print(json.dumps(report, indent=2), flush=True)
+        else:
+            render(
+                report,
+                selector=selector,
+                details=args.command == "show",
+                audit_view=args.command == "audit",
+            )
+            sys.stdout.flush()
+        problems = [*report["issues"], *(p for row in rows for p in row["issues"])]
+        return int(
+            args.command == "audit"
+            and any(p["severity"] in ("warning", "error") for p in problems)
+        )
     except KeyboardInterrupt:
         return 130
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         if args.json:
             print(json.dumps({"error": str(error)}))
         else:

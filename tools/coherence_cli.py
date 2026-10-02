@@ -65,7 +65,7 @@ EXAMPLES
     tools/coherence serve --model /models/target --draft /models/drafter
     tools/coherence pi -- --thinking xhigh --session last
     tools/coherence pi --ssh gpu-host -- --continue
-    tools/coherence cache -- status --details
+    tools/coherence cache
 
 FILES
     releases/0.1.0.json             Artifact identity and qualification scope.
@@ -636,6 +636,11 @@ def main(argv=None):
             return launch(args, remainder)
         elif args.command == "cache":
             connection = read_json(state / "connection.json")
+            telemetry = state / "telemetry" / hashlib.sha256(
+                ("local" + connection["cache_root"]).encode()
+            ).hexdigest()[:16]
+            private_directory(telemetry)
+            private_directory(telemetry / "clients")
             command = [
                 sys.executable,
                 str(ROOT / "scripts/qwen-radiance-cache"),
@@ -643,9 +648,16 @@ def main(argv=None):
                 "local",
                 "--cache-root",
                 connection["cache_root"],
+                "--telemetry-state",
+                str(telemetry),
                 *remainder,
             ]
-            return subprocess.call(command)
+            return subprocess.call(command, env={
+                **os.environ,
+                "QWEN_RADIANCE_CONTAINER": "vllm-coherence",
+                "QWEN_RADIANCE_SCHEDULER_HELPER": str(ROOT / "scripts/qwen-radiance-scheduler-status"),
+                "QWEN_RADIANCE_GPU_TEMPERATURE_HELPER": str(ROOT / "scripts/qwen-radiance-gpu-temperature"),
+            })
         return 0
     except (OSError, ValueError, KeyError, tarfile.TarError) as error:
         print(f"coherence: {error}", file=sys.stderr)
