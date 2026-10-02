@@ -32,6 +32,27 @@ test("temperature samples are validated and formatted with both AMD sensors", ()
 	assert.equal(formatTemperatureStatus(legacy), "36°C · 34.5°C");
 });
 
+test("Memory used/total GiB is shown after the fan without a repeated label and invalid pairs are rejected", () => {
+	const now = Date.now();
+	const sample = {
+		schema: "urn:qwen-r9700:gpu-temperature:v3", observed_at_ms: now,
+		edge_millicelsius: 56_000, junction_millicelsius: 99_000, fan_percent: 80,
+		vram_used_bytes: 28.5 * 1024 ** 3, vram_total_bytes: 32 * 1024 ** 3,
+	};
+	assert.equal(formatTemperatureStatus(parseTemperatureSample(JSON.stringify(sample), now)),
+		"99°C · 56°C · 80% · 28.5 / 32.0 GiB");
+	assert.equal(formatTemperatureStatus(parseTemperatureSample(JSON.stringify({ ...sample,
+		vram_used_bytes: 0 }), now)), "99°C · 56°C · 80% · 0.0 / 32.0 GiB");
+	assert.equal(formatTemperatureStatus(parseTemperatureSample(JSON.stringify({ ...sample,
+		vram_used_bytes: null, vram_total_bytes: null }), now)), "99°C · 56°C · 80%");
+	for (const pair of [
+		{ vram_used_bytes: -1 }, { vram_used_bytes: 33 * 1024 ** 3 },
+		{ vram_total_bytes: 0 }, { vram_total_bytes: null }, { vram_used_bytes: null },
+		{ vram_used_bytes: "100" }, { vram_used_bytes: 0.5 },
+		{ vram_used_bytes: Number.MAX_SAFE_INTEGER + 1 },
+	]) assert.throws(() => parseTemperatureSample(JSON.stringify({ ...sample, ...pair }), now), /invalid/);
+});
+
 test("extension uses one tmpfs client heartbeat and clears it on shutdown", (t) => {
 	const root = mkdtempSync(join(tmpdir(), "qwen-gpu-temperature-extension-"));
 	const state = join(root, "state");
@@ -43,11 +64,12 @@ test("extension uses one tmpfs client heartbeat and clears it on shutdown", (t) 
 	const helper = join(root, "helper");
 	writeFileSync(helper, "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
 	writeFileSync(join(state, "sample.json"), JSON.stringify({
-		schema,
+		schema: "urn:qwen-r9700:gpu-temperature:v3",
 		observed_at_ms: Date.now(),
 		edge_millicelsius: 35_000,
 		junction_millicelsius: 40_000,
 		fan_percent: 31,
+		vram_used_bytes: 28.5 * 1024 ** 3, vram_total_bytes: 32 * 1024 ** 3,
 	}), { mode: 0o600 });
 
 	const previous = {
@@ -79,7 +101,7 @@ test("extension uses one tmpfs client heartbeat and clears it on shutdown", (t) 
 		return { unref() {} };
 	});
 	t.mock.method(globalThis, "clearInterval", () => {});
-	let coverage = "Cache ≈ GPU 66,000 · RAM 0 · Disk 0 · Cold 160 tok";
+	let coverage = "VRAM 66,000 · RAM 0 · Disk 0 · Cold 160";
 	let bound = 0;
 	install({ on(name, handler) { handlers.set(name, handler); } }, { residency: {
 		start() {}, stop() {}, bind() { bound++; }, readBreakdown(tokens) {
@@ -94,22 +116,23 @@ test("extension uses one tmpfs client heartbeat and clears it on shutdown", (t) 
 		ui: { setStatus(key, value) { statuses.push([key, value]); } },
 	};
 	handlers.get("session_start")({}, ctx);
-	assert.equal(statuses.at(-1)[1], "40°C · 35°C · 31%");
+	assert.equal(statuses.at(-1)[1], "40°C · 35°C · 31% · 28.5 / 32.0 GiB");
 	assert.equal(refreshIntervalMs, 100);
 	assert.equal(readdirSync(clients).length, 1);
 	assert.ok(statuses.some(([key, value]) => key === "qwen-cache-residency" && value === coverage));
-	coverage = "Cache ≈ GPU 0 · RAM 66,000 · Disk 0 · Cold 160 tok";
+	coverage = "VRAM 0 · RAM 66,000 · Disk 0 · Cold 160";
 	writeFileSync(join(state, "sample.json"), JSON.stringify({
-		schema, observed_at_ms: now, edge_millicelsius: 36_000,
+		schema: "urn:qwen-r9700:gpu-temperature:v3", observed_at_ms: now, edge_millicelsius: 36_000,
 		junction_millicelsius: 41_000, fan_percent: 32,
+		vram_used_bytes: 29 * 1024 ** 3, vram_total_bytes: 32 * 1024 ** 3,
 	}));
 	now += 500;
 	refreshCallback();
 	assert.deepEqual(statuses.at(-1), ["qwen-cache-residency", coverage]);
-	assert.equal(statuses.filter(([key]) => key === "qwen-gpu-temperature").at(-1)[1], "40°C · 35°C · 31%");
+	assert.equal(statuses.filter(([key]) => key === "qwen-gpu-temperature").at(-1)[1], "40°C · 35°C · 31% · 28.5 / 32.0 GiB");
 	now += 500;
 	refreshCallback();
-	assert.deepEqual(statuses.at(-1), ["qwen-gpu-temperature", "41°C · 36°C · 32%"]);
+	assert.deepEqual(statuses.at(-1), ["qwen-gpu-temperature", "41°C · 36°C · 32% · 29.0 / 32.0 GiB"]);
 	handlers.get("session_compact")({}, ctx);
 	assert.equal(bound, 1, "compaction rebinds residency to the new generation");
 	handlers.get("session_shutdown")();

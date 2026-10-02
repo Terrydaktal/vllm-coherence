@@ -28,11 +28,13 @@ def test_concurrent_clients_share_one_content_free_scheduler_probe(tmp_path: Pat
     marker.touch(mode=0o600)
     (state / "sample.json").write_text(
         json.dumps({
-            "schema": "urn:qwen-r9700:gpu-temperature:v2",
+            "schema": "urn:qwen-r9700:gpu-temperature:v3",
             "observed_at_ms": int(time.time() * 1000),
             "edge_millicelsius": 35_000,
             "junction_millicelsius": 42_000,
             "fan_percent": 31,
+            "vram_used_bytes": 30_601_641_984,
+            "vram_total_bytes": 34_359_738_368,
         }),
         encoding="utf-8",
     )
@@ -97,9 +99,10 @@ print(json.dumps(scheduler), 'null', sep='\t', flush=True)
 
     deadline = time.monotonic() + 3
     sample_path = state / "scheduler-v2.json"
-    while not sample_path.exists() and time.monotonic() < deadline:
+    combined_path = state / "telemetry-v1.json"
+    while not combined_path.exists() and time.monotonic() < deadline:
         time.sleep(0.02)
-    assert sample_path.exists()
+    assert combined_path.exists()
     sample = json.loads(sample_path.read_text(encoding="utf-8"))
     assert sample["schema"] == "urn:qwen-r9700:scheduler-telemetry:v2"
     assert set(sample) == {"schema", "observed_at_ms", "backend"}
@@ -117,6 +120,8 @@ print(json.dumps(scheduler), 'null', sep='\t', flush=True)
     assert combined["scheduler"]["requests"][0]["state"] == "paused"
     assert combined["worker"] is None
     assert combined["temperature"]["junction_millicelsius"] == 42_000
+    assert combined["temperature"]["vram_used_bytes"] == 30_601_641_984
+    assert combined["temperature"]["vram_total_bytes"] == 34_359_738_368
     assert set(sample["backend"]["scheduler"]["requests"][0]) == {
         "chat_id",
         "generation",

@@ -35,9 +35,9 @@ def test_concurrent_clients_share_one_persistent_remote_probe(tmp_path: Path) ->
 	cat >/dev/null
 	printf 'probe\\n' >>"$PROBE_LOG"
 	printf '%s\\n' "${!#}" >"$INTERVAL_LOG"
-	printf '34000\\t36000\\t25\\n'
+		printf '34000\\t36000\\t25\\t30601641984\\t34359738368\\n'
 sleep 0.5
-printf '35000\\t37000\\t31\\n'
+printf '35000\\t37000\\t31\\t31138512896\\t34359738368\\n'
 """,
         encoding="utf-8",
     )
@@ -63,7 +63,9 @@ printf '35000\\t37000\\t31\\n'
     assert sample["edge_millicelsius"] == 34_000
     assert sample["junction_millicelsius"] == 36_000
     assert sample["fan_percent"] == 25
-    assert sample["schema"] == "urn:qwen-r9700:gpu-temperature:v2"
+    assert sample["schema"] == "urn:qwen-r9700:gpu-temperature:v3"
+    assert sample["vram_used_bytes"] == 30_601_641_984
+    assert sample["vram_total_bytes"] == 34_359_738_368
     assert probe_log.read_text(encoding="utf-8").splitlines() == ["probe"]
     assert interval_log.read_text(encoding="utf-8").strip() == "1"
 

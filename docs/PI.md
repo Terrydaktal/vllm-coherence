@@ -36,13 +36,13 @@ the terminal owner's configuration.
 ## Read the footer
 
 The footer is one continuous line that wraps to the available width. Its order is
-workspace/branch → context → cache → GPU temperatures/fan → Pi usage totals →
+workspace/branch → context → cache → GPU temperatures/fan → VRAM → Pi usage totals →
 model/thinking level. Context usage and capacity use full comma-separated numbers,
 followed by the percentage; there is no zero-padding or abbreviated context limit.
 
 | Cache counter | Meaning |
 | --- | --- |
-| `GPU` | Estimated tokens currently reusable from this chat's GPU cache. |
+| `VRAM` | Estimated tokens currently reusable from this chat's GPU cache. |
 | `RAM` | Additional cached tokens available from system RAM. |
 | `Disk` | Tokens covered by the current verified disk snapshot. This is durable backup coverage and may overlap GPU/RAM, rather than only the tokens that must be read from disk next. |
 | `Cold` | Estimated tokens not covered by reusable GPU/RAM/disk state that need model computation. |
@@ -52,10 +52,15 @@ make GPU coverage exceed Disk coverage. Compaction changes the generation being
 reported; saved coverage for the previous generation is not credited to the new
 checkpoint. Unknown or stale measurements appear as unavailable, not zero.
 
-The two temperatures are **junction, then edge**, followed by fan percentage.
-One file-locked temperature probe per host/state serves all windows once per
-second. Scheduler/cache metadata refreshes every 0.5 seconds without copying GPU
-buffers. Pi's existing input/output/cache-usage totals follow the temperatures.
+The two temperatures are **junction, then edge**, followed by fan percentage and
+`used / total GiB`. This pair reports the GPU's overall memory allocation, including
+model weights and caches; the `VRAM` token counter above describes this chat's cache.
+One file-locked probe per host/state reads temperatures, fan and VRAM once per
+second for all windows, including the Pi-opsec bridge. Scheduler/cache metadata
+refreshes every 0.5 seconds without copying GPU buffers. The footer omits the
+`Cache ≈` prefix and trailing `tok`. A thicker `•` separates context from VRAM
+coverage, Cold from the temperatures, and memory usage from Pi's usage totals.
+The thinner `·` separates values within those groups.
 
 ## Read the working spinner
 
@@ -76,6 +81,13 @@ scheduled is not counted as processed. Pi reads the feed every 100 ms; the count
 stays still while a chunk runs, then advances by the completed amount. Bulk cache
 and scheduler snapshots retain their half-second cadence. None of these updates
 adds GPU synchronization or interpolates an estimated processed-token count.
+
+A tool continuation ignores the previous response's phase and coarse scheduler
+status. Until the backend reports the new request, the spinner says
+`preparing next response · awaiting new backend request`, rather than inheriting
+the old prompt's ready state. `/qwen-timing` shows the current or last response's
+numeric preparation and first-output durations. Backend phase durations are
+elapsed times, including the final prompt execution, not isolated GPU kernel times.
 
 During generation, `x t/s, y t/s avg` means a three-second rolling rate followed
 by the average after first data. The rate clock excludes observed waits for

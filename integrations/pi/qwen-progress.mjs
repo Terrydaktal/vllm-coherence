@@ -191,8 +191,12 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 			observation = { available: false };
 		}
 			if (!observation.available) return observation;
-			if (requestTiming && observation.requestPhase?.request_id === requestTiming.ignoreRequestId) {
-				observation = { ...observation, requestPhase: undefined };
+			if (requestTiming?.ignoreRequestId && observation.requestPhase?.request_id === requestTiming.ignoreRequestId) {
+				// The coarse scheduler row is for this same finished request too.
+				// Keeping it would turn its completed prompt into a claim that the
+				// new tool continuation is already generating its first token.
+				observation = { ...observation, request: undefined, requestPhase: undefined,
+					awaitingNewRequest: true };
 			}
 			const timing = observation.requestPhase ?? observation.lastRequestTiming;
 			if (requestTiming && timing && timing.request_id !== requestTiming.ignoreRequestId) requestTiming.backend = timing;
@@ -314,6 +318,9 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 			if (exact) return `${exact.phase} · ${exact.detail}`;
 		const blocked = blockedStatus(observation, true);
 		if (blocked) return `${blocked.phase} · ${blocked.detail}`;
+		if (observation.awaitingNewRequest) {
+			return "preparing next response · awaiting new backend request";
+		}
 		if (!observation.available) {
 			return providerHeadersReceived
 				? observation.configured === false
@@ -615,10 +622,11 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		// decode time for the previous response.
 			const ignoreRequestId = (requestTiming ?? lastTiming)?.backend?.request_id;
 			if (requestTiming) lastTiming = requestTiming;
-			requestTiming = undefined;
+			// Install the exclusion before begin() performs its initial redraw.
+			requestTiming = { ignoreRequestId };
 			begin(ctx);
-			if (startedAt === 0) return replacementPayload;
-			requestTiming = { ignoreRequestId, toolGapMs: nextRequestFromToolsAt === undefined ? undefined : startedAt - nextRequestFromToolsAt };
+			if (startedAt === 0) { requestTiming = undefined; return replacementPayload; }
+			requestTiming.toolGapMs = nextRequestFromToolsAt === undefined ? undefined : startedAt - nextRequestFromToolsAt;
 			nextRequestFromToolsAt = undefined;
 		contextTokens = ctx.getContextUsage()?.tokens ?? contextTokens;
 		phase = "KV lookup/prefill";

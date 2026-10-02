@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 const root = process.env.QWEN_TEST_PI_ROOT ?? join(homedir(), ".local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works");
-test("installed footer is one continuous wrapping line with usage after temperatures", {
+test("installed footer wraps with one VRAM cache label and bare memory usage after fan", {
   skip: !existsSync(join(root, "pi-coding-agent/dist/modes/interactive/components/footer.js")),
 }, async () => {
   const mod = path => import(pathToFileURL(join(root, path)));
@@ -15,8 +15,8 @@ test("installed footer is one continuous wrapping line with usage after temperat
   const { stripTerminalSequences, visibleWidth } = await mod("pi-tui/dist/index.js");
   initTheme("dark", false);
   const statuses = new Map([
-    ["qwen-gpu-temperature", "40°C · 38°C · 25%"],
-    ["qwen-cache-residency", "Cache ≈ GPU 60,000 · RAM 0 · Disk 58,000 · Cold 160 tok"],
+    ["qwen-gpu-temperature", "40°C · 38°C · 25% · 28.5 / 31.9 GiB"],
+    ["qwen-cache-residency", "VRAM 60,000 · RAM 0 · Disk 58,000 · Cold 160"],
     ["other", "another extension status"],
   ]);
   const session = {
@@ -31,9 +31,15 @@ test("installed footer is one continuous wrapping line with usage after temperat
   const footer = new FooterComponent(session, {
     getGitBranch: () => "main", getExtensionStatuses: () => statuses, getAvailableProviderCount: () => 2,
   });
+  footer.setAutoCompactEnabled(true);
   const wide = footer.render(1000).map(stripTerminalSequences);
   assert.equal(wide.length, 1, "no hard break for path, model, or extension statuses");
-  assert.ok(wide[0].indexOf("Cold 160 tok") < wide[0].indexOf("40°C"));
+  assert.ok(wide[0].indexOf("Cold 160") < wide[0].indexOf("40°C"));
+  assert.ok(wide[0].includes("(auto) • VRAM 60,000 · RAM 0"));
+  assert.ok(wide[0].includes("Cold 160 • 40°C · 38°C"));
+  assert.ok(wide[0].includes("25% · 28.5 / 31.9 GiB • ↑4.8M"));
+  assert.doesNotMatch(wide[0], /Cache [≈=]|\btok\b|\bGPU\b/);
+  assert.equal(wide[0].match(/\bVRAM\b/g)?.length, 1);
   assert.ok(wide[0].includes("Disk 58,000"));
   assert.ok(wide[0].indexOf("Disk 58,000") < wide[0].indexOf("40°C"));
   assert.ok(wide[0].includes("↑4.8M ↓845k R109M CH96.7%"));

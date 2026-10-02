@@ -24,7 +24,11 @@ def configure_fixture(api: dict[str, object], root: Path) -> tuple[Path, bytes]:
     legacy = context_new + transform_old
     wrapped = context_new + transform_new
     unified = b"one-continuous-footer\ninline-cache-then-temperature\n"
-    patched = context_new + unified
+    separator_old = b"inline-cache-then-temperature\n"
+    separator_new = b"inline-cache-then-temperature-with-separators\n"
+    separated = context_new + unified.replace(separator_old, separator_new)
+    grouped = b"inline-cache-then-temperature-with-group-separators\n"
+    patched = separated.replace(separator_new, grouped)
     globals_ = api["run"].__globals__
     globals_.update(
         {
@@ -32,11 +36,15 @@ def configure_fixture(api: dict[str, object], root: Path) -> tuple[Path, bytes]:
             "BASE_SHA256": hashlib.sha256(base).hexdigest(),
             "LEGACY_SHA256": hashlib.sha256(legacy).hexdigest(),
             "WRAPPED_SHA256": hashlib.sha256(wrapped).hexdigest(),
+            "UNIFIED_SHA256": hashlib.sha256(context_new + unified).hexdigest(),
+            "SEPARATED_SHA256": hashlib.sha256(separated).hexdigest(),
             "PATCHED_SHA256": hashlib.sha256(patched).hexdigest(),
             "CONTEXT_OLD": context_old,
             "CONTEXT_NEW": context_new,
             "REPLACEMENTS": ((transform_old, transform_new),),
             "UNIFIED_REPLACEMENTS": ((transform_new, unified),),
+            "SEPARATOR_REPLACEMENTS": ((separator_old, separator_new),),
+            "GROUP_SEPARATOR_REPLACEMENTS": ((separator_new, grouped),),
         }
     )
     target = root / relative
@@ -60,6 +68,14 @@ def test_footer_patch_upgrades_base_and_legacy_states_idempotently(tmp_path: Pat
     api["run"](tmp_path, apply=True)
 
     target.write_bytes(b"context-new\ntruncate-footer\n")
+    api["run"](tmp_path, apply=True)
+    assert target.read_bytes() == expected
+
+    target.write_bytes(b"context-new\none-continuous-footer\ninline-cache-then-temperature\n")
+    api["run"](tmp_path, apply=True)
+    assert target.read_bytes() == expected
+
+    target.write_bytes(b"context-new\none-continuous-footer\ninline-cache-then-temperature-with-separators\n")
     api["run"](tmp_path, apply=True)
     assert target.read_bytes() == expected
 

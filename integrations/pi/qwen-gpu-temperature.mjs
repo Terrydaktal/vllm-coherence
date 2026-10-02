@@ -20,6 +20,7 @@ const SAMPLE_STALE_MS = 15_000;
 const ENSURE_RETRY_MS = 10_000;
 const SAMPLE_SCHEMA_V1 = "urn:qwen-r9700:gpu-temperature:v1";
 const SAMPLE_SCHEMA_V2 = "urn:qwen-r9700:gpu-temperature:v2";
+const SAMPLE_SCHEMA_V3 = "urn:qwen-r9700:gpu-temperature:v3";
 const UNKNOWN_STATUS = Symbol("unknown GPU temperature status");
 
 function processStartTicks() {
@@ -51,7 +52,13 @@ function validateSampleFile(path) {
 export function parseTemperatureSample(text, now = Date.now()) {
 	const sample = JSON.parse(text);
 	const legacy = sample?.schema === SAMPLE_SCHEMA_V1;
-	if ((!legacy && sample?.schema !== SAMPLE_SCHEMA_V2) || !Number.isSafeInteger(sample.observed_at_ms) ||
+	const hasVram = sample?.schema === SAMPLE_SCHEMA_V3;
+	const validVram = sample?.vram_used_bytes === null && sample?.vram_total_bytes === null ||
+		Number.isSafeInteger(sample?.vram_used_bytes) && sample.vram_used_bytes >= 0 &&
+		Number.isSafeInteger(sample?.vram_total_bytes) && sample.vram_total_bytes > 0 &&
+		sample.vram_used_bytes <= sample.vram_total_bytes;
+	if ((!legacy && sample?.schema !== SAMPLE_SCHEMA_V2 && !hasVram) ||
+		(hasVram && !validVram) || !Number.isSafeInteger(sample.observed_at_ms) ||
 		!Number.isSafeInteger(sample.edge_millicelsius) ||
 		!Number.isSafeInteger(sample.junction_millicelsius) ||
 		(!legacy && (!Number.isSafeInteger(sample.fan_percent) ||
@@ -72,9 +79,13 @@ function formatMilliCelsius(value) {
 export function formatTemperatureStatus(sample) {
 	const temperatures = `${formatMilliCelsius(sample.junction_millicelsius)} · ` +
 		formatMilliCelsius(sample.edge_millicelsius);
-	return Number.isSafeInteger(sample.fan_percent)
-		? `${temperatures} · ${sample.fan_percent}%`
-		: temperatures;
+	const parts = [temperatures];
+	if (Number.isSafeInteger(sample.fan_percent)) parts.push(`${sample.fan_percent}%`);
+	if (Number.isSafeInteger(sample.vram_used_bytes) && Number.isSafeInteger(sample.vram_total_bytes)) {
+		const gibibytes = value => (value / 1024 ** 3).toFixed(1);
+		parts.push(`${gibibytes(sample.vram_used_bytes)} / ${gibibytes(sample.vram_total_bytes)} GiB`);
+	}
+	return parts.join(" · ");
 }
 
 function configuration() {

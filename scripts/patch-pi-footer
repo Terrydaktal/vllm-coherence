@@ -23,7 +23,9 @@ RELATIVE_PATH = (
 BASE_SHA256 = "05cc0ab96cbdacf15a34f4e2a9a3ee0395abaeaac638c1c153632cb0befbc9d1"
 LEGACY_SHA256 = "28658292670c745f2de62b0233c34679b2a21dad354c993a06cf9fc29ed152e4"
 WRAPPED_SHA256 = "24408575e076a7e8b6a1bd8f2d38c49fd99edfa76f367f45ac246bc7131ef4e4"
-PATCHED_SHA256 = "2ce3d2fe5964648a117f75fb36a7e8fbf6c689bafd07cd7ab30cdfe0597f2534"
+UNIFIED_SHA256 = "2ce3d2fe5964648a117f75fb36a7e8fbf6c689bafd07cd7ab30cdfe0597f2534"
+SEPARATED_SHA256 = "17a3dbb5d8c02548fe71a14d65b130ce0acaa869751b8572341c5a11fe41b653"
+PATCHED_SHA256 = "25b98805e53bd4b0672beae5717a572c428fc0bc47ed56777167962dedd38a84"
 PREVIOUS_PATCHED_SHA256 = "35ae96eed317a4245cccb6d33c14896c3b39cbca73bdf31c6f756b516264caf0"
 
 CONTEXT_OLD = b"""        const contextPercentDisplay = contextPercent === "?"
@@ -198,8 +200,10 @@ REPLACEMENTS = (
 USAGE_ORDER_REPLACEMENTS = (
     (
         b"        // Colorize context percentage based on usage\n",
-        b"        const usageParts = statsParts.splice(0);\n"
-        b"        // Colorize context percentage based on usage\n",
+        (
+            b"        const usageParts = statsParts.splice(0);\n"
+            b"        // Colorize context percentage based on usage\n"
+        ),
     ),
     (
         b"""        if (typeof gpuTemperatureStatus === "string" && gpuTemperatureStatus.trim().length > 0) {
@@ -219,8 +223,10 @@ UNIFIED_REPLACEMENTS = (
     *USAGE_ORDER_REPLACEMENTS,
     (
         b'        const gpuTemperatureStatus = extensionStatuses.get("qwen-gpu-temperature");\n',
-        b'        const gpuTemperatureStatus = extensionStatuses.get("qwen-gpu-temperature");\n'
-        b'        const cacheResidencyStatus = extensionStatuses.get("qwen-cache-residency");\n',
+        (
+            b'        const gpuTemperatureStatus = extensionStatuses.get("qwen-gpu-temperature");\n'
+            b'        const cacheResidencyStatus = extensionStatuses.get("qwen-cache-residency");\n'
+        ),
     ),
     (
         b"        statsParts.push(contextPercentStr);\n",
@@ -256,6 +262,37 @@ UNIFIED_REPLACEMENTS = (
 )
 
 
+SEPARATOR_REPLACEMENTS = (
+    (
+        b"            statsParts.push(sanitizeStatusText(cacheResidencyStatus));\n",
+        b'            statsParts.push("\xc2\xb7", sanitizeStatusText(cacheResidencyStatus));\n',
+    ),
+    (
+        b"        statsParts.push(...usageParts);\n",
+        b"""        if (usageParts.length > 0) {
+            statsParts.push("\xc2\xb7", ...usageParts);
+        }
+""",
+    ),
+)
+
+
+GROUP_SEPARATOR_REPLACEMENTS = (
+    (
+        b'            statsParts.push("\xc2\xb7", sanitizeStatusText(cacheResidencyStatus));\n',
+        b'            statsParts.push("\xe2\x80\xa2", sanitizeStatusText(cacheResidencyStatus));\n',
+    ),
+    (
+        b"            statsParts.push(sanitizeStatusText(gpuTemperatureStatus));\n",
+        b'            statsParts.push("\xe2\x80\xa2", sanitizeStatusText(gpuTemperatureStatus));\n',
+    ),
+    (
+        b'            statsParts.push("\xc2\xb7", ...usageParts);\n',
+        b'            statsParts.push("\xe2\x80\xa2", ...usageParts);\n',
+    ),
+)
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -270,26 +307,36 @@ def patched_bytes(data: bytes) -> bytes:
     digest = sha256(data)
     if digest == PATCHED_SHA256:
         return data
+    if digest == SEPARATED_SHA256:
+        for old, new in GROUP_SEPARATOR_REPLACEMENTS:
+            data = replace_once(data, old, new)
+        if sha256(data) != PATCHED_SHA256:
+            raise PatchError("grouped footer postimage hash differs from the pinned ABI")
+        return data
     if digest == PREVIOUS_PATCHED_SHA256:
         for old, new in USAGE_ORDER_REPLACEMENTS:
             data = replace_once(data, old, new)
-        if sha256(data) != PATCHED_SHA256:
+        if sha256(data) != UNIFIED_SHA256:
             raise PatchError("previous footer migration hash differs from the pinned ABI")
-        return data
-    if digest != WRAPPED_SHA256:
-        if digest == BASE_SHA256:
-            data = replace_once(data, CONTEXT_OLD, CONTEXT_NEW)
-        elif digest != LEGACY_SHA256:
-            raise PatchError("footer differs from every pinned patch state")
-        for old, new in REPLACEMENTS:
+    elif digest != UNIFIED_SHA256:
+        if digest != WRAPPED_SHA256:
+            if digest == BASE_SHA256:
+                data = replace_once(data, CONTEXT_OLD, CONTEXT_NEW)
+            elif digest != LEGACY_SHA256:
+                raise PatchError("footer differs from every pinned patch state")
+            for old, new in REPLACEMENTS:
+                data = replace_once(data, old, new)
+            if sha256(data) != WRAPPED_SHA256:
+                raise PatchError("legacy wrapping footer hash differs from the pinned ABI")
+        for old, new in UNIFIED_REPLACEMENTS:
             data = replace_once(data, old, new)
-        if sha256(data) != WRAPPED_SHA256:
-            raise PatchError("legacy wrapping footer hash differs from the pinned ABI")
-    for old, new in UNIFIED_REPLACEMENTS:
+    if sha256(data) != UNIFIED_SHA256:
+        raise PatchError("unified footer hash differs from the pinned ABI")
+    for old, new in SEPARATOR_REPLACEMENTS:
         data = replace_once(data, old, new)
-    if sha256(data) != PATCHED_SHA256:
+    if sha256(data) != SEPARATED_SHA256:
         raise PatchError("footer postimage hash differs from the pinned ABI")
-    return data
+    return patched_bytes(data)
 
 
 def stable_read(path: Path) -> tuple[bytes, os.stat_result]:

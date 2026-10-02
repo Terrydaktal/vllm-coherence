@@ -463,6 +463,33 @@ test("a queued request without a blocker does not claim GPU contention or a cold
   assert.doesNotMatch(f.working.at(-1), /queued for GPU|0 \/ 150,800|after GPU admission/);
 });
 
+test("a tool continuation cannot reuse the previous response's prompt-ready status", (t) => {
+  const phase = { chat_id: "a".repeat(64), generation: "b".repeat(64), request_id: "c".repeat(64),
+    phase: "generate", blocker: null, input_tokens: 60000, computed_tokens: 60100,
+    cached_tokens: 60000, elapsed_ms: 2000, phase_elapsed_ms: 1000, first_token_ms: 1000,
+    timings_ms: { prefill: 1000, generate: 1000 } };
+  const observation = { available: true, request: { state: "running", computed_tokens: 60100,
+    input_tokens: 60000 }, requestPhase: phase, phaseObservedAt: Date.now() };
+  const f = fixture(t, { read: () => observation });
+  f.advance(1000);
+  f.update("text_delta", 100, "synthetic tool request");
+  f.end(100);
+  f.emit("tool_execution_start", { toolCallId: "read-one", toolName: "read" });
+  f.emit("tool_execution_end", { toolCallId: "read-one" });
+  const start = f.working.length;
+  f.emit("before_provider_request", { payload: { stream: true } });
+  f.advance(1000);
+  assert.match(f.working.at(-1), /preparing next response.*awaiting new backend request/);
+  assert.ok(f.working.slice(start).every((line) => !/prompt ready|generating model output/.test(line)),
+    "even the initial redraw must not inherit the completed request's GPU status");
+
+  observation.requestPhase = { ...phase, request_id: "d".repeat(64), phase: "prefill",
+    input_tokens: 61320, computed_tokens: 60100, cached_tokens: 60100,
+    first_token_ms: null, timings_ms: { prefill: 0 } };
+  f.advance(100);
+  assert.match(f.working.at(-1), /processing uncached prompt tokens.*0 \/ 1,220 uncached tok processed.*60,100 reused/);
+});
+
 test("authoritative cache phases replace stale queue samples and expose timings on demand", async (t) => {
   const phase = { chat_id: "a".repeat(64), generation: "b".repeat(64), request_id: "c".repeat(64),
     phase: "cache_update", blocker: null, input_tokens: 150800, computed_tokens: 0,

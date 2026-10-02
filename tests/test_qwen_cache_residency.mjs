@@ -19,7 +19,7 @@ test("cache tiers count each token once, in order of fastest available restore",
   assert.deepEqual(cacheBreakdown(sample({ gpu_tokens: 60_000 }), chat, 60_000), { gpu: 60_000, ram: 0, disk: 0, cold: 0, diskSaved: 40_000 });
   assert.deepEqual(cacheBreakdown(sample({ gpu_tokens: 0, ram_tokens: 50_000 }), chat, 60_000), { gpu: 0, ram: 50_000, disk: 0, cold: 10_000, diskSaved: 40_000 });
   assert.equal(formatCacheBreakdown(cacheBreakdown(value, chat, 60_000)),
-    "Cache ≈ GPU 30,000 · RAM 10,000 · Disk 40,000 · Cold 10,000 tok");
+    "VRAM 30,000 · RAM 10,000 · Disk 40,000 · Cold 10,000");
 });
 
 test("the newest request and output count is used during generation", () => {
@@ -37,7 +37,7 @@ test("a resumed prompt being rebuilt reports remaining prefill as cold, includin
     const breakdown = cacheBreakdown(value, chat, 238_880);
     assert.equal(breakdown.disk, 0);
     assert.equal(breakdown.cold, 222_496);
-    assert.match(formatCacheBreakdown(breakdown), /Disk 40,000 · Cold 222,496 tok/);
+    assert.match(formatCacheBreakdown(breakdown), /Disk 40,000 · Cold 222,496/);
   }
 });
 
@@ -69,7 +69,7 @@ test("missing, stale or incomplete telemetry never becomes a false cold-fill cla
 test("retained idle RAM coverage resolves Cold while an unverified disk backup remains unknown", () => {
   const value = sample({ gpu_tokens: 0, ram_tokens: 35_207, disk_tokens: null, disk_saved_tokens: null, input_tokens: null });
   assert.equal(formatCacheBreakdown(cacheBreakdown(value, chat, 35_207)),
-    "Cache ≈ GPU 0 · RAM 35,207 · Disk ? · Cold 0 tok");
+    "VRAM 0 · RAM 35,207 · Disk ? · Cold 0");
   assert.deepEqual(cacheBreakdown({ ...value, live: false }, chat, 35_207),
     { gpu: null, ram: null, disk: null, cold: null, diskSaved: null });
 });
@@ -111,12 +111,12 @@ test("new Pi reads the shared v2 backup count and falls back safely to an older 
   const telemetry = new CacheResidencyTelemetry();
   telemetry.config = { stateDirectory };
   telemetry.chat = chat;
-  assert.match(telemetry.readBreakdown(60_000), /Disk \? · Cold 10,000 tok$/);
+  assert.match(telemetry.readBreakdown(60_000), /Disk \? · Cold 10,000$/);
   writeFileSync(join(stateDirectory, "cache-residency-v2.json"), JSON.stringify(modern), { mode: 0o600 });
-  assert.match(telemetry.readBreakdown(60_000), /Disk 40,000 · Cold 10,000 tok$/);
+  assert.match(telemetry.readBreakdown(60_000), /Disk 40,000 · Cold 10,000$/);
   modern.observed_at_ms -= 6000;
   writeFileSync(join(stateDirectory, "cache-residency-v2.json"), JSON.stringify(modern));
-	assert.match(telemetry.readBreakdown(60_000), /GPU 30,000 .*Disk \? · Cold 10,000 tok$/);
+	assert.match(telemetry.readBreakdown(60_000), /VRAM 30,000 .*Disk \? · Cold 10,000$/);
 });
 
 test("cache residency consumes the combined telemetry snapshot without another file read", (t) => {
@@ -137,9 +137,9 @@ test("cache residency consumes the combined telemetry snapshot without another f
 	const telemetry = new CacheResidencyTelemetry();
 	telemetry.config = { stateDirectory };
 	telemetry.chat = chat;
-	assert.match(telemetry.readBreakdown(60_000, observed), /GPU 30,000 .*Disk 40,000 · Cold 10,000 tok$/);
+	assert.match(telemetry.readBreakdown(60_000, observed), /VRAM 30,000 .*Disk 40,000 · Cold 10,000$/);
 	combined.cache = sample({ gpu_tokens: 60_000 });
 	combined.observed_at_ms = observed + 150;
 	writeFileSync(join(stateDirectory, "telemetry-v1.json"), JSON.stringify(combined), { mode: 0o600 });
-	assert.match(telemetry.readBreakdown(60_000, observed + 150), /GPU 60,000 .*Cold 0 tok$/);
+	assert.match(telemetry.readBreakdown(60_000, observed + 150), /VRAM 60,000 .*Cold 0$/);
 });
