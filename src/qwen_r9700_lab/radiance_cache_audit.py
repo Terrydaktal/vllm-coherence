@@ -7,6 +7,7 @@ import contextlib
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -209,7 +210,61 @@ def inspection_lock(directory):
         os.close(descriptor)
 
 
-def scan_chat(directory, abi, *, stale_after=300, verify=False):
+def pending_checkpoint(tail, metadata, engine_pid):
+    """Defer orphan assessment while a healthy matching tail awaits its token interval.
+
+    The legacy journal has no per-file dependency list. It proves that publication
+    is deliberately pending, not that every extra object is still required. Keep
+    those objects visible and assess leftovers once that transaction settles.
+    """
+    if (
+        not isinstance(tail, dict)
+        or tail.get("available") is not True
+        or tail.get("active") is not True
+        or type(tail.get("pid")) is not int
+        or tail["pid"] <= 0
+        or type(engine_pid) is not int
+        or engine_pid != tail["pid"]
+        or metadata.get("status") != "ready"
+        or metadata.get("gc", {}).get("status") != "complete"
+    ):
+        return None
+    updated, interval = tail.get("updated_at"), tail.get("flush_tokens")
+    if (
+        type(updated) not in (int, float)
+        or not math.isfinite(updated)
+        or not -5 <= time.time() - updated <= 15
+        or type(interval) is not int
+        or interval <= 0
+    ):
+        return None
+    rows = tail.get("chats")
+    if not isinstance(rows, list) or len(rows) > 256:
+        return None
+    matches = [
+        row for row in rows if isinstance(row, dict)
+        and row.get("chat_id") == metadata.get("id")
+        and row.get("generation") == metadata.get("generation")
+    ]
+    if len(matches) != 1:
+        return None
+    row = matches[0]
+    if (
+        any(type(row.get(k)) is not int or row[k] < 0
+            for k in ("tokens", "durable_tokens", "blocks", "bytes"))
+        or type(metadata.get("tokens")) is not int
+        or row["durable_tokens"] != metadata["tokens"]
+        or not 0 < row["tokens"] - row["durable_tokens"] < interval
+        or row["blocks"] == 0
+        or row["bytes"] == 0
+    ):
+        return None
+    return {
+        key: row[key] for key in ("tokens", "durable_tokens", "blocks", "bytes")
+    } | {"flush_tokens": interval, "file_membership": "deferred_until_publication"}
+
+
+def scan_chat(directory, abi, *, stale_after=300, verify=False, tail_journal=None, engine_pid=None):
     row = {
         "id": directory.name,
         "abi": abi,
@@ -374,17 +429,36 @@ def scan_chat(directory, abi, *, stale_after=300, verify=False):
                 )
             )
         extras = [o for o in row["objects"] if o["category"] == "unreferenced"]
-        if extras:
-            age = max(0, time.time() - max(o["mtime"] for o in extras))
-            old_extras = age >= stale_after and lock == "locked"
+        pending = pending_checkpoint(tail_journal, info, engine_pid)
+        if pending is not None and lock == "locked":
+            row["pending_checkpoint"] = pending
             problems.append(
                 issue(
-                    "UNREFERENCED_OLD" if old_extras else "UNPUBLISHED",
-                    f"{len(extras)} object(s) outside the published head; "
-                    "may be an unfinished request or failed cleanup",
-                    severity="warning" if old_extras else "info",
+                    "UNPUBLISHED",
+                    f"Pending checkpoint: {pending['tokens']:,} tokens buffered after "
+                    f"{pending['durable_tokens']:,} published; waiting for the "
+                    f"{pending['flush_tokens']:,}-token flush interval. "
+                    f"{len(extras)} disk object(s) await publication or cleanup; "
+                    "orphan assessment is deferred until publication.",
+                    severity="info",
                 )
             )
+        elif extras:
+            now = time.time()
+            old_extras = [o for o in extras if now - o["mtime"] >= stale_after] if lock == "locked" else []
+            for objects, code, severity in (
+                (old_extras, "UNREFERENCED_OLD", "warning"),
+                ([o for o in extras if o not in old_extras], "UNPUBLISHED", "info"),
+            ):
+                if objects:
+                    problems.append(
+                        issue(
+                            code,
+                            f"{len(objects)} object(s) outside the published head; "
+                            "may be an unfinished request or failed cleanup",
+                            severity=severity,
+                        )
+                    )
         if info.get("status") == "incomplete":
             problems.append(
                 issue(
@@ -686,6 +760,7 @@ def fair_scheduler_status(prefix=FAIR_STATUS_PREFIX):
             available=True,
             active=age <= max(5, (quantum or 15) * 2),
             age_seconds=age,
+            pid=scheduler.get("pid"),
             quantum_seconds=quantum,
             policy="response_boundary" if quantum == 0 else "time_slice",
             switches=int(scheduler.get("switches", 0)),
@@ -822,7 +897,10 @@ def snapshot_tail_status(path=TAIL_STATUS_PATH):
         chats = payload.get("chats")
         if (
             payload.get("schema") != "urn:qwen-r9700:radiance-tail-residency:v1"
-            or not isinstance(payload.get("pid"), int)
+            or type(payload.get("pid")) is not int
+            or payload["pid"] <= 0
+            or not math.isfinite(updated)
+            or updated > time.time() + 5
             or not isinstance(payload.get("flush_tokens"), int)
             or payload["flush_tokens"] < 1
             or not isinstance(payload.get("max_bytes"), int)
@@ -866,6 +944,7 @@ def snapshot_tail_status(path=TAIL_STATUS_PATH):
             available=True,
             active=age <= 15,
             age_seconds=age,
+            updated_at=updated,
             pid=payload["pid"],
             flush_tokens=payload["flush_tokens"],
             max_bytes=payload["max_bytes"],
@@ -1010,6 +1089,8 @@ def scan(cache_root, *, abi=None, stale_after=300, verify=False):
         "abis": [],
         "duplicates": [],
         "verify_requested": verify,
+        "tail_journal": snapshot_tail_status(),
+        "scheduler": fair_scheduler_status(),
     }
     problems = output["issues"]
     snapshots = root / "snapshots"
@@ -1084,7 +1165,9 @@ def scan(cache_root, *, abi=None, stale_after=300, verify=False):
                         try:
                             real_directory(directory)
                             row = scan_chat(
-                                directory, namespace.name, stale_after=stale_after, verify=verify
+                                directory, namespace.name, stale_after=stale_after, verify=verify,
+                                tail_journal=output["tail_journal"],
+                                engine_pid=output["scheduler"].get("pid"),
                             )
                             if (row["metadata"].get("status") == "purged" and row["consistent"]
                                     and not row["objects"] and not row["issues"]):
@@ -1184,8 +1267,6 @@ def scan(cache_root, *, abi=None, stale_after=300, verify=False):
         "total_bytes": filesystem.f_blocks * filesystem.f_frsize,
     }
     output["drive"] = drive_health(root)
-    output["scheduler"] = fair_scheduler_status()
-    output["tail_journal"] = snapshot_tail_status()
     tracked = [row["io"] for row in output["chats"] if row["io"].get("available")]
     output["io"] = {
         "tracked_chats": len(tracked),

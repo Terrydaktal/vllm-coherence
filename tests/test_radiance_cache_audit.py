@@ -439,6 +439,128 @@ def test_unpublished_new_files_are_distinguished_from_old_residue(tmp_path):
     assert "UNREFERENCED_OLD" in codes(audit.scan(tmp_path)["chats"][0])
 
 
+def pending_tail(store, **changes):
+    return {
+        "available": True, "active": True, "pid": 123, "updated_at": time.time(),
+        "flush_tokens": 8192,
+        "chats": [{
+            "chat_id": store.chat["id"], "generation": store.chat["generation"],
+            "tokens": 16_000, "durable_tokens": 10_000, "blocks": 11, "bytes": 8000,
+        }],
+        **changes,
+    }
+
+
+def test_live_buffered_checkpoint_defers_age_warning_without_hiding_files(tmp_path, monkeypatch):
+    store = make_store(tmp_path)
+    store.write(EXTRA, memoryview(b"x" * len(BLOCK)))
+    os.utime(store.path(EXTRA), (1, 1))
+    tail = pending_tail(store)
+    calls = []
+    monkeypatch.setattr(audit, "snapshot_tail_status", lambda: calls.append("tail") or tail)
+    monkeypatch.setattr(audit, "fair_scheduler_status", lambda: {"available": True, "pid": 123})
+    before = inventory(tmp_path)
+
+    report = audit.scan(tmp_path)
+    row = report["chats"][0]
+
+    assert calls == ["tail"]  # One existing status read for the entire inventory.
+    assert inventory(tmp_path) == before
+    assert "UNPUBLISHED" in codes(row) and "UNREFERENCED_OLD" not in codes(row)
+    assert row["storage"]["unreferenced"]["files"] == 1
+    assert row["pending_checkpoint"]["tokens"] == 16_000
+    assert row["pending_checkpoint"]["file_membership"] == "deferred_until_publication"
+    assert "publication or cleanup" in next(p["message"] for p in row["issues"] if p["code"] == "UNPUBLISHED")
+    assert cli.health(row) == "CHECKPOINT PENDING"
+
+    # A publication ends the transaction. An obsolete journal cannot continue
+    # to classify this head as pending, even if its heartbeat is still fresh.
+    assert store.publish([FIRST, SECOND, EXTRA], 16_000, len(BLOCK))
+    settled = audit.scan(tmp_path)["chats"][0]
+    assert "pending_checkpoint" not in settled and "UNPUBLISHED" not in codes(settled)
+    assert cli.health(settled) == "SAVED"
+
+
+@pytest.mark.parametrize("fault", [
+    "unavailable", "stale_flag", "stale_timestamp", "future_timestamp", "wrong_pid",
+    "missing_engine_pid", "other_chat", "other_generation", "wrong_durable_count",
+    "flush_due", "no_ram_bytes", "no_ram_blocks", "duplicate_identity", "invalid_count",
+])
+def test_invalid_or_due_pending_checkpoint_keeps_orphan_warning(tmp_path, monkeypatch, fault):
+    store = make_store(tmp_path)
+    store.write(EXTRA, memoryview(BLOCK))
+    os.utime(store.path(EXTRA), (1, 1))
+    tail = pending_tail(store)
+    engine = {"available": True, "pid": 123}
+    if fault == "unavailable":
+        tail["available"] = False
+    elif fault == "stale_flag":
+        tail["active"] = False
+    elif fault == "stale_timestamp":
+        tail["updated_at"] = time.time() - 16
+    elif fault == "future_timestamp":
+        tail["updated_at"] = time.time() + 60
+    elif fault == "wrong_pid":
+        tail["pid"] = 124
+    elif fault == "missing_engine_pid":
+        del engine["pid"]
+    elif fault == "other_chat":
+        tail["chats"][0]["chat_id"] = "f" * 64
+    elif fault == "other_generation":
+        tail["chats"][0]["generation"] = "f" * 64
+    elif fault == "wrong_durable_count":
+        tail["chats"][0]["durable_tokens"] = 9999
+    elif fault == "flush_due":
+        tail["chats"][0]["tokens"] = 18_192
+    elif fault == "no_ram_bytes":
+        tail["chats"][0]["bytes"] = 0
+    elif fault == "no_ram_blocks":
+        tail["chats"][0]["blocks"] = 0
+    elif fault == "duplicate_identity":
+        tail["chats"].append(dict(tail["chats"][0]))
+    elif fault == "invalid_count":
+        tail["chats"][0]["tokens"] = True
+    monkeypatch.setattr(audit, "snapshot_tail_status", lambda: tail)
+    monkeypatch.setattr(audit, "fair_scheduler_status", lambda: engine)
+
+    row = audit.scan(tmp_path)["chats"][0]
+
+    assert "UNREFERENCED_OLD" in codes(row)
+    assert "pending_checkpoint" not in row and cli.health(row) == "WARN"
+
+
+@pytest.mark.parametrize("fault,expected", [("bad_header", "ERROR"), ("missing_block", "ERROR"), ("failed_gc", "WARN")])
+def test_pending_checkpoint_does_not_hide_real_cache_failures(tmp_path, monkeypatch, fault, expected):
+    store = make_store(tmp_path)
+    store.write(EXTRA, memoryview(BLOCK))
+    os.utime(store.path(EXTRA), (1, 1))
+    monkeypatch.setattr(audit, "snapshot_tail_status", lambda: pending_tail(store))
+    monkeypatch.setattr(audit, "fair_scheduler_status", lambda: {"available": True, "pid": 123})
+    if fault == "bad_header":
+        store.path(EXTRA).write_bytes(b"broken cache header")
+    elif fault == "missing_block":
+        store.path(FIRST).unlink()
+    else:
+        metadata = store.metadata()
+        metadata["gc"] = {"status": "failed", "errno": 28}
+        store.save_metadata(metadata)
+
+    assert cli.health(audit.scan(tmp_path)["chats"][0]) == expected
+
+
+def test_fresh_unpublished_file_does_not_mask_old_orphan(tmp_path):
+    store = make_store(tmp_path)
+    store.write(EXTRA, memoryview(BLOCK))
+    os.utime(store.path(EXTRA), (1, 1))
+    new_key = "g6-" + "4" * 64 + ".qkv"
+    store.write(new_key, memoryview(BLOCK))
+
+    row = audit.scan(tmp_path)["chats"][0]
+
+    assert {"UNREFERENCED_OLD", "UNPUBLISHED"}.issubset(codes(row))
+    assert cli.health(row) == "WARN"
+
+
 def write_session(path, *, compaction=False, name="Work", session_id="fixture-session"):
     path.parent.mkdir(parents=True, exist_ok=True)
     entries = [
@@ -591,6 +713,8 @@ def test_cli_exit_status_json_help_and_legacy_compatibility(tmp_path):
     assert "HANDOVER RAM" in status.stdout
     assert "DISK TRAFFIC" in status.stdout
     assert "WRITE TRAFFIC" not in status.stdout
+    heading = next(line for line in status.stdout.splitlines() if line.startswith("CHAT "))
+    assert heading.split()[:4] == ["CHAT", "STATE", "ID", "/"]
     legacy = run_cli(tmp_path, "list", "--json")
     assert legacy.returncode == 0
     assert isinstance(json.loads(legacy.stdout), list)

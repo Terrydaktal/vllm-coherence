@@ -82,7 +82,7 @@ def test_snapshot_refresh_uses_latest_file_and_same_three_second_acceptance(tmp_
     first = live.build_rows(report(), live.read_sample(path))[0]
     assert (first["gpu"], first["ram"], first["disk_saved"], first["cold"]) == (10_000, 0, 9_000, 10)
     assert first["context"] == 10_010
-    assert first["state"] == "Generating"
+    assert first["state"] == "Generating · PARTLY CACHED"
     assert first["round_ms"] == 43.5
     assert first["acceptance"] == 0.6
     changed = sample()
@@ -94,7 +94,117 @@ def test_snapshot_refresh_uses_latest_file_and_same_three_second_acceptance(tmp_
     second = live.build_rows(report(), live.read_sample(path))[0]
     assert (second["gpu"], second["cold"], second["round_ms"], second["acceptance"]) == (10_015, 0, 45.7, 0.72)
     assert second["context"] == 10_015
-    assert second["state"] == "Generating"
+    assert second["state"] == "Generating · CACHED"
+
+
+def test_idle_completed_chat_keeps_pending_token_without_claiming_write_activity():
+    inventory = report()
+    row = inventory["chats"][0]
+    row["metadata"]["tokens"] = 10_009
+    session = {
+        "id": CHAT, "generation": GENERATION, "last_turn_tokens": 10_010,
+        "pending_messages": False, "transcript_bytes": 100,
+    }
+    # A running Pi client does not mean the backend is generating or writing.
+    cli.correlate(inventory, [session], [{"chat_id": CHAT, "pid": 456, "port": 8012}])
+    assert {issue["code"] for issue in row["issues"]} == {"NEWER_TURN"}
+    value = sample()
+    value["phases"]["recent"] = value["phases"]["requests"]
+    value["phases"]["requests"] = []
+    value["cache"]["chats"][0].update(
+        gpu_tokens=0, disk_tokens=10_009, disk_saved_tokens=10_009,
+    )
+
+    idle = live.build_rows(inventory, value)[0]
+
+    assert idle["state"] == "PARTLY CACHED"
+    assert idle["active_processes"] == [{"chat_id": CHAT, "pid": 456, "port": 8012}]
+    assert (idle["gpu"], idle["ram"], idle["disk_saved"], idle["cold"], idle["context"]) == (
+        0, 0, 10_009, 1, 10_010,
+    )
+    # Actual activity still overrides the saved-checkpoint state immediately.
+    value["phases"]["requests"] = value["phases"]["recent"]
+    assert live.build_rows(inventory, value)[0]["state"] == "Generating · PARTLY CACHED"
+
+
+@pytest.mark.parametrize("code,expected", [
+    ("NEWER_TURN", "SAVED"),
+    ("NEW_LOCAL_MESSAGES", "LOCAL CHANGES"),
+    ("UNPUBLISHED", "UNPUBLISHED DATA"),
+])
+def test_coverage_info_is_not_reported_as_current_write_activity(code, expected):
+    row = report()["chats"][0]
+    row["issues"] = [{"severity": "info", "code": code}]
+    assert cli.health(row) == expected
+    row["pending_checkpoint"] = {"tokens": 10_009}
+    assert cli.health(row) == "CHECKPOINT PENDING"
+    row["issues"].append({"severity": "warning", "code": "GC_LEFTOVERS"})
+    assert cli.health(row) == "WARN"
+    row["issues"].append({"severity": "error", "code": "MISSING_BLOCKS"})
+    assert cli.health(row) == "ERROR"
+
+
+@pytest.mark.parametrize("resident", ["gpu_tokens", "ram_tokens", "disk_tokens"])
+@pytest.mark.parametrize("missing,label", [
+    (0, "CACHED"), (1, "PARTLY CACHED"), (100, "PARTLY CACHED"), (10_010, "COLD"),
+])
+def test_idle_coverage_uses_every_cold_token_independently_of_tier(resident, missing, label):
+    value = sample()
+    value["phases"]["requests"] = []
+    value["cache"]["chats"][0].update(
+        gpu_tokens=0, ram_tokens=0, disk_tokens=0, disk_saved_tokens=0,
+    )
+    value["cache"]["chats"][0][resident] = 10_010 - missing
+    if resident == "disk_tokens":
+        value["cache"]["chats"][0]["disk_saved_tokens"] = 10_010 - missing
+
+    row = live.build_rows(report(), value)[0]
+
+    assert row["cold"] == missing
+    assert row["coverage"] == row["state"] == label
+    assert row["save_pending"] is False
+
+
+def test_save_pending_is_independent_of_gpu_coverage_and_clears_on_live_publication():
+    inventory = report()
+    inventory["chats"][0]["pending_checkpoint"] = {"tokens": 10_010}
+    value = sample()
+    value["phases"]["requests"] = []
+    cache = value["cache"]["chats"][0]
+    cache.update(gpu_tokens=10_010, disk_tokens=10_010)
+    assert live.build_rows(inventory, value)[0]["state"] == "CACHED · CHECKPOINT PENDING"
+
+    # Leaving the GPU does not flush the separately buffered snapshot tail.
+    cache["gpu_tokens"] = 0
+    off_gpu = live.build_rows(inventory, value)[0]
+    assert off_gpu["cold"] == 0 and off_gpu["save_pending"] is True
+    assert off_gpu["state"] == "CACHED · CHECKPOINT PENDING"
+    cache["input_tokens"] = 10_011
+    assert live.build_rows(inventory, value)[0]["state"] == "PARTLY CACHED · CHECKPOINT PENDING"
+
+    # Publication updates live counters before the slower inventory refresh.
+    cache["disk_saved_tokens"] = 10_010
+    assert live.build_rows(inventory, value)[0]["state"] == "PARTLY CACHED"
+    cache["input_tokens"] = 10_010
+    assert live.build_rows(inventory, value)[0]["state"] == "CACHED"
+
+
+def test_buffered_tail_marks_save_pending_before_inventory_arrives():
+    value = sample()
+    value["phases"]["requests"] = []
+    value["cache"]["chats"][0].update(gpu_tokens=0, disk_tokens=10_010)
+    assert live.build_rows(None, value)[0]["state"] == "CACHED · CHECKPOINT PENDING"
+
+
+@pytest.mark.parametrize("severity,label", [("warning", "WARN"), ("error", "ERROR")])
+def test_cache_health_alerts_are_not_hidden_by_activity_or_coverage(severity, label):
+    inventory = report()
+    inventory["chats"][0]["issues"] = [{"severity": severity, "code": "CACHE_FAILURE"}]
+    value = sample()
+    assert live.build_rows(inventory, value)[0]["state"] == f"{label} · Generating · PARTLY CACHED"
+    value["phases"]["requests"] = []
+    value["cache"]["chats"][0].update(gpu_tokens=10_010, disk_tokens=10_010)
+    assert live.build_rows(inventory, value)[0]["state"] == f"{label} · CACHED · CHECKPOINT PENDING"
 
 
 @pytest.mark.parametrize("fault", ["old", "future", "schema", "cache_count", "duplicate", "phase_array", "scheduler_array"])
@@ -140,19 +250,24 @@ def test_unsafe_sample_is_not_read(tmp_path, fault):
 
 def test_compaction_does_not_borrow_previous_generation_context_or_statistics():
     value = sample()
+    inventory = report()
+    inventory["chats"][0]["pending_checkpoint"] = {"tokens": 10_010}
     new_generation = "d" * 64
     value["cache"]["chats"][0].update(generation=new_generation, gpu_tokens=1_000,
                                        disk_tokens=0, disk_saved_tokens=0, input_tokens=1_010)
     value["phases"]["requests"][0].update(generation=new_generation, input_tokens=1_010,
                                            last_round_ms=None, acceptance_rate_3s=None)
-    row = live.build_rows(report(), value)[0]
+    row = live.build_rows(inventory, value)[0]
     assert row["generation"] == new_generation
+    assert row["context"] == 1_010
     assert (row["gpu"], row["cold"], row["disk_saved"]) == (1_000, 10, 0)
     assert row["round_ms"] is None
     assert row["acceptance"] is None
+    assert row["state"] == "Generating · PARTLY CACHED"
+    assert row["save_pending"] is False
     # Also cover the gap after completion before the next metadata scan.
     value["phases"]["requests"] = []
-    assert live.build_rows(report(), value)[0]["cold"] == 10
+    assert live.build_rows(inventory, value)[0]["state"] == "PARTLY CACHED"
 
 
 def test_stale_nested_cache_or_other_abi_does_not_look_live():
@@ -160,10 +275,12 @@ def test_stale_nested_cache_or_other_abi_does_not_look_live():
     value["cache"]["observed_at_ms"] -= 6_000
     row = live.build_rows(report(), value)[0]
     assert row["gpu"] is None
+    assert row["state"] == "Generating · CACHE UNKNOWN"
     value = sample()
     value["cache"]["abi"] = "e" * 64
     row = live.build_rows(report(), value)[0]
     assert row["gpu"] is None and row["round_ms"] is None
+    assert row["state"] == "Generating · CACHE UNKNOWN"
 
 
 @pytest.mark.parametrize("fault", ["pid", "age"])
@@ -183,7 +300,9 @@ def test_unknown_generation_and_genuinely_absent_cache_are_distinguished():
     value["cache"]["chats"] = []
     row = live.build_rows(report(), value)[0]
     assert (row["gpu"], row["ram"], row["cold"]) == (0, 0, 10_010)
-    assert live.build_rows(report(), None)[0]["gpu"] is None
+    assert row["coverage"] == "COLD"
+    unknown = live.build_rows(report(), None)[0]
+    assert unknown["gpu"] is None and unknown["state"] == "CACHE UNKNOWN"
     row = live.build_rows(None, sample())[0]
     assert row["gpu"] == 10_000 and row["disk_bytes"] is None
 
@@ -194,7 +313,7 @@ def test_queue_names_blocker_and_does_not_relabel_admission_as_cold_fill():
         "chat_id": "f" * 64, "generation": "e" * 64,
     })
     row = live.build_rows(report(), value)[0]
-    assert row["state"] == "Queued for GPU · ffffffffffff"
+    assert row["state"] == "Queued for GPU · ffffffffffff · PARTLY CACHED"
     assert row["gpu"] == 10_000
 
 
@@ -211,7 +330,7 @@ def test_empty_cache_only_identity_is_not_a_live_chat():
         "phase": "admission", "input_tokens": 0,
     })
     rows = {row["id"]: row for row in live.build_rows(report(), value)}
-    assert rows[ghost["chat_id"]]["state"] == "Preparing response"
+    assert rows[ghost["chat_id"]]["state"] == "Preparing response · CACHED"
     assert rows[ghost["chat_id"]]["context"] == 0
 
 
@@ -450,13 +569,25 @@ def test_dashboard_counters_labels_and_terminal_content_are_unambiguous(tmp_path
     value = report()
     value["chats"][0]["metadata"]["title"] = "fixture\x1b[2J"
     inventory = SimpleNamespace(completed_at=time.monotonic(), error=None, thread=None)
-    lines, _, footer = live.dashboard_lines(value, sample(), None, inventory, arguments(tmp_path))
+    lines, header, footer = live.dashboard_lines(value, sample(), None, inventory, arguments(tmp_path))
     output = "\n".join([*lines, footer])
+    columns = lines[header - 1].split()
+    assert columns[:4] == ["CHAT", "STATE", "ID", "/"]
+    cold = columns.index("Cold")
+    assert columns[cold:cold + 6] == ["Cold", "tok", "Context", "tok", "Disk", "bytes"]
+    heading = lines[header - 1]
+    row = lines[header]
+    state_start, id_start = heading.index("STATE"), heading.index("ID / ABI")
+    assert row[:state_start].strip() == "fixture [2J"
+    assert row[state_start:id_start].strip() == "Generating · PARTLY CACHED"
+    assert row[id_start:].split()[4:6] == ["10", "10,010"]
     assert "100 ms refresh" in output
-    assert "43.5" in output and "60.0%" in output
+    assert "Round ms" not in output and "Accept(3s)" not in output
+    assert "43.5" not in output and "60.0%" not in output
     assert "90°C · 50°C · 40%" in output
     assert "Disk tok = saved backup" in output
     assert "every 30s" in output and "\x1b" not in output
+    assert "STATE / CHAT" not in output
 
 
 @pytest.mark.parametrize("arguments_extra,live_expected", [([], True), (["status"], True), (["--once"], False), (["--json"], False)])

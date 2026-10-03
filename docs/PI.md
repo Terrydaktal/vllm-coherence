@@ -274,12 +274,28 @@ history adds no new recording or synchronization to backend generation rounds.
 
 In a terminal, `qwen-radiance-cache` opens a full-screen dashboard. It reads the
 same shared `telemetry-v1.json` snapshot as Pi every **100 ms**, displaying each
-chat's GPU/RAM/disk/cold token counts, scheduler phase, latest round time and
-three-second acceptance, plus the shared GPU temperatures and fan percentage.
+chat's GPU/RAM/disk/cold and context token counts, scheduler phase, disk sizes and
+traffic, plus the shared GPU temperatures and fan percentage.
+Chat names form the first column, state the second, followed by the chat ID/ABI
+and token counters. The same name/state ordering is used in single reports.
 It registers as another consumer of Pi's existing locked monitors, so opening
 several dashboards and Pi windows does not multiply scheduler or hardware probes.
 Cache and temperature source timestamps retain their original cadence; a faster
 screen refresh does not make those probes run more frequently.
+
+The state column shows **CACHED** when there are no cold tokens, **PARTLY CACHED**
+when some context is cached and some is cold, and **COLD** when all context needs
+processing. One cold token is enough to show PARTLY CACHED; a response can leave
+its final sampled token unprocessed. Missing or stale counters show **CACHE
+UNKNOWN**. Active request phases and audit warnings/errors remain visible.
+
+**CHECKPOINT PENDING** is a separate flag for processed state buffered in the snapshot
+tail but not yet published as a complete disk checkpoint. A chat can therefore
+show `CACHED · CHECKPOINT PENDING`, even while idle or outside the GPU. Saving normally
+waits for 8,192 additional processed tokens or a forced flush. Live restore and
+durable-head counters clear this flag when publication completes, without waiting
+for the next disk inventory. The single-report audit's SAVED label describes the
+published checkpoint's health rather than full current-context coverage.
 
 Disk sizes, disk-traffic totals, Pi process metadata and audit results refresh
 in one background scan every **30 seconds**, with their age shown. This scan

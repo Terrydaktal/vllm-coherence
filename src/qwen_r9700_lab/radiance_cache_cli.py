@@ -89,6 +89,18 @@ OPERATION
     derived chat counters. It does not launch an SSH command on each display tick.
     Fast scans check headers under brief non-blocking chat locks. Busy chats are
     labelled BUSY. Full verification runs outside these locks and reports races.
+    The dashboard shows CACHED when there are no cold tokens, PARTLY CACHED when
+    some context is cold (including one token), and COLD when all context is cold.
+    Unknown coverage is shown as CACHE UNKNOWN, not assumed to be cold or cached.
+    CHECKPOINT PENDING is separate: a newer buffered tail awaits disk publication.
+    The live counters clear it when that tail becomes durable. Generating/waiting
+    phases and audit warnings remain visible alongside these coverage labels.
+    Chat names occupy the first column, followed by state and the chat ID/ABI.
+    Extra disk objects remain visible; orphan assessment waits for publication.
+    In a one-shot audit, SAVED describes a healthy published checkpoint.
+    Live request phases show activity; newer turn counts alone do not imply writes.
+    A response-end checkpoint excludes the final sampled token until it is processed,
+    so an idle saved chat can correctly show one cold token.
     Block coverage measures the published manifest, not an exact token restore
     percentage. Published tokens and the last recorded Pi turn are separate
     counters; the hybrid model may reuse fewer tokens than either counter.
@@ -621,8 +633,15 @@ def health(row):
         return "ERROR"
     if any(p["severity"] == "warning" for p in row["issues"]):
         return "WARN"
-    if any(p["code"] in {"NEWER_TURN", "NEW_LOCAL_MESSAGES", "UNPUBLISHED"} for p in row["issues"]):
-        return "UPDATING"
+    if row.get("pending_checkpoint"):
+        return "CHECKPOINT PENDING"
+    # These are coverage facts, not evidence of a running request or writer.
+    # In particular, a successful response may leave one emitted token pending
+    # after its exact processed-state checkpoint has already been published.
+    if any(p["code"] == "UNPUBLISHED" for p in row["issues"]):
+        return "UNPUBLISHED DATA"
+    if any(p["code"] == "NEW_LOCAL_MESSAGES" for p in row["issues"]):
+        return "LOCAL CHANGES"
     return "SAVED" if row["expected_blocks"] else "EMPTY"
 
 
@@ -772,10 +791,14 @@ def render(report, *, selector=None, details=False, audit_view=False):
             "scanned objects passed decompression and SHA-256 verification."
         )
     print()
+    chat_width = max([24, *(len(clean(title(row))[:72]) for row in chats),
+                      *(len(clean(session["title"])[:72]) for session in missing)])
+    state_width = max([18, *(len(health(row)) for row in chats)])
     print(
-        f"{'CHAT / ABI':23} {'STATE':12} {'PI PID / PORT':17} {'PUBLISHED / LAST TURN':>23}"
+        f"{'CHAT':{chat_width}} {'STATE':{state_width}} {'ID / ABI':23}"
+        f" {'PI PID / PORT':17} {'PUBLISHED / LAST TURN':>23}"
         f" {'BLOCKS':>18} {'DISK':>11} {'HANDOVER RAM':>15} {'TAIL RAM':>11}"
-        f" {'DISK TRAFFIC':>13}  CHAT"
+        f" {'DISK TRAFFIC':>13}"
     )
     for row in chats:
         coverage = row["coverage_percent"]
@@ -791,22 +814,25 @@ def render(report, *, selector=None, details=False, audit_view=False):
         process = active(row["active_processes"])
         io = row.get("io", {})
         write_traffic = human(io.get("written_file_bytes", 0)) if io.get("available") else "?"
+        chat_identity = f"{row['id'][:12]}/{row['abi'][:8]}"
         print(
-            f"{row['id'][:12]}/{row['abi'][:8]:8}  {health(row):12} {process:17}"
+            f"{clean(title(row))[:72]:{chat_width}} {health(row):{state_width}} {chat_identity:23}"
+            f" {process:17}"
             f" {tokens:>23} {blocks:>18}"
             f" {human(row['totals']['file_bytes']):>11}"
             f" {handover_cell(report, row['id']):>15} {tail_cell(report, row['id']):>11}"
-            f" {write_traffic:>13}  "
-            f"{clean(title(row))[:72]}"
+            f" {write_traffic:>13}"
         )
     for session in missing:
         tokens = f"0 / {number(session['last_turn_tokens'])}"
         process = active(session["active_processes"])
+        chat_identity = f"{session['id'][:12]}/-"
         print(
-            f"{session['id'][:12]}/{'-':8}  {'NO SNAPSHOT':12} {process:17}"
+            f"{clean(session['title'])[:72]:{chat_width}} {'NO SNAPSHOT':{state_width}} {chat_identity:23}"
+            f" {process:17}"
             f" {tokens:>23} {'0 saved':>18}"
             f" {human(0):>11} {handover_cell(report, session['id']):>15}"
-            f" {tail_cell(report, session['id']):>11} {'?':>13}  {clean(session['title'])[:72]}"
+            f" {tail_cell(report, session['id']):>11} {'?':>13}"
         )
     if not chats and not missing:
         print("No labelled chats found.")

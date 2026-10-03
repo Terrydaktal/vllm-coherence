@@ -148,7 +148,6 @@ def shared_state_directory(runtime, host):
         return original
 
 
-
 class SharedTelemetry:
     """Register one normal Pi consumer, sharing the existing locked monitors."""
 
@@ -308,11 +307,24 @@ def cache_breakdown(cache, row, context):
     return {"gpu": gpu, "ram": ram, "disk_saved": saved, "cold": cold, "context": total}
 
 
+def coverage_state(context, cold):
+    """Describe known token coverage without conflating it with disk durability."""
+    if not count(context) or not count(cold) or cold > context:
+        return "CACHE UNKNOWN"
+    if cold == 0:
+        return "CACHED"
+    return "COLD" if cold == context else "PARTLY CACHED"
+
+
 def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
     from . import radiance_cache_cli as cli
 
     now_ms = time.time() * 1000 if now_ms is None else now_ms
     report = report or {"chats": [], "unsnapshotted_chats": []}
+    pending = {
+        (row["id"], row["metadata"].get("generation"))
+        for row in report["chats"] if row.get("pending_checkpoint")
+    }
     records = {}
     for row in report["chats"]:
         if not abi or row["abi"] == abi:
@@ -383,8 +395,18 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
         phase = current.get(key) or recent.get(key)
         cache_row = cached.get(key)
         row.update(cache_breakdown(cache, cache_row, row["context"]))
+        row["save_pending"] = key in pending
         if cache_row is not None:
             row["published"] = row["disk_saved"]
+            buffered, durable = cache_row.get("disk_tokens"), cache_row.get("disk_saved_tokens")
+            if count(buffered) and count(durable):
+                # Restore coverage includes the RAM snapshot tail. Its extension
+                # beyond the durable head confirms buffered state without an
+                # extra read, and clears CHECKPOINT PENDING as soon as it is published.
+                row["save_pending"] = buffered > durable
+        labels = [row["state"]] if row["state"] in {
+            "BUSY/CHANGED", "ERROR", "WARN", "LOCAL CHANGES", "UNPUBLISHED DATA",
+        } else []
         row["round_ms"], row["acceptance"] = None, None
         if phase:
             if finite(phase.get("last_round_ms")) and phase["last_round_ms"] >= 0:
@@ -396,11 +418,17 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
                 blocker = identity(phase.get("blocker"))
                 if blocker:
                     name += " · " + ("earlier request" if blocker[0] == row["id"] else blocker[0][:12])
-                row["state"] = name
+                labels.append(name)
         # The disk byte counts belong to the slower inventory. Restore coverage
         # is never borrowed across a different ABI, including an explicit filter.
         if sample and row["abi"] and row["abi"] != cache.get("abi"):
             row.update(gpu=None, ram=None, disk_saved=None, cold=None, round_ms=None, acceptance=None)
+            row["save_pending"] = False
+        row["coverage"] = coverage_state(row["context"], row["cold"])
+        labels.append(row["coverage"])
+        if row["save_pending"]:
+            labels.append("CHECKPOINT PENDING")
+        row["state"] = " · ".join(labels)
     result = list(records.values())
     if selector:
         result = [row for row in result if row["id"].startswith(selector.casefold()) or any(
@@ -455,22 +483,27 @@ def dashboard_lines(report, sample, error, inventory, args, *, issues=False):
     if inventory.error:
         lines.append(f"Disk inventory: {cli.clean(inventory.error)}")
     lines.append("")
+    rows = build_rows(report, sample, selector=args.chat, abi=args.abi, now_ms=now_ms)
+    chat_width = max([24, *(len(cli.clean(row["title"])) for row in rows)])
+    state_width = max([18, *(len(cli.clean(row["state"])) for row in rows)])
     headings = (
-        f"{'CHAT / ABI':22} {'GPU tok':>9} {'RAM tok':>9} {'Disk tok':>9} {'Cold tok':>9}"
-        f" {'Round ms':>9} {'Accept(3s)':>11} {'Disk bytes':>11} {'Traffic':>11} {'PID/PORT':17}  STATE / CHAT"
+        f"{'CHAT':{chat_width}} {'STATE':{state_width}} {'ID / ABI':22}"
+        f" {'GPU tok':>9} {'RAM tok':>9} {'Disk tok':>9} {'Cold tok':>9}"
+        f" {'Context tok':>11}"
+        f" {'Disk bytes':>11} {'Traffic':>11} {'PID/PORT':17}"
     )
     lines.append(headings)
     header = len(lines)
-    for row in build_rows(report, sample, selector=args.chat, abi=args.abi, now_ms=now_ms):
+    for row in rows:
         size = lambda value: cli.human(value) if value is not None else "—"
         num = lambda value: cli.number(value) if value is not None else "—"
-        round_ms = f"{row['round_ms']:.1f}" if row['round_ms'] is not None else "—"
-        acceptance = f"{row['acceptance'] * 100:.1f}%" if row['acceptance'] is not None else "—"
         lines.append(
+            f"{cli.clean(row['title']):{chat_width}} {cli.clean(row['state']):{state_width}} "
             f"{row['id'][:12]}/{(row['abi'] or '-')[:8]:8} "
             f"{num(row['gpu']):>9} {num(row['ram']):>9} {num(row['disk_saved']):>9} {num(row['cold']):>9}"
-            f" {round_ms:>9} {acceptance:>11} {size(row['disk_bytes']):>11} {size(row['traffic_bytes']):>11}"
-            f" {cli.active(row['active_processes']):17}  {cli.clean(row['state'])} · {cli.clean(row['title'])}"
+            f" {num(row['context']):>11}"
+            f" {size(row['disk_bytes']):>11} {size(row['traffic_bytes']):>11}"
+            f" {cli.active(row['active_processes']):17}"
         )
     problems = [*(report or {}).get("issues", []), *(
         problem for row in (report or {}).get("chats", []) for problem in row["issues"]
