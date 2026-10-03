@@ -81,17 +81,20 @@ def test_snapshot_refresh_uses_latest_file_and_same_three_second_acceptance(tmp_
     path = write_sample(tmp_path / "telemetry-v1.json")
     first = live.build_rows(report(), live.read_sample(path))[0]
     assert (first["gpu"], first["ram"], first["disk_saved"], first["cold"]) == (10_000, 0, 9_000, 10)
+    assert first["context"] == 10_010
     assert first["state"] == "Generating"
     assert first["round_ms"] == 43.5
     assert first["acceptance"] == 0.6
     changed = sample()
-    changed["cache"]["chats"][0]["gpu_tokens"] = 10_005
+    changed["cache"]["chats"][0]["gpu_tokens"] = 10_015
     changed["phases"]["requests"][0].update(last_round_ms=45.7, acceptance_rate_3s=0.72)
     # Production writes are atomic renames, not modifications to an open file.
     replacement = write_sample(tmp_path / "new.json", changed)
     replacement.replace(path)
     second = live.build_rows(report(), live.read_sample(path))[0]
-    assert (second["gpu"], second["cold"], second["round_ms"], second["acceptance"]) == (10_005, 5, 45.7, 0.72)
+    assert (second["gpu"], second["cold"], second["round_ms"], second["acceptance"]) == (10_015, 0, 45.7, 0.72)
+    assert second["context"] == 10_015
+    assert second["state"] == "Generating"
 
 
 @pytest.mark.parametrize("fault", ["old", "future", "schema", "cache_count", "duplicate", "phase_array", "scheduler_array"])
@@ -195,6 +198,68 @@ def test_queue_names_blocker_and_does_not_relabel_admission_as_cold_fill():
     assert row["gpu"] == 10_000
 
 
+def test_empty_cache_only_identity_is_not_a_live_chat():
+    value = sample()
+    ghost = {
+        "chat_id": "e" * 64, "generation": "f" * 64, "gpu_tokens": 0, "ram_tokens": 0,
+        "disk_tokens": 0, "disk_saved_tokens": 0, "input_tokens": None,
+    }
+    value["cache"]["chats"].append(ghost)
+    assert [row["id"] for row in live.build_rows(report(), value)] == [CHAT]
+    value["phases"]["requests"].append({
+        "chat_id": ghost["chat_id"], "generation": ghost["generation"],
+        "phase": "admission", "input_tokens": 0,
+    })
+    rows = {row["id"]: row for row in live.build_rows(report(), value)}
+    assert rows[ghost["chat_id"]]["state"] == "Preparing response"
+    assert rows[ghost["chat_id"]]["context"] == 0
+
+
+@pytest.mark.parametrize("field,value", [
+    ("gpu_tokens", 1), ("ram_tokens", 1), ("disk_tokens", 1),
+    ("disk_saved_tokens", 1), ("input_tokens", 100), ("disk_tokens", None),
+])
+def test_cache_only_identity_with_context_data_or_unknown_head_is_retained(field, value):
+    feed = sample()
+    feed["phases"]["requests"] = []
+    feed["cache"]["chats"] = [{
+        "chat_id": CHAT, "generation": GENERATION, "gpu_tokens": 0, "ram_tokens": 0,
+        "disk_tokens": 0, "disk_saved_tokens": 0, "input_tokens": None, field: value,
+    }]
+    assert [row["id"] for row in live.build_rows(None, feed)] == [CHAT]
+
+
+def test_real_empty_chat_in_disk_inventory_is_retained():
+    feed = sample()
+    feed["phases"]["requests"] = []
+    feed["cache"]["chats"][0].update(
+        gpu_tokens=0, ram_tokens=0, disk_tokens=0, disk_saved_tokens=0, input_tokens=None,
+    )
+    assert [row["id"] for row in live.build_rows(report(), feed)] == [CHAT]
+
+
+@pytest.mark.parametrize("parked", [0, 2])
+def test_handover_header_counts_only_ram_images(tmp_path, parked):
+    feed = sample()
+    images = [
+        {"chat_id": str(i + 1) * 64, "generation": "f" * 64}
+        for i in range(parked)
+    ]
+    feed["worker"].update(
+        cached_chats=parked + 1, allocated_bytes=parked * 2**30,
+        residency={"active": {"chat_id": CHAT, "generation": GENERATION}, "images": images},
+    )
+    inventory = SimpleNamespace(completed_at=time.monotonic(), error=None, thread=None)
+    lines, _, _ = live.dashboard_lines(report(), feed, None, inventory, arguments(tmp_path))
+    assert f"Handover RAM: {cli.human(parked * 2**30)} allocated · {parked} parked chat(s)" in lines
+
+
+def test_legacy_handover_header_labels_total_as_cached_not_parked(tmp_path):
+    inventory = SimpleNamespace(completed_at=time.monotonic(), error=None, thread=None)
+    lines, _, _ = live.dashboard_lines(report(), sample(), None, inventory, arguments(tmp_path))
+    assert "Handover RAM: 1.0 GiB allocated · 1 cached chat(s)" in lines
+
+
 def test_coverage_partition_matches_pi_for_varied_memory_and_disk_states():
     cases = []
     for is_live in (False, True):
@@ -217,7 +282,8 @@ def test_coverage_partition_matches_pi_for_varied_memory_and_disk_states():
     for (cache, context), expected in zip(cases, reference, strict=True):
         actual = live.cache_breakdown(cache, cache["chats"][0], context)
         assert actual == {"gpu": expected["gpu"], "ram": expected["ram"],
-                          "cold": expected["cold"], "disk_saved": expected["diskSaved"]}
+                          "cold": expected["cold"], "disk_saved": expected["diskSaved"],
+                          "context": context}
 
 
 def test_client_joins_pi_state_and_preserves_existing_window_marker(tmp_path, monkeypatch):
@@ -267,9 +333,45 @@ def test_failed_monitor_start_keeps_valid_feed_without_fast_retry_storm(tmp_path
 def test_default_state_path_is_the_same_host_hash_as_legacy_pi(tmp_path, monkeypatch):
     monkeypatch.delenv("QWEN_RADIANCE_GPU_TEMPERATURE_STATE", raising=False)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(live.subprocess, "run", lambda *_a, **_k: SimpleNamespace(stdout="user fixture\n"))
     args = arguments(tmp_path, host="ai", telemetry_state=None)
     reader = live.SharedTelemetry(args)
     assert reader.directory == tmp_path / "qwen-radiance-gpu-temperature" / hashlib.sha256(b"ai").hexdigest()
+
+
+@pytest.mark.parametrize("alternative", ["fresh", "stale", "unsafe"])
+def test_default_dashboard_joins_the_existing_pi_reader_for_implicit_ssh_user(tmp_path, monkeypatch, alternative):
+    monkeypatch.delenv("QWEN_RADIANCE_GPU_TEMPERATURE_STATE", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    calls = []
+
+    def config(command, **kwargs):
+        calls.append(command)
+        assert kwargs["timeout"] == 1
+        return SimpleNamespace(stdout="user fixture\nhostname fixture.invalid\n")
+
+    monkeypatch.setattr(live.subprocess, "run", config)
+    root = tmp_path / "qwen-radiance-gpu-temperature"
+    original = root / hashlib.sha256(b"ai").hexdigest()
+    qualified = root / hashlib.sha256(b"fixture@ai").hexdigest()
+    value = sample()
+    if alternative == "stale":
+        value["observed_at_ms"] -= 6_000
+    write_sample(qualified / "telemetry-v1.json", value)
+    (qualified / "clients").mkdir(mode=0o700)
+    if alternative == "unsafe":
+        qualified.chmod(0o777)
+    reader = live.SharedTelemetry(arguments(tmp_path, host="ai", telemetry_state=None))
+    assert reader.directory == (qualified if alternative == "fresh" else original)
+    assert calls == [["ssh", "-G", "--", "ai"]]
+
+    # Explicit paths and user-qualified targets remain exact and do not inspect
+    # SSH configuration on every display update or for local readers.
+    calls.clear()
+    assert live.SharedTelemetry(arguments(tmp_path, host="ai")).directory == tmp_path / "telemetry"
+    assert live.SharedTelemetry(arguments(tmp_path, host="fixture@ai", telemetry_state=None)).directory == qualified
+    assert live.SharedTelemetry(arguments(tmp_path, host="local", telemetry_state=None)).directory == root / hashlib.sha256(b"local").hexdigest()
+    assert not calls
 
 
 def test_portable_cache_uses_same_state_and_deployment_as_portable_pi(tmp_path, monkeypatch):

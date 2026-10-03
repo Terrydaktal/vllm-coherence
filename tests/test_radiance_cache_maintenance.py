@@ -13,6 +13,7 @@ from qwen_r9700_lab import radiance_cache as cache
 from qwen_r9700_lab import radiance_cache_audit as audit
 from qwen_r9700_lab import radiance_cache_cli as cli
 from qwen_r9700_lab import radiance_cache_live as live
+from qwen_r9700_lab.radiance_cache_residency import ResidencyProbe
 
 ABI = "a" * 64
 OTHER_ABI = "b" * 64
@@ -306,17 +307,28 @@ def test_cli_preview_and_purge_json_are_installed_commands(tmp_path, capsys):
 def test_live_dashboard_keeps_lifetime_total_after_last_test_is_purged(tmp_path):
     store = fixture(tmp_path)
     traffic_bytes = store.io_totals()["written_file_bytes"]
+    probe = ResidencyProbe(tmp_path, ABI)
+    assert probe.disk_heads() == ({(store.chat["id"], store.chat["generation"]): 100}, True)
     cache.purge_test_chats(tmp_path)
     report = audit.scan(tmp_path)
     report["unsnapshotted_chats"] = []  # Added by the CLI's metadata correlation pass.
     assert report["io"]["written_file_bytes"] == 0
     inventory = SimpleNamespace(completed_at=time.monotonic(), error=None, thread=None)
     args = SimpleNamespace(host="local", interval=0.1, inventory_interval=30, chat=None, abi=None)
-    lines, _, _ = live.dashboard_lines(report, None, None, inventory, args)
+    now = time.time()
+    scheduler = {"pid": 123, "updated_at": now, "switches": 0, "requests": []}
+    worker = {"pid": 123, "switches": 0, "cached_chats": 0, "allocated_bytes": 0,
+              "residency": {"active": None, "images": []}}
+    sample = {"schema": live.SCHEMA, "observed_at_ms": int(now * 1000),
+              "scheduler": scheduler, "worker": worker,
+              "cache": probe.sample(scheduler, worker, None, now=now)}
+    assert sample["cache"]["chats"] == []
+    lines, _, _ = live.dashboard_lines(report, sample, None, inventory, args)
     output = "\n".join(lines)
     assert f"lifetime disk traffic {cli.human(traffic_bytes)}" in output
     assert f"{cli.human(traffic_bytes)} from deleted chats" in output
     assert "Synthetic release smoke" not in output
+    assert store.chat["id"][:12] not in output
 
 
 def test_remote_purge_sends_tested_standalone_source_and_only_requested_args(monkeypatch):

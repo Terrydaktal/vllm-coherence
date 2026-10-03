@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -120,6 +121,34 @@ def read_sample(path, now_ms=None):
     return sample
 
 
+def shared_state_directory(runtime, host):
+    """Join an existing Pi reader for the same implicit/explicit SSH user."""
+    root = runtime / "qwen-radiance-gpu-temperature"
+    original = root / hashlib.sha256(host.encode()).hexdigest()
+    if "@" in host or host in ("local", "localhost", "127.0.0.1"):
+        return original
+    try:
+        # Config inspection makes no connection and runs only at startup.
+        # `ai` and `lewis@ai` must not create separate hardware/metadata probes
+        # when Pi already has a valid reader for that effective SSH user.
+        config = subprocess.run(["ssh", "-G", "--", host], stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, check=True, timeout=1)
+        if len(config.stdout) > 65_536:
+            return original
+        users = [line.split()[1] for line in config.stdout.splitlines()
+                 if len(line.split()) == 2 and line.split()[0] == "user"]
+        if len(users) != 1 or not re.fullmatch(r"[A-Za-z0-9_.-]+", users[0]):
+            return original
+        candidate = root / hashlib.sha256(f"{users[0]}@{host}".encode()).hexdigest()
+        private_directory(candidate)
+        private_directory(candidate / "clients")
+        read_sample(candidate / "telemetry-v1.json")
+        return candidate
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return original
+
+
+
 class SharedTelemetry:
     """Register one normal Pi consumer, sharing the existing locked monitors."""
 
@@ -127,9 +156,7 @@ class SharedTelemetry:
         configured = args.telemetry_state or os.environ.get("QWEN_RADIANCE_GPU_TEMPERATURE_STATE")
         self.explicit_state = bool(configured)
         self.runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
-        self.directory = Path(configured) if configured else (
-            self.runtime / "qwen-radiance-gpu-temperature" / hashlib.sha256(args.host.encode()).hexdigest()
-        )
+        self.directory = Path(configured) if configured else shared_state_directory(self.runtime, args.host)
         self.host = args.host
         self.cache_root = args.cache_root
         self.marker = None
@@ -278,7 +305,7 @@ def cache_breakdown(cache, row, context):
         None if memory is None or disk is None else total - memory - disk
     )
     saved = row.get("disk_saved_tokens") if row else 0 if cache.get("complete") else None
-    return {"gpu": gpu, "ram": ram, "disk_saved": saved, "cold": cold}
+    return {"gpu": gpu, "ram": ram, "disk_saved": saved, "cold": cold, "context": total}
 
 
 def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
@@ -290,7 +317,8 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
     for row in report["chats"]:
         if not abi or row["abi"] == abi:
             records[row["id"]] = {
-                "id": row["id"], "abi": row["abi"], "title": cli.title(row),
+                "id": row["id"], "abi": row["abi"],
+                "title": cli.title(row) or row["metadata"].get("title") or row["id"][:12],
                 "generation": (row.get("session") or {}).get("generation") or row["metadata"].get("generation"),
                 "context": (row.get("session") or {}).get("last_turn_tokens"),
                 "published": row["metadata"].get("tokens"),
@@ -321,6 +349,16 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
             for row in source:
                 key = identity(row)
                 if key:
+                    # An older probe can still publish purged markers as empty
+                    # cache rows. Absence of data/context is not live activity;
+                    # retain real inventory rows and active requests separately.
+                    if (
+                        key not in current and row.get("input_tokens") in (None, 0)
+                        and all(count(row.get(field)) and row[field] == 0 for field in (
+                            "gpu_tokens", "ram_tokens", "disk_tokens", "disk_saved_tokens",
+                        ))
+                    ):
+                        continue
                     records.setdefault(key[0], {
                         "id": key[0], "abi": cache.get("abi"), "title": key[0][:12],
                         "generation": key[1], "context": row.get("input_tokens"), "published": None,
@@ -333,7 +371,7 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
         # than borrowing an old disk head or a prior request's round statistics.
         active = next((p for key, p in current.items() if key[0] == row["id"]), None)
         if active:
-            if row["generation"] != active["generation"]:
+            if row["generation"] != active["generation"] or not count(row["context"]):
                 row["context"] = active.get("input_tokens")
             row["generation"] = active["generation"]
         else:
@@ -389,8 +427,15 @@ def dashboard_lines(report, sample, error, inventory, args, *, issues=False):
         lines.append("Temperature sample unavailable")
     worker = sample.get("worker") or {} if sample else {}
     worker = worker if sample and worker.get("pid") == sample["scheduler"].get("pid") else {}
+    residency = worker.get("residency")
+    images = residency.get("images") if isinstance(residency, dict) else None
+    parked = (
+        f"{len(images)} parked chat(s)"
+        if isinstance(images, list) and all(identity(row) for row in images)
+        else f"{worker.get('cached_chats', 0)} cached chat(s)"
+    )
     lines.append(
-        f"Handover RAM: {cli.human(worker['allocated_bytes'])} allocated · {worker.get('cached_chats', 0)} parked chat(s)"
+        f"Handover RAM: {cli.human(worker['allocated_bytes'])} allocated · {parked}"
         if count(worker.get("allocated_bytes")) else "Handover RAM: telemetry unavailable"
     )
     if report:

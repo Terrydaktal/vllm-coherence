@@ -6,8 +6,8 @@ import pytest
 
 from qwen_r9700_lab import radiance_cache_residency as residency_module
 from qwen_r9700_lab.radiance_cache_residency import (
-    RoundAcceptance,
     ResidencyProbe,
+    RoundAcceptance,
     legacy_sample,
     public_request_phases,
     public_worker_status,
@@ -113,6 +113,44 @@ def fixture(tmp_path):
     return probe, scheduler, worker, tail, block
 
 
+def test_purged_marker_is_absent_and_same_chat_can_be_reactivated(tmp_path):
+    probe, _, _, _, block = fixture(tmp_path)
+    metadata_path = block.parent.parent.parent / "chat.json"
+    metadata = json.loads(metadata_path.read_text())
+    assert probe.disk_heads() == ({(CHAT, GEN): 40_000}, True)
+    block.unlink()
+    marker = {**metadata, "generation": OTHER, "status": "purged", "tokens": 0, "head": []}
+    metadata_path.write_text(json.dumps(marker))
+    assert probe.disk_heads() == ({}, True)
+    assert probe.disk_heads() == ({}, True)  # Cached manifest also remains excluded.
+
+    # A genuine empty chat is distinct from a deletion marker, and reusing the
+    # same ID with a new generation must make it visible again.
+    metadata_path.write_text(json.dumps({**marker, "status": "active", "generation": ABI}))
+    assert probe.disk_heads() == ({(CHAT, ABI): 0}, True)
+    revived_block = block.parent.parent / ABI / block.name
+    revived_block.parent.mkdir()
+    revived_block.write_bytes(b"reactivated synthetic KV payload")
+    details = revived_block.stat()
+    metadata_path.write_text(json.dumps({
+        **metadata, "status": "active", "generation": ABI,
+        "verified_head": {block.name: [
+            details.st_ino, details.st_size, details.st_mtime_ns, details.st_ctime_ns,
+        ]},
+    }))
+    assert probe.disk_heads() == ({(CHAT, ABI): 40_000}, True)
+
+
+@pytest.mark.parametrize("field,value", [("tokens", 1), ("head", ["g0-" + "1" * 64 + ".qkv"])])
+def test_malformed_purge_marker_remains_an_unknown_head(tmp_path, field, value):
+    probe, _, _, _, block = fixture(tmp_path)
+    path = block.parent.parent.parent / "chat.json"
+    metadata = {"id": CHAT, "generation": GEN, "status": "purged", "tokens": 0, "head": []}
+    metadata[field] = value
+    path.write_text(json.dumps(metadata))
+    assert probe.disk_heads() == ({(CHAT, GEN): None}, True)
+
+
 def test_shared_feed_refreshes_memory_every_half_second_and_verifies_disk_once_a_second(
     tmp_path, monkeypatch, capsys
 ):
@@ -144,13 +182,21 @@ def test_shared_feed_refreshes_memory_every_half_second_and_verifies_disk_once_a
 
     sources = {
         "/dev/shm/qwen-radiance-fair-public-phases.json": None,
+        "/dev/shm/qwen-radiance-fair-public-stops-status.json": None,
         "/dev/shm/qwen-radiance-fair-public-scheduler.json": scheduler,
         "/dev/shm/qwen-radiance-fair-public-worker.json": worker,
         "/dev/shm/qwen-radiance-snapshot-tail.json": tail,
     }
+    completion_reads = []
+
+    def read_status(path):
+        if path.endswith("-stops-status.json"):
+            completion_reads.append(clock[0])
+        return sources[path]
+
     monkeypatch.setattr(probe, "disk_heads", disk_heads)
     monkeypatch.setattr(residency_module, "ResidencyProbe", lambda *_: probe)
-    monkeypatch.setattr(residency_module, "optional_json", sources.__getitem__)
+    monkeypatch.setattr(residency_module, "optional_json", read_status)
     monkeypatch.setattr(residency_module.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(residency_module.time, "time", lambda: 100 + clock[0])
     monkeypatch.setattr(residency_module.time, "sleep", sleep)
@@ -167,6 +213,7 @@ def test_shared_feed_refreshes_memory_every_half_second_and_verifies_disk_once_a
     assert [value["chats"][0]["gpu_tokens"] for value in samples] == [47000, 48000, 49000]
     assert [value["chats"][0]["disk_saved_tokens"] for value in samples] == [40000, 40000, 45000]
     assert disk_checks == [0, 1]
+    assert completion_reads == [0, 1]
 
 
 def test_gpu_ram_disk_and_live_progress_are_generation_scoped(tmp_path):
@@ -205,6 +252,43 @@ def test_gpu_ram_disk_and_live_progress_are_generation_scoped(tmp_path):
     row = probe.sample(scheduler, worker, tail, now=102)["chats"][0]
     assert row["gpu_tokens"] == row["ram_tokens"] == 0
     assert row["disk_tokens"] == 47_000  # RAM tail still assists the disk restore.
+
+
+def test_completed_context_survives_idle_without_a_local_vm_transcript(tmp_path):
+    from qwen_r9700_lab.radiance_cache_live import build_rows
+
+    probe, scheduler, worker, tail, _ = fixture(tmp_path)
+    request = {"chat_id": CHAT, "generation": GEN, "state": "running",
+               "computed_tokens": 48_532, "input_tokens": 48_000}
+    scheduler["requests"] = [request]
+    probe.sample(scheduler, worker, tail, now=100)
+    scheduler["requests"] = []
+    completed = {"schema": "urn:qwen-r9700:request-stops-status:v1", "pid": 123,
+                 "recent": [{"chat_id": CHAT, "generation": GEN, "input_tokens": 48_000,
+                             "output_tokens": 533, "total_tokens": 48_533}]}
+    cache = probe.sample(scheduler, worker, tail, now=101, completion_status=completed)
+    assert cache["chats"][0]["input_tokens"] == 48_533
+    assert cache["chats"][0]["gpu_tokens"] == 48_532
+    rows = build_rows(None, {"cache": cache, "scheduler": scheduler}, now_ms=101_000)
+    assert rows[0]["context"] == 48_533
+    assert rows[0]["cold"] == 1  # Do not guess the unprocessed output from KV length.
+
+    # The idle count remains useful after the phase timer expires and in RAM.
+    scheduler["updated_at"] = tail["updated_at"] = 200
+    worker["residency"] = {"active": {"chat_id": OTHER, "generation": GEN},
+                           "images": [{"chat_id": CHAT, "generation": GEN}]}
+    assert probe.sample(scheduler, worker, tail, now=201, completion_status=completed)["chats"][0]["input_tokens"] == 48_533
+    scheduler["requests"] = [{**request, "state": "paused", "input_tokens": 49_000}]
+    assert probe.sample(scheduler, worker, tail, now=202, completion_status=completed)["chats"][0]["input_tokens"] == 49_000
+
+    scheduler["requests"] = []
+    for incompatible in (
+        {**completed, "pid": 456},
+        {**completed, "schema": "unknown"},
+        {**completed, "recent": [{**completed["recent"][0], "generation": "e" * 64}]},
+        {**completed, "recent": [{**completed["recent"][0], "total_tokens": 1}]},
+    ):
+        assert probe.sample(scheduler, worker, tail, now=203, completion_status=incompatible)["chats"][0]["input_tokens"] is None
 
 
 def test_idle_backend_is_kept_live_by_tail_heartbeat_and_stale_memory_is_unknown(tmp_path):

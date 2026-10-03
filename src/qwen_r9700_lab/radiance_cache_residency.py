@@ -203,6 +203,30 @@ def optional_json(path):
         return None
 
 
+def completed_context_tokens(status, pid):
+    """Keep completed context counts without treating them as live requests."""
+    if (
+        not count(pid) or pid == 0
+        or not isinstance(status, dict)
+        or status.get("schema") != "urn:qwen-r9700:request-stops-status:v1"
+        or status.get("pid") != pid
+        or not isinstance(status.get("recent"), list)
+        or len(status["recent"]) > 16
+    ):
+        return {}
+    result = {}
+    for row in status["recent"]:
+        key = identity(row)
+        if key is None:
+            continue
+        inputs, outputs, total = (row.get(field) for field in (
+            "input_tokens", "output_tokens", "total_tokens",
+        ))
+        if all(count(value) for value in (inputs, outputs, total)) and total == inputs + outputs:
+            result[key] = total
+    return result
+
+
 def _round_acceptance_event(value):
     """Return only safe numeric round telemetry, never payload text."""
     if not isinstance(value, dict) or value.get("schema") != "urn:qwen-r9700:decode-rounds:v1":
@@ -492,6 +516,13 @@ class ResidencyProbe:
                 tokens, head = metadata.get("tokens"), metadata.get("head")
                 if not count(tokens) or not isinstance(head, list) or len(head) > 4096:
                     raise ValueError("invalid snapshot head")
+                if metadata.get("status") == "purged":
+                    if tokens != 0 or head != []:
+                        raise ValueError("invalid purged snapshot head")
+                    # Keep the deletion marker on disk for late-writer safety
+                    # and traffic history, without presenting it as a cache.
+                    del rows[key]
+                    continue
                 if tokens == 0 and head == []:
                     rows[key] = 0
                     continue
@@ -525,10 +556,11 @@ class ResidencyProbe:
         self.manifests = {key: value for key, value in self.manifests.items() if key in present}
         return rows, complete
 
-    def sample(self, scheduler, worker, tail, now=None, *, disk_inventory=None):
+    def sample(self, scheduler, worker, tail, now=None, *, disk_inventory=None, completion_status=None):
         now = time.time() if now is None else now
         disk, complete = self.disk_heads() if disk_inventory is None else disk_inventory
         pid = scheduler.get("pid") if isinstance(scheduler, dict) else None
+        contexts = completed_context_tokens(completion_status, pid)
         tail_live = isinstance(tail, dict) and tail.get("pid") == pid and fresh(tail, now, 15)
         live = count(pid) and pid > 0 and (fresh(scheduler, now, 5) or tail_live)
         if pid != self.pid or not live:
@@ -646,7 +678,11 @@ class ResidencyProbe:
                     "ram_tokens": ram if coherent else None,
                     "disk_tokens": disk_tokens,
                     "disk_saved_tokens": disk_saved_tokens,
-                    "input_tokens": row["input_tokens"] if row else None,
+                    # Existing consumers use this field as their context bound.
+                    # While idle, use the last completed request's full context,
+                    # including output that need not have been processed into KV.
+                    # A new request supplies its own prompt count immediately.
+                    "input_tokens": row["input_tokens"] if row else contexts.get(key),
                 }
             )
         return {
@@ -682,6 +718,7 @@ def main():
     changes = StatusChanges()
     round_acceptance = RoundAcceptance()
     disk_inventory, last_disk_check = None, 0.0
+    completion_status = None
     while True:
         scheduler = optional_json("/dev/shm/qwen-radiance-fair-public-scheduler.json")
         worker = optional_json("/dev/shm/qwen-radiance-fair-public-worker.json")
@@ -691,17 +728,22 @@ def main():
             if selected != (probe.abi if probe else None):
                 probe = ResidencyProbe(root, selected) if selected else None
                 disk_inventory, last_disk_check = None, 0.0
+                completion_status = None
         # Memory counters follow the half-second shared feed; disk verification
         # retains its existing one-second cadence and cost across all Pi windows.
         if probe and (disk_inventory is None or time.monotonic() - last_disk_check >= 1):
             disk_inventory = probe.disk_heads()
+            # Completion-only numeric bookkeeping is tiny and shares the disk
+            # metadata cadence; it adds no GPU work or separate monitor/SSH call.
+            completion_status = optional_json("/dev/shm/qwen-radiance-fair-public-stops-status.json")
             last_disk_check = time.monotonic()
         tail = optional_json("/dev/shm/qwen-radiance-snapshot-tail.json")
         scheduler = observe_idle_scheduler(scheduler, tail)
         round_acceptance.read()
         phases = restore_last_round_acceptance(public_request_phases(phases), round_acceptance)
         coverage = (
-            probe.sample(scheduler, worker, tail, disk_inventory=disk_inventory) if probe else None
+            probe.sample(scheduler, worker, tail, disk_inventory=disk_inventory,
+                         completion_status=completion_status) if probe else None
         )
         print(
             "\t".join(
