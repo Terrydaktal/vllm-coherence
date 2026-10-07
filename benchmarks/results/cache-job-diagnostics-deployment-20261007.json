@@ -1,0 +1,104 @@
+{
+  "smoke_status": "PASS",
+  "health_status": 200,
+  "smoke": [
+    {
+      "kind": "api_health",
+      "http_status": 200
+    },
+    {
+      "kind": "model_identity",
+      "http_status": 200
+    },
+    {
+      "kind": "installed_source_identity",
+      "files": 7
+    },
+    {
+      "kind": "unlabelled_cache_transfer_smoke",
+      "http_status": 200,
+      "input_tokens": 2229,
+      "output_tokens": 2,
+      "finish": "stop",
+      "seconds": 2.274,
+      "response_sha256": "36833fea5e7988fe91037f3c4bd7d9de316de506bbc3b148f1bf6e2aae108392"
+    },
+    {
+      "kind": "live_diagnostic_writer_and_native_hooks",
+      "written": 146,
+      "dropped": 0,
+      "write_errors": 0,
+      "native_hooks": true,
+      "stages": {
+        "python_gc": 71,
+        "disk_write": 15,
+        "file_fsync": 15,
+        "file_publish": 15,
+        "directory_fsync": 15,
+        "namespace_collection": 2,
+        "round_start": 3,
+        "recorder_batch": 7,
+        "gpu_submit": 1,
+        "decode_sync_wait": 1,
+        "gpu_complete": 1
+      }
+    }
+  ],
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "b45f76576daad77ad5e0010c1035c2bb5ef140d8813d6b0c6ba355095fd1aaa8",
+    "qwen_radiance_response_end.py": "9e5b62165c396548b93f859c24242ffacfe934df8b2f8c3b79ccbdd62a2c0fd7",
+    "qwen_radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+    "qwen_radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+    "qwen_radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
+    "qwen_radiance_cache_telemetry.py": "1c650a5fb96cb464e067292e885fea70350ca293d62fa21299500f09fdb39bf9"
+  },
+  "recorder_health": {
+    "schema": "urn:coherence:cache-job-timings:v1",
+    "trace_id": "87ccfb1802c841d384712a92fc4ac723",
+    "pid": 947,
+    "updated_at_ms": 1791332791026,
+    "written": 146,
+    "dropped": 0,
+    "write_errors": 0,
+    "context_drops": 0,
+    "gpu_hooks": true,
+    "source_sha256": {
+      "recorder": "1c650a5fb96cb464e067292e885fea70350ca293d62fa21299500f09fdb39bf9",
+      "transfer_handler": "6154da32665430780d17c6ae1d2bf76a5399d1f807fcfb4b111aa951e5ba8e01",
+      "connector": "c3ed81b167466294e453da35b7253a4798135f959ee9350caf78e3c913171a67"
+    },
+    "pending": 0,
+    "capacity": 4096,
+    "max_file_bytes": 16777216,
+    "retained_files": 2,
+    "writer_last_batch_ms": 0.106693,
+    "writer_max_batch_ms": 26.680468
+  },
+  "data_safety": "unlabelled synthetic request; no durable chat snapshot created",
+  "schema": "urn:coherence:diagnostics-deployment:v1",
+  "recorded_at": "2026-10-07T00:28:59.238196+00:00",
+  "host": "ai",
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "runtime_abi": "2a9b3a0b1f4a77cce74de1d2d22b17e2d915cfe470e1ad4cfd9918c9e9baf801",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "scope": "Cache-job instrumentation activation. Numerical kernels and cache data format unchanged. Startup/source checks and one unlabelled synthetic API request; not a renewed numerical or performance qualification.",
+  "activation": {
+    "waited_for_idle": true,
+    "active_requests_at_stop": 0,
+    "flushed_chats_before_stop": 1,
+    "graceful_stop": true
+  },
+  "native_qualification_remaining": [
+    "matched observer-overhead measurement",
+    "instrumented cancellation/handover stress",
+    "rare-stall causal confirmation"
+  ],
+  "native_log_correlation": {
+    "matched_decode_rounds": 1,
+    "sequence_gaps": 0,
+    "invalid_records": 0,
+    "historical_rounds_excluded_from_lifecycle_matching": 14909
+  }
+}

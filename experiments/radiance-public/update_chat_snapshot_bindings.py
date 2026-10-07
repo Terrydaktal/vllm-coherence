@@ -138,6 +138,8 @@ manifest["runtime"]["chat_storage"] = {
         for p in (
             ROOT / "src/qwen_r9700_lab/radiance_cache.py",
             ROOT / "src/qwen_r9700_lab/radiance_memory.py",
+            ROOT / "src/qwen_r9700_lab/radiance_cache_telemetry.py",
+            ROOT / "src/qwen_r9700_lab/radiance_kfd_trace.py",
             BASE / "radiance_chat_tier.py",
             BASE / "radiance_fair_scheduler.py",
             BASE / "patch_chat_snapshot.py",
@@ -254,6 +256,7 @@ manifest["runtime"]["fair_scheduler"] = {
             "updates for one request"
         ),
     },
+
 }
 manifest["serving"]["max_num_seqs"] = 2
 manifest["storage"]["secondary_tier"] = "qwen_chat_fs"
@@ -298,6 +301,18 @@ data_abi = hashlib.sha256(
 ).hexdigest()
 manifest["storage"]["data_abi"] = data_abi
 manifest["storage"]["data_contract"] = data_contract
+# Retain only explicitly reviewed predecessor IDs when the serialized numerical
+# contract is unchanged. Refreshing diagnostic/startup code must not silently
+# drop the live predecessors; a new arithmetic/data ABI cannot inherit them.
+if prior.get("storage", {}).get("data_abi") == data_abi:
+    compatible = manifest["runtime"]["memory_report"]["compatible_runtime_abis"]
+    for predecessor in prior.get("runtime", {}).get("memory_report", {}).get(
+        "compatible_runtime_abis", []
+    ):
+        if not re.fullmatch(r"[0-9a-f]{64}", predecessor):
+            raise ValueError("invalid reviewed predecessor runtime ABI")
+        if predecessor not in compatible:
+            compatible.append(predecessor)
 prior_storage = prior.get("storage", {})
 manifest["storage"]["previous_data_abi"] = (
     prior_storage.get("previous_data_abi", previous_data_abi)

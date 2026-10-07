@@ -288,6 +288,12 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     assert (tmp_path / "qwen_radiance_memory.py").read_bytes() == core.with_name(
         "radiance_memory.py"
     ).read_bytes()
+    assert (tmp_path / "qwen_radiance_kfd_trace.py").read_bytes() == core.with_name(
+        "radiance_kfd_trace.py"
+    ).read_bytes()
+    assert (tmp_path / "qwen_radiance_cache_telemetry.py").read_bytes() == core.with_name(
+        "radiance_cache_telemetry.py"
+    ).read_bytes()
     assert engine.read_text().count("def qwen_response_outcome(") == 1
     assert engine.read_text().count("def qwen_answer_priority(") == 1
     assert engine.read_text().count("input_queue.get(timeout=0.02)") == 1
@@ -398,6 +404,10 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     abi = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = json.loads(path.read_text())
     assert manifest["storage"]["secondary_tier"] == "qwen_chat_fs"
+    assert {
+        "radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py",
+        "radiance_kfd_trace.py",
+    } <= manifest["runtime"]["chat_storage"]["modules"].keys()
     for name, expected in manifest["runtime"].get("release_files", {}).items():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
@@ -411,11 +421,35 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         # Increasing residency to one GPU bank and two RAM banks preserves
         # the predecessor's arithmetic and snapshot data contract.
         "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c",
+        # Cache-job diagnostics change observation only, retaining this live
+        # predecessor's arithmetic, cache contents and serialized format.
+        "9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247",
+        # Thread counters and asynchronous generation HIP markers preserve
+        # the initial cache-job recorder's arithmetic and snapshot data format.
+        "2a9b3a0b1f4a77cce74de1d2d22b17e2d915cfe470e1ad4cfd9918c9e9baf801",
+        # First-use allocation/copy/wait spans measure existing operations only;
+        # the active generation-diagnostics runtime remains compatible.
+        "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
+        # Reuse rejection diagnostics retain the preceding staged handover
+        # timing runtime's arithmetic and serialized snapshot contract.
+        "f014330cebc8c71d156dbb2ea7ac17fa5ecea14e51c6e2be481a35c0c7449586",
+        # Exact-size startup handover banks preserve all cache arithmetic and
+        # the serialized data ABI from the preceding live diagnostics release.
+        "404e7eb3c7c3c6ed105c9860c8502c4cee5928057713aa3f97f4da13b55fed7a",
+        # The opt-in KFD reader performs no GPU work and preserves the exact
+        # pinned-bank release's arithmetic and snapshot data format.
+        "a1630fae05ab4f9dd6ca6a7dcdfa55c1feaf9d36fdbb9bbb16229709c099f6b4",
+        # Process-wide THP protection changes startup host memory policy only;
+        # the previous queue-diagnostics release retains its numerical/data ABI.
+        "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
+        # Completing the generated authentication metadata leaves the already
+        # deployed process-policy code and snapshot numerical contract unchanged.
+        "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede",
     ]
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (
             REPO_ROOT / "src/qwen_r9700_lab"
-            if name in ("radiance_cache.py", "radiance_memory.py")
+            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_kfd_trace.py")
             else base
         ) / name
         assert hashlib.sha256(source.read_bytes()).hexdigest() == expected

@@ -1,6 +1,8 @@
 """Processed-position and lifetime regressions; native continuation is separate."""
 
 import importlib.util
+import json
+import logging
 import sys
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -323,6 +325,255 @@ def fake_cache(monkeypatch):
     return cache.ResponseEndCache(manager), old, step, pool, managers
 
 
+def decision_records(caplog):
+    return [
+        json.loads(record.getMessage().removeprefix("Response cache decision: "))
+        for record in caplog.records
+        if record.name == "vllm.qwen_response_end"
+    ]
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "no_endpoint",
+        "prompt_does_not_extend_endpoint",
+        "multimodal_request",
+        "prompt_embeddings",
+        "lora_request",
+        "prefix_cache_disabled",
+        "prefix_identity_unavailable",
+        "cache_salt_changed",
+        "prefix_hash_changed",
+        "partial_prefix_changed",
+        "matching_endpoint",
+    ],
+)
+def test_every_local_lookup_outcome_is_logged_without_private_data(
+    monkeypatch, caplog, reason
+):
+    c, old, step, _, _ = fake_cache(monkeypatch)
+    assert c.remember(old, step)
+    newer = SimpleNamespace(**vars(old))
+    newer.request_id = "PRIVATE-REQUEST-ID"
+    newer.all_token_ids = [*old.all_token_ids, 99]
+    newer.num_tokens += 1
+    newer.num_prompt_tokens = newer.num_tokens
+    if reason == "no_endpoint":
+        c.clear()
+    elif reason == "prompt_does_not_extend_endpoint":
+        newer.num_tokens = c.entry["tokens"]
+    elif reason == "multimodal_request":
+        newer.mm_features = ["PRIVATE-MULTIMODAL"]
+    elif reason == "prompt_embeddings":
+        newer.prompt_embeds = "PRIVATE-EMBEDDINGS"
+    elif reason == "lora_request":
+        newer.lora_request = "PRIVATE-LORA"
+    elif reason == "prefix_cache_disabled":
+        c.manager.prefix_cache_lookup_enabled = lambda _: False
+    elif reason == "prefix_identity_unavailable":
+        newer.block_hashes = []
+    elif reason == "cache_salt_changed":
+        newer.cache_salt = "PRIVATE-CACHE-SALT"
+    elif reason == "prefix_hash_changed":
+        newer.block_hashes = [b"PRIVATE-PREFIX-HASH"]
+    elif reason == "partial_prefix_changed":
+        newer.all_token_ids[12] = 123456789
+    with caplog.at_level(logging.INFO, logger="vllm.qwen_response_end"):
+        hit = c.lookup(newer)
+    assert (hit is not None) == (reason == "matching_endpoint")
+    (row,) = decision_records(caplog)
+    assert row["reason"] == reason
+    assert row["outcome"] == ("hit" if hit else "rejected")
+    assert row["cache_source"] == "gpu_endpoint"
+    assert row["endpoint_tokens"] == (0 if reason == "no_endpoint" else 14)
+    assert row["hash_size"] == 8
+    assert len(row["request_id"]) == 64
+    assert "PRIVATE-" not in caplog.text
+    assert "123456789" not in caplog.text
+    assert set(row) <= {
+        "cache_source",
+        "outcome",
+        "reason",
+        "input_tokens",
+        "computed_tokens",
+        "endpoint_tokens",
+        "hash_size",
+        "request_id",
+    }
+
+
+@pytest.mark.parametrize(
+    "mutation,reason",
+    [
+        (None, "no_endpoint"),
+        ("PRIVATE-METADATA", "invalid_endpoint_metadata"),
+        ({"schema": "PRIVATE-SCHEMA"}, "endpoint_schema_mismatch"),
+        ({"tokens": True}, "invalid_endpoint_token_count"),
+        ({"tokens": 0}, "endpoint_not_ahead"),
+        ({"tokens": 26}, "prompt_does_not_extend_endpoint"),
+        ({"tokens": 24}, "aligned_endpoint"),
+        ({"block_size": 0}, "invalid_endpoint_block_size"),
+        ({"hash_size": 2}, "hash_block_size_mismatch"),
+        ({"groups": 2}, "cache_group_count_mismatch"),
+        ({"prefix_sha256": "PRIVATE-FINGERPRINT"}, "prefix_identity_changed"),
+    ],
+)
+def test_every_durable_metadata_rejection_is_logged_before_reading_blocks(
+    endpoint_status,
+    caplog,
+    mutation,
+    reason,
+):
+    status, end, _ = endpoint_status
+    endpoint = (end | mutation) if isinstance(mutation, dict) else mutation
+    status.req.request_id = "PRIVATE-REQUEST-ID"
+    scheduler = SimpleNamespace(
+        manager=SimpleNamespace(
+            secondary_tiers=[SimpleNamespace(response_end_head=lambda _: endpoint)],
+            lookup=lambda *_: pytest.fail(
+                "rejected metadata must not issue block lookups"
+            ),
+        )
+    )
+    with caplog.at_level(logging.INFO, logger="vllm.qwen_response_end"):
+        assert offload.lookup_response_end(scheduler, status) == (False, None)
+    (row,) = decision_records(caplog)
+    assert row["reason"] == reason
+    assert row["cache_source"] == "offload_endpoint"
+    assert row["outcome"] == "rejected"
+    assert row["tier_index"] == 0
+    assert "PRIVATE-" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "unsupported_blocks_per_chunk",
+        "cache_group_block_size_mismatch",
+        "prefix_identity_unavailable",
+        "no_endpoint_tier",
+    ],
+)
+def test_durable_configuration_and_unavailable_prefix_rejections(
+    endpoint_status, caplog, reason
+):
+    status, end, _ = endpoint_status
+    tiers = [SimpleNamespace(response_end_head=lambda _: end)]
+    if reason == "unsupported_blocks_per_chunk":
+        status.config.blocks_per_chunk = 2
+    elif reason == "cache_group_block_size_mismatch":
+        status.config.kv_group_configs[-1].tokens_per_block = 8
+    elif reason == "prefix_identity_unavailable":
+        status.req.block_hashes = []
+    else:
+        tiers = [SimpleNamespace()]
+    scheduler = SimpleNamespace(manager=SimpleNamespace(secondary_tiers=tiers))
+    with caplog.at_level(logging.INFO, logger="vllm.qwen_response_end"):
+        assert offload.lookup_response_end(scheduler, status) == (False, None)
+    (row,) = decision_records(caplog)
+    assert row["reason"] == reason
+
+
+def test_dependency_polling_records_counts_and_changes_without_repeated_log_spam(
+    endpoint_status, caplog
+):
+    status, end, result = endpoint_status
+    keys, _ = offload.endpoint_dependencies(status, end)
+    found = {key: result.HIT for key in keys}
+    found[keys[-1]] = result.HIT_PENDING
+    found[keys[0]] = result.MISS
+    scheduler = SimpleNamespace(
+        manager=SimpleNamespace(
+            secondary_tiers=[SimpleNamespace(response_end_head=lambda _: end)],
+            lookup=lambda key, _: found[key],
+        )
+    )
+    with caplog.at_level(logging.INFO, logger="vllm.qwen_response_end"):
+        for _ in range(3):
+            assert offload.lookup_response_end(scheduler, status) == (False, None)
+        found[keys[0]] = result.HIT
+        for _ in range(3):
+            assert offload.lookup_response_end(scheduler, status) == (True, None)
+        found[keys[-1]] = result.HIT
+        assert offload.lookup_response_end(scheduler, status) == (True, 23)
+    rows = decision_records(caplog)
+    assert [r["reason"] for r in rows] == [
+        "missing_dependencies",
+        "pending_dependencies",
+        "matching_endpoint",
+    ]
+    assert [r["outcome"] for r in rows] == ["rejected", "loading", "hit"]
+    assert [r["missing_dependencies"] for r in rows] == [1, 0, 0]
+    assert [r["pending_dependencies"] for r in rows] == [1, 1, 0]
+    assert all(r["dependency_count"] == len(keys) for r in rows)
+    assert rows[-1]["cached_tokens"] == 23
+
+
+@pytest.mark.parametrize("mode", ["disabled", "full", "failed"])
+def test_rejection_is_in_backend_log_even_without_optional_recording(
+    monkeypatch, tmp_path, caplog, mode
+):
+    from qwen_r9700_lab import radiance_cache_telemetry as telemetry
+
+    recorder = telemetry.Recorder(
+        tmp_path / "optional", capacity=1, start=False, gc_events=False
+    )
+    monkeypatch.setattr(
+        telemetry, "_recorder", None if mode == "disabled" else recorder
+    )
+    if mode == "full":
+        recorder.emit("already_full", 0, 0)
+    elif mode == "failed":
+
+        def fail(*_, **__):
+            raise OSError("PRIVATE-WRITER-FAILURE")
+
+        monkeypatch.setattr(telemetry, "emit", fail)
+    c, old, _, _, _ = fake_cache(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="vllm.qwen_response_end"):
+        assert c.lookup(old) is None
+    (row,) = decision_records(caplog)
+    assert row["reason"] == "no_endpoint"
+    assert "PRIVATE-WRITER-FAILURE" not in caplog.text
+    if mode == "full":
+        assert recorder.dropped == 1
+
+
+def test_structured_lookup_record_reaches_writer_with_whitelisted_fields(
+    monkeypatch, tmp_path
+):
+    from qwen_r9700_lab import radiance_cache_telemetry as telemetry
+
+    recorder = telemetry.Recorder(tmp_path / "lookup", start=False, gc_events=False)
+    monkeypatch.setattr(telemetry, "_recorder", recorder)
+    req = SimpleNamespace(
+        request_id="PRIVATE-REQUEST-ID",
+        cache_salt=f"private:{'a' * 64}:{'b' * 64}",
+        num_prompt_tokens=197565,
+        num_computed_tokens=0,
+    )
+    cache.record_response_end_decision(
+        req,
+        "gpu_endpoint",
+        "rejected",
+        "prefix_hash_changed",
+        endpoint_tokens=197486,
+        hash_size=16,
+        raw_token_values="PRIVATE-TOKENS",
+        prefix_sha256="PRIVATE-HASH",
+    )
+    recorder.flush()
+    (row,) = [json.loads(line) for line in recorder.path.read_text().splitlines()]
+    assert row["stage"] == "response_end_lookup"
+    assert row["reason"] == "prefix_hash_changed"
+    assert row["endpoint_tokens"] == 197486
+    assert row["hash_size"] == 16
+    assert row["input_tokens"] == 197565
+    assert row["chat_id"] == "a" * 64 and row["generation"] == "b" * 64
+    assert "PRIVATE-" not in recorder.path.read_text()
+
+
 def test_pins_survive_producer_free_and_are_released_once(monkeypatch):
     c, old, step, pool, groups = fake_cache(monkeypatch)
     assert c.remember(old, step)
@@ -420,7 +671,9 @@ def test_terminal_successor_does_not_release_its_new_checkpoint(monkeypatch):
     assert c.entry is replacement
 
 
-@pytest.mark.parametrize("change", ["different_prefix", "shorter_prompt", "same_length"])
+@pytest.mark.parametrize(
+    "change", ["different_prefix", "shorter_prompt", "same_length"]
+)
 def test_unused_endpoint_releases_only_its_pins_after_lookup_miss(monkeypatch, change):
     c, old, step, pool, groups = fake_cache(monkeypatch)
     assert c.remember(old, step)
@@ -447,10 +700,20 @@ def test_unused_endpoint_releases_only_its_pins_after_lookup_miss(monkeypatch, c
     assert not c.release_unused(newer)
 
 
-@pytest.mark.parametrize("guard", [
-    "no_lookup", "matching_lease", "other_lease", "local_hit", "computed",
-    "in_flight", "queued_copy", "in_flight_copy", "transfer",
-])
+@pytest.mark.parametrize(
+    "guard",
+    [
+        "no_lookup",
+        "matching_lease",
+        "other_lease",
+        "local_hit",
+        "computed",
+        "in_flight",
+        "queued_copy",
+        "in_flight_copy",
+        "transfer",
+    ],
+)
 def test_unused_endpoint_preserves_live_ownership_and_pending_work(monkeypatch, guard):
     c, old, step, pool, _ = fake_cache(monkeypatch)
     assert c.remember(old, step)
@@ -464,7 +727,9 @@ def test_unused_endpoint_preserves_live_ownership_and_pending_work(monkeypatch, 
     if guard == "no_lookup":
         del newer._qwen_response_end_lease
     elif guard in {"matching_lease", "other_lease"}:
-        newer._qwen_response_end_lease = entry if guard == "matching_lease" else dict(entry)
+        newer._qwen_response_end_lease = (
+            entry if guard == "matching_lease" else dict(entry)
+        )
     elif guard == "local_hit":
         newer.qwen_response_end_local = 14
     elif guard == "computed":
@@ -488,16 +753,21 @@ def test_pressure_reclaim_preserves_current_speculative_and_transfer_state(
     monkeypatch, computed, first_required
 ):
     c, req, _, pool, groups = fake_cache(monkeypatch)
-    monkeypatch.setattr(pool, "get_num_free_blocks", lambda: sum(
-        b.ref_cnt == 0 and not b.is_null for b in pool.blocks
-    ))
+    monkeypatch.setattr(
+        pool,
+        "get_num_free_blocks",
+        lambda: sum(b.ref_cnt == 0 and not b.is_null for b in pool.blocks),
+    )
     req.num_computed_tokens = computed
     before = [list(group.req_to_blocks["old"]) for group in groups]
     protected = before[1][3]
     req.num_in_flight_tokens = 8
     assert cache.reclaim_snapshot_history(c.manager, req, [protected.block_id]) == 0
     req.num_in_flight_tokens = 0
-    assert cache.reclaim_snapshot_history(c.manager, req, [protected.block_id]) == first_required - 1
+    assert (
+        cache.reclaim_snapshot_history(c.manager, req, [protected.block_id])
+        == first_required - 1
+    )
     assert groups[0].req_to_blocks["old"] == before[0]
     assert groups[2].req_to_blocks["old"] == before[2]
     after = groups[1].req_to_blocks["old"]

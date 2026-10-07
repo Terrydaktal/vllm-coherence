@@ -58,10 +58,10 @@ readonly PROGRAM=pi-remote-qwen-radiance
 readonly PI_VERSION=0.84.2
 readonly MODEL_ID=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
 readonly PI_MODEL="qwen-r9700/$MODEL_ID"
-readonly SNAPSHOT_ABI=9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247
+readonly SNAPSHOT_ABI=d5eef8c4f6f925b8e05bbb7a2a2337561d8caa7a4633e73b7553023cfc79cb14
 readonly SNAPSHOT_DATA_ABI=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly SNAPSHOT_PATCH_SHA256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
-readonly REMOTE_LAUNCHER_SHA256=df891261519225dd923d9d1564e8a4e7080b44e4c187fcfe7b11b031f754d25b
+readonly REMOTE_LAUNCHER_SHA256=9c5504417f9d0be7234752453bce3d0fab49e36ad3ff77a35c7a261c602c0d54
 readonly IMAGE_ID=4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf
 readonly DEFAULT_REMOTE=lewis@ai
 readonly AUTO_LOCAL_PORT_FIRST=8012
@@ -434,6 +434,8 @@ readonly launcher_source="$project_root/experiments/radiance-public/launch_publi
 readonly patch_source="$project_root/experiments/radiance-public/patch_streaming_snapshot.py"
 readonly cache_module="$project_root/src/qwen_r9700_lab/radiance_cache.py"
 readonly memory_module="$project_root/src/qwen_r9700_lab/radiance_memory.py"
+readonly cache_telemetry_module="$project_root/src/qwen_r9700_lab/radiance_cache_telemetry.py"
+readonly kfd_trace_module="$project_root/src/qwen_r9700_lab/radiance_kfd_trace.py"
 readonly cache_tier_module="$project_root/experiments/radiance-public/radiance_chat_tier.py"
 readonly fair_scheduler_module="$project_root/experiments/radiance-public/radiance_fair_scheduler.py"
 readonly cache_patch_module="$project_root/experiments/radiance-public/patch_chat_snapshot.py"
@@ -504,7 +506,7 @@ done
 if ((reuse_existing == 0)); then
 	[[ $(sha256sum -- "$launcher_source" | awk '{print $1}') == "$REMOTE_LAUNCHER_SHA256" ]] || die 'local server launcher hash mismatch'
 	[[ $(sha256sum -- "$patch_source" | awk '{print $1}') == "$SNAPSHOT_PATCH_SHA256" ]] || die 'local snapshot patch hash mismatch'
-	for module in "$cache_module" "$memory_module" "$cache_tier_module" "$fair_scheduler_module" "$cache_patch_module"; do
+	for module in "$cache_module" "$memory_module" "$cache_telemetry_module" "$kfd_trace_module" "$cache_tier_module" "$fair_scheduler_module" "$cache_patch_module"; do
 		[[ -f $module && ! -L $module ]] || die "missing chat storage module: $module"
 		expected=$(jq -r --arg name "${module##*/}" '.runtime.chat_storage.modules[$name]' "$abi_source")
 		[[ $(sha256sum "$module" | awk '{print $1}') == "$expected" ]] || die "chat storage module hash mismatch: $module"
@@ -564,6 +566,8 @@ ssh -T "$remote_host" /usr/bin/bash -s -- \
 	"$remote_patch" "$SNAPSHOT_PATCH_SHA256" \
 	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_cache.py" "$(jq -r '.runtime.chat_storage.modules["radiance_cache.py"]' "$abi_source")" \
 	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_memory.py" "$(jq -r '.runtime.chat_storage.modules["radiance_memory.py"]' "$abi_source")" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_cache_telemetry.py" "$(jq -r '.runtime.chat_storage.modules["radiance_cache_telemetry.py"]' "$abi_source")" \
+	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_kfd_trace.py" "$(jq -r '.runtime.chat_storage.modules["radiance_kfd_trace.py"]' "$abi_source")" \
 	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_chat_tier.py" "$(jq -r '.runtime.chat_storage.modules["radiance_chat_tier.py"]' "$abi_source")" \
 	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_fair_scheduler.py" "$(jq -r '.runtime.chat_storage.modules["radiance_fair_scheduler.py"]' "$abi_source")" \
 	"$REMOTE_ROOT/radiance-vllm-mxfp4/patch_chat_snapshot.py" "$(jq -r '.runtime.chat_storage.modules["patch_chat_snapshot.py"]' "$abi_source")" \

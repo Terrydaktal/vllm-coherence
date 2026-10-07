@@ -1,0 +1,562 @@
+{
+  "schema": "urn:coherence:kfd-round-diagnosis:v1",
+  "trace_id": "10e22332dc4e4e6ba96f5d2bdd2ae87d",
+  "runtime_abi": "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
+  "capture_seconds": 300.000177359,
+  "event_bytes": 10608,
+  "timed_rounds": 2050,
+  "context_range": [
+    205155,
+    213540
+  ],
+  "round_mean_ms": 53.727120487804875,
+  "round_median_ms": 51.5355,
+  "round_max_ms": 407.783,
+  "rounds_at_least_65_ms": 28,
+  "rounds_at_least_500_ms": 0,
+  "events_by_kind": {
+    "9": 111,
+    "10": 201
+  },
+  "eviction_cycles": 65,
+  "restore_rescheduled": 90,
+  "unmatched_restores": 0,
+  "unfinished_evictions": 0,
+  "unknown_restores": 0,
+  "clock_offset_ns": 1490,
+  "clock_offset_change_ns": -1240,
+  "outliers": [
+    {
+      "round": 2,
+      "context_tokens": 205155,
+      "round_ms": 407.783,
+      "eviction_interval_overlap_ms": 345.3899,
+      "residual_ms": 62.393100000000004,
+      "eviction_cycles": 1,
+      "restore_retries": 3,
+      "trigger_counts": {
+        "0": 1,
+        "1": 2
+      },
+      "gpu_elapsed_ms": 401.997528,
+      "host_submission_ms": 13.250012,
+      "main_thread_cpu_ms": 404.570719,
+      "main_thread_minor_faults": 3,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1838,
+      "context_tokens": 212568,
+      "round_ms": 394.146,
+      "eviction_interval_overlap_ms": 339.179673,
+      "residual_ms": 54.966327000000035,
+      "eviction_cycles": 2,
+      "restore_retries": 4,
+      "trigger_counts": {
+        "0": 2
+      },
+      "gpu_elapsed_ms": 394.161926,
+      "host_submission_ms": 5.247789,
+      "main_thread_cpu_ms": 392.624066,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 2023,
+      "context_tokens": 213401,
+      "round_ms": 363.172,
+      "eviction_interval_overlap_ms": 308.885183,
+      "residual_ms": 54.28681700000004,
+      "eviction_cycles": 1,
+      "restore_retries": 3,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 363.105225,
+      "host_submission_ms": 4.556696,
+      "main_thread_cpu_ms": 361.973727,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1502,
+      "context_tokens": 211061,
+      "round_ms": 355.683,
+      "eviction_interval_overlap_ms": 300.859939,
+      "residual_ms": 54.823060999999996,
+      "eviction_cycles": 2,
+      "restore_retries": 2,
+      "trigger_counts": {
+        "0": 2,
+        "1": 2
+      },
+      "gpu_elapsed_ms": 355.650635,
+      "host_submission_ms": 8.37266,
+      "main_thread_cpu_ms": 353.932413,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1846,
+      "context_tokens": 212617,
+      "round_ms": 323.259,
+      "eviction_interval_overlap_ms": 270.203313,
+      "residual_ms": 53.055687000000034,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 323.357788,
+      "host_submission_ms": 5.438992,
+      "main_thread_cpu_ms": 321.493365,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 750,
+      "context_tokens": 207664,
+      "round_ms": 315.24,
+      "eviction_interval_overlap_ms": 261.999547,
+      "residual_ms": 53.240453,
+      "eviction_cycles": 1,
+      "restore_retries": 3,
+      "trigger_counts": {
+        "0": 1,
+        "1": 2
+      },
+      "gpu_elapsed_ms": 315.375946,
+      "host_submission_ms": 5.085175,
+      "main_thread_cpu_ms": 313.574592,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 3,
+      "context_tokens": 205157,
+      "round_ms": 312.758,
+      "eviction_interval_overlap_ms": 258.806984,
+      "residual_ms": 53.95101599999998,
+      "eviction_cycles": 1,
+      "restore_retries": 2,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 312.926971,
+      "host_submission_ms": 6.119053,
+      "main_thread_cpu_ms": 310.821642,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1484,
+      "context_tokens": 210961,
+      "round_ms": 297.649,
+      "eviction_interval_overlap_ms": 243.751968,
+      "residual_ms": 53.897031999999996,
+      "eviction_cycles": 1,
+      "restore_retries": 3,
+      "trigger_counts": {
+        "0": 1,
+        "1": 2
+      },
+      "gpu_elapsed_ms": 297.786346,
+      "host_submission_ms": 6.059242,
+      "main_thread_cpu_ms": 295.988927,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 261,
+      "context_tokens": 206013,
+      "round_ms": 284.567,
+      "eviction_interval_overlap_ms": 231.094037,
+      "residual_ms": 53.47296300000002,
+      "eviction_cycles": 1,
+      "restore_retries": 3,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 284.633484,
+      "host_submission_ms": 5.077136,
+      "main_thread_cpu_ms": 282.656504,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1152,
+      "context_tokens": 209318,
+      "round_ms": 258.958,
+      "eviction_interval_overlap_ms": 206.022714,
+      "residual_ms": 52.93528600000002,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 259.040436,
+      "host_submission_ms": 5.414721,
+      "main_thread_cpu_ms": 257.430156,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 491,
+      "context_tokens": 206841,
+      "round_ms": 223.518,
+      "eviction_interval_overlap_ms": 169.691104,
+      "residual_ms": 53.826896000000005,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 52.49152,
+      "host_submission_ms": 5.131806,
+      "main_thread_cpu_ms": 222.341835,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 686,
+      "context_tokens": 207455,
+      "round_ms": 222.351,
+      "eviction_interval_overlap_ms": 169.655144,
+      "residual_ms": 52.69585599999999,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 222.438705,
+      "host_submission_ms": 4.381584,
+      "main_thread_cpu_ms": 221.652635,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 105,
+      "context_tokens": 205482,
+      "round_ms": 207.569,
+      "eviction_interval_overlap_ms": 154.801294,
+      "residual_ms": 52.767705999999976,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 207.644958,
+      "host_submission_ms": 5.206827,
+      "main_thread_cpu_ms": 206.831711,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 876,
+      "context_tokens": 208201,
+      "round_ms": 202.402,
+      "eviction_interval_overlap_ms": 148.618269,
+      "residual_ms": 53.78373099999999,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 52.636089,
+      "host_submission_ms": 4.839741,
+      "main_thread_cpu_ms": 201.596199,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1070,
+      "context_tokens": 208978,
+      "round_ms": 172.973,
+      "eviction_interval_overlap_ms": 119.604082,
+      "residual_ms": 53.36891800000001,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 173.193863,
+      "host_submission_ms": 8.193288,
+      "main_thread_cpu_ms": 172.11813,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 293,
+      "context_tokens": 206143,
+      "round_ms": 163.561,
+      "eviction_interval_overlap_ms": 111.182411,
+      "residual_ms": 52.378589000000005,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 163.607803,
+      "host_submission_ms": 4.547576,
+      "main_thread_cpu_ms": 162.846488,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1642,
+      "context_tokens": 211703,
+      "round_ms": 159.249,
+      "eviction_interval_overlap_ms": 106.49584,
+      "residual_ms": 52.753159999999994,
+      "eviction_cycles": 1,
+      "restore_retries": 0,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 159.334564,
+      "host_submission_ms": 4.809851,
+      "main_thread_cpu_ms": 158.456196,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1262,
+      "context_tokens": 209818,
+      "round_ms": 158.364,
+      "eviction_interval_overlap_ms": 105.220969,
+      "residual_ms": 53.14303100000001,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 158.439331,
+      "host_submission_ms": 4.671099,
+      "main_thread_cpu_ms": 157.774376,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 204,
+      "context_tokens": 205794,
+      "round_ms": 152.528,
+      "eviction_interval_overlap_ms": 99.30697,
+      "residual_ms": 53.221029999999985,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1,
+        "1": 2
+      },
+      "gpu_elapsed_ms": 152.520813,
+      "host_submission_ms": 7.71119,
+      "main_thread_cpu_ms": 151.780704,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1458,
+      "context_tokens": 210831,
+      "round_ms": 152.175,
+      "eviction_interval_overlap_ms": 99.625055,
+      "residual_ms": 52.54994500000001,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 152.221268,
+      "host_submission_ms": 4.623378,
+      "main_thread_cpu_ms": 151.538864,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 203,
+      "context_tokens": 205789,
+      "round_ms": 142.082,
+      "eviction_interval_overlap_ms": 88.884085,
+      "residual_ms": 53.197914999999995,
+      "eviction_cycles": 2,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 2,
+        "1": 1
+      },
+      "gpu_elapsed_ms": 142.077484,
+      "host_submission_ms": 5.262239,
+      "main_thread_cpu_ms": 141.389962,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 826,
+      "context_tokens": 207957,
+      "round_ms": 103.232,
+      "eviction_interval_overlap_ms": 50.839135,
+      "residual_ms": 52.392865,
+      "eviction_cycles": 1,
+      "restore_retries": 1,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 103.282745,
+      "host_submission_ms": 4.701019,
+      "main_thread_cpu_ms": 102.56564,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1501,
+      "context_tokens": 211053,
+      "round_ms": 88.759,
+      "eviction_interval_overlap_ms": 35.384656,
+      "residual_ms": 53.374344,
+      "eviction_cycles": 2,
+      "restore_retries": 0,
+      "trigger_counts": {
+        "0": 2
+      },
+      "gpu_elapsed_ms": 88.781937,
+      "host_submission_ms": 4.856702,
+      "main_thread_cpu_ms": 88.283676,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1067,
+      "context_tokens": 208966,
+      "round_ms": 86.702,
+      "eviction_interval_overlap_ms": 33.660146,
+      "residual_ms": 53.041854,
+      "eviction_cycles": 2,
+      "restore_retries": 0,
+      "trigger_counts": {
+        "1": 1,
+        "0": 2
+      },
+      "gpu_elapsed_ms": 75.309113,
+      "host_submission_ms": 6.330826,
+      "main_thread_cpu_ms": 86.158015,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1069,
+      "context_tokens": 208975,
+      "round_ms": 79.268,
+      "eviction_interval_overlap_ms": 26.546956,
+      "residual_ms": 52.721044,
+      "eviction_cycles": 1,
+      "restore_retries": 0,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 79.137627,
+      "host_submission_ms": 5.992681,
+      "main_thread_cpu_ms": 78.791723,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1840,
+      "context_tokens": 212580,
+      "round_ms": 73.895,
+      "eviction_interval_overlap_ms": 20.411593,
+      "residual_ms": 53.483407,
+      "eviction_cycles": 1,
+      "restore_retries": 0,
+      "trigger_counts": {
+        "0": 1
+      },
+      "gpu_elapsed_ms": 73.759857,
+      "host_submission_ms": 6.157813,
+      "main_thread_cpu_ms": 73.510681,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 1482,
+      "context_tokens": 210956,
+      "round_ms": 68.583,
+      "eviction_interval_overlap_ms": 0.0,
+      "residual_ms": 68.583,
+      "eviction_cycles": 0,
+      "restore_retries": 0,
+      "trigger_counts": {},
+      "gpu_elapsed_ms": 67.924919,
+      "host_submission_ms": 4.638798,
+      "main_thread_cpu_ms": 68.28522,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    },
+    {
+      "round": 748,
+      "context_tokens": 207658,
+      "round_ms": 68.277,
+      "eviction_interval_overlap_ms": 0.0,
+      "residual_ms": 68.277,
+      "eviction_cycles": 0,
+      "restore_retries": 0,
+      "trigger_counts": {},
+      "gpu_elapsed_ms": 67.638893,
+      "host_submission_ms": 4.7548,
+      "main_thread_cpu_ms": 67.993171,
+      "main_thread_minor_faults": 0,
+      "main_thread_major_faults": 0
+    }
+  ],
+  "scope": "Nested eviction requests remain active until each has a corresponding non-retry restore. Driver events mark requests before actual queue operations; their intervals are diagnostic approximations, not kernel execution times. Only this captured lifecycle is joined. Kernel FIFO drops remain unobservable.",
+  "observed_at": "2026-10-07",
+  "capture_manifest_sha256": "b0854c409eaf079b1e21b638b163d9d88db19939db77e4a59804586e236d3230",
+  "raw_kfd_sha256": "3e708a394f831dbb98df7f6db95e6440f0cad14e8885a332087628bafe71fb87",
+  "captured_outliers_overlapping_eviction": 26,
+  "main_thread_faults_at_nonstartup_outliers": 0,
+  "recorded_eviction_triggers": {
+    "SVM": 65,
+    "USERPTR": 46
+  },
+  "findings": [
+    "26 of 28 rounds at least 65 ms overlap process-local queue eviction intervals. Their remaining time is 52.379\u201362.393 ms.",
+    "Matched GPU intervals confirm delayed stream progress; submission took a few milliseconds and non-startup main-thread outliers had no page faults.",
+    "Driver eviction triggers identify SVM and USERPTR memory-mapping invalidation, with repeated restoration retries.",
+    "No round reached 500 ms during this bounded capture. The previous 2,132.826 ms incident remains a separate historical observation without a simultaneous driver capture."
+  ],
+  "remaining_uncertainty": [
+    "The specific CPU mapping and initiating CPU action are not identified by queue events.",
+    "Huge-page promotion of other remaining eligible mappings is plausible but not directly established.",
+    "Two 68 ms rounds have no recorded queue eviction. Silent FIFO loss and other kernel/dependency effects are not excluded.",
+    "The recorder adds host activity; this capture is not a zero-overhead throughput benchmark."
+  ],
+  "capture_health": {
+    "dropped": 0,
+    "write_errors": 0,
+    "round_sample_errors": 0,
+    "gpu_rounds": {
+      "capacity": 64,
+      "pending": 0,
+      "free": 63,
+      "completed": 2050,
+      "dropped": 0,
+      "errors": 0,
+      "quarantined": 0
+    },
+    "kfd_capture": {
+      "state": "duration_limit",
+      "pid": 629,
+      "bytes": 10608,
+      "duration_limit_seconds": 300,
+      "byte_limit": 67108864,
+      "error_errno": null
+    }
+  },
+  "privacy": "Aggregate numeric diagnostics only. No chat contents, token IDs or model tensor values inspected or retained."
+}

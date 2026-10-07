@@ -1,0 +1,66 @@
+{
+  "schema": "urn:coherence:diagnostics-deployment:v1",
+  "recorded_at": "2026-10-07T12:17:42.893055+00:00",
+  "host": "ai",
+  "runtime_abi": "404e7eb3c7c3c6ed105c9860c8502c4cee5928057713aa3f97f4da13b55fed7a",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "scope": "Response-end rejection and ordinary prefix fallback logging; first-use pinned allocation/copy/wait CPU spans. No numerical kernels, snapshot payloads or valid reuse decisions changed. Existing generation-round diagnostics remain enabled and install their runtime hooks on the first scheduled natural request.",
+  "activation": {
+    "waited_for_idle": true,
+    "active_requests_at_stop": 0,
+    "queued_requests_at_stop": 0,
+    "graceful_stop": true,
+    "flushed_chats_before_stop": 0,
+    "saved_chat_caches_preserved": true
+  },
+  "backend": {
+    "running": true,
+    "ready": true,
+    "pinned": true,
+    "startup_operation_complete": true
+  },
+  "cpu_checks": {
+    "passed": 383,
+    "scope": "Response-end GPU/offload reasons, dependency transitions, privacy and real writer, scheduler fallback, actual SSH argument joining, installed source and snapshot bindings, lifecycle and release CPU regressions"
+  },
+  "installed_source_hashes": {
+    "qwen_radiance_cache_telemetry.py": "6071470a989f55400e31ff7603d11463a66fa8f430d5323d88c66e7e1ccf3cfa",
+    "qwen_radiance_fair_scheduler.py": "43d85a35b666e2721386502f00ed4a257eecd8f64548d601a5b806df3121d9df",
+    "qwen_radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "qwen_radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71"
+  },
+  "recorder_health": {
+    "schema": "urn:coherence:cache-job-timings:v1",
+    "pid": 946,
+    "trace_id": "870e53aba00a4b2f82cf7705b7df5a05",
+    "updated_at_ms": 1791375434209,
+    "written": 132,
+    "dropped": 0,
+    "write_errors": 0,
+    "source_sha256": {
+      "recorder": "6071470a989f55400e31ff7603d11463a66fa8f430d5323d88c66e7e1ccf3cfa"
+    },
+    "gpu_hooks": false,
+    "generation_round_telemetry": true,
+    "sample_age_seconds": 0.037
+  },
+  "native_CPU_logger_check": {
+    "info_enabled": true,
+    "decision_records": 1,
+    "repeated_identical_decision_deduplicated": true,
+    "tested_reason": "no_endpoint",
+    "GPU_model_prompt_sent": false
+  },
+  "launcher_checks": {
+    "remote_preflight": "PASS",
+    "actual_remote_authentication": "existing",
+    "compatible_predecessor_authenticated_before_restart": true,
+    "source_of_fix": "Encode compatible ABI list as one comma-separated SSH argument; parse every authenticated entry remotely."
+  },
+  "data_safety": "Only status labels, counts and hashes inspected. No user chat contents, token values or model tensors read; no model benchmark prompt sent.",
+  "qualification_limits": [
+    "CPU logger probe is not a production-request cache miss/hit test.",
+    "A future natural request must supply the incident-specific rejection reason.",
+    "No native observer-overhead benchmark or new numerical qualification performed."
+  ]
+}

@@ -81,8 +81,8 @@
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
       "patch_dflash_response_cache.py": "65b63fb943d42ae0e7661fee72abaf37d174c1eee3ce08cfe26b851f4a51b1b0",
-      "radiance_response_end.py": "9e5b62165c396548b93f859c24242ffacfe934df8b2f8c3b79ccbdd62a2c0fd7",
-      "radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+      "radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+      "radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71",
       "patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5",
       "patch_gdn_initial_prefill.py": "08ee2400af3d35703d9ae9bef931d863c7cbf4009d479a5ce3346fbaae64c86a",
       "patch_gdn_extreme_decay.py": "fe976580b26f83fc0051c0afe1ce0eb9bd7b4391bec9a956e16df20c212cf04e",
@@ -393,18 +393,19 @@
       "format": "qwen-chat-cache-v1",
       "tier": "qwen_chat_fs",
       "modules": {
-        "radiance_cache.py": "0597bbace19be39be20ed5d5cbcf8b14fc67d0121b9034be7139d993d44e57cb",
+        "radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
         "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
-        "radiance_chat_tier.py": "6df820db27b15bb502959b081c2b9e54821a300fd2a290c898b9819edcb45d1a",
-        "radiance_fair_scheduler.py": "7c78e053fd291bc52ad5c0b95027e170b373651a1689a1b460926f3a43c5d446",
-        "patch_chat_snapshot.py": "a8d4633ebda02e0b4b2ac8e921b8e2ed9d04e43f5bb53cdb052e8e55b17639a7"
+        "radiance_cache_telemetry.py": "27ad70a51c8bd1d41a34e65d1625e1534150ae6048282ea49100060b0cb5e6b1",
+        "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
+        "radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+        "radiance_fair_scheduler.py": "36e173aab7aa6a005283922e09667b9094755fd2ba9c9c2144b149b3ff495f17",
+        "patch_chat_snapshot.py": "91c81219478b3f70d37f1925fd5b4a7b8f1fbd710c727c5d965152689284482e"
       }
     },
     "response_end_reuse": {
       "schema": "urn:coherence:response-end:v1",
       "scope": "synchronous V2 DFlash; token-only TP1; full/sliding attention and aligned Mamba",
-      "contract": "Reuse only the exact processed visible prefix. Pin immutable attention tails; copy accepted GDN/conv state to a canonical endpoint. Exclude an emitted-but-unprocessed token and decline an overwritten early-stop state. Persist domain-separated endpoint keys with complete-prefix dependencies; retain the prior disk head until verification. Unchanged physical layout, quantization and numerical kernels.",
-      "admission_pressure": "Release unused GPU endpoint references after a prefix miss if full-prompt admission cannot fit; preserve matching leases, in-flight work, pending copies and protected transfers; disk state and arithmetic unchanged."
+      "contract": "Reuse only the exact processed visible prefix. Pin immutable attention tails; copy accepted GDN/conv state to a canonical endpoint. Exclude an emitted-but-unprocessed token and decline an overwritten early-stop state. Persist domain-separated endpoint keys with complete-prefix dependencies; retain the prior disk head until verification. Unchanged physical layout, quantization and numerical kernels."
     },
     "memory_report": {
       "schema": "urn:qwen-r9700:radiance-memory:v1",
@@ -421,7 +422,15 @@
         "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
         "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
-        "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c"
+        "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c",
+        "9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247",
+        "2a9b3a0b1f4a77cce74de1d2d22b17e2d915cfe470e1ad4cfd9918c9e9baf801",
+        "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
+        "f014330cebc8c71d156dbb2ea7ac17fa5ecea14e51c6e2be481a35c0c7449586",
+        "404e7eb3c7c3c6ed105c9860c8502c4cee5928057713aa3f97f4da13b55fed7a",
+        "a1630fae05ab4f9dd6ca6a7dcdfa55c1feaf9d36fdbb9bbb16229709c099f6b4",
+        "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
+        "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede"
       ]
     },
     "buffered_tool_usage": {
@@ -432,7 +441,7 @@
     "fair_scheduler": {
       "class": "qwen_radiance_fair_scheduler.FairScheduler",
       "policy": "uninterrupted responses; least-recently-served waiting chat at completion; handover overlaps client-side tool execution; reserve selected response through cache admission until completion or cancellation; swaps alone do not count as service; 2-second grace for completed tool calls; 30-second queue-age override at next boundary; equal priorities preserve this policy; higher priority 1 reserves the whole answer; higher priority 2 parks a response at the next safe synchronous step",
-      "maximum_cached_chats": 3,
+      "maximum_cached_chats": 2,
       "pinned_host_page_policy": "MADV_NOHUGEPAGE on complete anonymous backing mappings after pinned allocation and before DMA; prevent khugepaged HSA queue invalidation; retain allocator ownership and existing snapshot data ABI",
       "runner_state_slots": 2,
       "maximum_dispatched_sequences": 1,
@@ -464,15 +473,6 @@
         "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
         "retention": "last numeric response timings plus cumulative generation-round and draft/accepted counters per generation; at most 16 generations",
         "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
-      },
-      "request_stop_telemetry": {
-        "schema": "urn:qwen-r9700:request-stops:v1",
-        "status_schema": "urn:qwen-r9700:request-stops-status:v1",
-        "path": "/dev/shm/qwen-radiance-fair-public-stops.jsonl",
-        "max_file_bytes": 1048576,
-        "rotated_files": 1,
-        "maximum_pending_records": 64,
-        "contract": "one CPU-only terminal record per completed EngineCore request; capture before cleanup and publish after final round accounting; hashed identities, stop category, counts and whitelisted sampling; no text, token IDs, device reads, GPU fences or per-token hooks; bounded loss counters; stable existing Pi phase wire format"
       }
     }
   },

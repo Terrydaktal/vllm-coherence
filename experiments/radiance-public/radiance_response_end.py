@@ -7,7 +7,121 @@ uses the existing salted hash chain plus exact token IDs in the partial block;
 those IDs stay in memory and are never put in telemetry.
 """
 
+import hashlib
+import json
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger("vllm.qwen_response_end")
+DECISION_REASONS = frozenset(
+    {
+        "no_endpoint",
+        "response_end_disabled",
+        "prompt_does_not_extend_endpoint",
+        "multimodal_request",
+        "prompt_embeddings",
+        "lora_request",
+        "prefix_cache_disabled",
+        "prefix_identity_unavailable",
+        "cache_salt_changed",
+        "prefix_hash_changed",
+        "partial_prefix_changed",
+        "prefix_identity_changed",
+        "endpoint_schema_mismatch",
+        "invalid_endpoint_metadata",
+        "invalid_endpoint_token_count",
+        "invalid_endpoint_block_size",
+        "endpoint_not_ahead",
+        "aligned_endpoint",
+        "unsupported_blocks_per_chunk",
+        "hash_block_size_mismatch",
+        "cache_group_count_mismatch",
+        "cache_group_block_size_mismatch",
+        "missing_dependencies",
+        "pending_dependencies",
+        "no_endpoint_tier",
+        "matching_endpoint",
+        "normal_prefix_lookup",
+        "unspecified",
+    }
+)
+DECISION_COUNTS = frozenset(
+    {
+        "endpoint_tokens",
+        "hash_size",
+        "cached_tokens",
+        "dependency_count",
+        "missing_dependencies",
+        "pending_dependencies",
+        "tier_index",
+    }
+)
+
+
+def record_response_end_decision(request, source, outcome, reason, **counts):
+    """Log each distinct admission decision, independently of optional telemetry.
+
+    Repeated polling of the same pending/rejected endpoint is deduplicated per
+    request/source/tier. Changed reasons or counts are always recorded. No
+    prefix hashes, salts, token values, paths or exception messages are emitted.
+    """
+    value = {
+        "cache_source": source
+        if source in {"gpu_endpoint", "offload_endpoint", "gpu_blocks"}
+        else "unknown",
+        "outcome": outcome
+        if outcome in {"hit", "miss", "rejected", "loading"}
+        else "unknown",
+        "reason": reason if reason in DECISION_REASONS else "unspecified",
+    }
+    for name in ("input_tokens", "computed_tokens"):
+        number = getattr(
+            request,
+            "num_prompt_tokens" if name == "input_tokens" else "num_computed_tokens",
+            None,
+        )
+        if type(number) is int and 0 <= number <= 2**63 - 1:
+            value[name] = number
+    for name, number in counts.items():
+        if name in DECISION_COUNTS and type(number) is int and 0 <= number <= 2**63 - 1:
+            value[name] = number
+    request_id = getattr(request, "request_id", None)
+    if isinstance(request_id, str):
+        value["request_id"] = hashlib.sha256(request_id.encode()).hexdigest()
+    salt = getattr(request, "cache_salt", None)
+    if isinstance(salt, str):
+        parts = salt.rsplit(":", 2)
+        if len(parts) == 3:
+            for name, candidate in zip(
+                ("chat_id", "generation"), parts[1:], strict=True
+            ):
+                if len(candidate) == 64 and all(
+                    c in "0123456789abcdef" for c in candidate
+                ):
+                    value[name] = candidate
+    previous = getattr(request, "_qwen_response_end_decisions", None)
+    if previous is None:
+        previous = request._qwen_response_end_decisions = {}
+    key = (value["cache_source"], value.get("tier_index", 0))
+    if previous.get(key) == value:
+        return
+    previous[key] = value
+    # This remains in the ordinary backend log even when the bounded recorder
+    # is disabled, contended or full. It runs at admission, never per decode row.
+    logger.info(
+        "Response cache decision: %s",
+        json.dumps(value, sort_keys=True, separators=(",", ":")),
+    )
+    try:
+        try:
+            import qwen_radiance_cache_telemetry as telemetry
+        except ModuleNotFoundError as error:
+            if error.name != "qwen_radiance_cache_telemetry":
+                raise
+            from qwen_r9700_lab import radiance_cache_telemetry as telemetry
+        telemetry.emit("response_end_lookup", **value)
+    except Exception:  # noqa: BLE001, S110 -- decision already logged; telemetry cannot affect reuse.
+        pass
 
 
 @dataclass(frozen=True)
@@ -201,18 +315,40 @@ class ResponseEndCache:
         request.qwen_response_end_local = 0
         request._qwen_response_end_lease = None
         entry = self.entry
-        if (
-            entry is None
-            or entry["tokens"] >= request.num_tokens
-            or request.mm_features
-            or getattr(request, "prompt_embeds", None) is not None
-            or request.lora_request is not None
-            or not self.manager.prefix_cache_lookup_enabled(request)
-            or prefix_identity(
+        reason = None
+        if entry is None:
+            reason = "no_endpoint"
+        elif entry["tokens"] >= request.num_tokens:
+            reason = "prompt_does_not_extend_endpoint"
+        elif request.mm_features:
+            reason = "multimodal_request"
+        elif getattr(request, "prompt_embeds", None) is not None:
+            reason = "prompt_embeddings"
+        elif request.lora_request is not None:
+            reason = "lora_request"
+        elif not self.manager.prefix_cache_lookup_enabled(request):
+            reason = "prefix_cache_disabled"
+        else:
+            actual = prefix_identity(
                 request, entry["tokens"], self.manager.block_pool.hash_block_size
             )
-            != entry["identity"]
-        ):
+            if actual is None:
+                reason = "prefix_identity_unavailable"
+            elif actual[0] != entry["identity"][0]:
+                reason = "cache_salt_changed"
+            elif actual[1] != entry["identity"][1]:
+                reason = "prefix_hash_changed"
+            elif actual[2] != entry["identity"][2]:
+                reason = "partial_prefix_changed"
+        record_response_end_decision(
+            request,
+            "gpu_endpoint",
+            "rejected" if reason else "hit",
+            reason or "matching_endpoint",
+            endpoint_tokens=entry["tokens"] if entry else 0,
+            hash_size=self.manager.block_pool.hash_block_size,
+        )
+        if reason:
             return None
         self.hits += 1
         request.qwen_response_end_local = entry["tokens"]
@@ -236,8 +372,11 @@ class ResponseEndCache:
         pending copy's references. Durable snapshots remain untouched.
         """
         entry = getattr(request, "_qwen_response_end_lease", None)
-        if (entry is None or request.num_in_flight_tokens
-                or request.num_computed_tokens <= entry["tokens"]):
+        if (
+            entry is None
+            or request.num_in_flight_tokens
+            or request.num_computed_tokens <= entry["tokens"]
+        ):
             return False
         request._qwen_response_end_lease = None
         # A terminal step may already have installed a newer checkpoint.
@@ -297,7 +436,10 @@ def reclaim_snapshot_history(manager, request, protected=()):
     before = pool.get_num_free_blocks()
     protected = set(protected)
     for group in manager.coordinator.single_type_managers:
-        if not isinstance(group.kv_cache_spec, MambaSpec) or group.mamba_cache_mode != "align":
+        if (
+            not isinstance(group.kv_cache_spec, MambaSpec)
+            or group.mamba_cache_mode != "align"
+        ):
             continue
         blocks = group.req_to_blocks.get(request.request_id, ())
         # The block containing the last committed token and every speculative

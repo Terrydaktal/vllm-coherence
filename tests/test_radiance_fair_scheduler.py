@@ -26,6 +26,12 @@ BANK_A_NEXT = f"{CHAT_A}:{GEN_A_NEXT}"
 
 
 def load_module(monkeypatch):
+    # Unit fixtures have no native transfer handler and must not start writers
+    # at production /dev/shm paths. The recorder has its own isolated tests.
+    from qwen_r9700_lab import radiance_cache_telemetry
+
+    monkeypatch.setenv("QWEN_CACHE_JOB_TELEMETRY", "0")
+    monkeypatch.setattr(radiance_cache_telemetry, "_recorder", None)
     scheduler_module = ModuleType("vllm.v1.core.sched.scheduler")
 
     class Scheduler:
@@ -2042,6 +2048,10 @@ def test_request_phase_generation_metrics_track_consecutive_rounds_and_acceptanc
 ):
     module = load_module(monkeypatch)
     scheduler, request = phase_fixture(module, tmp_path)
+    diagnostic_intervals = []
+    monkeypatch.setattr(module.cache_telemetry, "complete_round",
+                        lambda context, end_ns, *, contiguous: diagnostic_intervals.append(
+                            (context["round"], end_ns, contiguous)))
     clock = [100.0]
     monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
     scheduler.request_phases.set(request, "generate")
@@ -2084,6 +2094,9 @@ def test_request_phase_generation_metrics_track_consecutive_rounds_and_acceptanc
     # handover; the ten seconds parked in the other phase are excluded.
     assert resumed["last_round_ms"] == pytest.approx(6.0)
     assert resumed["last_acceptance_rate"] == pytest.approx(2 / 7)
+    assert [value[2] for value in diagnostic_intervals] == [False, True, True, False]
+    assert [value[0] for value in diagnostic_intervals] == [1, 2, 3, 4]
+    assert diagnostic_intervals[1][1] == int(100.0437 * 1_000_000_000)
 
 
 def test_queue_phase_requires_another_selected_response(tmp_path, monkeypatch):
@@ -2314,3 +2327,73 @@ def test_decode_transition_retires_only_observed_slow_queue_episodes(monkeypatch
     assert calls == ["sync", "sync"]
     assert module.after_forward_prepare(runner, step)
     assert calls == ["sync", "sync", "sync"]
+
+
+@pytest.mark.parametrize("endpoint", ["disabled", "miss", "hit"])
+def test_prefix_fallback_records_reuse_count_without_changing_selection(monkeypatch, endpoint):
+    module = load_module(monkeypatch)
+    scheduler = new_scheduler(module)
+    decisions, fallback_calls = [], []
+    helper = ModuleType("qwen_radiance_response_end")
+    helper.record_response_end_decision = lambda req, source, outcome, reason, **counts: decisions.append(
+        (req, source, outcome, reason, counts)
+    )
+    monkeypatch.setitem(sys.modules, helper.__name__, helper)
+    fallback = ("ordinary blocks", 1648, 0, False)
+    exact = ("endpoint blocks", 1700, 0, False)
+    def upstream(_self, request):
+        fallback_calls.append(request)
+        return fallback
+    monkeypatch.setattr(module.Scheduler, "_get_local_prefix_cache_hit", upstream, raising=False)
+    scheduler._phase = lambda *_: None
+    scheduler._cache_wait = lambda _: "cache_lookup"
+    scheduler._response_end_cache = lambda _: (
+        None if endpoint == "disabled" else SimpleNamespace(lookup=lambda _: exact if endpoint == "hit" else None)
+    )
+    request = SimpleNamespace(request_id="synthetic-prefix")
+    scheduler.request_phases = SimpleNamespace(live={request.request_id: {}})
+    expected = exact if endpoint == "hit" else fallback
+    assert scheduler._get_local_prefix_cache_hit(request) == expected
+    assert scheduler.request_phases.live[request.request_id]["cached_tokens"] == expected[1]
+    assert fallback_calls == ([] if endpoint == "hit" else [request])
+    if endpoint == "hit":
+        assert decisions == []  # Endpoint lookup itself records the hit.
+    else:
+        assert decisions[-1] == (request, "gpu_blocks", "hit", "normal_prefix_lookup", {"cached_tokens": 1648})
+        if endpoint == "disabled":
+            assert decisions[0][1:4] == ("gpu_endpoint", "rejected", "response_end_disabled")
+
+
+def test_ram_swap_records_existing_copies_and_waits_and_restores_saved_prefix(
+    constructed_worker, tmp_path, monkeypatch,
+):
+    fixture = constructed_worker
+    telemetry = fixture.module.cache_telemetry
+    recorder = telemetry.Recorder(tmp_path / "timing", start=False, gc_events=False)
+    monkeypatch.setattr(telemetry, "_recorder", recorder)
+    monkeypatch.setattr(telemetry, "_round", {})
+    worker = fixture.create()
+    waits = []
+    monkeypatch.setattr(worker.torch.cuda, "synchronize", lambda: waits.append(True))
+    try:
+        worker.before({"bank": BANK_A, "save_blocks": [], "drop_banks": [], "barrier": False})
+        worker.before({"bank": BANK_B, "save_blocks": [0, 1], "drop_banks": [], "barrier": False})
+        recorder.flush()
+        first_sequence = recorder.sequence
+        fixture.gpu.data[:] = [99] * 32
+        worker.before({"bank": BANK_A, "save_blocks": [3, 4], "drop_banks": [], "barrier": False})
+        recorder.flush()
+        rows = [json.loads(line) for line in recorder.path.read_text().splitlines()]
+        changed = [row for row in rows if row["sequence"] > first_sequence]
+        assert len(waits) == 8  # Initial three, then prepare + two waits per stage chunk.
+        assert fixture.gpu.data[:8] == list(range(8))
+        assert fixture.gpu.data[12:20] == [99] * 8
+        assert worker.images[BANK_B]["buffer"].data[12:20] == [99] * 8
+        assert worker.active == BANK_A
+        assert sum(row["stage"] == "handover_ram_copy" for row in changed) == 2
+        submissions = [row for row in changed if row["stage"] == "handover_copy_submit"]
+        assert [row["direction"] for row in submissions] == ["store", "load", "store"]
+        assert all(row["bytes"] == 8 for row in submissions)
+        assert worker.allocation_events == 1
+    finally:
+        recorder.close()

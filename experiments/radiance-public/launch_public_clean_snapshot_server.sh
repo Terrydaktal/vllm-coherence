@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247
+readonly abi_id=d5eef8c4f6f925b8e05bbb7a2a2337561d8caa7a4633e73b7553023cfc79cb14
 readonly data_abi=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
@@ -199,6 +199,7 @@ readonly startup_id
 # old kernels over this image. Only the authenticated local integration is added.
 # Allow EngineCore to drain and publish pending snapshot tails before the
 # container runtime's independent kill deadline. vLLM defaults to immediate abort.
+# An approved bounded KFD capture is opt-in and starts at the first real decode.
 exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=host --network=host \
 	--stop-timeout 90 \
 	--device /dev/kfd --device /dev/dri --group-add keep-groups \
@@ -206,6 +207,8 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	-e PYTHONHASHSEED=0 -e ROCR_VISIBLE_DEVICES=0 -e HIP_VISIBLE_DEVICES=0 -e HF_HUB_OFFLINE=1 \
 	-e QWEN_RADIANCE_CACHE_ABI="$data_abi" \
 	-e QWEN_QUALIFIED_SPEED=1 \
+	-e QWEN_KFD_CAPTURE_PATH="${QWEN_KFD_CAPTURE_PATH:-}" \
+	-e QWEN_KFD_CAPTURE_SECONDS="${QWEN_KFD_CAPTURE_SECONDS:-300}" \
 	-e QWEN_ROUND_EVENT_STATUS_PATH=/dev/shm/qwen-radiance-fair-public \
 	-e VLLM_ROCM_USE_AITER=1 -e VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=1 \
 	-e VLLM_ROCM_USE_AITER_MHA=0 -e VLLM_ROCM_USE_AITER_MLA=0 -e VLLM_ROCM_USE_AITER_MOE=0 \

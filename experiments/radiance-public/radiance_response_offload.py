@@ -36,27 +36,44 @@ def endpoint_key(endpoint, group_idx):
     return make_offload_key(bytes.fromhex(endpoint["prefix_sha256"]), group_idx)
 
 
+def endpoint_rejection_reason(status, endpoint):
+    """Same compatibility checks, with a content-free reason for every miss."""
+    if endpoint is None:
+        return "no_endpoint"
+    if not isinstance(endpoint, dict):
+        return "invalid_endpoint_metadata"
+    if endpoint.get("schema") != SCHEMA:
+        return "endpoint_schema_mismatch"
+    count, block = endpoint.get("tokens"), endpoint.get("block_size")
+    if type(count) is not int:
+        return "invalid_endpoint_token_count"
+    if type(block) is not int or block <= 0:
+        return "invalid_endpoint_block_size"
+    if count <= status.num_locally_computed_tokens:
+        return "endpoint_not_ahead"
+    if count >= status.req.num_prompt_tokens:
+        return "prompt_does_not_extend_endpoint"
+    if count % block == 0:
+        return "aligned_endpoint"
+    if status.config.blocks_per_chunk != 1:
+        return "unsupported_blocks_per_chunk"
+    if endpoint.get("hash_size") != status.config.tokens_per_hash:
+        return "hash_block_size_mismatch"
+    if endpoint.get("groups") != len(status.config.kv_group_configs):
+        return "cache_group_count_mismatch"
+    if any(g.tokens_per_block != block for g in status.config.kv_group_configs):
+        return "cache_group_block_size_mismatch"
+    actual = fingerprint(status.req, count, status.config.tokens_per_hash)
+    if actual is None:
+        return "prefix_identity_unavailable"
+    if actual != endpoint.get("prefix_sha256"):
+        return "prefix_identity_changed"
+    return None
+
+
 def compatible_endpoint(status, endpoint):
     """Corrupt, stale or differently shaped metadata is always a cache miss."""
-    if not isinstance(endpoint, dict) or endpoint.get("schema") != SCHEMA:
-        return False
-    count, block = endpoint.get("tokens"), endpoint.get("block_size")
-    if (
-        type(count) is not int
-        or type(block) is not int
-        or block <= 0
-        or count <= status.num_locally_computed_tokens
-        or count >= status.req.num_prompt_tokens
-        or count % block == 0
-        or status.config.blocks_per_chunk != 1
-        or endpoint.get("hash_size") != status.config.tokens_per_hash
-        or endpoint.get("groups") != len(status.config.kv_group_configs)
-        or any(g.tokens_per_block != block for g in status.config.kv_group_configs)
-    ):
-        return False
-    return fingerprint(
-        status.req, count, status.config.tokens_per_hash
-    ) == endpoint.get("prefix_sha256")
+    return endpoint_rejection_reason(status, endpoint) is None
 
 
 def endpoint_dependencies(status, endpoint):
@@ -158,26 +175,68 @@ def store_response_ends(scheduler, output):
 
 def lookup_response_end(scheduler, status):
     """Return (handled, hit); None hit means a verified endpoint is loading."""
+    from qwen_radiance_response_end import record_response_end_decision
     from vllm.v1.kv_offload.base import LookupResult
 
-    for tier in getattr(scheduler.manager, "secondary_tiers", ()):
+    found_tier = False
+    for index, tier in enumerate(getattr(scheduler.manager, "secondary_tiers", ())):
         if not hasattr(tier, "response_end_head"):
             continue
+        found_tier = True
         endpoint = tier.response_end_head(status.req_context)
-        if not compatible_endpoint(status, endpoint):
+        reason = endpoint_rejection_reason(status, endpoint)
+        details = {"tier_index": index}
+        if isinstance(endpoint, dict):
+            details["endpoint_tokens"] = endpoint.get("tokens")
+            details["hash_size"] = endpoint.get("hash_size")
+        if reason:
+            record_response_end_decision(
+                status.req, "offload_endpoint", "rejected", reason, **details
+            )
             continue
         count = endpoint["tokens"]
         keys, _ = endpoint_dependencies(status, endpoint)
-        pending, missing = False, False
+        pending, missing = 0, 0
         for key in keys:
             found = scheduler.manager.lookup(key, status.req_context)
-            missing |= found is LookupResult.MISS
-            pending |= found in (LookupResult.HIT_PENDING, LookupResult.RETRY)
+            missing += found is LookupResult.MISS
+            pending += found in (LookupResult.HIT_PENDING, LookupResult.RETRY)
+        details.update(
+            dependency_count=len(keys),
+            missing_dependencies=missing,
+            pending_dependencies=pending,
+        )
         if missing:
+            record_response_end_decision(
+                status.req,
+                "offload_endpoint",
+                "rejected",
+                "missing_dependencies",
+                **details,
+            )
             continue
         if pending:
+            record_response_end_decision(
+                status.req,
+                "offload_endpoint",
+                "loading",
+                "pending_dependencies",
+                **details,
+            )
             return True, None
         status.req.qwen_response_end_lookup = endpoint
         status.partial_tail_boundary = count
+        record_response_end_decision(
+            status.req,
+            "offload_endpoint",
+            "hit",
+            "matching_endpoint",
+            cached_tokens=count,
+            **details,
+        )
         return True, count - status.num_locally_computed_tokens
+    if not found_tier:
+        record_response_end_decision(
+            status.req, "offload_endpoint", "rejected", "no_endpoint_tier"
+        )
     return False, None

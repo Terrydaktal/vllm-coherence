@@ -21,6 +21,13 @@ import re
 import statistics
 import time
 import weakref
+
+try:
+    import qwen_radiance_cache_telemetry as cache_telemetry
+except ModuleNotFoundError as error:
+    if error.name != "qwen_radiance_cache_telemetry":
+        raise
+    from qwen_r9700_lab import radiance_cache_telemetry as cache_telemetry
 from pathlib import Path
 from typing import ClassVar
 from uuid import uuid4
@@ -226,6 +233,7 @@ class RequestPhases:
             self._last_generation_request_id = None
             self._last_generation_at = None
 
+
     def set(self, request, phase, blocker=None):
         now = time.monotonic()
         rid = request.request_id
@@ -284,10 +292,11 @@ class RequestPhases:
             accepted_tokens = 0
         if accepted_tokens > draft_tokens:
             accepted_tokens = draft_tokens
-        if (
+        contiguous = (
             self._last_generation_request_id == request.request_id
             and self._last_generation_at is not None
-        ):
+        )
+        if contiguous:
             row["last_round_ms"] = max(0.0, (now - self._last_generation_at) * 1000)
         self._last_generation_request_id = request.request_id
         self._last_generation_at = now
@@ -304,11 +313,15 @@ class RequestPhases:
         event = {
             "schema": ROUND_LOG_SCHEMA,
             "pid": os.getpid(),
+            "monotonic_ns": int(now * 1_000_000_000),
+            "cache_trace_id": cache_telemetry.trace_id(),
             "observed_at_ms": int(time.time() * 1000),
             "chat_id": row["chat_id"],
             "generation": row["generation"],
             "request_id": row["request_id"],
             "round": row["generation_rounds"],
+            "computed_tokens": _stop_count(getattr(request, "num_computed_tokens", None)),
+            "input_tokens": _stop_count(getattr(request, "num_prompt_tokens", None)),
             "round_ms": (
                 round(row["last_round_ms"], 3)
                 if row["last_round_ms"] is not None
@@ -322,6 +335,7 @@ class RequestPhases:
         }
         if scheduled_shape is not None:
             event["scheduled_shape"] = scheduled_shape
+        cache_telemetry.complete_round(event, event["monotonic_ns"], contiguous=contiguous)
         self._round_events.append(event)
 
     def take_round_events(self):
@@ -469,14 +483,15 @@ def _record_decode_sync(runner, banks, *, key, total, reason):
     cuda = banks.torch.cuda
     started = time.perf_counter()
     device_sync = getattr(cuda, "synchronize", None)
-    if callable(device_sync):
-        device_sync()
-        mode = "device"
-    else:
-        # Older/test runtimes may expose only current_stream(). Keep the
-        # compatibility fallback instead of silently skipping the fence.
-        cuda.current_stream().synchronize()
-        mode = "current_stream"
+    with cache_telemetry.span("decode_sync_wait", reason=reason):
+        if callable(device_sync):
+            device_sync()
+            mode = "device"
+        else:
+            # Older/test runtimes may expose only current_stream(). Keep the
+            # compatibility fallback instead of silently skipping the fence.
+            cuda.current_stream().synchronize()
+            mode = "current_stream"
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     stream = cuda.current_stream()
     stream_value = getattr(stream, "cuda_stream", stream)
@@ -1042,6 +1057,7 @@ class FairScheduler(Scheduler):
         if not 2 <= self.max_banks <= 4:
             raise ValueError("invalid RAM-cache bank limit")
         self.status_path = str(config.get("status_path", STATUS))
+        cache_telemetry.configure(self.status_path)
 
         def make_manager():
             prefill_options = (
@@ -1172,11 +1188,19 @@ class FairScheduler(Scheduler):
         connector.get_num_new_matched_tokens = measured_lookup
 
     def _get_local_prefix_cache_hit(self, request):
+        from qwen_radiance_response_end import record_response_end_decision
+
         self._phase(request, self._cache_wait(request))
         end_cache = self._response_end_cache(request)
         result = end_cache.lookup(request) if end_cache is not None else None
+        if end_cache is None:
+            record_response_end_decision(request, "gpu_endpoint", "rejected", "response_end_disabled")
         if result is None:
             result = super()._get_local_prefix_cache_hit(request)
+            record_response_end_decision(
+                request, "gpu_blocks", "hit" if result[1] else "miss",
+                "normal_prefix_lookup", cached_tokens=result[1],
+            )
         phases = getattr(self, "request_phases", None)
         if phases is not None and request.request_id in phases.live:
             phases.live[request.request_id]["cached_tokens"] = result[1]
@@ -1546,6 +1570,7 @@ class FairScheduler(Scheduler):
         scheduler_output.qwen_fair = self._step_worker_metadata
         return super()._build_kv_connector_meta(connector, scheduler_output)
 
+
     @staticmethod
     def _scheduled_request_ids(scheduler_output):
         scheduled = getattr(scheduler_output, "num_scheduled_tokens", None)
@@ -1667,6 +1692,13 @@ class FairScheduler(Scheduler):
             phase_row = self.request_phases.live.get(candidate_id)
             if phase_row is not None:
                 value["last_round_ms"] = phase_row.get("last_round_ms")
+                value["cache_timing_context"] = {
+                    "request_id": phase_row["request_id"],
+                    "chat_id": phase_row["chat_id"], "generation": phase_row["generation"],
+                    "round": phase_row["generation_rounds"] + 1,
+                    "input_tokens": _stop_count(getattr(candidate, "num_prompt_tokens", None)),
+                    "computed_tokens": self.request_phases.computed_tokens(candidate),
+                }
         self.drop_banks = []
         return value
 
@@ -2080,9 +2112,13 @@ class WorkerBanks:
                 start, stop = begin * stride, end * stride
                 if not 0 <= start <= stop <= gpu.numel():
                     raise ValueError("RAM cache transfer exceeds a KV storage region")
-                destination[offset + start : offset + stop].copy_(
-                    gpu[start:stop], non_blocking=True
-                )
+                with cache_telemetry.span(
+                    "handover_copy_submit", direction="store", bytes=stop - start,
+                    block_count=end - begin, resources=True,
+                ):
+                    destination[offset + start : offset + stop].copy_(
+                        gpu[start:stop], non_blocking=True
+                    )
                 amount += stop - start
         return amount
 
@@ -2093,7 +2129,11 @@ class WorkerBanks:
                 start, stop = begin * stride, end * stride
                 if not 0 <= start <= stop <= gpu.numel():
                     raise ValueError("RAM cache transfer exceeds a KV storage region")
-                gpu[start:stop].copy_(source[offset + start : offset + stop], non_blocking=True)
+                with cache_telemetry.span(
+                    "handover_copy_submit", direction="load", bytes=stop - start,
+                    block_count=end - begin, resources=True,
+                ):
+                    gpu[start:stop].copy_(source[offset + start : offset + stop], non_blocking=True)
                 amount += stop - start
         return amount
 
@@ -2168,17 +2208,28 @@ class WorkerBanks:
                     length = stop_byte - start_byte
                     # Preserve outgoing GPU bytes before the incoming H2D copy
                     # can overwrite them. Each region uses its own block stride.
-                    self.stage[:length].copy_(gpu[start_byte:stop_byte], non_blocking=True)
-                    self.torch.cuda.synchronize()
+                    with cache_telemetry.span(
+                        "handover_copy_submit", direction="store", bytes=length,
+                        block_count=end - begin, resources=True,
+                    ):
+                        self.stage[:length].copy_(gpu[start_byte:stop_byte], non_blocking=True)
+                    with cache_telemetry.span("handover_copy_wait", direction="store", resources=True):
+                        self.torch.cuda.synchronize()
                     for part_begin, part_end in self._intersections(incoming, begin, end):
                         part_start, part_stop = part_begin * stride, part_end * stride
-                        gpu[part_start:part_stop].copy_(
-                            buffer[offset + part_start : offset + part_stop],
-                            non_blocking=True,
-                        )
+                        with cache_telemetry.span(
+                            "handover_copy_submit", direction="load", bytes=part_stop - part_start,
+                            block_count=part_end - part_begin, resources=True,
+                        ):
+                            gpu[part_start:part_stop].copy_(
+                                buffer[offset + part_start : offset + part_stop],
+                                non_blocking=True,
+                            )
                         amount += part_stop - part_start
-                    self.torch.cuda.synchronize()
-                    buffer[offset + start_byte : offset + stop_byte].copy_(self.stage[:length])
+                    with cache_telemetry.span("handover_copy_wait", direction="load", resources=True):
+                        self.torch.cuda.synchronize()
+                    with cache_telemetry.span("handover_ram_copy", bytes=length, resources=True):
+                        buffer[offset + start_byte : offset + stop_byte].copy_(self.stage[:length])
                     amount += length
         return amount
 
@@ -2190,7 +2241,8 @@ class WorkerBanks:
         if changed or metadata["barrier"]:
             # Includes asynchronous recurrent-state/count copies and offloader
             # DMA from the preceding step. No GPU write crosses the handover.
-            self.torch.cuda.synchronize()
+            with cache_telemetry.span("handover_prepare_wait", resources=True):
+                self.torch.cuda.synchronize()
         dropped = False
         for key in metadata["drop_banks"]:
             old = self.images.pop(key, None)
@@ -2230,7 +2282,8 @@ class WorkerBanks:
                 raise MemoryError("RAM chat-cache capacity exhausted")
             buffer = self.free_buffers.pop()
             amount += self._copy_to_buffer(buffer, outgoing)
-            self.torch.cuda.synchronize()
+            with cache_telemetry.span("handover_copy_wait", direction="store", resources=True):
+                self.torch.cuda.synchronize()
         else:
             buffer = incoming["buffer"]
             amount += self._swap(buffer, outgoing, incoming["ranges"])
@@ -2252,10 +2305,16 @@ class WorkerBanks:
         )
 
 
+
+
 def before_forward(runner, scheduler_output):
     metadata = scheduler_output.qwen_fair
     if metadata is None:
         return
+    cache_telemetry.configure(metadata.get("status_path", STATUS))
+    cache_telemetry.install_runtime_hooks()
+    cache_telemetry.begin_round({**metadata.get("cache_timing_context", {}),
+                               "scheduled_tokens": scheduler_output.total_num_scheduled_tokens})
     if not hasattr(runner, "qwen_banks"):
         runner.qwen_banks = WorkerBanks(runner, metadata)
     changed = metadata["bank"] != runner.qwen_banks.active

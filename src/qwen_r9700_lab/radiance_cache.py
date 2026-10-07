@@ -26,6 +26,42 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+try:
+    import qwen_radiance_cache_telemetry as cache_telemetry
+except ModuleNotFoundError as error:
+    if error.name != "qwen_radiance_cache_telemetry":
+        raise
+    try:
+        from qwen_r9700_lab import radiance_cache_telemetry as cache_telemetry
+    except ModuleNotFoundError as missing:
+        if missing.name not in {"qwen_r9700_lab", "qwen_r9700_lab.radiance_cache_telemetry"}:
+            raise
+        try:
+            # The legacy flat /patches tree supports the standalone cache CLI.
+            import radiance_cache_telemetry as cache_telemetry
+        except ModuleNotFoundError as standalone:
+            if standalone.name != "radiance_cache_telemetry":
+                raise
+
+            # SSH sends this CLI as source on stdin, and lifecycle control loads
+            # its pinned flush helper by filename. Neither host tool needs a
+            # recorder or has to import the serving package. The backend's
+            # installer authenticates and installs the real telemetry module.
+            class _HostCacheTelemetry:
+                @staticmethod
+                def span(*args, **kwargs):
+                    return contextlib.nullcontext()
+
+                @staticmethod
+                def lock(mutex, *args, **kwargs):
+                    return mutex
+
+                @staticmethod
+                def measured(*args, **kwargs):
+                    return lambda operation: operation
+
+            cache_telemetry = _HostCacheTelemetry()
+
 DEFAULT_ROOT = "/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1"
 FORMAT = "qwen-chat-cache-v1"
 HEADER = struct.Struct(">8sQ32s")
@@ -74,7 +110,8 @@ def real_directory(path: Path) -> None:
 def sync_directory(path: Path) -> None:
     fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        os.fsync(fd)
+        with cache_telemetry.span("directory_fsync"):
+            os.fsync(fd)
     finally:
         os.close(fd)
 
@@ -84,10 +121,13 @@ def atomic_write(path: Path, content: bytes) -> None:
     temporary = Path(name)
     try:
         with os.fdopen(fd, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(path)
+            with cache_telemetry.span("disk_write", bytes=len(content)):
+                stream.write(content)
+                stream.flush()
+            with cache_telemetry.span("file_fsync"):
+                os.fsync(stream.fileno())
+        with cache_telemetry.span("file_publish"):
+            temporary.replace(path)
         sync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
@@ -150,9 +190,13 @@ def request_tail_flush(
 def encode_block(data: memoryview | bytes) -> bytes:
     import zstandard
 
-    compressed = zstandard.ZstdCompressor(level=1, write_checksum=True).compress(data)
+    with cache_telemetry.span("compression", bytes=len(data)):
+        compressed = zstandard.ZstdCompressor(level=1, write_checksum=True).compress(data)
     magic, payload = (COMPRESSED, compressed) if len(compressed) < len(data) else (RAW, data)
-    return HEADER.pack(magic, len(data), hashlib.sha256(data).digest()) + bytes(payload)
+    with cache_telemetry.span("checksum", bytes=len(data)):
+        digest = hashlib.sha256(data).digest()
+    with cache_telemetry.span("encoded_buffer_copy", bytes=len(payload)):
+        return HEADER.pack(magic, len(data), digest) + bytes(payload)
 
 
 def decode_block(data: bytes, expected_size: int) -> bytes:
@@ -169,14 +213,17 @@ def decode_block(data: bytes, expected_size: int) -> bytes:
         try:
             if zstandard.frame_content_size(payload) != expected_size:
                 raise SnapshotIntegrityError("snapshot frame size differs from its header")
-            payload = zstandard.ZstdDecompressor().decompress(
-                payload, max_output_size=expected_size, allow_extra_data=False
-            )
+            with cache_telemetry.span("decompression", bytes=expected_size):
+                payload = zstandard.ZstdDecompressor().decompress(
+                    payload, max_output_size=expected_size, allow_extra_data=False
+                )
         except zstandard.ZstdError as error:
             raise SnapshotIntegrityError("invalid compressed snapshot payload") from error
     elif magic != RAW:
         raise SnapshotIntegrityError("unknown snapshot encoding")
-    if len(payload) != expected_size or hashlib.sha256(payload).digest() != digest:
+    with cache_telemetry.span("checksum", bytes=len(payload)):
+        valid = len(payload) == expected_size and hashlib.sha256(payload).digest() == digest
+    if not valid:
         raise SnapshotIntegrityError("snapshot checksum mismatch")
     return payload
 
@@ -202,7 +249,8 @@ class ChatStore:
     def lock(self, *, exclusive: bool = False):
         fd = os.open(self.directory / ".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+            with cache_telemetry.span("snapshot_lock", minimum_ms=0.05):
+                fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
             yield
         finally:
             os.close(fd)
@@ -329,7 +377,8 @@ class ChatStore:
             return
         fd = os.open(self.directory / ".io.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            with cache_telemetry.span("io_counter_lock", minimum_ms=0.05):
+                fcntl.flock(fd, fcntl.LOCK_EX)
             prior = self.io_totals()
             now = datetime.now(UTC).isoformat()
             info = {
@@ -367,7 +416,9 @@ class ChatStore:
                     path = self.path(key)
                     # The engine has one process but several filesystem workers.
                     # Coalesce simultaneous requests for the same immutable key.
-                    with _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)]:
+                    with cache_telemetry.lock(
+                        _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)], "block_write_lock"
+                    ):
                         if path.exists():
                             counts["reused_blocks"] += 1
                             continue
@@ -407,8 +458,11 @@ class ChatStore:
                     # Exclude a simultaneous repair of this immutable key. A
                     # reader must not remove a newer valid replacement after
                     # detecting damage in the old file. Release before yield.
-                    with _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)]:
-                        encoded = path.read_bytes()
+                    with cache_telemetry.lock(
+                        _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)], "block_read_lock"
+                    ):
+                        with cache_telemetry.span("disk_read"):
+                            encoded = path.read_bytes()
                         try:
                             data = decode_block(encoded, expected_size)
                         except SnapshotIntegrityError:

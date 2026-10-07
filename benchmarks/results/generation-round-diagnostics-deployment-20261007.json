@@ -1,0 +1,123 @@
+{
+  "smoke_status": "PASS",
+  "health_status": 200,
+  "smoke": [
+    {
+      "kind": "api_health",
+      "http_status": 200
+    },
+    {
+      "kind": "model_identity",
+      "http_status": 200
+    },
+    {
+      "kind": "installed_source_identity",
+      "files": 7
+    },
+    {
+      "kind": "unlabelled_generation_smoke",
+      "http_status": 200,
+      "input_tokens": 33,
+      "output_tokens": 90,
+      "finish": "stop",
+      "seconds": 2.551,
+      "response_sha256": "7645daea97dc627528ed8591b12b1643c7900810f5864ebe79f1b7d7bac8fb9d"
+    },
+    {
+      "kind": "live_thread_counters_and_asynchronous_gpu_rounds",
+      "main_thread_intervals": 12,
+      "gpu_rounds": 12,
+      "gpu_inter_round_gaps": 11,
+      "stages": {
+        "python_gc": 70,
+        "disk_write": 9,
+        "file_fsync": 9,
+        "file_publish": 9,
+        "directory_fsync": 9,
+        "namespace_collection": 1,
+        "round_start": 23,
+        "recorder_batch": 5,
+        "decode_sync_wait": 1,
+        "main_thread_round": 12,
+        "gpu_round": 12,
+        "gpu_submit": 1,
+        "gpu_complete": 1
+      }
+    }
+  ],
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "500a31e42b9b7aaba6da6bf330f1f3e2c72e46ad525d121159d2609c58e39e39",
+    "qwen_radiance_response_end.py": "9e5b62165c396548b93f859c24242ffacfe934df8b2f8c3b79ccbdd62a2c0fd7",
+    "qwen_radiance_response_offload.py": "87aa1420882abc03b2e9a5961ce620877dc48498e835f4375fbbbbd72eb4c71f",
+    "qwen_radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+    "qwen_radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
+    "qwen_radiance_cache_telemetry.py": "9f32b55595d1012b019af6abe4c448caa2517a1fb39739c9de16894d958e374b"
+  },
+  "recorder_health": {
+    "schema": "urn:coherence:cache-job-timings:v1",
+    "trace_id": "d94db3b2f9674c3b85808bb8e730b8df",
+    "pid": 946,
+    "updated_at_ms": 1791340128171,
+    "written": 162,
+    "dropped": 0,
+    "write_errors": 0,
+    "context_drops": 0,
+    "gpu_hooks": true,
+    "generation_round_telemetry": true,
+    "main_thread_samples": 12,
+    "round_sample_errors": 0,
+    "gpu_rounds": {
+      "capacity": 64,
+      "pending": 0,
+      "free": 63,
+      "completed": 12,
+      "dropped": 0,
+      "errors": 0,
+      "quarantined": 0
+    },
+    "source_sha256": {
+      "recorder": "9f32b55595d1012b019af6abe4c448caa2517a1fb39739c9de16894d958e374b",
+      "transfer_handler": "6154da32665430780d17c6ae1d2bf76a5399d1f807fcfb4b111aa951e5ba8e01",
+      "connector": "c3ed81b167466294e453da35b7253a4798135f959ee9350caf78e3c913171a67",
+      "round_runner": "bc514cf65612fb06cdf4cadba29539dffe09915a55533f299b0d2c01048fdf69"
+    },
+    "pending": 0,
+    "capacity": 4096,
+    "max_file_bytes": 16777216,
+    "retained_files": 2,
+    "writer_last_batch_ms": 0.135732,
+    "writer_max_batch_ms": 46.729932
+  },
+  "data_safety": "unlabelled synthetic input; no durable chat snapshot; no user chat contents read",
+  "schema": "urn:coherence:diagnostics-deployment:v1",
+  "recorded_at": "2026-10-07T02:31:06.414147+00:00",
+  "host": "ai",
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "runtime_abi": "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "scope": "Main-thread completion-interval CPU/page-fault/context-switch counters and asynchronously collected generation HIP timings. Numerical kernels, snapshot bytes and scheduling policy unchanged. Startup/source checks and a short synthetic activation check; not numerical, performance or rare-stall causal qualification.",
+  "activation": {
+    "waited_for_idle": true,
+    "active_requests_at_stop": 0,
+    "queued_requests_at_stop": 0,
+    "flushed_chats_before_stop": 0,
+    "graceful_stop": true
+  },
+  "cpu_checks": {
+    "passed": 274,
+    "scope": "Cache-job/thread/GPU-marker behavior, scheduler, storage, installer, launcher and lifecycle CPU checks; native event timing checked separately below"
+  },
+  "native_log_correlation": {
+    "matched_decode_rounds": 12,
+    "matched_main_thread_intervals": 12,
+    "sequence_gaps": 0,
+    "unmatched_outliers": 0
+  },
+  "native_qualification_remaining": [
+    "matched observer-overhead measurement",
+    "instrumented cancellation/handover stress",
+    "rare-stall causal confirmation"
+  ]
+}

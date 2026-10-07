@@ -396,6 +396,12 @@ def transformed_sources(
         package_root / "qwen_radiance_memory.py": cache_source.with_name(
             "radiance_memory.py"
         ).read_text(),
+        package_root / "qwen_radiance_cache_telemetry.py": cache_source.with_name(
+            "radiance_cache_telemetry.py"
+        ).read_text(),
+        package_root / "qwen_radiance_kfd_trace.py": cache_source.with_name(
+            "radiance_kfd_trace.py"
+        ).read_text(),
     }
 
 

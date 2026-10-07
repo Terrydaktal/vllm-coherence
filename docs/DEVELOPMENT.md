@@ -23,6 +23,10 @@ release path. The legacy `pi-remote-qwen-radiance` launcher retains its remote
 host, deployment and cache ABI; the portable Coherence launcher uses its own
 deployment. Both select the backend container explicitly for telemetry.
 
+For rare round stalls, use the bounded [cache-job recorder and correlation
+tool](CACHE_ROUND_DIAGNOSTICS.md). It records cache/lock/GC timings without
+adding GPU waits and retains numeric evidence only.
+
 The legacy launcher's `--reuse-existing` mode authenticates the pinned backend
 files on the GPU host and the running container. Local edits to backend source
 are not loaded by that mode and do not prevent attaching to the deployed release.

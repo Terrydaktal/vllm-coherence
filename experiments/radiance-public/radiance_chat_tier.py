@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import functools
+import hashlib
 import json
 import logging
 import os
@@ -20,12 +21,17 @@ from qwen_radiance_cache import (
     ChatStore,
     RetiredGenerationError,
     atomic_write,
+    cache_telemetry,
     identity,
     private_control_directory,
     real_directory,
     retire_incompatible_snapshots,
 )
-from vllm.v1.kv_offload.base import OffloadPolicy, get_offload_block_hash, get_offload_group_idx
+from vllm.v1.kv_offload.base import (
+    OffloadPolicy,
+    get_offload_block_hash,
+    get_offload_group_idx,
+)
 from vllm.v1.kv_offload.tiering.base import JobResult
 from vllm.v1.kv_offload.tiering.fs.manager import (
     FileSystemTierManager,
@@ -82,7 +88,7 @@ def tail_keys(status, num_tokens):
 def synchronized(method):
     @functools.wraps(method)
     def guarded(self, *args, **kwargs):
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             return method(self, *args, **kwargs)
 
     return guarded
@@ -206,7 +212,8 @@ class ChatFileSystemTierManager(FileSystemTierManager):
                     # Old formats cannot restore this engine. Collect away from
                     # the scheduler, including chats not resumed after an upgrade.
                     self._next_namespace_collection = time.monotonic() + 60
-                    retire_incompatible_snapshots(self._root, apply=True)
+                    with cache_telemetry.span("namespace_collection"):
+                        retire_incompatible_snapshots(self._root, apply=True)
             except Exception:
                 logger.exception("Chat snapshot publication worker failed; retrying")
 
@@ -335,13 +342,14 @@ class ChatFileSystemTierManager(FileSystemTierManager):
                 # The primary slot is pinned only for this async job. Copy the
                 # changing tail before acknowledging it so later CPU eviction
                 # cannot force another GPU prefill or lose the flush source.
-                tail_blocks[name] = bytes(block)
+                with cache_telemetry.span("tail_buffer_copy", bytes=len(block), resources=True):
+                    tail_blocks[name] = bytes(block)
             else:
                 disk_blocks.append((name, block))
         if disk_blocks and not state["store"].write_many(disk_blocks):
             raise ValueError("snapshot generation was retired during store")
         if tail_blocks:
-            with self._chat_mutex:
+            with cache_telemetry.lock(self._chat_mutex):
                 state["tail_blocks"].update(tail_blocks)
 
     def _load(self, state, keys, offsets):
@@ -359,7 +367,8 @@ class ChatFileSystemTierManager(FileSystemTierManager):
                 data = next(disk)
             # Verify before touching the destination. Corruption cannot expose
             # a partly decoded recurrent state as a successful restored block.
-            view[offset : offset + self._block_size] = data
+            with cache_telemetry.span("restore_buffer_copy", bytes=len(data), resources=True):
+                view[offset : offset + self._block_size] = data
 
     @synchronized
     def _submit(self, job, is_store):
@@ -379,15 +388,24 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         task = functools.partial(
             operation, state, keys, [int(bid) * self._block_size for bid in job.block_ids]
         )
+        if cache_telemetry.trace_id() is not None:
+            context = cache_telemetry.request_context(
+                job.req_context.req_id, state["store"].chat, job.job_id,
+                is_store=is_store, size=len(keys) * self._block_size, block_count=len(keys),
+            )
+            queued = time.monotonic_ns()
+            task = functools.partial(cache_telemetry.task, task, context, queued)
+            cache_telemetry.emit("cpu_submit", **context)
         enqueue = self._pool.enqueue_store if is_store else self._pool.enqueue_load
-        enqueue(job.job_id, 1, [task])
+        with cache_telemetry.span("cpu_enqueue", job_kind="filesystem", job_id=job.job_id):
+            enqueue(job.job_id, 1, [task])
 
     def submit_store(self, job_metadata):
         if job_metadata.req_context.req_id not in self._chat_requests:
             # The primary RAM tier cascades new blocks to every secondary tier.
             # Acknowledge unlabelled stores without creating shared .bin files
             # that cannot later be attributed or safely collected.
-            with self._chat_mutex:
+            with cache_telemetry.lock(self._chat_mutex):
                 self._ignored_jobs.append(JobResult(job_id=job_metadata.job_id, success=True))
             return None
         self._submit(job_metadata, True)
@@ -396,7 +414,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         if job_metadata.req_context.req_id not in self._chat_requests:
             # ChatLookup always misses these. Fail an unexpected load so stale
             # unlabelled data can never reach the model.
-            with self._chat_mutex:
+            with cache_telemetry.lock(self._chat_mutex):
                 self._ignored_jobs.append(JobResult(job_id=job_metadata.job_id, success=False))
             return None
         self._submit(job_metadata, False)
@@ -410,7 +428,8 @@ class ChatFileSystemTierManager(FileSystemTierManager):
 
     @synchronized
     def get_finished_jobs(self):
-        results = super().get_finished_jobs()
+        with cache_telemetry.span("cpu_poll", minimum_ms=1):
+            results = super().get_finished_jobs()
         results.extend(self._ignored_jobs)
         self._ignored_jobs = []
         for result in results:
@@ -418,6 +437,9 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             if owner is not None:
                 req_id, is_store = owner
                 state = self._chat_requests[req_id]
+                cache_telemetry.emit("cpu_ack", job_kind="filesystem", job_id=result.job_id,
+                                     request_id=hashlib.sha256(str(req_id).encode()).hexdigest(),
+                                     success=bool(result.success))
                 state["jobs"].remove(result.job_id)
                 # The parent invalidates failed loads and the engine recomputes
                 # their tokens. A subsequent successfully completed request can
@@ -431,7 +453,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         wanted = set(names)
         result = {}
         key = (store.chat["id"], store.chat["generation"])
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             record = self._tail_heads.get(key)
             if record is not None:
                 record["last_access"] = time.monotonic()
@@ -501,17 +523,18 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             or record["tokens"] - record["durable_tokens"] >= self._tail_flush_tokens
         )
 
+    @cache_telemetry.measured("tail_flush", reason="tail_flush")
     def _flush_record(self, record, reason):
         store = record["store"]
         key = (store.chat["id"], store.chat["generation"])
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             if self._tail_heads.get(key) is not record or self._states_for_chat(key[0]):
                 return None
             tail_blocks = list(record["tail_blocks"].items())
         if tail_blocks and not store.write_many(tail_blocks):
             raise ValueError("snapshot generation retired before tail flush")
         prepared = store.prepare_publication(record["keys"], self._block_size)
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             # Keep the old manifest valid through tail writes and verification.
             # The short atomic publish/GC section excludes a newer request so it
             # can never delete blocks that request is currently producing.
@@ -542,10 +565,10 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         }
 
     def _publish_ready(self, *, force_identities=frozenset(), force_all=False):
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             chats = {state["store"].chat["id"] for state in self._chat_requests.values()}
         for chat_id in chats:
-            with self._chat_mutex:
+            with cache_telemetry.lock(self._chat_mutex):
                 states = self._states_for_chat(chat_id)
                 if not states or any(not s["finished"] or s["jobs"] for s in states.values()):
                     continue
@@ -577,7 +600,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
                     )
                 else:
                     record = None
-                with self._chat_mutex:
+                with cache_telemetry.lock(self._chat_mutex):
                     current = self._states_for_chat(chat_id)
                     if current.keys() != states.keys() or any(
                         not state["finished"] or state["jobs"] for state in current.values()
@@ -598,11 +621,11 @@ class ChatFileSystemTierManager(FileSystemTierManager):
                 continue
             except ValueError:
                 logger.exception("Chat snapshot tail rejected; previous head retained: %s", chat_id)
-                with self._chat_mutex:
+                with cache_telemetry.lock(self._chat_mutex):
                     for req_id in states:
                         self._chat_requests.pop(req_id, None)
 
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             if force_all:
                 # Completed requests have already moved out of _chat_requests.
                 # Shutdown must flush their retained RAM heads too, including
@@ -625,7 +648,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
 
     def _enforce_tail_budget(self):
         while True:
-            with self._chat_mutex:
+            with cache_telemetry.lock(self._chat_mutex):
                 records = list(self._tail_heads.values())
                 total = sum(
                     sum(len(data) for data in record["tail_blocks"].values()) for record in records
@@ -656,7 +679,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         chat = identity(chat)
         key = (chat["id"], chat["generation"])
         self._publish_ready(force_identities={key})
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             if self._states_for_chat(chat["id"]):
                 return None
             record = self._tail_heads.get(key)
@@ -706,7 +729,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             path.unlink(missing_ok=True)
 
     def _publish_tail_status(self, *, force=False):
-        with self._chat_mutex:
+        with cache_telemetry.lock(self._chat_mutex):
             records = list(self._tail_heads.values())
             body = {
                 "schema": "urn:qwen-r9700:radiance-tail-residency:v1",
@@ -760,7 +783,7 @@ class ChatFileSystemTierManager(FileSystemTierManager):
             # candidate before the general CPU tier and its mmap disappear.
             self.drain_jobs()
             self.get_finished_jobs()
-            with self._chat_mutex:
+            with cache_telemetry.lock(self._chat_mutex):
                 # The server can begin an orderly shutdown while a generation is
                 # still active. It has no settled head to publish, but it must not
                 # prevent the preceding complete RAM tail from becoming durable.
