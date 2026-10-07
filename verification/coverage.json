@@ -80,16 +80,22 @@
     },
     {
       "id": "OBS-01",
-      "contract": "Cache residency, shared probes, useful failure evidence and content-free cache-job/round diagnostics",
+      "contract": "Cache residency, shared probes and automatic actionable failure evidence; incident-time reboot/trace attribution separated from current health; local tunnel and remote backend checks; diagnostic entries excluded from model context; content-free cache-job/round diagnostics",
       "sources": [
         "src/qwen_r9700_lab/radiance_cache_residency.py",
         "src/qwen_r9700_lab/radiance_error_report.py",
+        "integrations/pi/qwen-radiance-errors.mjs",
+        "integrations/pi/qwen-transport-diagnostics.mjs",
         "src/qwen_r9700_lab/radiance_cache_telemetry.py"
       ],
       "tests": [
         "tests/test_radiance_cache_residency.py",
         "tests/test_radiance_error_report.py",
         "tests/test_radiance_memory.py",
+        "tests/test_radiance_errors.mjs",
+        "tests/test_radiance_errors_sdk.mjs",
+        "tests/test_transport_diagnostics.mjs",
+        "tests/test_transport_diagnostics_sdk.mjs",
         "tests/test_cache_job_telemetry.py"
       ],
       "native": "Telemetry correlation under load"

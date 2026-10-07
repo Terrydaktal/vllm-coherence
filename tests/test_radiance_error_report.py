@@ -25,7 +25,10 @@ def entry(
 
 
 def traceback(
-    *, container="a" * 64, timestamp=1000000, exception="RuntimeError: synthetic failure"
+    *,
+    container="a" * 64,
+    timestamp=1000000,
+    exception="RuntimeError: synthetic failure",
 ):
     return [
         entry(body, container=container, timestamp=timestamp + n)
@@ -85,8 +88,14 @@ def test_multiple_backends_and_chained_exceptions_remain_separate():
 
 
 def test_incomplete_and_malformed_records_do_not_become_fake_tracebacks():
-    assert parse_journal(b"\n".join([*traceback()[:-1], b'{"truncated', b"not json"])) == []
-    assert parse_journal(entry("Input contains EngineCore encountered a fatal error.")) == []
+    assert (
+        parse_journal(b"\n".join([*traceback()[:-1], b'{"truncated', b"not json"]))
+        == []
+    )
+    assert (
+        parse_journal(entry("Input contains EngineCore encountered a fatal error."))
+        == []
+    )
 
 
 def test_a_multiline_journal_record_keeps_its_traceback():
@@ -100,7 +109,10 @@ def test_a_multiline_journal_record_keeps_its_traceback():
 
 def test_large_traces_retain_the_start_and_terminal_cause():
     lines = traceback()[:-1]
-    lines += [entry('  File "/opt/vllm/' + "x" * 1000 + '.py", line 2, in run') for _ in range(60)]
+    lines += [
+        entry('  File "/opt/vllm/' + "x" * 1000 + '.py", line 2, in run')
+        for _ in range(60)
+    ]
     lines.append(entry("MemoryError: synthetic allocation failure"))
     result = parse_journal(b"\n".join(lines))[0]
     assert result["truncated"]
@@ -126,7 +138,10 @@ def test_old_crashes_are_not_attributed_to_a_new_request():
 
 
 def test_terminal_control_sequences_are_removed():
-    assert clean("before\x1b]52;c;bad\x07\x1b[31mafter\x1b[0m\x00\x9b\n") == "beforeafter\n"
+    assert (
+        clean("before\x1b]52;c;bad\x07\x1b[31mafter\x1b[0m\x00\x9b\n")
+        == "beforeafter\n"
+    )
 
 
 def test_binary_journal_message_encoding_is_supported():
@@ -147,6 +162,7 @@ def test_simultaneous_windows_share_one_bounded_probe(monkeypatch, tmp_path):
 
     monkeypatch.setattr(probe, "bounded_journal", journal)
     monkeypatch.setattr(probe, "backend_state", lambda: {"ready": True})
+    monkeypatch.setattr(probe, "host_state", lambda _: {})
     monkeypatch.setattr(probe.time, "time", lambda: 1000)
     directory = tmp_path / "shared"
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -156,9 +172,13 @@ def test_simultaneous_windows_share_one_bounded_probe(monkeypatch, tmp_path):
     assert {p.name for p in directory.iterdir()} == {"lock", "report.json"}
 
 
-def test_container_inspection_failure_does_not_hide_trace_or_claim_it_stopped(monkeypatch):
+def test_container_inspection_failure_does_not_hide_trace_or_claim_it_stopped(
+    monkeypatch,
+):
     monkeypatch.setattr(
-        probe.subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=125, stdout="")
+        probe.subprocess,
+        "run",
+        lambda *a, **kw: SimpleNamespace(returncode=125, stdout=""),
     )
 
     class Healthy:
@@ -173,3 +193,140 @@ def test_container_inspection_failure_does_not_hide_trace_or_claim_it_stopped(mo
     monkeypatch.setattr(probe.urllib.request, "urlopen", lambda *a, **kw: Healthy())
     state = probe.backend_state()
     assert state["ready"] is True and state["running"] is None
+
+
+def test_request_error_trace_is_collected_without_an_enginecore_fatal_banner():
+    lines = traceback(exception="OSError: [Errno 28] No space left on device")[1:]
+    lines.append(entry("PRIVATE request dump from the same logger"))
+    result = parse_journal(b"\n".join(lines))
+    assert len(result) == 1
+    assert result[0]["exception_type"] == "OSError"
+    assert result[0]["summary"] == "OSError: [Errno 28] No space left on device"
+    assert "PRIVATE" not in json.dumps(result)
+
+
+def test_uvicorn_plain_asgi_trace_keeps_frames_without_vllm_logger_tags():
+    bodies = [
+        "ERROR: Exception in ASGI application",
+        "Traceback (most recent call last):",
+        '  File "/opt/vllm/server.py", line 31, in request',
+        "    write_checkpoint()",
+        "OSError: [Errno 28] No space left on device",
+        "PRIVATE adjacent prompt dump",
+    ]
+    raw = b"\n".join(
+        json.dumps(
+            {
+                "MESSAGE": f"(APIServer pid=1) {body}",
+                "CONTAINER_ID_FULL": "a" * 64,
+                "__REALTIME_TIMESTAMP": str(1000000 * 1000 + n),
+            }
+        ).encode()
+        for n, body in enumerate(bodies)
+    )
+    result = parse_journal(raw)
+    assert len(result) == 1
+    assert "server.py" in result[0]["traceback"]
+    assert result[0]["exception_type"] == "OSError"
+    assert "PRIVATE" not in json.dumps(result)
+
+
+def test_boot_failure_is_numeric_and_does_not_retain_other_kernel_text():
+    messages = [
+        "[Hardware Error]: System Fatal error.",
+        "[Hardware Error]: CPU:9 (19:21:2) MC5_STATUS[-|UE|PCC]: 0xbea0000000000108",
+        "[Hardware Error]: Execution Unit Ext. Error Code: 0",
+        "PRIVATE unrelated journal message",
+    ]
+    raw = b"\n".join(
+        json.dumps(
+            {
+                "__REALTIME_TIMESTAMP": str(1010000 * 1000 + n),
+                "_BOOT_ID": "b" * 32,
+                "MESSAGE": message,
+            }
+        ).encode()
+        for n, message in enumerate(messages)
+    )
+    result = probe.parse_kernel_journal(b"\n".join(reversed(raw.splitlines())))
+    assert result[0]["kind"] == "cpu_machine_check"
+    assert result[0]["cpu"] == 9
+    assert result[0]["fatal"] is True
+    assert result[0]["unit"] == "execution"
+    assert result[0]["extended_code"] == 0
+    assert "PRIVATE" not in json.dumps(result)
+
+
+def collected_failure(**extra):
+    return {
+        "incidents": [],
+        "backend": {"running": False, "ready": False},
+        "captured_at": 1100000,
+        "lookup_issue": None,
+        **extra,
+    }
+
+
+def test_reboot_during_request_is_explained_without_a_python_traceback():
+    collected = collected_failure(
+        host={
+            "boot_id": "b" * 32,
+            "boot_started_at": 1010000,
+            "kernel_events": [
+                {
+                    "timestamp": 1010020,
+                    "kind": "cpu_machine_check",
+                    "cpu": 9,
+                    "fatal": True,
+                    "unit": "execution",
+                    "extended_code": 0,
+                }
+            ],
+        }
+    )
+    result = report_for_window(collected, 1000000, 1020000)
+    assert result["diagnosis"]["kind"] == "host_restarted"
+    assert "CPU 9" in result["diagnosis"]["summary"]
+    assert "watchdog" in result["diagnosis"]["summary"]
+    assert result["incident"] is None
+    assert "restart Pi" in result["diagnosis"]["recovery"]
+
+
+def test_prior_boot_failure_is_not_blamed_for_a_later_connection_error():
+    collected = collected_failure(
+        host={
+            "boot_started_at": 900000,
+            "kernel_events": [
+                {
+                    "timestamp": 900020,
+                    "kind": "cpu_machine_check",
+                    "fatal": True,
+                    "cpu": 9,
+                }
+            ],
+        }
+    )
+    result = report_for_window(collected, 1000000, 1020000)
+    assert result["diagnosis"]["kind"] == "backend_stopped"
+    assert "CPU" not in result["diagnosis"]["summary"]
+
+
+def test_disk_full_and_oom_have_useful_recovery_instead_of_generic_engine_error():
+    incidents = parse_journal(
+        b"\n".join(traceback(exception="OSError: [Errno 28] No space left on device"))
+    )
+    result = report_for_window(collected_failure(incidents=incidents), 999000, 1001000)
+    assert result["diagnosis"]["kind"] == "disk_full"
+    assert "free space" in result["diagnosis"]["recovery"]
+    result = report_for_window(
+        collected_failure(backend={"oom_killed": True}), 999000, 1001000
+    )
+    assert result["diagnosis"]["kind"] == "host_oom"
+
+
+def test_healthy_backend_is_current_status_and_not_an_explanation_of_the_past():
+    result = report_for_window(
+        collected_failure(backend={"running": True, "ready": True}), 999000, 1001000
+    )
+    assert result["diagnosis"]["kind"] == "cause_unknown"
+    assert "ready" in result["diagnosis"]["summary"]

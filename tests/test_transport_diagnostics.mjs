@@ -41,6 +41,23 @@ test("raw exception fields are bounded and allowlisted, including aggregate caus
   assert.equal(transportCauses(new AggregateError(Array.from({ length: 100 }, timeout))).length, 12);
 });
 
+test("expanded diagnostics retain safe code locations without exception text or eval data", () => {
+  const error = Object.assign(new Error("PRIVATE_REQUEST"), { code: "UND_ERR_SOCKET", stack:
+    "TypeError: PRIVATE_REQUEST\n" +
+    "    at fetch (node:internal/deps/undici/undici:12501:13)\n" +
+    "    at async stream (/opt/pi/node_modules/provider/adapter.js:17:4)\n" +
+    "    at eval (PRIVATE_REQUEST)\n" +
+    "    at secret (https://user:PRIVATE_KEY@host/file.js:1:2)\n" });
+  const causes = transportCauses(error);
+  assert.equal(causes[0].frames.length, 2);
+  const text = transportDiagnosticLines({ elapsed_ms: 10, request_elapsed_ms: 10,
+    timestamp: 1, endpoint: "http://127.0.0.1:8013/v1/chat/completions", phase: "stream",
+    attempt: 1, headers_ms: 1, http_status: 200, sdk_error: "TypeError", causes }, true).join("\n");
+  assert.match(text, /undici:12501:13/);
+  assert.match(text, /adapter.js:17:4/);
+  assert.doesNotMatch(JSON.stringify(causes) + text, /PRIVATE|user:/);
+});
+
 test("retains streaming failure timings without wrapping or reading the response body", async () => {
   let clock = 0;
   const response = new Response("synthetic stream");

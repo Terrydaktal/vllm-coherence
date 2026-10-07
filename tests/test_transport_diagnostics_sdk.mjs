@@ -98,9 +98,13 @@ test("transport report survives session persistence and expands outside model co
   const directory = await mkdtemp(join(tmpdir(), "transport-errors-sdk-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const extension = join(directory, "errors.ts");
+  const backendEvidence = { schema: "urn:qwen-r9700:backend-error:v1", status: "unavailable", incident: null,
+    backend: { ready: true, running: true }, diagnosis: { kind: "host_restarted",
+      summary: "AI host restarted during this request. Boot reported a fatal CPU error on CPU 9.",
+      recovery: "Check /backend status, then restart Pi to recreate its connection." } };
   await writeFile(extension, `import { Text } from "@earendil-works/pi-tui";
 import { installRadianceErrors } from ${JSON.stringify(resolve("integrations/pi/qwen-radiance-errors.mjs"))};
-export default function (pi) { installRadianceErrors(pi, { Text, probe: async () => { throw new Error("unexpected backend lookup"); } }); }
+export default function (pi) { installRadianceErrors(pi, { Text, probe: async () => (${JSON.stringify(backendEvidence)}) }); }
 `);
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }, { projectTrusted: true });
   const resourceLoader = new DefaultResourceLoader({ cwd: directory, agentDir: directory, settingsManager,
@@ -125,12 +129,14 @@ export default function (pi) { installRadianceErrors(pi, { Text, probe: async ()
   assert.equal(entries[0].data.causes[1].code, "UND_ERR_CONNECT_TIMEOUT");
   assert.doesNotMatch(JSON.stringify(saved), /SYNTHETIC_PRIVATE/);
   const reopened = SessionManager.open(sessionManager.getSessionFile());
-  assert.doesNotMatch(JSON.stringify(reopened.buildSessionContext().messages), /UND_ERR_CONNECT_TIMEOUT|transport-error|fixture.invalid/);
+  assert.doesNotMatch(JSON.stringify(reopened.buildSessionContext().messages), /UND_ERR_CONNECT_TIMEOUT|transport-error|fixture.invalid|fatal CPU error/);
   const errorIndex = events.findIndex((event) => event.type === "message_end" && event.message.role === "assistant");
   assert.ok(events.findIndex((event) => event.type === "entry_appended") > errorIndex);
   const renderer = resourceLoader.getExtensions().extensions.find((ext) => ext.entryRenderers?.has(TRANSPORT_ERROR_ENTRY)).entryRenderers.get(TRANSPORT_ERROR_ENTRY);
   const component = new CustomEntryComponent(entries[0], renderer);
   assert.match(component.render(100).join("\n"), /ctrl\+o to expand/);
+  assert.match(component.render(100).join("\n"), /AI host restarted/);
+  assert.match(component.render(100).join("\n"), /restart Pi/);
   component.setExpanded(true);
   assert.match(component.render(100).join("\n"), /Underlying cause chain/);
 });

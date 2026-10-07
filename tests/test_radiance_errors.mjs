@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BACKEND_ERROR_ENTRY, TRANSPORT_ERROR_ENTRY, backendErrorMessage, diagnosticLines, installRadianceErrors,
-  reportBackendFailure } from "../integrations/pi/qwen-radiance-errors.mjs";
+  reportBackendFailure, connectionDiagnosticLines, lookupFailure, probeLocalConnection } from "../integrations/pi/qwen-radiance-errors.mjs";
+import { createServer } from "node:net";
 import { createTransportDiagnostics, TRANSPORT_ERROR } from "../integrations/pi/qwen-transport-diagnostics.mjs";
 
 const failure = "EngineCore encountered an issue. See stack trace (above) for the root cause.";
@@ -17,7 +18,8 @@ function fixture(probe = async () => report) {
   const ctx = { model: { id: "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate" },
     sessionManager: { getSessionFile: () => session } };
   class Text { constructor(text) { this.text = text; } }
-  installRadianceErrors(pi, { Text, now: () => 20000, probe: (args) => { probes.push(args); return probe(args); } });
+  installRadianceErrors(pi, { Text, now: () => 20000, connectionProbe: async () => ({ listening: true }),
+    probe: (args) => { probes.push(args); return probe(args); } });
   return { pi, ctx, entries, probes, renderers, commands, switch: () => { session = "synthetic-session-b"; },
     emit: (name, event = {}) => handlers.get(name)?.(event, ctx) };
 }
@@ -54,8 +56,9 @@ test("repeated failures share one diagnostic entry but an explicit command can s
   assert.equal(f.probes.at(-1).latest, true);
 });
 
-test("ordinary errors and successful turns perform no diagnostic lookup", async () => {
+test("other providers and successful turns perform no diagnostic lookup", async () => {
   const f = fixture();
+  f.ctx.model = { id: "another-provider" };
   assert.equal(f.emit("message_end", { message: { ...message(), errorMessage: "synthetic network error" } }), undefined);
   assert.equal(f.emit("message_end", { message: { ...message(), stopReason: "stop" } }), undefined);
   await f.emit("turn_end");
@@ -74,7 +77,7 @@ test("a failed SSH lookup leaves a visible, retryable diagnostic instead of losi
 
 test("an old or missing traceback is described honestly and current backend health is separate", () => {
   const text = diagnosticLines({ status: "unavailable", backend: { ready: true } }, true).join("\n");
-  assert.match(text, /No EngineCore traceback matched this request/);
+  assert.match(text, /No backend traceback was recorded/);
   assert.match(text, /currently ready/);
   assert.doesNotMatch(text, /Traceback \(most recent/);
 });
@@ -115,7 +118,7 @@ test("a diagnostic persistence failure cannot bypass compaction cancellation", a
   assert.equal(await reportBackendFailure(f.pi, f.ctx, failure, 10000), false);
 });
 
-test("connection diagnostics persist after the failed message without a remote lookup or model text", async () => {
+test("connection diagnostics automatically fetch backend evidence after the failed message without model text", async () => {
   const f = fixture();
   const capture = createTransportDiagnostics({ fetch: async () => {
     throw new TypeError("fetch failed", { cause: Object.assign(new Error(), { code: "UND_ERR_CONNECT_TIMEOUT" }) });
@@ -127,13 +130,80 @@ test("connection diagnostics persist after the failed message without a remote l
   assert.doesNotMatch(JSON.stringify(failure), /UND_ERR_CONNECT_TIMEOUT/);
   await f.emit("turn_end");
   await f.emit("agent_settled");
-  assert.equal(f.probes.length, 0);
+  assert.equal(f.probes.length, 1);
   assert.equal(f.entries.length, 1);
   assert.equal(f.entries[0].customType, TRANSPORT_ERROR_ENTRY);
+  assert.equal(f.entries[0].data.backend_report.incident.id, "incident-a");
   const render = f.renderers.get(TRANSPORT_ERROR_ENTRY), theme = { fg: (_color, value) => value };
   assert.match(render(f.entries[0], { expanded: false }, theme).text, /UND_ERR_CONNECT_TIMEOUT.*ctrl\+o/);
   assert.match(render(f.entries[0], { expanded: true }, theme).text, /Endpoint: http:\/\/127.0.0.1:18080/);
   f.emit("message_end", { message: failure });
   await f.emit("turn_end");
   assert.equal(f.entries.length, 1);
+});
+
+test("collapsed connection failures explain a confirmed host restart and how to recover", async () => {
+  const f = fixture(async () => ({ schema: report.schema, status: "unavailable", incident: null,
+    backend: { ready: true, running: true },
+    diagnosis: { kind: "host_restarted", summary: "AI host restarted; fatal CPU watchdog error recorded on CPU 9.",
+      recovery: "Check /backend status, then restart Pi to recreate its connection." } }));
+  const transport = { schema: "urn:qwen-r9700:transport-error:v1", id: "reboot", timestamp: 10000,
+    elapsed_ms: 60000, request_elapsed_ms: 60000, endpoint: "http://127.0.0.1:8013/v1/chat/completions",
+    phase: "stream", attempt: 1, headers_ms: 300, http_status: 200, sdk_error: "TypeError",
+    causes: [{ parent: null, name: "SocketError", code: "UND_ERR_SOCKET" }] };
+  f.emit("message_end", { message: { ...message(), [TRANSPORT_ERROR]: transport } });
+  await f.emit("turn_end");
+  const renderer = f.renderers.get(TRANSPORT_ERROR_ENTRY), theme = { fg: (_color, value) => value };
+  const text = renderer(f.entries[0], { expanded: false }, theme).text;
+  assert.match(text, /AI host restarted/);
+  assert.match(text, /restart Pi/);
+});
+
+test("every failed Qwen request is diagnosed, including HTTP and incomplete-stream errors", async () => {
+  for (const errorMessage of ["400 invalid or unsupported inference request", "Stream ended without finish reason"]) {
+    const f = fixture();
+    f.emit("message_end", { message: { ...message(), errorMessage } });
+    await f.emit("turn_end");
+    assert.equal(f.probes.length, 1);
+    assert.equal(f.entries.length, 1);
+  }
+});
+
+test("a dead local tunnel is distinguished from a stopped backend", () => {
+  const transport = { elapsed_ms: 0, request_elapsed_ms: 0, sdk_error: "Error", phase: "connect", causes: [{ code: "ECONNREFUSED" }],
+    local_connection: { listening: false, code: "ECONNREFUSED" },
+    backend_report: { status: "unavailable", backend: { ready: true },
+      diagnosis: { kind: "cause_unknown", summary: "Backend is ready now." } } };
+  const text = connectionDiagnosticLines(transport, false).join("\n");
+  assert.match(text, /local tunnel or relay is not listening/);
+  assert.match(text, /relaunch Pi or pi-opsec/);
+  assert.doesNotMatch(text, /backend start/);
+});
+
+test("an unreachable diagnostic host is reported without pretending to know it rebooted", () => {
+  const backend_report = lookupFailure({ since: 10000, until: 20000 }, "host_unreachable", "ssh", { code: 255 });
+  const text = connectionDiagnosticLines({ elapsed_ms: 0, phase: "connect", sdk_error: "Error",
+    causes: [{ code: "ECONNREFUSED" }], backend_report }, false).join("\n");
+  assert.match(text, /could not reach the AI host/);
+  assert.doesNotMatch(text, /host restarted|CPU/);
+});
+
+test("local listener probe sends no HTTP/model request and identifies a closed port", async (t) => {
+  let dataReceived = false;
+  const server = createServer((socket) => { socket.on("data", () => { dataReceived = true; }); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.close(); });
+  const endpoint = `http://127.0.0.1:${server.address().port}/v1/chat/completions`;
+  assert.deepEqual(await probeLocalConnection(endpoint), { listening: true });
+  await new Promise((resolve) => server.close(resolve));
+  assert.deepEqual(await probeLocalConnection(endpoint), { listening: false, code: "ECONNREFUSED" });
+  assert.equal(dataReceived, false);
+  assert.equal(await probeLocalConnection("https://external.invalid/v1/chat/completions"), undefined);
+});
+
+test("compaction HTTP and transport failures get evidence; validation failures do not", async () => {
+  const f = fixture();
+  assert.equal(await reportBackendFailure(f.pi, f.ctx, "compaction endpoint returned HTTP 503", 10000), true);
+  assert.equal(f.probes.length, 1);
+  assert.equal(await reportBackendFailure(f.pi, f.ctx, "checkpoint missing required Key Decisions section"), false);
 });

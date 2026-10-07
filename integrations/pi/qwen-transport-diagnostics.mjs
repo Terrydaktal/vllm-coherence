@@ -27,6 +27,22 @@ const PHASES = {
 };
 const milliseconds = (value) => Math.round(Math.max(0, value) * 10) / 10;
 
+function codeFrames(stack) {
+  if (typeof stack !== "string") return [];
+  const frames = [];
+  for (const line of stack.slice(0, 16384).split("\n").slice(1)) {
+    // Keep V8 code locations, excluding the exception message, URL credentials,
+    // request data, eval arguments and arbitrary free-form stack annotations.
+    const match = /^\s+at (?:(?:async )?([\w.$<>]+) )?\(?((?:file:\/\/)?\/[^\x00-\x1f():?#]{1,320}\.(?:[cm]?js|tsx?)|node:[\w/._-]{1,160}):(\d+):(\d+)\)?$/.exec(line);
+    if (!match) continue;
+    const location = match[2];
+    if (!location.startsWith("node:") && !location.includes("/node_modules/") && !location.includes("/integrations/pi/")) continue;
+    frames.push({ ...(match[1] ? { function: match[1] } : {}), location, line: Number(match[3]), column: Number(match[4]) });
+    if (frames.length === 8) break;
+  }
+  return frames;
+}
+
 export function transportCauses(error) {
   const pending = [{ error, parent: null }], seen = new Set(), result = [];
   while (pending.length && result.length < 12) {
@@ -39,13 +55,15 @@ export function transportCauses(error) {
     if (SYSCALLS.has(current.syscall)) node.syscall = current.syscall;
     if (typeof current.address === "string" && isIP(current.address)) node.address = current.address;
     if (Number.isInteger(current.port) && current.port > 0 && current.port <= 65535) node.port = current.port;
+    const frames = codeFrames(current.stack);
+    if (frames.length) node.frames = frames;
     const index = result.push(node) - 1;
     pending.push({ error: current.cause, parent: index });
     if (Array.isArray(current.errors)) {
       for (const child of current.errors.slice(0, 12)) pending.push({ error: child, parent: index });
     }
   }
-  // Deliberately exclude free-form messages, stacks, bodies and headers. Fetch
+  // Deliberately exclude free-form messages, stack text, bodies and headers. Fetch
   // errors can embed the full URL (including credentials) or application data.
   return result;
 }
@@ -126,7 +144,7 @@ export function createTransportDiagnostics({ fetch: customFetch, signal,
         codes.includes("UND_ERR_HEADERS_TIMEOUT") ? "headers" :
         attempt.headers_ms !== undefined ? "stream" : "before_headers";
       return {
-        schema: TRANSPORT_SCHEMA, id: randomUUID(), timestamp: attempt.timestamp,
+        schema: TRANSPORT_SCHEMA, id: randomUUID(), timestamp: attempt.timestamp, failed_at: wall(),
         endpoint: attempt.endpoint, phase, attempt: attempt.number,
         elapsed_ms: attempt.failed_ms ?? milliseconds(now() - attempt.started),
         request_elapsed_ms: milliseconds(now() - started),
@@ -142,7 +160,8 @@ export function transportDiagnosticLines(report, expanded) {
   const code = report.causes?.map((cause) => cause.code).filter(Boolean).join(" → ") || report.sdk_error;
   const summary = `Connection failure: ${code} · ${(report.elapsed_ms / 1000).toFixed(2)}s · ${PHASES[report.phase] ?? "transport stage unknown"}`;
   if (!expanded) return [`${summary} (ctrl+o to expand)`];
-  const lines = [summary, `Endpoint: ${report.endpoint}`, `Recorded ${new Date(report.timestamp).toISOString()} · incident ${report.id}`,
+  const lines = [summary, `Endpoint: ${report.endpoint}`, `Request started ${new Date(report.timestamp).toISOString()} · incident ${report.id}`,
+    ...(report.failed_at ? [`Connection failed ${new Date(report.failed_at).toISOString()}`] : []),
     `Attempt ${report.attempt} · ${(report.request_elapsed_ms / 1000).toFixed(2)}s since provider request began`,
     report.headers_ms === null ? "No HTTP response headers received; backend admission is unconfirmed." :
       `HTTP ${report.http_status} headers after ${(report.headers_ms / 1000).toFixed(2)}s; failure occurred in the response stream.`,
@@ -152,11 +171,11 @@ export function transportDiagnosticLines(report, expanded) {
       `${cause.parent === null ? "" : ` · cause of ${cause.parent}`}` +
       `${cause.syscall ? ` · ${cause.syscall}` : ""}${cause.address ? ` · ${cause.address}` : ""}` +
       `${cause.port ? `:${cause.port}` : ""}${cause.errno !== undefined ? ` · errno ${cause.errno}` : ""}`);
+    for (const frame of cause.frames ?? []) lines.push(`     at ${frame.function ? frame.function + " " : ""}${frame.location}:${frame.line}:${frame.column}`);
   }
   for (const previous of report.previous_attempts ?? []) {
     lines.push(`Earlier attempt ${previous.attempt}: ${(previous.elapsed_ms / 1000).toFixed(2)}s · ` +
       previous.causes.map((cause) => cause.code ?? cause.name).join(" → "));
   }
-  lines.push("Request/response contents, headers, URL credentials and free-form exception text are not recorded.");
   return lines;
 }

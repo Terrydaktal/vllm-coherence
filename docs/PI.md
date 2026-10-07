@@ -335,9 +335,29 @@ to an authenticated archive. `qwen_rehydrate_tool_turn` retrieves exact line ran
 or literal matches, preserving access to evidence without resending every large
 tool output on every request.
 
-Recorded EngineCore errors are attached as expandable diagnostics: `Ctrl+O`
-reveals the traceback, and `/backend-error` retrieves the latest recorded failure.
-A missing traceback is reported explicitly; a forced kill may leave none.
+Every failed Qwen provider request automatically collects bounded backend and
+host evidence, including HTTP, incomplete-stream and connection failures.
+The collapsed error gives an explanation and recovery step when the evidence
+supports one. `Ctrl+O` shows the matching Python traceback, safe SDK code frames,
+container health/exit/OOM status, host boot identity and available disk space.
+`/backend-error` repeats the lookup explicitly. Successful generation performs
+no extra diagnostic lookup or listener probe.
+
+For a connection failure, Pi checks the local TCP listener separately from the
+AI host. A refused local endpoint with a healthy remote backend calls for
+relaunching Pi to recreate its tunnel or relay. A host boot inside the failed
+request's time window is reported as a restart; available kernel records can
+identify a fatal CPU machine-check. A previous boot failure is not attributed to
+a later request. If SSH or the VM diagnostic relay is unavailable, Pi says which
+lookup failed and leaves the underlying cause unconfirmed. A machine-check
+identifies the detected failure, not necessarily the hardware/software trigger.
+
+Ordinary request tracebacks are collected without requiring an EngineCore fatal
+banner. Disk-full and allocation failures get specific recovery guidance.
+The checks run only after an error, share a two-second host result cache, and are
+bounded in time and output. Reports are display-only session entries and never
+enter the model's context. The lookup cannot recover a traceback that a hard
+reset erased or prove a root cause from a socket error alone.
 
 Completed backend requests also append one content-free termination record to
 `/dev/shm/qwen-radiance-fair-public-stops.jsonl` on the GPU host. It captures the
