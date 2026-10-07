@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=601ef3af44369874f019eedafb0a3f9c5c5562fde5e0d55fa9c26471ecd1e6f5
+readonly abi_id=f09cb39ad7a78b7de7fec5da61a492670bdfd75baba12ea3533bd71be8736c89
 readonly data_abi=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
@@ -241,6 +241,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	--worker-cls speed_candidate_worker.SpeedCandidateWorker \
 	--kv-transfer-config "$kv_transfer_config" \
 	--middleware qwen_radiance_request_guard.require_snapshot_abi \
+	--middleware qwen_radiance_request_timeline.RequestTimelineMiddleware \
 	--enable-prefix-caching --mamba-cache-mode align --enable-auto-tool-choice \
 	--tool-call-parser qwen3_xml --reasoning-parser qwen3 \
 	--enable-per-request-metrics --enable-force-include-usage --enable-prompt-tokens-details \

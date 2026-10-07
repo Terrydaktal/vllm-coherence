@@ -1,0 +1,278 @@
+{
+  "schema": "urn:coherence:first-output-timeline-deployment:v1",
+  "status": "PASS",
+  "observed_at": "2026-10-07T20:30:12.317792+00:00",
+  "runtime_abi": "0132858cd8da2594704a7d275fdbfb7e263d1a10499a9d5f7c70bbfb6c9d952e",
+  "authenticated_manifest_abi": "0132858cd8da2594704a7d275fdbfb7e263d1a10499a9d5f7c70bbfb6c9d952e",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "snapshot_data_abi_changed": false,
+  "model_arithmetic_changed": false,
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "health_status": 200,
+  "smoke_status": "PASS",
+  "smoke": [
+    {
+      "status": 200,
+      "headers_ms": 45.508389,
+      "first_body_ms": 1784.614407,
+      "first_content_ms": 1784.716409,
+      "elapsed_ms": 2543.194387,
+      "request_id": "22081d09d127a33f10bae78b3bfe193e08d9cf6b0d638f3fba00e2a66d909ed8",
+      "completion_tokens": 2,
+      "finish_reason": "stop",
+      "done": true,
+      "stream_chunks": 4
+    },
+    {
+      "status": 200,
+      "headers_ms": 3.570662,
+      "first_body_ms": 93.238111,
+      "first_content_ms": 93.292742,
+      "elapsed_ms": 129.522653,
+      "request_id": "f2aed37b2d3aa8465cc17c643b8e9fc1b4cbf698bfb2472d643547f4a9acbba0",
+      "completion_tokens": 2,
+      "finish_reason": "stop",
+      "done": true,
+      "stream_chunks": 4
+    },
+    {
+      "status": 200,
+      "headers_ms": 3.478851,
+      "first_body_ms": 83.24515,
+      "first_content_ms": 83.296321,
+      "elapsed_ms": 119.366169,
+      "request_id": "3850563e863fd5c9ecb92c63dfa003be54d8103e9bc3adaf3e0ccd74e0ffb601",
+      "completion_tokens": 2,
+      "finish_reason": "stop",
+      "done": true,
+      "stream_chunks": 4
+    },
+    {
+      "status": 200,
+      "headers_ms": 3.493921,
+      "first_body_ms": 82.481604,
+      "first_content_ms": 82.533495,
+      "elapsed_ms": 118.378259,
+      "request_id": "17e8a46387d2e6cc90ecc3d1cc10caf2a125029fe5f6673b4f3cf196bd4de5a1",
+      "completion_tokens": 2,
+      "finish_reason": "stop",
+      "done": true,
+      "stream_chunks": 4
+    },
+    {
+      "status": 200,
+      "headers_ms": 3.330697,
+      "first_body_ms": 82.137697,
+      "first_content_ms": 82.25646,
+      "elapsed_ms": 117.883139,
+      "request_id": "344565b1d0e4c761a4fde8bea05aa95c320752ba81fe76c06160a0039a63a54c",
+      "completion_tokens": 2,
+      "finish_reason": "stop",
+      "done": true,
+      "stream_chunks": 4
+    }
+  ],
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "529774faf0b870e372124f44881105b4388e05dcb203901c3377a8d92d412842",
+    "qwen_radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "qwen_radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71",
+    "qwen_radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+    "qwen_radiance_cache_telemetry.py": "f11dde07cc9e2a4d93aefff86a88c8ae7e48e09ac8d0455375700835b4037057",
+    "qwen_radiance_request_timeline.py": "bff41600195bfa2c80bea1811b60f75741773e035615180b43f16890330efd4c",
+    "qwen_radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
+    "vllm/v1/engine/async_llm.py": "10db71a47cac5f6d4b5afd00f6c09880e36773a9faaaa36ae96927e9f057110b",
+    "vllm/entrypoints/openai/chat_completion/serving.py": "c23ad9d6100a770804952901be5b03dec481eca374f1fc2af76b8df0d8a3beb3",
+    "vllm/v1/worker/gpu_worker.py": "74d4863c857bda189718eccec6702db4e91b1bc7844f5b2d5862f9e675d1c3f7"
+  },
+  "worker_processes": [
+    {
+      "pid": 946,
+      "THP_enabled": "0"
+    }
+  ],
+  "request_timeline_activation": {
+    "complete_requests": 5,
+    "failed_requests": 0,
+    "recorder_drops": 0,
+    "write_errors": 0,
+    "first_output_hook_installed": true,
+    "model_requests": 5,
+    "generated_tokens": 10,
+    "scope": "Five tiny synthetic streaming requests after an idle restart; no real chat contents inspected, no long-context cache restoration or throughput qualification."
+  },
+  "request_timelines": [
+    {
+      "status": "COMPLETE",
+      "incomplete_reasons": [],
+      "latencies": {
+        "engine_first_output_ms": 1778.421582,
+        "api_first_content_ms": 1779.068825,
+        "http_first_body_ms": 1779.122546,
+        "http_headers_ms": 39.969327,
+        "http_end_ms": 2538.121734,
+        "scheduler_first_output_ms": 1776.299709
+      },
+      "covered_union_ms": 1750.048339,
+      "unattributed_ms": 29.02048600000012,
+      "overlap_by_stage_ms": {
+        "http_body_receive": 0.008311,
+        "api_render": 1.904068,
+        "async_input_process": 9.191045,
+        "engine_submit": 0.065151,
+        "phase_admission": 4.081513,
+        "phase_cache_lookup": 2.790446,
+        "phase_prefill": 1728.504954,
+        "worker_execute": 481.275588,
+        "phase_handover": 0.733735,
+        "python_gc": 13.194187,
+        "worker_sample": 1247.107074,
+        "main_thread_round": 2.773016,
+        "phase_generate": 2.769116,
+        "gpu_round": 1.675744
+      }
+    },
+    {
+      "status": "COMPLETE",
+      "incomplete_reasons": [],
+      "latencies": {
+        "engine_first_output_ms": 92.336483,
+        "api_first_content_ms": 92.798662,
+        "http_first_body_ms": 92.841423,
+        "http_headers_ms": 3.086242,
+        "http_end_ms": 129.659336,
+        "scheduler_first_output_ms": 91.161168
+      },
+      "covered_union_ms": 86.396323,
+      "unattributed_ms": 6.402338999999998,
+      "overlap_by_stage_ms": {
+        "http_body_receive": 0.00378,
+        "api_render": 1.119122,
+        "async_input_process": 0.089672,
+        "engine_submit": 0.054331,
+        "phase_admission": 0.551112,
+        "phase_handover": 17.942901,
+        "phase_cache_lookup": 1.375917,
+        "phase_prefill": 63.621994,
+        "worker_execute": 69.585584,
+        "python_gc": 0.099972,
+        "worker_sample": 2.718344,
+        "main_thread_round": 1.639183,
+        "phase_generate": 1.637494,
+        "gpu_round": 0.906268
+      }
+    },
+    {
+      "status": "COMPLETE",
+      "incomplete_reasons": [],
+      "latencies": {
+        "engine_first_output_ms": 82.204008,
+        "api_first_content_ms": 82.661367,
+        "http_first_body_ms": 82.705748,
+        "http_headers_ms": 2.893858,
+        "http_end_ms": 119.761876,
+        "scheduler_first_output_ms": 81.003774
+      },
+      "covered_union_ms": 80.84146,
+      "unattributed_ms": 1.8199070000000006,
+      "overlap_by_stage_ms": {
+        "http_body_receive": 0.00285,
+        "api_render": 1.01202,
+        "async_input_process": 0.069651,
+        "engine_submit": 0.043561,
+        "phase_admission": 0.520301,
+        "phase_handover": 11.4257,
+        "phase_cache_lookup": 0.792416,
+        "phase_prefill": 65.317368,
+        "worker_execute": 70.996943,
+        "python_gc": 1.818747,
+        "worker_sample": 2.928619,
+        "main_thread_round": 1.659823,
+        "phase_generate": 1.657593,
+        "gpu_round": 0.875077
+      }
+    },
+    {
+      "status": "COMPLETE",
+      "incomplete_reasons": [],
+      "latencies": {
+        "engine_first_output_ms": 81.527585,
+        "api_first_content_ms": 81.921713,
+        "http_first_body_ms": 81.965384,
+        "http_headers_ms": 2.918989,
+        "http_end_ms": 118.091273,
+        "scheduler_first_output_ms": 80.080916
+      },
+      "covered_union_ms": 80.231228,
+      "unattributed_ms": 1.6904849999999954,
+      "overlap_by_stage_ms": {
+        "http_body_receive": 0.00324,
+        "api_render": 1.147523,
+        "async_input_process": 0.070091,
+        "engine_submit": 0.044951,
+        "phase_admission": 0.558201,
+        "phase_handover": 11.406331,
+        "phase_cache_lookup": 0.806566,
+        "phase_prefill": 64.353528,
+        "worker_execute": 70.295598,
+        "python_gc": 0.090672,
+        "worker_sample": 2.530101,
+        "main_thread_round": 1.842967,
+        "phase_generate": 1.840797,
+        "gpu_round": 0.952299
+      }
+    },
+    {
+      "status": "COMPLETE",
+      "incomplete_reasons": [],
+      "latencies": {
+        "engine_first_output_ms": 81.437283,
+        "api_first_content_ms": 81.827931,
+        "http_first_body_ms": 81.871922,
+        "http_headers_ms": 3.00457,
+        "http_end_ms": 117.841108,
+        "scheduler_first_output_ms": 80.224238
+      },
+      "covered_union_ms": 80.2706,
+      "unattributed_ms": 1.557331000000005,
+      "overlap_by_stage_ms": {
+        "http_body_receive": 0.00259,
+        "api_render": 1.407348,
+        "async_input_process": 0.053631,
+        "engine_submit": 0.036621,
+        "phase_admission": 0.53897,
+        "phase_handover": 11.478853,
+        "phase_cache_lookup": 0.803356,
+        "phase_prefill": 64.345538,
+        "worker_execute": 70.9016,
+        "python_gc": 0.095892,
+        "worker_sample": 2.060851,
+        "main_thread_round": 1.605293,
+        "phase_generate": 1.603693,
+        "gpu_round": 0.763786
+      }
+    }
+  ],
+  "remaining_ttft_problem": "UNPROVEN: activation is confirmed; no recurrence of the former 61.2-second nonstreaming request or real-chat cold restoration was diagnosed by these short requests.",
+  "overhead": "Host boundary timestamps and bounded asynchronous records; no extra GPU markers, synchronization or tensor reads for this timeline. Existing generation GPU telemetry is unchanged.",
+  "capture_manifest": {
+    "qwen-radiance-fair-public-api-1-cache-jobs-health.json": "de541f8df36599508ef39cc0507a0a89a675d19e8b56aef7774012352de815c8",
+    "qwen-radiance-fair-public-cache-jobs-health.json": "245eed2359e94690eda2c507d311176ff285185d998622999b04e3a1d9bfd298",
+    "qwen-radiance-fair-public-cache-jobs.jsonl": "73959a479aee1337de4eca038a7919a7eccbcb57a3c596c1758d10b2a96c8b15",
+    "qwen-radiance-fair-public-api-1-cache-jobs.jsonl": "d87b8b3ec7105ef8455d02f4f9b10528669f7ff5aa7cff2cbec0248713d8dca9"
+  },
+  "cpu_checks_passed": 270,
+  "cpu_check_files": [
+    "tests/test_first_work_timeline.py",
+    "tests/test_request_timing_context.py",
+    "tests/test_cache_job_telemetry.py",
+    "tests/test_radiance_fair_scheduler.py",
+    "tests/test_radiance_request_timeline.py",
+    "tests/test_radiance_request_timeline_patch.py",
+    "tests/test_first_output_telemetry_analysis.py",
+    "tests/test_radiance_public_snapshot_patch.py",
+    "tests/test_qualified_speed_release.py",
+    "tests/test_radiance_launcher_preflight.py"
+  ]
+}

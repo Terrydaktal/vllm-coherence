@@ -149,6 +149,7 @@ manifest["runtime"]["chat_storage"] = {
             ROOT / "src/qwen_r9700_lab/radiance_cache.py",
             ROOT / "src/qwen_r9700_lab/radiance_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_cache_telemetry.py",
+            ROOT / "src/qwen_r9700_lab/radiance_request_timeline.py",
             ROOT / "src/qwen_r9700_lab/radiance_pinned_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_kfd_trace.py",
             BASE / "radiance_chat_tier.py",
@@ -267,7 +268,19 @@ manifest["runtime"]["fair_scheduler"] = {
             "updates for one request"
         ),
     },
-
+    "first_output_timeline": {
+        "schema": "urn:coherence:cache-job-timings:v1",
+        "module": "radiance_request_timeline.py",
+        "boundaries": (
+            "HTTP arrival and body receipt; template/tokenization; input processing and "
+            "engine submission; scheduler admission/queue/handover/cache/prefill; "
+            "first worker execute/sample; first engine output; first serialized semantic "
+            "content; first HTTP body and request termination"
+        ),
+        "identity": "hashed HTTP/external/internal request bridges; per-process trace and boot clock identity",
+        "attribution": "clipped interval unions; explicit unattributed time and incomplete captures",
+        "overhead": "bounded asynchronous numeric records; no new GPU synchronization or model requests",
+    },
 }
 manifest["serving"]["max_num_seqs"] = 2
 manifest["storage"]["secondary_tier"] = "qwen_chat_fs"

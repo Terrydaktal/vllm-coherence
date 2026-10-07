@@ -405,12 +405,13 @@
       "modules": {
         "radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
         "radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
-        "radiance_cache_telemetry.py": "27ad70a51c8bd1d41a34e65d1625e1534150ae6048282ea49100060b0cb5e6b1",
+        "radiance_cache_telemetry.py": "95c0087f1b84b21211ea2de4f9f7ba855840b9d06342dd1ece52ef43fd846260",
+        "radiance_request_timeline.py": "bff41600195bfa2c80bea1811b60f75741773e035615180b43f16890330efd4c",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
         "radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
-        "radiance_fair_scheduler.py": "251e655fe5dbc63d87da22b397a528e8497ea66cc03470720b42bec121da67b9",
-        "patch_chat_snapshot.py": "a22cb361a7db3eba31c3f7c08dd9707b3cb598d62e01f2a80f3e2fae51e9ec0b"
+        "radiance_fair_scheduler.py": "529774faf0b870e372124f44881105b4388e05dcb203901c3377a8d92d412842",
+        "patch_chat_snapshot.py": "a07994f7f468302a3bcf6653f2c41d43a29a07e429d8593d4df93ce0e216974f"
       }
     },
     "response_end_reuse": {
@@ -484,6 +485,14 @@
         "transitions": "immediate tmpfs publication; shared inotify/SSH feed; local file notifications",
         "retention": "last numeric response timings plus cumulative generation-round and draft/accepted counters per generation; at most 16 generations",
         "contract": "no token IDs, text, tensors, GPU synchronization, or extra model requests; round duration is content-free wall time between consecutive generation updates for one request"
+      },
+      "first_output_timeline": {
+        "schema": "urn:coherence:cache-job-timings:v1",
+        "module": "radiance_request_timeline.py",
+        "boundaries": "HTTP arrival and body receipt; template/tokenization; input processing and engine submission; scheduler admission/queue/handover/cache/prefill; first worker execute/sample; first engine output; first serialized semantic content; first HTTP body and request termination",
+        "identity": "hashed HTTP/external/internal request bridges; per-process trace and boot clock identity",
+        "attribution": "clipped interval unions; explicit unattributed time and incomplete captures",
+        "overhead": "bounded asynchronous numeric records; no new GPU synchronization or model requests"
       }
     }
   },

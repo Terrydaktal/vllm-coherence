@@ -198,15 +198,19 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     serving = tmp_path / "vllm/entrypoints/openai/chat_completion/serving.py"
     serving.parent.mkdir(parents=True)
     fixture = (
-        "class Serving:\n"
+        "logger = init_logger(__name__)\nclass Serving:\n"
         "    async def create(self, request):\n"
         + installer.TOOL_HANDOVER_SERVING[0][0]
+        + installer.TIMELINE_SERVING[1][0]
+        + "        request_id = (\n"
+        + installer.TIMELINE_SERVING[2][0]
         + "    async def stream(self, request):\n"
         + "        for _ in []:\n"
         + "".join("    " * i + "if True:\n" for i in range(3, 6))
     )
     fixture += installer.BUFFERED_USAGE_OLD
     fixture += installer.TOOL_HANDOVER_SERVING[1][0]
+    fixture += installer.TIMELINE_SERVING[3][0]
     fixture += "    async def complete(self, request):\n        for _ in []:\n"
     fixture += installer.TOOL_HANDOVER_SERVING[2][0]
     serving.write_text(fixture)
@@ -256,7 +260,9 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
         installer.V028_MEMORY_REPORT_HOOKS if release == "0.28" else installer.MEMORY_REPORT_HOOKS
     )
     worker_fixture = (
-        "class Worker:\n    def warmup(self):\n"
+        "logger = init_logger(__name__)\nclass Worker:\n"
+        '    @instrument(span_name="Warmup (GPU)")\n'
+        "    def compile_or_warm_up_model(self):\n"
         + memory_hooks[0][0]
         + "        )\n\n"
         + memory_hooks[1][0]
@@ -267,6 +273,10 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
         "V028_GPU_WORKER_SHA256" if release == "0.28" else "GPU_WORKER_SHA256",
         hashlib.sha256(worker_fixture.encode()).hexdigest(),
     )
+    async_llm = tmp_path / "vllm/v1/engine/async_llm.py"
+    async_llm.write_bytes(gzip.decompress(
+        (REPO_ROOT / "tests/fixtures/vllm_028_request_timeline_async_llm.py.gz").read_bytes()
+    ))
     installer.install(tmp_path, core, tier)
     first = scheduler.read_bytes()
     first_mamba = mamba.read_bytes()
@@ -410,7 +420,7 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     assert manifest["storage"]["secondary_tier"] == "qwen_chat_fs"
     assert {
         "radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py",
-        "radiance_pinned_memory.py", "radiance_kfd_trace.py",
+        "radiance_pinned_memory.py", "radiance_kfd_trace.py", "radiance_request_timeline.py",
     } <= manifest["runtime"]["chat_storage"]["modules"].keys()
     for name, expected in manifest["runtime"].get("release_files", {}).items():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
@@ -453,7 +463,7 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (
             REPO_ROOT / "src/qwen_r9700_lab"
-            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py")
+            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py", "radiance_request_timeline.py")
             else base
         ) / name
         assert hashlib.sha256(source.read_bytes()).hexdigest() == expected

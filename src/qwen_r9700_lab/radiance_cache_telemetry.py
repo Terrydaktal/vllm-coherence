@@ -46,6 +46,8 @@ _IDENTITIES = {
     "chat_id",
     "generation",
     "request_id",
+    "external_request_id",
+    "http_request_id",
 }
 _COUNTS = {
     "round",
@@ -68,6 +70,7 @@ _COUNTS = {
     "missing_dependencies",
     "pending_dependencies",
     "tier_index",
+    "status_code",
 }
 _LABELS = {"job_kind", "direction", "reason", "cache_source", "outcome"}
 _LABEL_VALUES = {
@@ -80,6 +83,7 @@ _LABEL_VALUES = {
     "tail_flush",
     "shutdown",
     "generation",
+    "prefill",
     "execute_return",
     "execute_failed",
     "sample_return",
@@ -126,6 +130,7 @@ _METRICS = {
     "queue_ms",
     "lifetime_ms",
     "gpu_inter_round_gap_ms",
+    "gpu_inter_prefill_gap_ms",
     "thread_user_ms",
     "thread_system_ms",
     "off_cpu_ms",
@@ -152,7 +157,7 @@ def fields(values):
             if math.isfinite(value) and value >= 0:
                 result[name] = round(value, 6)
         elif (
-            name in {"success", "indices_truncated", "stream_match"}
+            name in {"success", "indices_truncated", "stream_match", "streaming"}
             and type(value) is bool
         ):
             result[name] = value
@@ -200,6 +205,7 @@ class Recorder:
         self.sequence = self.written = self.dropped = self.write_errors = 0
         self.context_drops = 0
         self.gpu_hooks = False
+        self.worker_first_work_hooks = False
         self.round_hook_attempt_ns = None
         self.round_sampler = None
         self.kfd_capture = None
@@ -342,6 +348,7 @@ class Recorder:
             "write_errors": self.write_errors,
             "context_drops": self.context_drops,
             "gpu_hooks": self.gpu_hooks,
+            "worker_first_work_hooks": self.worker_first_work_hooks,
             "generation_round_telemetry": generation_timings_enabled(),
             "main_thread_samples": self.main_thread_samples,
             "round_sample_errors": self.round_sample_errors,
@@ -453,6 +460,22 @@ def _consecutive(previous, current):
         )
         and type(previous.get("round")) is int
         and current.get("round") == previous["round"] + 1
+    )
+
+
+def _consecutive_prefill(previous, current):
+    """Only adjacent completed prompt ranges of this exact request may join."""
+    return (
+        all(
+            previous.get(k) == current.get(k) and k in current
+            for k in ("request_id", "chat_id", "generation", "input_tokens")
+        )
+        and previous.get("job_kind") == current.get("job_kind") == "prefill"
+        and type(previous.get("computed_tokens")) is int
+        and type(previous.get("scheduled_tokens")) is int
+        and previous["scheduled_tokens"] > 0
+        and current.get("computed_tokens")
+        == previous["computed_tokens"] + previous["scheduled_tokens"]
     )
 
 
@@ -588,20 +611,33 @@ class GpuRoundTimings:
                         item["pair"][1]
                     )
                     previous = self.previous
+                    prefill = item["context"].get("job_kind") == "prefill"
                     if (
                         previous is not None
                         and previous["success"]
                         and item["success"]
                         and previous["stream_match"]
                         and previous["stream_id"] == item["stream_id"]
-                        and _consecutive(previous["context"], item["context"])
+                        and (
+                            _consecutive_prefill(previous["context"], item["context"])
+                            if prefill
+                            else (
+                                previous["context"].get("job_kind") != "prefill"
+                                and _consecutive(previous["context"], item["context"])
+                            )
+                        )
                     ):
-                        values["gpu_inter_round_gap_ms"] = previous["pair"][
-                            1
-                        ].elapsed_time(item["pair"][0])
+                        gap = (
+                            "gpu_inter_prefill_gap_ms"
+                            if prefill
+                            else "gpu_inter_round_gap_ms"
+                        )
+                        values[gap] = previous["pair"][1].elapsed_time(item["pair"][0])
                 cpu_ns, faults, resources = _thread_delta(item["before"], item["after"])
                 self.recorder.emit(
-                    "gpu_round",
+                    "gpu_prefill"
+                    if item["context"].get("job_kind") == "prefill"
+                    else "gpu_round",
                     item["start_ns"],
                     item["end_ns"],
                     {**values, **resources},
@@ -645,21 +681,35 @@ def install_round_hooks(owner, cuda):
     @functools.wraps(execute)
     def execute_wrapped(self, *args, **kwargs):
         item = None
+        first_work = {}
         try:
             output = args[0] if args else kwargs.get("scheduler_output")
             fair = getattr(output, "qwen_fair", None) or {}
             context = fair.get("cache_timing_context", {})
             count = getattr(output, "total_num_scheduled_tokens", 0)
             dummy = kwargs.get("dummy_run", args[2] if len(args) > 2 else False)
+            # Keep host spans for every prefill chunk and the first generation
+            # step. Prefill GPU markers use the same bounded asynchronous pool
+            # as decode; event queries remain off the serving thread.
+            if (
+                not dummy
+                and not fair.get("barrier")
+                and context.get("request_id")
+                and context.get("round", 1) <= 1
+                and count > 0
+                and len(getattr(output, "num_scheduled_tokens", {})) == 1
+            ):
+                first_work = {**context, "scheduled_tokens": count}
             if (
                 generation_timings_enabled()
                 and not dummy
                 and not fair.get("barrier")
                 and context.get("request_id")
-                and 0 < count <= 16
+                and count > 0
+                and (count <= 16 or first_work)
                 and len(getattr(output, "num_scheduled_tokens", {})) == 1
             ):
-                if not _recorder.kfd_attempted:
+                if count <= 16 and not _recorder.kfd_attempted:
                     _recorder.kfd_attempted = True
                     if os.environ.get("QWEN_KFD_CAPTURE_PATH"):
                         try:
@@ -669,31 +719,55 @@ def install_round_hooks(owner, cuda):
                                 start_if_approved,
                             )
                         _recorder.kfd_capture = start_if_approved(_recorder.trace_id)
-                item = sampler.begin({**context, "scheduled_tokens": count})
+                gpu_context = {**context, "scheduled_tokens": count}
+                computed = context.get("computed_tokens")
+                total = context.get("input_tokens")
+                if (
+                    type(computed) is int and type(total) is int and computed < total
+                ) or count > 16:
+                    gpu_context["job_kind"] = "prefill"
+                item = sampler.begin(gpu_context)
         except Exception:
             sampler.recorder.round_sample_errors += 1
         self._qwen_cache_round_item = item
+        self._qwen_first_work_context = first_work
         try:
-            result = execute(self, *args, **kwargs)
+            with (
+                span("worker_execute", resources=True, **first_work)
+                if first_work
+                else _NO_SPAN
+            ):
+                result = execute(self, *args, **kwargs)
         except BaseException:
             sampler.end(item, success=False, reason="execute_failed")
             self._qwen_cache_round_item = None
+            self._qwen_first_work_context = {}
             raise
         if getattr(self, "execute_model_state", None) is None:
             sampler.end(item, success=True, reason="execute_return")
             self._qwen_cache_round_item = None
+            self._qwen_first_work_context = {}
+        _tag_first_work_output(result, first_work)
         return result
 
     @functools.wraps(sample)
     def sample_wrapped(self, *args, **kwargs):
         success = False
         try:
-            result = sample(self, *args, **kwargs)
+            context = getattr(self, "_qwen_first_work_context", {})
+            with (
+                span("worker_sample", resources=True, **context)
+                if context
+                else _NO_SPAN
+            ):
+                result = sample(self, *args, **kwargs)
+            _tag_first_work_output(result, context)
             success = True
             return result
         finally:
             item = getattr(self, "_qwen_cache_round_item", None)
             self._qwen_cache_round_item = None
+            self._qwen_first_work_context = {}
             sampler.end(
                 item,
                 success=success,
@@ -702,6 +776,38 @@ def install_round_hooks(owner, cuda):
 
     owner.execute_model, owner.sample_tokens = execute_wrapped, sample_wrapped
     owner._qwen_cache_round_hooks = True
+    _recorder.worker_first_work_hooks = True
+
+
+def _tag_first_work_output(result, context):
+    # The context belongs to this actual asynchronous result, never to a global
+    # "current chat". Class-level wrapping avoids a bound-method reference cycle
+    # that could otherwise keep its GPU tensors alive after output collection.
+    if context and getattr(type(result), "_qwen_first_work_output_hooks", False):
+        try:
+            result._qwen_first_work_context = fields(context)
+        except Exception:
+            _recorder.round_sample_errors += 1
+
+
+def install_async_output_hooks(owner):
+    """Observe the existing completion wait without adding GPU operations."""
+    if getattr(owner, "_qwen_first_work_output_hooks", False):
+        return
+    original = owner.get_output
+
+    @functools.wraps(original)
+    def get_output(self, *args, **kwargs):
+        context = getattr(self, "_qwen_first_work_context", None)
+        with (
+            span("worker_get_output", resources=True, **context)
+            if context
+            else _NO_SPAN
+        ):
+            return original(self, *args, **kwargs)
+
+    owner.get_output = get_output
+    owner._qwen_first_work_output_hooks = True
 
 
 def emit(stage, **values):
@@ -713,6 +819,13 @@ def emit(stage, **values):
             _recorder.dropped += 1
 
 
+def emit_at(stage, start_ns, end_ns, **values):
+    """Persist a boundary/span without I/O, waits or exception propagation."""
+    if _recorder is not None:
+        try:
+            _recorder.emit(stage, start_ns, end_ns, values)
+        except Exception:
+            _recorder.dropped += 1
 
 
 class Span:
@@ -989,8 +1102,8 @@ def install_runtime_hooks():
             ).hexdigest()
         _runtime_hooks_installed = True
         _recorder.gpu_hooks = True
-    if generation_timings_enabled() and _recorder.round_sampler is None:
-        # Retry an early runner import failure without abandoning round diagnostics.
+    if generation_timings_enabled() and not _recorder.worker_first_work_hooks:
+        # A failed early import must not permanently remove cold-prefill timing.
         # Retry at most once per second, never rewrap already installed methods.
         now = time.monotonic_ns()
         if (
@@ -1001,9 +1114,14 @@ def install_runtime_hooks():
         _recorder.round_hook_attempt_ns = now
         try:
             import torch
+            from vllm.v1.worker.gpu.async_utils import AsyncOutput
             from vllm.v1.worker.gpu.model_runner import GPUModelRunner
 
+            install_async_output_hooks(AsyncOutput)
             install_round_hooks(GPUModelRunner, torch.cuda)
+            _recorder.worker_first_work_hooks = bool(
+                getattr(GPUModelRunner, "_qwen_cache_round_hooks", False)
+            )
             _recorder.source_hashes["round_runner"] = hashlib.sha256(
                 Path(sys.modules[GPUModelRunner.__module__].__file__).read_bytes()
             ).hexdigest()

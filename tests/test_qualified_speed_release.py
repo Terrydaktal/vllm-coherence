@@ -152,9 +152,25 @@ def test_deployment_receipt_matches_current_sources_and_qualification():
             BASE / source
         )
     snapshot_manifest = BASE / "snapshot-abi-chat-cache-v1.json"
-    assert receipt["runtime_abi"] == release.digest(snapshot_manifest)
-    assert (
-        receipt["data_abi"]
-        == json.loads(snapshot_manifest.read_text())["storage"]["data_abi"]
+    snapshot = json.loads(snapshot_manifest.read_text())
+    authenticated_abi = receipt.get(
+        "authenticated_manifest_abi", receipt["runtime_abi"]
     )
+    assert authenticated_abi == release.digest(snapshot_manifest)
+    # A metadata-only refresh can retain the already-running, explicitly
+    # reviewed predecessor. Installed serving sources must still match above.
+    assert receipt["runtime_abi"] in {
+        authenticated_abi,
+        *snapshot["runtime"]["memory_report"]["compatible_runtime_abis"],
+    }
+    if "worker_processes" in receipt:
+        assert receipt["worker_processes"]
+        assert all(
+            worker["THP_enabled"] == "0" for worker in receipt["worker_processes"]
+        )
+        assert (
+            receipt["installed_source_hashes"]["qwen_radiance_memory.py"]
+            == (snapshot["runtime"]["chat_storage"]["modules"]["radiance_memory.py"])
+        )
+    assert receipt["data_abi"] == snapshot["storage"]["data_abi"]
     assert len(receipt["smoke"]) == 5

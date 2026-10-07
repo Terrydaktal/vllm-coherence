@@ -10,6 +10,63 @@ GPU_WORKER_SHA256 = "50134ca3a147f5470e556437cbd40a13ea05b098efbac6553d5ea2f3e5f
 V028_STREAMING_CHAT_SHA256 = "a2440b6b76ad87de86bcf6fc7061ad5d02ab67c1c3c89ca7de3eeb29aa12aa2f"
 V028_ENGINE_CORE_SHA256 = "f4b1e07b6d91fac1549bc74a5c804e5a88793d663b5dc045c9e455db6550f5ad"
 V028_GPU_WORKER_SHA256 = "5e8faf3e00649289c81c2917dd4557a80b0b351c33295d8e0c4b204a304e6552"
+ASYNC_LLM_SHA256 = "bceed0b3f5f0c834fef79525f2462a092f082390f0070526280abc95945837dd"
+TIMELINE_IMPORT = (
+    "logger = init_logger(__name__)\n",
+    "logger = init_logger(__name__)\n"
+    "import qwen_radiance_request_timeline as request_timeline\n",
+)
+TIMELINE_WARMUP = (
+    TIMELINE_IMPORT,
+    (
+        '    @instrument(span_name="Warmup (GPU)")\n',
+        '    @instrument(span_name="Warmup (GPU)")\n'
+        '    @request_timeline.model_warmup\n',
+    ),
+)
+TIMELINE_SERVING = (
+    TIMELINE_IMPORT,
+    (
+        "        result = await self.render_chat_request(request)\n",
+        '        with request_timeline.api_render():\n'
+        "            result = await self.render_chat_request(request)\n",
+    ),
+    (
+        '            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"\n'
+        "        )\n",
+        '            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"\n'
+        "        )\n"
+        "        request_timeline.bind_external(request_id)\n",
+    ),
+    (
+        "                    data = chunk.model_dump_json(exclude_unset=True)\n"
+        '                    yield f"data: {data}\\n\\n"\n',
+        "                    data = chunk.model_dump_json(exclude_unset=True)\n"
+        "                    request_timeline.first_api_content(choice_data.delta)\n"
+        '                    yield f"data: {data}\\n\\n"\n',
+    ),
+)
+TIMELINE_ASYNC = (
+    TIMELINE_IMPORT,
+    (
+        "        # Add the EngineCoreRequest to EngineCore (separate process).\n"
+        "        await self.engine_core.add_request_async(request)\n",
+        "        # Add the EngineCoreRequest to EngineCore (separate process).\n"
+        '        with request_timeline.span("engine_submit"):\n'
+        "            await self.engine_core.add_request_async(request)\n",
+    ),
+    (
+        "                if out is not STREAM_FINISHED:\n"
+        "                    yield out\n",
+        "                if out is not STREAM_FINISHED:\n"
+        "                    request_timeline.first_engine_output(out)\n"
+        "                    yield out\n",
+    ),
+)
+ASYNC_INPUT_START = "        # Convert Input --> Request.\n"
+ASYNC_INPUT_END = "        # We start the output_handler on the first call to add_request() so\n"
+ASYNC_INPUT_WRAPPED = '        with request_timeline.span("async_input_process"):\n'
+ASYNC_INPUT_BRIDGE = "        request_timeline.internal_id_bridge(request)\n\n"
 MEMORY_REPORT_HOOKS = (
     (
         "        enable_gpu_sync_check()\n\n        return CompilationTimes(\n",
@@ -180,6 +237,9 @@ def tool_handover_core(text):
 
 
 def memory_report_worker(text):
+    for old, new in reversed(TIMELINE_WARMUP):
+        if text.count(new) == 1:
+            text = text.replace(new, old)
     # Accept our previous installed hook as well as the new startup preparation,
     # then authenticate the recovered upstream worker before changing it.
     pool_hook = (
@@ -198,11 +258,14 @@ def memory_report_worker(text):
         hooks = V028_MEMORY_REPORT_HOOKS
     else:
         raise ValueError("memory report worker source differs from the pinned runtime")
-    return apply_replacements(text, hooks)
+    return apply_replacements(apply_replacements(text, hooks), TIMELINE_WARMUP)
 
 
 def stream_buffered_tool_usage(text: str) -> str:
     """Let empty parser deltas reach the normal per-choice continuous-usage path."""
+    for old, new in reversed(TIMELINE_SERVING):
+        if text.count(new) == 1:
+            text = text.replace(new, old)
     for old, new in TOOL_HANDOVER_SERVING:
         if text.count(new) == 1:
             text = text.replace(new, old)
@@ -217,8 +280,37 @@ def stream_buffered_tool_usage(text: str) -> str:
     ):
         raise ValueError("buffered usage chat serving source differs from the pinned runtime")
     return apply_replacements(
-        original.replace(BUFFERED_USAGE_OLD, BUFFERED_USAGE_NEW), TOOL_HANDOVER_SERVING
+        apply_replacements(
+            original.replace(BUFFERED_USAGE_OLD, BUFFERED_USAGE_NEW), TOOL_HANDOVER_SERVING
+        ),
+        TIMELINE_SERVING,
     )
+
+
+def request_timeline_async(text: str) -> str:
+    """Observe API input processing and IPC without altering request IDs."""
+    for old, new in reversed(TIMELINE_ASYNC):
+        if text.count(new) == 1:
+            text = text.replace(new, old)
+    if ASYNC_INPUT_WRAPPED in text:
+        if text.count(ASYNC_INPUT_WRAPPED) != 1 or text.count(ASYNC_INPUT_BRIDGE) != 1:
+            raise ValueError("request timeline input wrapper is ambiguous")
+        prefix, _, remainder = text.partition(ASYNC_INPUT_WRAPPED)
+        region, _, suffix = remainder.partition(ASYNC_INPUT_BRIDGE)
+        lines = region.splitlines(keepends=True)
+        if any(line.strip() and not line.startswith("    ") for line in lines):
+            raise ValueError("request timeline input indentation changed")
+        text = prefix + "".join(line[4:] if line.strip() else line for line in lines) + suffix
+    if hashlib.sha256(text.encode()).hexdigest() != ASYNC_LLM_SHA256:
+        raise ValueError("request timeline AsyncLLM source differs from the pinned runtime")
+    if text.count(ASYNC_INPUT_START) != 1 or text.count(ASYNC_INPUT_END) != 1:
+        raise ValueError("request timeline input boundaries changed")
+    prefix, _, remainder = text.partition(ASYNC_INPUT_START)
+    region, _, suffix = remainder.partition(ASYNC_INPUT_END)
+    region = ASYNC_INPUT_START + region
+    wrapped = "".join("    " + line if line.strip() else line for line in region.splitlines(keepends=True))
+    text = prefix + ASYNC_INPUT_WRAPPED + wrapped + ASYNC_INPUT_BRIDGE + ASYNC_INPUT_END + suffix
+    return apply_replacements(text, TIMELINE_ASYNC)
 
 
 def retain_settled_mamba_tail(text: str) -> str:
@@ -305,6 +397,7 @@ def transformed_sources(
     factory = package_root / "vllm/v1/kv_offload/tiering/factory.py"
     mamba = package_root / "vllm/v1/core/single_type_kv_cache_manager.py"
     serving = package_root / "vllm/entrypoints/openai/chat_completion/serving.py"
+    async_llm = package_root / "vllm/v1/engine/async_llm.py"
     output = package_root / "vllm/v1/core/sched/output.py"
     runner = package_root / "vllm/v1/worker/gpu/model_runner.py"
     engine = package_root / "vllm/v1/engine/core.py"
@@ -398,6 +491,7 @@ def transformed_sources(
         factory: factory_text,
         mamba: retain_settled_mamba_tail(mamba.read_text()),
         serving: stream_buffered_tool_usage(serving.read_text()),
+        async_llm: request_timeline_async(async_llm.read_text()),
         output: add_fair_output(output.read_text()),
         runner: add_fair_runner_hooks(runner.read_text()),
         engine: tool_handover_core(engine.read_text()),
@@ -408,11 +502,14 @@ def transformed_sources(
         package_root / "qwen_radiance_memory.py": cache_source.with_name(
             "radiance_memory.py"
         ).read_text(),
-        package_root / "qwen_radiance_pinned_memory.py": cache_source.with_name(
-            "radiance_pinned_memory.py"
-        ).read_text(),
         package_root / "qwen_radiance_cache_telemetry.py": cache_source.with_name(
             "radiance_cache_telemetry.py"
+        ).read_text(),
+        package_root / "qwen_radiance_request_timeline.py": cache_source.with_name(
+            "radiance_request_timeline.py"
+        ).read_text(),
+        package_root / "qwen_radiance_pinned_memory.py": cache_source.with_name(
+            "radiance_pinned_memory.py"
         ).read_text(),
         package_root / "qwen_radiance_kfd_trace.py": cache_source.with_name(
             "radiance_kfd_trace.py"

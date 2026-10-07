@@ -86,13 +86,15 @@
     },
     {
       "id": "OBS-01",
-      "contract": "Cache residency, shared probes and automatic actionable failure evidence; incident-time reboot/trace attribution separated from current health; local tunnel and remote backend checks; diagnostic entries excluded from model context; content-free cache-job/round diagnostics",
+      "contract": "Cache residency, shared probes and automatic actionable failure evidence; incident-time reboot/trace attribution separated from current health; local tunnel and remote backend checks; diagnostic entries excluded from model context; request-to-first-output phase timeline with explicit hashed identity bridges, boot/lifecycle validation, clipped interval union and incomplete-capture reporting",
       "sources": [
         "src/qwen_r9700_lab/radiance_cache_residency.py",
         "src/qwen_r9700_lab/radiance_error_report.py",
         "integrations/pi/qwen-radiance-errors.mjs",
         "integrations/pi/qwen-transport-diagnostics.mjs",
-        "src/qwen_r9700_lab/radiance_cache_telemetry.py"
+        "src/qwen_r9700_lab/radiance_cache_telemetry.py",
+        "src/qwen_r9700_lab/radiance_request_timeline.py",
+        "tools/analyze_cache_job_telemetry.py"
       ],
       "tests": [
         "tests/test_radiance_cache_residency.py",
@@ -102,7 +104,12 @@
         "tests/test_radiance_errors_sdk.mjs",
         "tests/test_transport_diagnostics.mjs",
         "tests/test_transport_diagnostics_sdk.mjs",
-        "tests/test_cache_job_telemetry.py"
+        "tests/test_cache_job_telemetry.py",
+        "tests/test_first_work_timeline.py",
+        "tests/test_request_timing_context.py",
+        "tests/test_radiance_request_timeline.py",
+        "tests/test_radiance_request_timeline_patch.py",
+        "tests/test_first_output_telemetry_analysis.py"
       ],
       "native": "Telemetry correlation under load"
     },

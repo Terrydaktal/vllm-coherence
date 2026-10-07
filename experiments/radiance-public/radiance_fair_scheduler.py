@@ -240,6 +240,17 @@ class RequestPhases:
             self._last_generation_request_id = None
             self._last_generation_at = None
 
+    def _timeline(self, request, stage, start, end):
+        # Retain individual requests even after the latest-per-chat live status
+        # replaces them. Anonymous release smoke requests are included too.
+        row = self.live[request.request_id]
+        cache_telemetry.emit_at(
+            stage, int(start * 1_000_000_000), int(end * 1_000_000_000),
+            request_id=row["request_id"], chat_id=row["chat_id"],
+            generation=row["generation"],
+            input_tokens=_stop_count(getattr(request, "num_prompt_tokens", None)),
+            computed_tokens=_stop_count(getattr(request, "num_computed_tokens", None)),
+        )
 
     def set(self, request, phase, blocker=None):
         now = time.monotonic()
@@ -260,15 +271,20 @@ class RequestPhases:
                 "draft_tokens": 0,
                 "accepted_tokens": 0,
             }
+            self._timeline(request, "scheduler_admitted", now, now)
+            self._timeline(request, "phase_enter_" + phase, now, now)
             return True
         row = self.live[rid]
         if row["phase"] == phase and row["blocker"] == blocker:
             return False
         elapsed = max(0, (now - row["since"]) * 1000)
+        self._timeline(request, "phase_" + row["phase"], row["since"], now)
         row["timings_ms"][row["phase"]] = row["timings_ms"].get(row["phase"], 0) + elapsed
         row.update(phase=phase, blocker=blocker, since=now)
+        self._timeline(request, "phase_enter_" + phase, now, now)
         if phase == "generate" and row["first_token_ms"] is None:
             row["first_token_ms"] = max(0, (now - row["started"]) * 1000)
+            self._timeline(request, "scheduler_first_output", now, now)
         if phase != "generate":
             self._reset_generation_clock(rid)
         return True
@@ -433,6 +449,8 @@ class RequestPhases:
             return
         self.capture_stop(request)
         self.set(request, "complete")
+        now = time.monotonic()
+        self._timeline(request, "scheduler_finished", now, now)
         row = self.row(request)
         row["termination"] = self.live[request.request_id]["termination"]
         if len(self._stop_events) >= STOP_LOG_MAX_PENDING:
@@ -1557,6 +1575,7 @@ class FairScheduler(Scheduler):
                 self._step_worker_metadata = metadata
                 output = self._parent_step(throttle_prefills)
                 output.qwen_fair = metadata
+        self._bind_timing_context(output, metadata)
         if self.running:
             # Use the request actually admitted by vLLM (it may skip a blocked
             # request in the same chat). A cache swap or cleanup-only frame is
@@ -1574,9 +1593,44 @@ class FairScheduler(Scheduler):
     def _build_kv_connector_meta(self, connector, scheduler_output):
         # The connector builds its flush set inside super().schedule(), before
         # schedule() returns. Attach the barrier early enough for that pass.
+        self._bind_timing_context(scheduler_output, self._step_worker_metadata)
         scheduler_output.qwen_fair = self._step_worker_metadata
         return super()._build_kv_connector_meta(connector, scheduler_output)
 
+    def _bind_timing_context(self, scheduler_output, metadata):
+        """Attribute work only once the parent scheduler has selected its rows.
+
+        Response ownership may name a blocked request or the preceding answer.
+        It cannot identify the work actually admitted into this output. Rebind
+        before connector jobs are built and again after parent scheduling; never
+        consume bank-copy/drop metadata a second time just to refresh telemetry.
+        """
+        if metadata is None:
+            return
+        metadata.pop("cache_timing_context", None)
+        metadata.pop("last_round_ms", None)
+        request_ids = self._scheduled_request_ids(scheduler_output)
+        if metadata.get("barrier") or len(request_ids) != 1:
+            return
+        phases = getattr(self, "request_phases", None)
+        request = getattr(self, "requests", {}).get(request_ids[0])
+        if phases is None or request is None:
+            return
+        row = phases.live.get(request.request_id)
+        if row is None:
+            return
+        scheduled_count = int(scheduler_output.num_scheduled_tokens[request_ids[0]])
+        computed = _stop_count(getattr(request, "num_computed_tokens", None))
+        metadata["last_round_ms"] = row.get("last_round_ms")
+        metadata["cache_timing_context"] = {
+            "request_id": row["request_id"],
+            "chat_id": row["chat_id"],
+            "generation": row["generation"],
+            "round": row["generation_rounds"] + 1,
+            "input_tokens": _stop_count(getattr(request, "num_prompt_tokens", None)),
+            # The parent has already advanced this count for the pending frame.
+            "computed_tokens": max(0, computed - scheduled_count) if computed is not None else None,
+        }
 
     @staticmethod
     def _scheduled_request_ids(scheduler_output):

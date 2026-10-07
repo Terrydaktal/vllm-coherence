@@ -199,6 +199,46 @@ def test_gpu_round_pool_is_bounded_and_skips_instead_of_waiting(recorder):
 
 
 @pytest.mark.parametrize(
+    "boundary",
+    [None, "computed_tokens", "request_id", "generation", "input_tokens", "failed", "decode"],
+)
+def test_prefill_gpu_gaps_require_adjacent_ranges_and_stay_out_of_decode(
+    recorder, boundary
+):
+    cuda, state, calls = fake_round_cuda()
+    sampler = recorder.round_sampler = telemetry.GpuRoundTimings(
+        cuda, recorder, capacity=3
+    )
+    context = round_context(
+        1, job_kind="prefill", computed_tokens=0, input_tokens=60000,
+        scheduled_tokens=3296,
+    )
+    sampler.end(
+        sampler.begin(context), success=boundary != "failed", reason="execute_return"
+    )
+    next_context = {**context, "computed_tokens": 3296}
+    if boundary == "computed_tokens":
+        next_context[boundary] = 3297
+    elif boundary in ("request_id", "generation"):
+        next_context[boundary] = "f" * 64
+    elif boundary == "input_tokens":
+        next_context[boundary] += 1
+    elif boundary == "decode":
+        next_context.pop("job_kind")
+        next_context["round"] = 2
+    sampler.end(sampler.begin(next_context), success=True, reason="execute_return")
+    assert calls == ["record"] * 4
+    state.ready = True
+    sampler.collect()
+    captured = rows(recorder)
+    assert captured[0]["stage"] == "gpu_prefill"
+    assert captured[1]["stage"] == ("gpu_round" if boundary == "decode" else "gpu_prefill")
+    assert ("gpu_inter_prefill_gap_ms" in captured[1]) == (boundary is None)
+    assert "gpu_inter_round_gap_ms" not in captured[1]
+    assert captured[1]["gpu_elapsed_ms"] == 1
+
+
+@pytest.mark.parametrize(
     "boundary", ["request", "generation", "round", "stream", "failed"]
 )
 def test_gpu_gaps_are_not_reported_across_unrelated_rounds(recorder, boundary):
@@ -276,6 +316,7 @@ def test_round_hooks_keep_model_results_arguments_and_exceptions(recorder):
     assert caught.value is failure
     state.ready = True
     events = rows(recorder)
+    assert [e["stage"] for e in events[:2]] == ["worker_execute", "worker_sample"]
     events = [e for e in events if e["stage"] == "gpu_round"]
     assert len(events) == 2 and events[0]["success"] and not events[1]["success"]
     assert events[1]["reason"] == "sample_failed"
@@ -315,9 +356,9 @@ def test_approved_kfd_capture_starts_once_on_owned_real_forward(recorder, monkey
 
 
 @pytest.mark.parametrize(
-    "excluded", ["dummy", "barrier", "prefill", "batch", "unowned"]
+    "excluded", ["dummy", "barrier", "unclassified_large", "batch", "unowned"]
 )
-def test_round_hooks_do_not_instrument_startup_handover_or_prefill(recorder, excluded):
+def test_round_hooks_do_not_instrument_startup_handover_or_unowned_work(recorder, excluded):
     cuda, _, calls = fake_round_cuda()
 
     class Runner:
@@ -337,8 +378,9 @@ def test_round_hooks_do_not_instrument_startup_handover_or_prefill(recorder, exc
     )
     if excluded == "barrier":
         output.qwen_fair["barrier"] = True
-    elif excluded == "prefill":
+    elif excluded == "unclassified_large":
         output.total_num_scheduled_tokens = 4096
+        output.qwen_fair["cache_timing_context"]["round"] = 2
     elif excluded == "batch":
         output.num_scheduled_tokens["b"] = 8
     elif excluded == "unowned":

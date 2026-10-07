@@ -1,8 +1,9 @@
 # Cache jobs and isolated slow rounds
 
 The cache-job recorder investigates rare long rounds without changing cache
-contents, arithmetic, flush intervals or scheduling. It starts with the serving
-scheduler and is installed by `patch_chat_snapshot.py`; the release package
+contents, arithmetic, flush intervals or scheduling. API admission, model warmup
+and serving-scheduler hooks each start a process-scoped recorder and are installed
+by `patch_chat_snapshot.py`; the release package
 includes `qwen_radiance_cache_telemetry.py`. Set `QWEN_CACHE_JOB_TELEMETRY=0` in
 the **container environment before startup** to disable it. Editing the source
 or restarting Pi does not activate it in an already running backend: the backend
@@ -14,7 +15,7 @@ must reload the runtime. The stage profiler is not needed.
 | --- | --- |
 | Round start/completion | Hashed request/chat identity, round number, scheduled/input/computed token counts, monotonic timestamp and recorder lifecycle ID. Computed tokens count processed state, not an emitted pending token. |
 | Main generation thread | Thread CPU, user/system CPU, minor/major page faults, voluntary/involuntary context switches and wall-minus-CPU time across consecutive completed rounds. This covers scheduler work outside the worker forward. Handover, another request, a different thread or a reset generation clock starts a new baseline. |
-| Generation GPU timing | Two HIP markers bracket `execute_model` entry through `sample_tokens` return. Completed current-stream duration and the previous end-to-next-start gap are collected asynchronously. The gap is included only for consecutive successful rounds of the same request, generation and stream. Worker host/thread counters are included separately. |
+| Generation and prefill GPU timing | Two HIP markers bracket `execute_model` entry through `sample_tokens` return. Completed current-stream duration and the previous end-to-next-start gap are collected asynchronously. Prefill records include scheduled and processed ranges; gaps join only adjacent chunks of the same request, generation and stream. These elapsed intervals can include host dispatch starvation; they are not pure kernel busy time. Worker host/thread counters are included separately. |
 | GPU transfer submission | Host wall/thread CPU time, thread page faults, job ID, direction, bytes, per-group logical ranges `[first GPU-block index, count]`. These are logical indices, not physical pointers. |
 | GPU transfer completion | Native completed HIP start/end duration, submission-to-observed-completion lifetime, success and originating request/round. Lifetime includes dependency/queue waits and completion polling delay; it is not DMA duration. |
 | Existing GPU waits | Duration of the existing offload wait and decode-transition/recovery fence, with job IDs/reason. No new wait is inserted. |
@@ -25,6 +26,8 @@ must reload the runtime. The stage profiler is not needed.
 | Shared state | Contended tier/block/manifest/I/O-counter lock acquisition (at least 0.05 ms), slow completion polling (at least 1 ms), tail publication and old-namespace collection. |
 | Python GC | Generation, duration, collected/uncollectable counts and executing thread. Existing GC callbacks and collection policy are retained. |
 | Recorder health | Dropped records/context, write errors, pending queue size, writer batch time, transfer-hook installation and installed source hashes. Slow recorder batches are recorded so the observer's own work is visible. |
+| First-output request timeline | HTTP admission/body receive, render/template work, asynchronous input processing, engine submission, scheduler admission and phase transitions, worker execution/sampling, first generated engine output, first serialized API content, HTTP headers/first body and terminal completion. Explicit hashed-ID bridges connect API and internal engine request identities. |
+| Startup lifecycle | Process-scoped recorder start and full worker model warmup before readiness, with monotonic timestamps, process/lifecycle identity and a hashed boot identity. Startup spans are retained separately from request work. |
 
 The qualified TP1 lane runs scheduler and worker in one process. Jobs retain
 their originating identity when another chat takes the GPU. Separate `active`
@@ -37,12 +40,91 @@ No prompt text, token values, cache keys, tensors, paths, pointers or exception
 messages are included. Logical ranges are capped at 16 groups; truncation is
 explicit. GPU job contexts are capped at 256, with evictions counted.
 
+## Long first-output delays
+
+The first tiny request in the [process-policy deployment receipt](../benchmarks/results/process-wide-thp-deployment-20261007.json)
+took 61.213 seconds **to complete a nonstreaming HTTP request**. That capture
+did not retain a matching request phase timeline or the first generated-output
+timestamp. It therefore does not measure 61.213 seconds to first token, or show
+which operation consumed the delay. Subsequent request completion times cannot
+supply the missing phase attribution retrospectively.
+
+The request recorder now starts at HTTP admission, before body processing and
+render/tokenization, rather than relying solely on scheduler admission. It
+records points or host spans at the existing boundaries and bridges the random
+HTTP request identity to the hashed API and internally assigned engine IDs.
+Scheduler phase-enter markers and completed phase spans persist independently
+of the footer's latest status. Worker host execution and sampling spans include
+prefill and the first generated output. These API and host timeline hooks add
+no GPU event, synchronization, tensor read or model request. The separate GPU
+timing recorder adds the two asynchronous HIP markers described above; clocks,
+thread counters and bounded recorder work also have a cost.
+
+The output boundaries have different meanings:
+
+| Boundary | Meaning |
+| --- | --- |
+| `first_engine_output` | First engine output containing generated token IDs; its timestamp is retained, with no token values. |
+| `first_api_content` | First serialized streaming chunk containing content, reasoning or tool metadata, before yielding it to the HTTP writer. |
+| `http_first_body` | First nonempty response body successfully handed to the ASGI sender. An early role-only SSE event can satisfy this without a generated token. |
+| `http_end` | Completed HTTP wall time; a cancelled or failed request remains an explicit failed timeline. |
+
+These are server boundaries. Network/tunnel/client buffering after ASGI send
+is not measured as GPU generation time. A nonstreaming response may have no
+first-content stream marker; its engine first-output boundary remains distinct
+from response completion.
+
+Preserve each participating API/engine process's numeric log, rotated log and
+health snapshot. All timestamps must share the same hashed boot identity;
+the analyzer refuses cross-process subtraction when the clock domain is missing
+or differs. An explicit internal-ID bridge is required to join request identities.
+Matching chat identity, active-request snapshots and nearby timestamps are not
+substitutes. Use any of the recorded HTTP/API/internal request SHA-256 digests:
+
+```bash
+UV_CACHE_DIR=/data/.cache/uv uv run python tools/analyze_cache_job_telemetry.py \
+  --request-id REQUEST_SHA256 \
+  --cache-log /tmp/capture/api-cache-jobs.jsonl \
+  --cache-log /tmp/capture/engine-cache-jobs.jsonl \
+  --health /tmp/capture/api-cache-jobs-health.json \
+  --health /tmp/capture/engine-cache-jobs-health.json \
+  --output /tmp/capture/first-output.json
+```
+
+Request mode does not need a round log. It reports engine, serialized-content,
+first-body and completed-request latencies separately. The attribution window
+ends at first serialized content when available, otherwise first engine output.
+Every observed span is clipped to that window. `covered_union_ms` merges nested
+and concurrent spans; `unattributed_ms` retains the rest of the elapsed wall time.
+Their sum equals the latency window. Per-stage overlap times can exceed that
+window when added and must never be presented as a serial total.
+
+`INCOMPLETE` is reported for missing/ambiguous start, bridge or output boundaries,
+missing terminal completion, failed/cancelled phases, unmatched lifecycle health,
+invalid records, sequence gaps, recorder loss or unclosed scheduler phases.
+Unfinished phases remain explicit rather than receiving invented durations.
+`COMPLETE` means the retained boundary and recorder checks passed; it does not
+identify the blocking cause or certify every internal instruction. Ordinary
+rotation and a full recorder queue can still limit what a later capture proves.
+
+The [7 October activation receipt](../benchmarks/results/first-output-timeline-deployment-20261007.json)
+records 270 CPU checks and five complete synthetic request timelines after an
+idle restart, with no dropped records or write errors. The first request's
+serialized-content latency was 1,779 ms: 481 ms in the first worker execute call
+and 1,247 ms in sampling, with 29 ms explicitly unattributed. These nested host
+spans are diagnostic attribution, not independent GPU durations. Later requests
+reached serialized content in 82–93 ms. This confirms recorder activation; it
+does not qualify real-chat restoration or establish that the old delay is fixed.
+
 ## Files and overhead
 
 For status prefix `/dev/shm/qwen-radiance-fair-public`, the recorder writes:
 
 - `-cache-jobs.jsonl` and `.jsonl.1`: up to 16 MiB each, retaining one older file.
 - `-cache-jobs-health.json`: health snapshot updated about once a second.
+- API writers use `-api-PID-cache-jobs.jsonl` (and `.1`) and a matching health
+  file. They cannot rotate the engine's log. Startup retains live API writers
+  and the two most recent dead-PID sets; older API sets are retired.
 - The existing `-rounds.jsonl` gains lifecycle/monotonic timestamps and input and
   computed context counts; its existing retention is unchanged.
 
@@ -66,11 +148,13 @@ cross-stream dependency. Failed driver queries quarantine pairs. Health reports
 completed/dropped/error counts and pending/free/quarantined capacity.
 
 Set `QWEN_GENERATION_ROUND_TELEMETRY=0` in the **container environment before
-startup** to disable the CPU/GPU round measurements while retaining cache-job
-diagnostics. The worker hook is installed on the actual V2 runner independently
-of stage profiling; dummy runs, barrier frames, unowned/batched calls and forwards
-larger than 16 rows are excluded. An early runner import failure is retried at
-most once a second rather than permanently abandoning round diagnostics.
+startup** to disable the CPU/GPU round and first-work measurements while retaining
+cache-job diagnostics. The worker hook is installed on the actual V2 runner,
+independently of stage profiling. Dummy runs, barrier frames and unowned/batched
+calls are excluded. GPU round markers cover at most 16 rows; the host first-work
+spans also cover larger prefill chunks until the first generation step completes.
+`worker_first_work_hooks` in recorder health confirms that hook installation
+succeeded; an early setup failure is retried at most once a second.
 This is the pinned single-request TP1 lane,
 not a claim that arbitrary asynchronous/multi-rank streams are covered.
 
@@ -238,10 +322,26 @@ driver tracing may still be needed; not every HIP instruction is instrumented.
 
 `main_thread_round.off_cpu_ms` is wall time minus thread CPU, not an identified
 blocking cause: it can include GPU/I/O waits, GIL contention and OS descheduling.
-Major page faults show disk-backed page-in activity, not necessarily swap.
+Major page faults count serviced faults, not disk traffic: swap may be compressed
+RAM, and zero-page swap restoration need not read storage at all.
 Generation `gpu_elapsed_ms` is the current-stream marker span, including idle or
 dependency gaps within it; it is not a sum of active kernel times and does not
 measure unrelated streams. Neither metric by itself establishes causation.
+
+The same bounded asynchronous marker pool also records every owned prefill
+chunk as `gpu_prefill`, including its starting computed-token count and scheduled
+width. `gpu_inter_prefill_gap_ms` is emitted only between adjacent prompt ranges
+with the same request, chat, generation, prompt length and stream. Decode and
+prefill gaps cannot bridge each other. Marker queries and elapsed-time reads run
+on the existing writer; prefill adds no synchronization or serving-thread wait.
+These spans separate queued GPU work from gaps between chunks, while the
+existing `worker_execute` and `worker_sample` spans retain host CPU/fault costs.
+`worker_get_output` observes the asynchronous result's existing completion wait
+and output reconstruction, with wall/thread CPU time and page faults. Its
+numeric context is attached to that result, so a later request cannot relabel
+it. It introduces no additional GPU query, wait, event, or synchronization.
+Marker elapsed time includes any host-dispatch starvation between its markers;
+it is not a pure kernel-busy measurement.
 
 CPU tests cover snapshot bytes, locks, propagation of original results/errors,
 bounded drops/rotation, real writing, GC callbacks, native transfer-result reuse
