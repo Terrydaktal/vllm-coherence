@@ -188,6 +188,25 @@ interpreting that absence as proof. No round reached 500 ms in this capture
 attributed to a driver event. The captured mechanism is a strong candidate for
 that older incident, not a claim that all long pauses are repaired.
 
+### Process-wide huge-page protection
+
+Production startup now applies `PR_SET_THP_DISABLE=1` and requires
+`PR_GET_THP_DISABLE=1` before importing release installers or model/GPU code.
+The existing qualification supervisor uses the same helper in
+`radiance_memory.py`. Linux inherits this policy across fork and exec, covering
+the API server and its model workers as well as the dedicated parking buffers.
+Failure to set or verify the policy aborts startup. The startup log retains the
+numeric policy receipt; `/proc/PID/status` exposes `THP_enabled: 0` for each worker.
+
+This does not change the host's global huge-page settings, model arithmetic,
+snapshot data layout or tensor contents, and adds no per-round call. It removes
+huge-page promotion as one source of mapping invalidation in this process tree;
+ordinary unmapping, registration lifetimes and other driver causes can still
+interrupt queues. CPU fork/exec and failure-injection checks establish the
+startup behavior. Whether it eliminates the remaining long rounds requires a
+matched live capture; allocation and CPU-transfer performance must also be
+checked before claiming a performance benefit.
+
 ## Capture and correlation
 
 Let normal Pi work produce around 5–10K rounds: roughly 4–8 minutes at 50 ms

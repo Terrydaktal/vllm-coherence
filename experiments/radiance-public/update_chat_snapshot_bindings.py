@@ -59,6 +59,16 @@ manifest["runtime"] = {
         )
     },
 }
+manifest["runtime"]["process_memory_policy"] = {
+    "helper": "radiance_memory.py:disable_transparent_hugepages",
+    "policy": "PR_SET_THP_DISABLE=1; verify PR_GET_THP_DISABLE=1",
+    "scope": "backend process tree before release imports and model initialization",
+    "failure_behavior": "Abort startup before importing GPU/model code if setup or verification fails.",
+    "host_global_policy_changed": False,
+    "per_round_calls": 0,
+    "model_arithmetic_changed": False,
+    "qualification": "CPU fork/exec inheritance and fail-closed startup checks; queue-stall elimination requires live evidence.",
+}
 manifest["runtime"]["draft_head_initialization"] = {
     "installer": "patch_draft_head_initialization.py",
     "upstream_commit": DRAFT_UPSTREAM,

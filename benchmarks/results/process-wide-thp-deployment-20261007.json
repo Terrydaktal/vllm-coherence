@@ -1,0 +1,90 @@
+{
+  "schema": "urn:coherence:process-thp-deployment:v1",
+  "observed_at": "2026-10-07",
+  "status": "PASS",
+  "runtime_abi": "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede",
+  "authenticated_manifest_abi": "262354487bb421226717d41cdd24851998d2f819f0cef95d7ebef0fc6fd28427",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "cpu_checks_passed": 107,
+  "model_arithmetic_changed": false,
+  "snapshot_data_abi_changed": false,
+  "host_global_thp_changed": false,
+  "per_round_policy_calls": 0,
+  "long_round_elimination": "UNPROVEN; requires matched queue-event evidence",
+  "health_status": 200,
+  "smoke_status": "PASS",
+  "smoke": [
+    {
+      "name": "reply",
+      "http_status": 200,
+      "output_tokens": 2,
+      "finish_reason": "stop",
+      "elapsed_s": 61.21290603200032
+    },
+    {
+      "name": "arithmetic",
+      "http_status": 200,
+      "output_tokens": 2,
+      "finish_reason": "stop",
+      "elapsed_s": 0.1401887430001807
+    },
+    {
+      "name": "code",
+      "http_status": 200,
+      "output_tokens": 9,
+      "finish_reason": "stop",
+      "elapsed_s": 0.2689939880001475
+    },
+    {
+      "name": "json",
+      "http_status": 200,
+      "output_tokens": 2,
+      "finish_reason": "stop",
+      "elapsed_s": 0.1503486410001642
+    },
+    {
+      "name": "completion",
+      "http_status": 200,
+      "output_tokens": 3,
+      "finish_reason": "stop",
+      "elapsed_s": 1.120017747998645
+    }
+  ],
+  "worker_processes": [
+    {
+      "pid": 32812,
+      "Name": "vllm",
+      "THP_enabled": "0"
+    },
+    {
+      "pid": 35802,
+      "Name": "python3",
+      "THP_enabled": "0"
+    },
+    {
+      "pid": 35803,
+      "Name": "VLLM::EngineCor",
+      "THP_enabled": "0"
+    }
+  ],
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "3a67a339a07814741d67c3cee044f4c72a469c2d329207128c0777f58b8ad4ad",
+    "qwen_radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "qwen_radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71",
+    "qwen_radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+    "qwen_radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03"
+  },
+  "cpu_check_files": [
+    "tests/test_radiance_process_memory_policy.py",
+    "tests/test_conformance_memory_policy.py",
+    "tests/test_radiance_memory.py",
+    "tests/test_radiance_pinned_memory.py",
+    "tests/test_radiance_public_snapshot_patch.py",
+    "tests/test_radiance_launcher_preflight.py",
+    "tests/test_coherence_release.py",
+    "tests/test_qualified_speed_release.py"
+  ]
+}

@@ -236,6 +236,23 @@
         "tests/test_stage26_residual.py"
       ],
       "native": "25 September 2026: shared 0K/60K/200K warmup/control/profile/control capture completed on the repaired compiled Global-512 speed candidate. All paired outputs and accepted-token schedules matched; every expected speculative round was retained. The same 60K coding capture feeds the chained tasks. Natural 0K/200K outputs below the 5K target remain explicit validation failures. Matched GPU union and clean-control residuals exclude measured profiling slowdown; isolated pauses remain in the reports. Capture 6ec96682eeba444b9c1cddaa0cdb5cc2; exact measured source and runtime hashes are in benchmarks/results/compiled-global512-stage-profile-20260925.json."
+    },
+    {
+      "id": "PROCESS-THP-01",
+      "contract": "Disable and verify transparent huge pages before production release/model imports. Fail startup on an unconfirmed policy; retain inheritance across fork/exec, host-global settings, model arithmetic and snapshot data ABI. Refresh bindings without losing required module hashes or explicitly reviewed compatible runtime IDs.",
+      "sources": [
+        "src/qwen_r9700_lab/radiance_memory.py",
+        "src/qwen_r9700_lab/conformance_supervisor.py",
+        "experiments/radiance-public/bootstrap_radiance_release.py",
+        "experiments/radiance-public/update_chat_snapshot_bindings.py"
+      ],
+      "tests": [
+        "tests/test_radiance_process_memory_policy.py",
+        "tests/test_conformance_memory_policy.py",
+        "tests/test_radiance_public_snapshot_patch.py",
+        "tests/test_qualified_speed_release.py"
+      ],
+      "native": "7 October 2026: running API/model processes report THP_enabled=0; five synthetic API smoke requests and installed-source binding checks passed. Evidence: benchmarks/results/process-wide-thp-deployment-20261007.json. This verifies startup/deployment, not elimination of all queue evictions or 500ms rounds; matched long-round/event evidence remains required."
     }
   ]
 }

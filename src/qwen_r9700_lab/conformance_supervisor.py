@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 
 from qwen_r9700_lab.diagnostic_contract import write_private
+from qwen_r9700_lab.radiance_memory import (
+    disable_transparent_hugepages as disable_process_hugepages,
+)
 
 
 def disable_transparent_hugepages(libc):
@@ -26,20 +29,9 @@ def disable_transparent_hugepages(libc):
     mitigation for the recorded AMD SVM stall, not a repair of the driver or
     a guarantee that no other allocation can trigger memory compaction.
     """
-    # PR_SET_THP_DISABLE / PR_GET_THP_DISABLE. Pass full-width varargs.
-    zero = ctypes.c_ulong(0)
-    if libc.prctl(41, ctypes.c_ulong(1), zero, zero, zero) != 0:
-        raise OSError(ctypes.get_errno(), "could not disable qualification huge pages")
-    observed = libc.prctl(42, zero, zero, zero, zero)
-    if observed != 1:
-        raise RuntimeError("qualification huge-page policy was not confirmed disabled")
-    return {
-        "schema": "urn:qwen:qualification-memory-policy:v1",
-        "transparent_hugepages": "disabled",
-        "pr_get_thp_disable": observed,
-        "scope": "owned_process_tree",
-        "host_global_policy_changed": False,
-    }
+    return disable_process_hugepages(
+        libc, schema="urn:qwen:qualification-memory-policy:v1"
+    )
 
 
 def main():

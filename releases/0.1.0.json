@@ -60,7 +60,7 @@
     "src/qwen_r9700_lab/radiance_kfd_trace.py"
   ],
   "integration_sha256": {
-    "experiments/radiance-public/bootstrap_radiance_release.py": "50137ed474ab227cc19311217d67a60ae8989e0fa920ee3cf0d690591d79edcb",
+    "experiments/radiance-public/bootstrap_radiance_release.py": "e778eec05a516d46547973a1bddc22583f555bb32f45fea9a4d1d37750607ff5",
     "experiments/radiance-public/qualified_speed_release.py": "bf953d14af2f280a490326e59f2bac41015323d57692627e0deae80ff98674b2",
     "experiments/radiance-public/qualified-speed-release.json": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
     "experiments/radiance-public/speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
@@ -105,7 +105,7 @@
     "experiments/radiance-public/gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
     "experiments/radiance-public/qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
     "src/qwen_r9700_lab/radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
-    "src/qwen_r9700_lab/radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
+    "src/qwen_r9700_lab/radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
     "src/qwen_r9700_lab/radiance_cache_telemetry.py": "27ad70a51c8bd1d41a34e65d1625e1534150ae6048282ea49100060b0cb5e6b1",
     "src/qwen_r9700_lab/radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
     "src/qwen_r9700_lab/radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2"

@@ -72,7 +72,7 @@
       "sha256": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd"
     },
     "release_files": {
-      "bootstrap_radiance_release.py": "50137ed474ab227cc19311217d67a60ae8989e0fa920ee3cf0d690591d79edcb",
+      "bootstrap_radiance_release.py": "e778eec05a516d46547973a1bddc22583f555bb32f45fea9a4d1d37750607ff5",
       "qualified_speed_release.py": "bf953d14af2f280a490326e59f2bac41015323d57692627e0deae80ff98674b2",
       "qualified-speed-release.json": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
       "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
@@ -118,6 +118,16 @@
       "stock_gdn_norm_quant.py": "24bb94804e803f49a21e2a88ddcf30f060a6a133a42cb0d0b94af04bc6d6ac9e",
       "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
       "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
+    },
+    "process_memory_policy": {
+      "helper": "radiance_memory.py:disable_transparent_hugepages",
+      "policy": "PR_SET_THP_DISABLE=1; verify PR_GET_THP_DISABLE=1",
+      "scope": "backend process tree before release imports and model initialization",
+      "failure_behavior": "Abort startup before importing GPU/model code if setup or verification fails.",
+      "host_global_policy_changed": false,
+      "per_round_calls": 0,
+      "model_arithmetic_changed": false,
+      "qualification": "CPU fork/exec inheritance and fail-closed startup checks; queue-stall elimination requires live evidence."
     },
     "draft_head_initialization": {
       "installer": "patch_draft_head_initialization.py",
@@ -394,7 +404,7 @@
       "tier": "qwen_chat_fs",
       "modules": {
         "radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
-        "radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
+        "radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
         "radiance_cache_telemetry.py": "27ad70a51c8bd1d41a34e65d1625e1534150ae6048282ea49100060b0cb5e6b1",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",

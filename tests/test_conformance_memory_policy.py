@@ -20,7 +20,9 @@ def thp_state():
     return ctypes.CDLL(None).prctl(42, zero, zero, zero, zero)
 
 
-def test_owned_child_and_exec_grandchild_inherit_policy_without_changing_parent(tmp_path):
+def test_owned_child_and_exec_grandchild_inherit_policy_without_changing_parent(
+    tmp_path,
+):
     parent_before = thp_state()
     query = (
         "import ctypes,json; from pathlib import Path; "
@@ -50,11 +52,25 @@ def test_owned_child_and_exec_grandchild_inherit_policy_without_changing_parent(
     assert thp_state() == parent_before
 
 
-@pytest.mark.parametrize("get_state", [-1, 0, 3])
+@pytest.mark.parametrize("get_state", [0, 3])
 def test_unconfirmed_or_except_advised_policy_is_rejected(get_state):
-    libc = SimpleNamespace(prctl=lambda operation, *_: 0 if operation == 41 else get_state)
+    libc = SimpleNamespace(
+        prctl=lambda operation, *_: 0 if operation == 41 else get_state
+    )
     with pytest.raises(RuntimeError, match="not confirmed disabled"):
         supervisor.disable_transparent_hugepages(libc)
+
+
+def test_policy_verification_error_is_not_silently_accepted():
+    def prctl(operation, *_):
+        if operation == 41:
+            return 0
+        ctypes.set_errno(errno.EPERM)
+        return -1
+
+    with pytest.raises(OSError, match="could not verify") as raised:
+        supervisor.disable_transparent_hugepages(SimpleNamespace(prctl=prctl))
+    assert raised.value.errno == errno.EPERM
 
 
 def test_failed_policy_setup_stops_before_workload_launch(tmp_path, monkeypatch):
@@ -70,7 +86,9 @@ def test_failed_policy_setup_stops_before_workload_launch(tmp_path, monkeypatch)
     def forbidden_launch(*_, **__):
         pytest.fail("workload launched without required memory policy")
 
-    monkeypatch.setattr(supervisor.ctypes, "CDLL", lambda *_, **__: SimpleNamespace(prctl=prctl))
+    monkeypatch.setattr(
+        supervisor.ctypes, "CDLL", lambda *_, **__: SimpleNamespace(prctl=prctl)
+    )
     monkeypatch.setattr(supervisor.signal, "signal", lambda *_: None)
     monkeypatch.setattr(supervisor.os, "getppid", lambda: 123)
     monkeypatch.setattr(supervisor.os, "getpgrp", os.getpid)

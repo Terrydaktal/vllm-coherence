@@ -12,23 +12,33 @@ import shutil
 import sys
 from pathlib import Path
 
-from patch_chat_snapshot import install
-from patch_dflash_sampling_rng import install as install_dflash_sampling_rng
-from patch_draft_head_initialization import install as install_draft_head_initialization
-from patch_gdn_initial_prefill import install as install_gdn_initial_prefill
-from patch_gdn_extreme_decay import (
-    LIBRARY_SHA256 as GDN_LIBRARY_SHA256,
-)
-from patch_gdn_extreme_decay import (
-    build as build_gdn_correction,
-)
-from patch_gdn_extreme_decay import (
-    install as install_gdn_correction,
-)
-from patch_verify_head_memory import install as install_verify_head_memory
+from radiance_memory import disable_transparent_hugepages
 
 
 def main():
+    # Apply before release installers can import Torch/HIP. Linux preserves the
+    # policy across the entrypoint exec and every future model-worker fork/exec.
+    # Refuse startup if setting or confirmation fails; no per-round check runs.
+    memory_policy = disable_transparent_hugepages()
+    print("Backend host memory policy: " + json.dumps(memory_policy), flush=True)
+
+    from patch_chat_snapshot import install
+    from patch_dflash_sampling_rng import install as install_dflash_sampling_rng
+    from patch_draft_head_initialization import (
+        install as install_draft_head_initialization,
+    )
+    from patch_gdn_extreme_decay import (
+        LIBRARY_SHA256 as GDN_LIBRARY_SHA256,
+    )
+    from patch_gdn_extreme_decay import (
+        build as build_gdn_correction,
+    )
+    from patch_gdn_extreme_decay import (
+        install as install_gdn_correction,
+    )
+    from patch_gdn_initial_prefill import install as install_gdn_initial_prefill
+    from patch_verify_head_memory import install as install_verify_head_memory
+
     source = Path(__file__).resolve().parent
     profile = json.loads((source / "runtime-radiance-1.0.16.json").read_text())
     manifest = {}
@@ -77,8 +87,13 @@ def main():
     from patch_dflash_response_cache import install as install_dflash_response_cache
 
     install_dflash_response_cache(package)
-    shutil.copyfile(source / "radiance_response_end.py", package / "qwen_radiance_response_end.py")
-    shutil.copyfile(source / "radiance_response_offload.py", package / "qwen_radiance_response_offload.py")
+    shutil.copyfile(
+        source / "radiance_response_end.py", package / "qwen_radiance_response_end.py"
+    )
+    shutil.copyfile(
+        source / "radiance_response_offload.py",
+        package / "qwen_radiance_response_offload.py",
+    )
     if profile.get("optimized_d7", {}).get("target_head", {}).get("mode") in (
         "global256",
         "global512",

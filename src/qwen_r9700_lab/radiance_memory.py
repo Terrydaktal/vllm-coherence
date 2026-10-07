@@ -1,13 +1,17 @@
-"""Shared GPU allocation accounting; reads counters and tensor metadata only.
+"""Shared allocation accounting and an explicit startup host-memory policy.
 
-The worker starts this after warmup. No CUDA/HIP operations, allocator resets,
+The accounting worker starts after warmup. No CUDA/HIP operations, allocator resets,
 tensor values, garbage collection, or trace-history recording are used.
 This module also runs over SSH using only the standard library to read reports.
+The startup policy is applied only when explicitly called by the backend or
+qualification supervisor, before model initialization; report readers do not
+change their own memory policy.
 """
 
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import fcntl
 import json
 import math
@@ -56,6 +60,37 @@ GROUPS = {
     "kv_block_zeroer": "Cache initialization buffers",
     "speculator": "Draft working buffers",
 }
+
+
+def disable_transparent_hugepages(
+    libc=None, *, schema="urn:qwen-r9700:process-memory-policy:v1"
+):
+    """Disable THP for this process and its future fork/exec descendants.
+
+    Call before importing GPU/model code so registered host buffers never begin
+    with a promotable backing mapping. This is a scoped mitigation for memory
+    invalidation stalls, not a proof that every possible queue pause is fixed.
+    No global sysfs setting, tensor value, GPU API or per-round work is involved.
+    """
+    libc = ctypes.CDLL(None, use_errno=True) if libc is None else libc
+    # PR_SET_THP_DISABLE / PR_GET_THP_DISABLE. prctl is variadic: pass all
+    # trailing arguments at their full unsigned-long width.
+    zero = ctypes.c_ulong(0)
+    if libc.prctl(41, ctypes.c_ulong(1), zero, zero, zero) != 0:
+        raise OSError(ctypes.get_errno(), "could not disable transparent huge pages")
+    observed = libc.prctl(42, zero, zero, zero, zero)
+    if observed == -1:
+        raise OSError(ctypes.get_errno(), "could not verify transparent huge-page policy")
+    if observed != 1:
+        raise RuntimeError("transparent huge-page policy was not confirmed disabled")
+    return {
+        "schema": schema,
+        "pid": os.getpid(),
+        "transparent_hugepages": "disabled",
+        "pr_get_thp_disable": observed,
+        "scope": "owned_process_tree",
+        "host_global_policy_changed": False,
+    }
 
 
 def natural(value):
