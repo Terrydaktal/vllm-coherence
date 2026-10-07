@@ -66,17 +66,23 @@
     },
     {
       "id": "PI-01",
-      "contract": "Validated compaction and preserved editor/history state",
+      "contract": "Validated compaction, preserved editor/history state and fresh streamed context accounting; never revive pre-compaction usage before measured prompt usage arrives.",
       "sources": [
         "integrations/pi/qwen-radiance-compaction.mjs",
         "scripts/patch-pi-precontinuation-compaction",
-        "scripts/patch-pi-project-history"
+        "scripts/patch-pi-project-history",
+        "scripts/patch-pi-internal-guard-retry"
       ],
       "tests": [
         "tests/test_patch_pi_precontinuation_compaction.py",
-        "tests/test_patch_pi_project_history.py"
+        "tests/test_patch_pi_project_history.py",
+        "tests/test_pi_context_usage.mjs",
+        "tests/test_pi_footer.mjs",
+        "tests/test_pi_streaming_usage.mjs",
+        "tests/test_radiance_compaction_sdk.mjs",
+        "tests/test_patch_pi_internal_guard_retry.py"
       ],
-      "native": "Live tool continuation and compaction integration"
+      "native": "Pinned Pi SDK synthetic stream/compaction and footer integration; fresh measured counts verified before message_end, invalid partials rejected, completion/reset/new-session boundaries checked. No backend inference required."
     },
     {
       "id": "OBS-01",

@@ -63,6 +63,13 @@ workspace/branch → context → cache → GPU temperatures/fan → VRAM → Pi 
 model/thinking level. Context usage and capacity use full comma-separated numbers,
 followed by the percentage; there is no zero-padding or abbreviated context limit.
 
+After compaction, the previous prompt's usage is invalidated. The context counter
+shows `?` only until fresh provider prompt usage arrives, then includes the current
+stream's output as it grows, before the answer is saved. Cache-read/write tokens
+are included once; reasoning is already part of output. Zero, output-only, failed
+or mismatched-model partials cannot restore a stale pre-compaction count. This
+uses the existing stream updates without a tokenizer request or backend work.
+
 | Cache counter | Meaning |
 | --- | --- |
 | `VRAM` | Estimated tokens currently reusable from this chat's GPU cache. |

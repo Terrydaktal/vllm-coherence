@@ -148,6 +148,36 @@ PATCHES = (
 """,
     ),
     FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""        // After compaction, the last assistant usage reflects pre-compaction context size.
+        // We can only trust usage from an assistant that responded after the latest compaction.
+        // If no such assistant exists, context token count is unknown until the next LLM response.
+""",
+        new=b"""        // The active stream belongs to this agent and is cleared at run/session boundaries.
+        // Its fresh provider usage is usable before message_end persists the answer.
+        // Require measured prompt usage; zero/output-only partials must not revive
+        // a stale pre-compaction count or replace an unknown count with an estimate.
+        const streaming = this.agent.state.streamingMessage;
+        const usage = streaming?.usage;
+        if (this.agent.state.isStreaming && streaming?.role === "assistant" &&
+            streaming.provider === model.provider && streaming.model === model.id &&
+            streaming.stopReason !== "aborted" && streaming.stopReason !== "error" &&
+            [usage?.input, usage?.output, usage?.cacheRead, usage?.cacheWrite].every(
+                (value) => Number.isSafeInteger(value) && value >= 0,
+            )) {
+            const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+            const tokens = promptTokens + usage.output;
+            if (promptTokens > 0 && Number.isSafeInteger(tokens) &&
+                (usage.totalTokens === undefined || usage.totalTokens === 0 || usage.totalTokens === tokens)) {
+                return { tokens, contextWindow, percent: (tokens / contextWindow) * 100 };
+            }
+        }
+        // Persisted usage must still come from after the latest compaction.
+        // Until fresh prompt usage arrives, keep the context count unknown.
+""",
+    ),
+    FilePatch(
         relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
         preimage_sha256="e4c84f7e3b884533db5a8a6e6b65f34767fb3ade30a2f4213202d99e7ff4d8b6",
         old=b"""            setWorkingMessage: (message) => {

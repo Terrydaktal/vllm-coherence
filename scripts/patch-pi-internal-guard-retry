@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: E501
 """Apply and authenticate Pi's invisible internal guard-retry patch."""
 
 from __future__ import annotations
@@ -113,13 +112,25 @@ def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
 
 def classify(data: bytes, patch: FilePatch) -> str:
     # The installer applies compaction after this patch in agent-session.js.
-    # Reverse only that authenticated later patch before checking our own pin.
+    # Reverse the whole authenticated later group before checking our own pin.
+    # A partial upgrade can contain only some transforms, but must still recover
+    # the exact same group preimage; unrelated edits cannot pass authentication.
     following = runpy.run_path(str(Path(__file__).with_name("patch-pi-precontinuation-compaction")))
-    for later in reversed(following["PATCHES"]):
-        if later.relative_path == patch.relative_path and data.count(later.new) == 1:
-            candidate = data.replace(later.new, later.old)
-            if sha256(candidate) == later.preimage_sha256:
-                data = candidate
+    later_group = tuple(later for later in following["PATCHES"] if later.relative_path == patch.relative_path)
+    if later_group:
+        try:
+            following["classify"](data, later_group)
+        except following["PatchError"]:
+            pass  # Our own exact preimage check below will reject unknown bytes.
+        else:
+            for later in reversed(later_group):
+                if data.count(later.new) == 1:
+                    data = data.replace(later.new, later.old)
+                else:
+                    for legacy in later.legacy:
+                        if data.count(legacy) == 1:
+                            data = data.replace(legacy, later.old)
+                            break
     old_count = data.count(patch.old)
     new_count = data.count(patch.new)
     if old_count == 1 and new_count == 0 and sha256(data) == patch.preimage_sha256:
