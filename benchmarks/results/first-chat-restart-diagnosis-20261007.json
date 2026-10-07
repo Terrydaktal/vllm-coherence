@@ -1,0 +1,105 @@
+{
+  "schema": "urn:coherence:first-chat-restart-diagnosis:v1",
+  "observed_date": "2026-10-07",
+  "scope": "One normal Pi request after the diagnostic backend restart; numeric telemetry and later OS mapping metadata only. No chat contents, token values or tensor data inspected. This is an incident diagnosis, not a throughput benchmark.",
+  "incident_runtime_abi": "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
+  "incident_data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "incident_scheduler_sha256": "500a31e42b9b7aaba6da6bf330f1f3e2c72e46ad525d121159d2609c58e39e39",
+  "recorder_trace_id": "d94db3b2f9674c3b85808bb8e730b8df",
+  "request_id": "99cd0a0320d97c7a16aa9ae9498ea9b4c995527bd2265fb23fbaa0af11754b46",
+  "first_token_ms": 61058.41539695393,
+  "input_tokens": 182558,
+  "cached_tokens": 182527,
+  "new_prompt_tokens": 31,
+  "phase_ms": {
+    "admission": 1.417,
+    "handover": 27506.478,
+    "cache_lookup": 15110.564,
+    "ram_allocation": 17949.647,
+    "cache_restore": 241.778,
+    "prefill": 248.531
+  },
+  "handover": {
+    "requested_allocation_bytes": 20249051136,
+    "individual_chat_buffer_bytes": 9990307840,
+    "chat_buffers_allocated": 2,
+    "staging_bytes": 268435456,
+    "parked_data_bytes": 243007488,
+    "allocation_events": 1,
+    "copy_dispatch_and_wait_ms": 27487.110798014328,
+    "previous_gpu_bank": "post-restart synthetic activation request"
+  },
+  "later_os_mapping_observation": {
+    "scope": "After the response; confirms retained RAM footprint, not historical allocation or wait stacks. No mapped memory contents read.",
+    "host_page_policy_bytes": 34628173824,
+    "anonymous_shared_arena_sizes_bytes": [
+      17179869184,
+      17179869184,
+      268435456
+    ],
+    "arena_resident_sizes_bytes": [
+      17179869184,
+      17179869184,
+      268435456
+    ],
+    "no_hugepage_flag_present": true,
+    "existing_huge_mappings_can_remain": true,
+    "later_host_mem_available_bytes": 8458792960
+  },
+  "restore": {
+    "block_count": 231,
+    "decoded_bytes": 6237192192,
+    "elapsed_ms": 15090.671697,
+    "thread_cpu_ms": 10986.863323,
+    "minor_faults": 1532822,
+    "major_faults": 882,
+    "components_ms": {
+      "disk_read": 3956.6,
+      "decompression": 5727.0,
+      "checksum": 2740.9,
+      "restore_buffer_copy": 1553.2
+    },
+    "component_time_union_ms": 13977.812052,
+    "unattributed_inside_job_ms": 1112.859645,
+    "gpu_transfer_lifetime_ms": 234.264478,
+    "gpu_transfer_event_ms": 226.458405
+  },
+  "confirmed": [
+    "The first bank switch allocates both full-capacity parked-chat buffers at once.",
+    "ROCm backing arenas retained 32.25 GiB for an 18.86 GiB requested pinned allocation.",
+    "Only 31 input tokens needed computation; cold checkpoint restoration caused the lookup delay.",
+    "The synthetic activation request remained the prior bank and was parked rather than retired."
+  ],
+  "unresolved": [
+    "The 17.95-second allocation phase does not separate torch pinned allocation from the mapping policy.",
+    "The 27.49-second handover measurement does not separate individual copy submission from device completion waits.",
+    "Restore page faults and later memory headroom do not independently prove that swap or memory pressure caused the earlier allocation/handover stalls."
+  ],
+  "diagnostic_change": {
+    "scope": "Separate existing pinned allocation/policy/copy/wait calls with CPU clocks and per-thread fault deltas; no additional GPU synchronization or event. Running backend was not reloaded.",
+    "cpu_checks": {
+      "passed": 196,
+      "scope": "Scheduler/data preservation and unchanged wait counts, recorder, installer, launcher authentication and lifecycle CPU tests. No native first-use timing or observer overhead qualification."
+    },
+    "candidate": {
+      "previous_runtime_abi": "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
+      "candidate_runtime_abi": "f014330cebc8c71d156dbb2ea7ac17fa5ecea14e51c6e2be481a35c0c7449586",
+      "unchanged_data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+      "launcher_sha256": "3bb2ca2beededc40e6c201aeaf525121b59a39032d332b518896323df6191848",
+      "scheduler_sha256": "6d32108a966066ee8d594a709d8ee27945895821ed079cc113889a71f9c0f1b7",
+      "scope": "CPU-only handover diagnostic spans; candidate prepared, running backend not reloaded."
+    },
+    "staged_for_next_restart": true,
+    "running_backend_reloaded": false,
+    "lint": {
+      "new_diagnostic_regions": "No issues",
+      "existing_unrelated_issues": [
+        "PLR1730",
+        "BLE001",
+        "SIM102",
+        "I001"
+      ]
+    }
+  },
+  "private_capture_manifest_sha256": "a9af02ce91a5f2f0aac8e0fa2b57f693d3c75da9c3aa6a2d0863a5b3b526539a"
+}

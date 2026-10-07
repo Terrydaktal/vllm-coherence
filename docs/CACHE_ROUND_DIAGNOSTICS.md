@@ -18,7 +18,7 @@ must reload the runtime. The stage profiler is not needed.
 | GPU transfer submission | Host wall/thread CPU time, thread page faults, job ID, direction, bytes, per-group logical ranges `[first GPU-block index, count]`. These are logical indices, not physical pointers. |
 | GPU transfer completion | Native completed HIP start/end duration, submission-to-observed-completion lifetime, success and originating request/round. Lifetime includes dependency/queue waits and completion polling delay; it is not DMA duration. |
 | Existing GPU waits | Duration of the existing offload wait and decode-transition/recovery fence, with job IDs/reason. No new wait is inserted. |
-| Chat handover | Pinned allocation and page-policy spans, copy submission, existing device waits and RAM-to-RAM stage copies. Host wall/thread CPU time and page faults distinguish memory preparation from copying and completion waiting. No device event or synchronization is added. |
+| Startup RAM and chat handover | Individual pinned mappings, huge-page policy, parallel prefault, HIP registration, copy submission, existing device waits and RAM-to-RAM stage copies. Host wall/thread CPU time and page faults distinguish allocation/registration from copying and completion waiting. No device event or synchronization is added. The page-aligned backing size is checked against available RAM; production prepares the pool before readiness. Main-thread counters exclude prefault helper threads. |
 | Filesystem jobs | Submission, queue delay, worker wall/thread CPU time, page faults, completion acknowledgement and bytes. GPU and filesystem job IDs occupy separate namespaces. |
 | Snapshot processing | Tail and restore RAM copies, compression, decompression, checksum, encoded-buffer copy, file write, file/directory fsync and atomic rename. Payload and metadata writes both appear, distinguished by byte count. |
 | Response-end reuse | Local GPU and offload endpoint decisions, explicit rejection reason, endpoint/input/computed token counts, hash block size and missing/pending dependency counts. Ordinary GPU prefix fallback records its matched token count. |
@@ -101,6 +101,29 @@ bookkeeping at admission; they add no tensor reads or GPU events/synchronization
 They do not change acceptance checks or cache ownership. Backend modules must be
 reloaded before these additions appear in a running process.
 
+## Handover allocation
+
+`radiance_pinned_memory.py` maps exactly the requested bytes rounded to a system
+page, disables huge-page promotion before touching or registering pages, prefaults
+large mappings using eight CPU helpers, then registers the memory with the loaded
+HIP runtime. `torch.frombuffer` retains the registration through the underlying
+buffer object, including tensor views. Existing handover completion fences keep
+that storage alive until DMA finishes. Registration failure aborts preparation;
+there is no fallback to a larger PyTorch pinned allocation.
+
+The startup worker hook prepares the two parking images and swap stage after GPU
+warmup and before API readiness. The first chat switch reuses that pool. A stock
+scheduler does not allocate it. The headroom check includes all actual backing
+pages and an 8 GiB system reserve. Cache layout, saved ranges, snapshot data ABI
+and numerical execution are unchanged. Disk restoration remains a separate cost.
+
+The older first-switch capture allocated 32.25 GiB for 18.858 GiB of requested
+buffers and took 86.843 seconds. The exact-size pool took 2.204, 2.206 and 2.064
+seconds in three subsequent startups, with 18.858 GiB of backing memory. The
+[deployment receipt](../benchmarks/results/exact-pinned-handover-deployment-20261007.json)
+records these observations and the synthetic DMA/handover checks. These are pool
+preparation timings; disk restore and model prefill remain separate costs.
+
 ## Bounded driver events
 
 An explicitly approved capture can use `radiance_kfd_trace.py` when ROCm SDK
@@ -158,7 +181,7 @@ an approximation to the time queues were unavailable, not active kernel timing.
 
 The specific mapping and CPU action that caused each invalidation remain
 unidentified. Huge-page promotion remains a candidate: the worker still has
-eligible heap/anonymous mappings even though the existing parking buffers exclude it.
+eligible heap/anonymous mappings even though the new parking buffers exclude it.
 The trace contains no page-fault/migration records; its finite FIFO prevents
 interpreting that absence as proof. No round reached 500 ms in this capture
 (maximum 407.783 ms), so the older 2,132.826 ms incident has not been directly
@@ -229,8 +252,44 @@ additions.
 The [response-end logging activation receipt](../benchmarks/results/response-end-reuse-diagnostics-deployment-20261007.json)
 records the next idle restart, 383 passing CPU checks, matching installed source
 hashes and an installed CPU logger check. It also activates the first-use
-allocation/copy/wait spans described in the recorded-operations table. The live recorder has the new source
+allocation/copy/wait spans described below. The live recorder has the new source
 identity; the CPU logger check confirms ordinary logging and duplicate-poll
 suppression without a model prompt. The next natural cache lookup supplies the
 incident-specific rejection reason. This is not new numerical or observer-overhead
-qualification.
+qualification. The local Pi launcher's compatible-release list now travels as
+one comma-separated SSH argument, fixing rejection of an authenticated runtime
+when its ABI was later in that list.
+
+## First request after restart
+
+The [7 October first-request diagnosis](../benchmarks/results/first-chat-restart-diagnosis-20261007.json)
+records 61.058 seconds to first output: 17.950 seconds allocating parked-chat
+RAM, 27.506 seconds handing over from the synthetic activation request, 15.111
+seconds loading the checkpoint into the CPU tier, 0.242 seconds restoring the
+GPU cache and 0.249 seconds prefilling 31 new tokens. It reused 182,527 of
+182,558 input tokens. The lookup phase includes asynchronous filesystem loading;
+it is not just a manifest check.
+
+The two requested 9.304 GiB parked-chat buffers were backed by two fully
+resident 16 GiB ROCm arenas, plus a 0.25 GiB staging arena. Thus the requested
+18.858 GiB allocation retained 32.25 GiB of physical host memory. The guard
+currently counts requested bytes; that is not a measurement of the larger
+allocator arenas. Normal virtual-address reservation would not pay this same
+backing/registration cost. Existing huge pages can remain despite the `nh`
+mapping flag preventing future promotion.
+
+Only the first bank switch allocates these buffers. Each chat's first use after
+a restart may still require disk-to-CPU restoration until its state is resident.
+For this request, the filesystem job took 15.091 seconds, including 3.957 seconds
+reading, 5.727 seconds decompressing, 2.741 seconds verifying checksums and 1.553
+seconds copying to the CPU tier. Fault counts corroborate memory preparation
+work but do not identify a particular swap or driver blocking mechanism.
+
+The allocation and handover's internal blocking cause was not captured. New
+`pinned_allocation` and `pinned_page_policy` spans separate allocator work from
+mapping policy; `handover_copy_submit`, `handover_prepare_wait`,
+`handover_copy_wait` and `handover_ram_copy` separate dispatch, existing waits
+and RAM staging. All include CPU clocks and fault deltas, retain the original
+copy order and wait count, and add no device events. They are prepared for the
+next runtime reload; the incident runtime was left running and no reproduction
+workload was submitted. This is instrumentation, not a repair of the delay.

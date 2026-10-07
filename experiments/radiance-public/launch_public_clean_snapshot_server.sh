@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=d5eef8c4f6f925b8e05bbb7a2a2337561d8caa7a4633e73b7553023cfc79cb14
+readonly abi_id=184f334c350633c1127bc17597f4de2e4f114748d15d82ba7a75eb2829f7bc65
 readonly data_abi=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd

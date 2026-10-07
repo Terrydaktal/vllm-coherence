@@ -70,6 +70,41 @@ def new_scheduler(module):
     return instance
 
 
+@pytest.mark.parametrize("endpoint", ["disabled", "miss", "hit"])
+def test_prefix_fallback_records_reuse_count_without_changing_selection(monkeypatch, endpoint):
+    module = load_module(monkeypatch)
+    scheduler = new_scheduler(module)
+    decisions, fallback_calls = [], []
+    helper = ModuleType("qwen_radiance_response_end")
+    helper.record_response_end_decision = lambda req, source, outcome, reason, **counts: decisions.append(
+        (req, source, outcome, reason, counts)
+    )
+    monkeypatch.setitem(sys.modules, helper.__name__, helper)
+    fallback = ("ordinary blocks", 1648, 0, False)
+    exact = ("endpoint blocks", 1700, 0, False)
+    def upstream(_self, request):
+        fallback_calls.append(request)
+        return fallback
+    monkeypatch.setattr(module.Scheduler, "_get_local_prefix_cache_hit", upstream, raising=False)
+    scheduler._phase = lambda *_: None
+    scheduler._cache_wait = lambda _: "cache_lookup"
+    scheduler._response_end_cache = lambda _: (
+        None if endpoint == "disabled" else SimpleNamespace(lookup=lambda _: exact if endpoint == "hit" else None)
+    )
+    request = SimpleNamespace(request_id="synthetic-prefix")
+    scheduler.request_phases = SimpleNamespace(live={request.request_id: {}})
+    expected = exact if endpoint == "hit" else fallback
+    assert scheduler._get_local_prefix_cache_hit(request) == expected
+    assert scheduler.request_phases.live[request.request_id]["cached_tokens"] == expected[1]
+    assert fallback_calls == ([] if endpoint == "hit" else [request])
+    if endpoint == "hit":
+        assert decisions == []  # Endpoint lookup itself records the hit.
+    else:
+        assert decisions[-1] == (request, "gpu_blocks", "hit", "normal_prefix_lookup", {"cached_tokens": 1648})
+        if endpoint == "disabled":
+            assert decisions[0][1:4] == ("gpu_endpoint", "rejected", "response_end_disabled")
+
+
 @pytest.mark.parametrize("reclaimed", [False, True])
 def test_bank_allocation_retries_only_after_reclaiming_space(monkeypatch, reclaimed):
     module = load_module(monkeypatch)
@@ -446,7 +481,13 @@ def constructed_worker(tmp_path, monkeypatch):
         return StorageTensor([0] * amount)
 
     monkeypatch.setattr(Path, "read_text", read_text)
-    monkeypatch.setattr(module, "protect_pinned_host_mapping", lambda tensor: [(tensor.data_ptr(), tensor.data_ptr() + tensor.numel())])
+    def allocate(torch, amount, **kwargs):
+        tensor = torch.empty(amount, dtype=torch.uint8, device="cpu", pin_memory=True)
+        with kwargs["span"]("pinned_page_policy", bytes=amount, resources=True):
+            pass
+        return tensor, (tensor.data_ptr(), tensor.data_ptr() + module.backing_bytes(amount))
+
+    monkeypatch.setattr(module, "allocate_pinned_bytes", allocate)
     monkeypatch.setitem(
         sys.modules,
         "torch",
@@ -525,24 +566,25 @@ def test_pinned_mapping_policy_surfaces_madvise_failure(monkeypatch):
     assert error.value.errno == errno.EINVAL
 
 
-def test_failed_pinned_page_policy_does_not_publish_partial_banks(constructed_worker, monkeypatch):
+def test_failed_pinned_allocation_does_not_publish_partial_banks(constructed_worker, monkeypatch):
     fixture = constructed_worker
     worker = fixture.create()
     calls = []
-    def protect(tensor):
-        calls.append(tensor)
+    original = fixture.module.allocate_pinned_bytes
+    def allocate(torch, amount, **kwargs):
+        calls.append(amount)
         if len(calls) == 2:
             raise OSError(errno.ENOMEM, "page policy failed")
-        return [(0x1000, 0x2000)]
-    monkeypatch.setattr(fixture.module, "protect_pinned_host_mapping", protect)
+        return original(torch, amount, **kwargs)
+    monkeypatch.setattr(fixture.module, "allocate_pinned_bytes", allocate)
     with pytest.raises(OSError, match="page policy failed"):
         worker._ensure_buffers()
     assert worker.stage is None and worker.free_buffers == []
     assert worker.host_page_mappings == set()
     assert worker.allocated_bytes == worker.allocation_events == 0
     # A later allocation attempt can recover after a transient policy failure.
-    assert worker._ensure_buffers()[0] == 64
-    assert worker.host_page_mappings == {(0x1000, 0x2000)}
+    assert worker._ensure_buffers()[0] == 8192
+    assert len(worker.host_page_mappings) == 2
 
 
 @pytest.mark.parametrize("available", [0, 8 * 1024**3 - 1024])
@@ -588,17 +630,61 @@ def test_second_chat_checks_current_ram_before_allocating_and_can_retry(construc
     assert worker.allocated_bytes == 0
     assert worker.allocation_events == 0
 
-    fixture.memory["available"] += 1024
+    fixture.memory["available"] += 16384
     worker.before(handover)
     assert worker.active == BANK_B
     assert fixture.allocations == [32, 32]
     assert worker.images[BANK_A]["buffer"].data[:8] == list(range(8))
-    assert worker.allocated_bytes == 64
+    assert worker.allocated_bytes == 8192
     assert worker.allocation_events == 1
 
     fixture.memory["available"] = 0
     assert worker._ensure_buffers() == (0, 0.0)
     assert fixture.allocations == [32, 32]
+
+
+def test_pool_headroom_counts_every_backing_page(constructed_worker):
+    fixture = constructed_worker
+    worker = fixture.create(max_banks=3)
+    assert worker.reserved_capacity_bytes == 3 * mmap.PAGESIZE
+    fixture.memory["available"] = 8 * 1024**3 + 2 * mmap.PAGESIZE
+    with pytest.raises(MemoryError, match="system headroom"):
+        worker._ensure_buffers()
+    assert fixture.allocations == []
+
+
+def test_startup_prepares_pool_once_without_changing_gpu_cache_or_bank(constructed_worker):
+    fixture = constructed_worker
+    worker = fixture.create(max_banks=3)
+    runner = worker.runner
+    runner.vllm_config = SimpleNamespace(
+        scheduler_config=SimpleNamespace(scheduler_cls=fixture.module.FairScheduler),
+        additional_config={"qwen_fair": {"max_cached_chats": 3, "status_path": worker.status_path}},
+    )
+    fixture.module.prepare_handover_pool(runner)
+    first = runner.qwen_banks
+    assert first.stage is not None and len(first.free_buffers) == 2
+    assert first.active is None and first.images == {}
+    assert fixture.gpu.data == list(range(32))
+    assert fixture.allocations == [32, 32, 32]
+    fixture.module.prepare_handover_pool(runner)
+    assert runner.qwen_banks is first
+    assert first.allocation_events == 1
+    first.before({"bank": BANK_A, "save_blocks": [], "drop_banks": [], "barrier": False})
+    first.before({"bank": BANK_B, "save_blocks": [0, 1], "drop_banks": [], "barrier": False})
+    assert fixture.allocations == [32, 32, 32]
+    assert first.images[BANK_A]["buffer"].data[:8] == list(range(8))
+
+
+def test_stock_scheduler_startup_does_not_allocate_chat_pool(constructed_worker):
+    fixture = constructed_worker
+    runner = fixture.create().runner
+    runner.vllm_config = SimpleNamespace(
+        scheduler_config=SimpleNamespace(scheduler_cls="vllm.v1.core.sched.scheduler.Scheduler"),
+    )
+    fixture.module.prepare_handover_pool(runner)
+    assert fixture.allocations == []
+    assert not hasattr(runner, "qwen_banks")
 
 
 def test_worker_retains_two_ram_images_and_restores_all_three_chats(constructed_worker):
@@ -619,7 +705,7 @@ def test_worker_retains_two_ram_images_and_restores_all_three_chats(constructed_
 
     assert set(worker.images) == {BANK_A, BANK_B}
     assert fixture.allocations == [32, 32, 32]
-    assert worker.allocated_bytes == worker.reserved_capacity_bytes == 96
+    assert worker.allocated_bytes == worker.reserved_capacity_bytes == 12288
 
     for bank, first_byte, parked in (
         (BANK_A, 0, {BANK_B, bank_c}),
@@ -673,7 +759,7 @@ def test_worker_uses_one_inactive_image_and_round_trips_overlapping_pages(tmp_pa
     worker.stage = ByteTensor([0] * 8)
     worker.free_buffers = [ByteTensor([0] * 32)]
     worker.allocated_bytes = 40
-    worker.reserved_capacity_bytes = 40
+    worker.reserved_capacity_bytes = 8192
     gpu = ByteTensor(range(32))
     worker.regions = [(gpu, 0, 4)]
 
@@ -743,7 +829,7 @@ def test_first_gpu_bank_publishes_zero_allocation_residency(tmp_path, monkeypatc
     worker.capacity = 32
     worker.stage_capacity = 8
     worker.allocated_bytes = 0
-    worker.reserved_capacity_bytes = 40
+    worker.reserved_capacity_bytes = 8192
     worker.regions = [(ByteTensor(range(32)), 0, 4)]
 
     worker.before(
@@ -784,7 +870,7 @@ def test_same_chat_successor_discards_gpu_bank_without_allocating_ram(tmp_path, 
     worker.capacity = 32
     worker.stage_capacity = 8
     worker.allocated_bytes = 0
-    worker.reserved_capacity_bytes = 40
+    worker.reserved_capacity_bytes = 8192
     worker.regions = [(ByteTensor(range(32)), 0, 4)]
 
     def unexpected_allocation():
@@ -815,7 +901,9 @@ def test_same_chat_successor_discards_gpu_bank_without_allocating_ram(tmp_path, 
 
 def test_worker_times_pinned_allocation_separately_from_gpu_transfer(tmp_path, monkeypatch):
     module = load_module(monkeypatch)
-    monkeypatch.setattr(module, "protect_pinned_host_mapping", lambda tensor: [(0x1000, 0x2000)])
+    monkeypatch.setattr(module, "allocate_pinned_bytes", lambda torch, amount, **kwargs: (
+        ByteTensor([0] * amount), (amount * 4096, amount * 4096 + 4096),
+    ))
     worker = module.WorkerBanks.__new__(module.WorkerBanks)
     original_read_text = Path.read_text
     monkeypatch.setattr(
@@ -849,7 +937,7 @@ def test_worker_times_pinned_allocation_separately_from_gpu_transfer(tmp_path, m
     worker.max_banks = 2
     worker.stage_capacity = 8
     worker.allocated_bytes = 0
-    worker.reserved_capacity_bytes = 40
+    worker.reserved_capacity_bytes = 8192
     worker.regions = [(ByteTensor(range(32)), 0, 4)]
 
     worker.before(
@@ -862,13 +950,86 @@ def test_worker_times_pinned_allocation_separately_from_gpu_transfer(tmp_path, m
     )
 
     status = json.loads((tmp_path / "fair-worker.json").read_text())
-    assert status["last_allocation_bytes"] == 40
+    assert status["last_allocation_bytes"] == 8192
     assert status["last_allocation_seconds"] == 2.5
     assert status["allocation_events"] == 1
     assert status["allocation_seconds"] == 2.5
     assert status["last_transfer_bytes"] == 8
     assert abs(status["last_transfer_seconds"] - 0.4) < 1e-9
     assert status["last_handover"] == "swap"
+
+
+def test_first_handover_separates_pinning_policy_dispatch_and_wait_without_extra_syncs(
+    constructed_worker, tmp_path, monkeypatch,
+):
+    fixture = constructed_worker
+    telemetry = fixture.module.cache_telemetry
+    recorder = telemetry.Recorder(tmp_path / "timing", start=False, gc_events=False)
+    monkeypatch.setattr(telemetry, "_recorder", recorder)
+    monkeypatch.setattr(telemetry, "_round", {})
+    telemetry.begin_round({"chat_id": CHAT_B, "generation": GEN_B, "request_id": "f" * 64})
+    worker = fixture.create(max_banks=3)
+    waits = []
+    monkeypatch.setattr(worker.torch.cuda, "synchronize", lambda: waits.append(True))
+    try:
+        worker.before({"bank": BANK_A, "save_blocks": [], "drop_banks": [], "barrier": False})
+        worker.before({"bank": BANK_B, "save_blocks": [0, 1], "drop_banks": [], "barrier": False})
+        recorder.flush()
+        rows = [json.loads(line) for line in recorder.path.read_text().splitlines()]
+        stages = [row["stage"] for row in rows if row["stage"] != "round_start"]
+        assert stages == [
+            "handover_prepare_wait", "handover_prepare_wait",
+            "pinned_page_policy", "pinned_allocation",
+            "pinned_page_policy", "pinned_allocation",
+            "pinned_page_policy", "pinned_allocation",
+            "handover_copy_submit", "handover_copy_wait",
+        ]
+        assert len(waits) == 3  # Exactly the original activation and switch waits.
+        assert fixture.allocations == [32, 32, 32]
+        copy = next(row for row in rows if row["stage"] == "handover_copy_submit")
+        assert copy["bytes"] == 8 and copy["block_count"] == 2 and copy["direction"] == "store"
+        assert worker.images[BANK_A]["buffer"].data[:8] == list(range(8))
+        assert worker.active == BANK_B
+        for row in rows[1:]:
+            assert row["active"]["request_id"] == "f" * 64
+            assert "thread_cpu_ms" in row and "minor_faults" in row and "major_faults" in row
+    finally:
+        recorder.close()
+
+
+def test_ram_swap_records_existing_copies_and_waits_and_restores_saved_prefix(
+    constructed_worker, tmp_path, monkeypatch,
+):
+    fixture = constructed_worker
+    telemetry = fixture.module.cache_telemetry
+    recorder = telemetry.Recorder(tmp_path / "timing", start=False, gc_events=False)
+    monkeypatch.setattr(telemetry, "_recorder", recorder)
+    monkeypatch.setattr(telemetry, "_round", {})
+    worker = fixture.create()
+    waits = []
+    monkeypatch.setattr(worker.torch.cuda, "synchronize", lambda: waits.append(True))
+    try:
+        worker.before({"bank": BANK_A, "save_blocks": [], "drop_banks": [], "barrier": False})
+        worker.before({"bank": BANK_B, "save_blocks": [0, 1], "drop_banks": [], "barrier": False})
+        recorder.flush()
+        first_sequence = recorder.sequence
+        fixture.gpu.data[:] = [99] * 32
+        worker.before({"bank": BANK_A, "save_blocks": [3, 4], "drop_banks": [], "barrier": False})
+        recorder.flush()
+        rows = [json.loads(line) for line in recorder.path.read_text().splitlines()]
+        changed = [row for row in rows if row["sequence"] > first_sequence]
+        assert len(waits) == 8  # Initial three, then prepare + two waits per stage chunk.
+        assert fixture.gpu.data[:8] == list(range(8))
+        assert fixture.gpu.data[12:20] == [99] * 8
+        assert worker.images[BANK_B]["buffer"].data[12:20] == [99] * 8
+        assert worker.active == BANK_A
+        assert sum(row["stage"] == "handover_ram_copy" for row in changed) == 2
+        submissions = [row for row in changed if row["stage"] == "handover_copy_submit"]
+        assert [row["direction"] for row in submissions] == ["store", "load", "store"]
+        assert all(row["bytes"] == 8 for row in submissions)
+        assert worker.allocation_events == 1
+    finally:
+        recorder.close()
 
 
 def test_cache_banks_route_request_operations_to_their_owner(monkeypatch):
@@ -2327,73 +2488,3 @@ def test_decode_transition_retires_only_observed_slow_queue_episodes(monkeypatch
     assert calls == ["sync", "sync"]
     assert module.after_forward_prepare(runner, step)
     assert calls == ["sync", "sync", "sync"]
-
-
-@pytest.mark.parametrize("endpoint", ["disabled", "miss", "hit"])
-def test_prefix_fallback_records_reuse_count_without_changing_selection(monkeypatch, endpoint):
-    module = load_module(monkeypatch)
-    scheduler = new_scheduler(module)
-    decisions, fallback_calls = [], []
-    helper = ModuleType("qwen_radiance_response_end")
-    helper.record_response_end_decision = lambda req, source, outcome, reason, **counts: decisions.append(
-        (req, source, outcome, reason, counts)
-    )
-    monkeypatch.setitem(sys.modules, helper.__name__, helper)
-    fallback = ("ordinary blocks", 1648, 0, False)
-    exact = ("endpoint blocks", 1700, 0, False)
-    def upstream(_self, request):
-        fallback_calls.append(request)
-        return fallback
-    monkeypatch.setattr(module.Scheduler, "_get_local_prefix_cache_hit", upstream, raising=False)
-    scheduler._phase = lambda *_: None
-    scheduler._cache_wait = lambda _: "cache_lookup"
-    scheduler._response_end_cache = lambda _: (
-        None if endpoint == "disabled" else SimpleNamespace(lookup=lambda _: exact if endpoint == "hit" else None)
-    )
-    request = SimpleNamespace(request_id="synthetic-prefix")
-    scheduler.request_phases = SimpleNamespace(live={request.request_id: {}})
-    expected = exact if endpoint == "hit" else fallback
-    assert scheduler._get_local_prefix_cache_hit(request) == expected
-    assert scheduler.request_phases.live[request.request_id]["cached_tokens"] == expected[1]
-    assert fallback_calls == ([] if endpoint == "hit" else [request])
-    if endpoint == "hit":
-        assert decisions == []  # Endpoint lookup itself records the hit.
-    else:
-        assert decisions[-1] == (request, "gpu_blocks", "hit", "normal_prefix_lookup", {"cached_tokens": 1648})
-        if endpoint == "disabled":
-            assert decisions[0][1:4] == ("gpu_endpoint", "rejected", "response_end_disabled")
-
-
-def test_ram_swap_records_existing_copies_and_waits_and_restores_saved_prefix(
-    constructed_worker, tmp_path, monkeypatch,
-):
-    fixture = constructed_worker
-    telemetry = fixture.module.cache_telemetry
-    recorder = telemetry.Recorder(tmp_path / "timing", start=False, gc_events=False)
-    monkeypatch.setattr(telemetry, "_recorder", recorder)
-    monkeypatch.setattr(telemetry, "_round", {})
-    worker = fixture.create()
-    waits = []
-    monkeypatch.setattr(worker.torch.cuda, "synchronize", lambda: waits.append(True))
-    try:
-        worker.before({"bank": BANK_A, "save_blocks": [], "drop_banks": [], "barrier": False})
-        worker.before({"bank": BANK_B, "save_blocks": [0, 1], "drop_banks": [], "barrier": False})
-        recorder.flush()
-        first_sequence = recorder.sequence
-        fixture.gpu.data[:] = [99] * 32
-        worker.before({"bank": BANK_A, "save_blocks": [3, 4], "drop_banks": [], "barrier": False})
-        recorder.flush()
-        rows = [json.loads(line) for line in recorder.path.read_text().splitlines()]
-        changed = [row for row in rows if row["sequence"] > first_sequence]
-        assert len(waits) == 8  # Initial three, then prepare + two waits per stage chunk.
-        assert fixture.gpu.data[:8] == list(range(8))
-        assert fixture.gpu.data[12:20] == [99] * 8
-        assert worker.images[BANK_B]["buffer"].data[12:20] == [99] * 8
-        assert worker.active == BANK_A
-        assert sum(row["stage"] == "handover_ram_copy" for row in changed) == 2
-        submissions = [row for row in changed if row["stage"] == "handover_copy_submit"]
-        assert [row["direction"] for row in submissions] == ["store", "load", "store"]
-        assert all(row["bytes"] == 8 for row in submissions)
-        assert worker.allocation_events == 1
-    finally:
-        recorder.close()

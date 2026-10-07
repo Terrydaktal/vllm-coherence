@@ -88,6 +88,7 @@ def test_binding_refresh_preserves_only_reviewed_compatible_predecessors(
     for name in (
         "radiance_memory.py",
         "radiance_cache_telemetry.py",
+        "radiance_pinned_memory.py",
         "radiance_kfd_trace.py",
     ):
         expected = hashlib.sha256(

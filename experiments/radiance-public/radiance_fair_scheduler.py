@@ -35,6 +35,13 @@ from uuid import uuid4
 from vllm.v1.core.kv_cache_manager import KVCacheManager
 from vllm.v1.core.sched.scheduler import Scheduler
 
+try:
+    from qwen_radiance_pinned_memory import allocate_pinned_bytes, backing_bytes
+except ModuleNotFoundError as error:
+    if error.name != "qwen_radiance_pinned_memory":
+        raise
+    from qwen_r9700_lab.radiance_pinned_memory import allocate_pinned_bytes, backing_bytes
+
 STATUS = "/dev/shm/qwen-radiance-fair-public"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 HANDOVER_TOKEN = "qwen_tool_handover"
@@ -2060,18 +2067,16 @@ class WorkerBanks:
             self.capacity,
             max(256 * 1024**2, max(stride for _, _, stride in self.regions)),
         )
-        required = self.capacity * (self.max_banks - 1) + self.stage_capacity
+        required = backing_bytes(self.capacity) * (self.max_banks - 1) + backing_bytes(self.stage_capacity)
         self.allocated_bytes = 0
         self.reserved_capacity_bytes = required
 
     def _ensure_buffers(self):
         if self.stage is not None:
             return 0, 0.0
-        # Defer the large pinned allocation until a second chat actually needs
-        # the GPU. A single-chat workload pays no allocation or page-registration
-        # cost merely because fair scheduling is enabled.
-        # Check current headroom here too: unused RAM capacity must not reject
-        # the first chat, and memory availability can change since initialization.
+        # Production prepares this pool before readiness. Keep this idempotent
+        # fallback for callers without the startup hook and recheck actual
+        # page-aligned backing bytes, including the swap stage and system reserve.
         memory = {
             line.split(":", 1)[0]: int(line.split()[1]) * 1024
             for line in Path("/proc/meminfo").read_text().splitlines()
@@ -2087,11 +2092,9 @@ class WorkerBanks:
         buffers = []
         mappings = set()
         for size in [self.capacity] * (self.max_banks - 1) + [self.stage_capacity]:
-            buffer = self.torch.empty(size, dtype=self.torch.uint8, device="cpu", pin_memory=True)
-            # This happens after host registration and before any DMA uses the
-            # buffer. Protect the backing arena, including allocator slack, so
-            # background THP promotion cannot pause unrelated decode rounds.
-            mappings.update(protect_pinned_host_mapping(buffer))
+            with cache_telemetry.span("pinned_allocation", bytes=size, resources=True):
+                buffer, mapping = allocate_pinned_bytes(self.torch, size, span=cache_telemetry.span)
+            mappings.add(mapping)
             buffers.append(buffer)
         stage = buffers.pop()
         # Publish the arena only after every allocation succeeds. A failed stage
@@ -2305,6 +2308,26 @@ class WorkerBanks:
         )
 
 
+def prepare_handover_pool(runner):
+    """Prepare both parked-chat buffers after GPU warmup, before API readiness."""
+    vllm_config = runner.vllm_config
+    scheduler = vllm_config.scheduler_config.scheduler_cls
+    if scheduler not in (FairScheduler, "qwen_radiance_fair_scheduler.FairScheduler"):
+        return
+    config = (vllm_config.additional_config or {}).get("qwen_fair", {})
+    max_banks = int(config.get("max_cached_chats", 2))
+    if not 2 <= max_banks <= 4:
+        raise ValueError("invalid RAM-cache bank limit")
+    metadata = {"max_banks": max_banks, "status_path": str(config.get("status_path", STATUS))}
+    cache_telemetry.configure(metadata["status_path"])
+    cache_telemetry.install_runtime_hooks()
+    if not hasattr(runner, "qwen_banks"):
+        runner.qwen_banks = WorkerBanks(runner, metadata)
+    amount, seconds = runner.qwen_banks._ensure_buffers()
+    runner.qwen_banks._publish_status(
+        last_allocation_bytes=amount, last_allocation_seconds=seconds, handover="startup",
+    )
+    logging.getLogger(__name__).info("Chat handover RAM ready: %s bytes in %.3fs", amount, seconds)
 
 
 def before_forward(runner, scheduler_output):

@@ -16,7 +16,9 @@ MEMORY_REPORT_HOOKS = (
         "        enable_gpu_sync_check()\n\n"
         "        # Shared CPU allocator accounting, after all GPU warmup.\n"
         "        from qwen_radiance_memory import start_memory_report\n"
-        "        start_memory_report(self.model_runner)\n\n"
+        "        start_memory_report(self.model_runner)\n"
+        "        from qwen_radiance_fair_scheduler import prepare_handover_pool\n"
+        "        prepare_handover_pool(self.model_runner)\n\n"
         "        return CompilationTimes(\n",
     ),
     (
@@ -33,7 +35,9 @@ V028_MEMORY_REPORT_HOOKS = (
         "        set_torch_threads_for_runtime()\n\n"
         "        # Shared CPU allocator accounting, after all GPU warmup.\n"
         "        from qwen_radiance_memory import start_memory_report\n"
-        "        start_memory_report(self.model_runner)\n\n"
+        "        start_memory_report(self.model_runner)\n"
+        "        from qwen_radiance_fair_scheduler import prepare_handover_pool\n"
+        "        prepare_handover_pool(self.model_runner)\n\n"
         "        return CompilationTimes(\n",
     ),
     MEMORY_REPORT_HOOKS[1],
@@ -176,7 +180,15 @@ def tool_handover_core(text):
 
 
 def memory_report_worker(text):
+    # Accept our previous installed hook as well as the new startup preparation,
+    # then authenticate the recovered upstream worker before changing it.
+    pool_hook = (
+        "        from qwen_radiance_fair_scheduler import prepare_handover_pool\n"
+        "        prepare_handover_pool(self.model_runner)\n"
+    )
+    text = text.replace(pool_hook, "")
     for old, new in (*MEMORY_REPORT_HOOKS, *V028_MEMORY_REPORT_HOOKS):
+        new = new.replace(pool_hook, "")
         if text.count(new) == 1:
             text = text.replace(new, old)
     digest = hashlib.sha256(text.encode()).hexdigest()
@@ -395,6 +407,9 @@ def transformed_sources(
         package_root / "qwen_radiance_fair_scheduler.py": fair_source.read_text(),
         package_root / "qwen_radiance_memory.py": cache_source.with_name(
             "radiance_memory.py"
+        ).read_text(),
+        package_root / "qwen_radiance_pinned_memory.py": cache_source.with_name(
+            "radiance_pinned_memory.py"
         ).read_text(),
         package_root / "qwen_radiance_cache_telemetry.py": cache_source.with_name(
             "radiance_cache_telemetry.py"

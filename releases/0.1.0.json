@@ -56,6 +56,7 @@
     "src/qwen_r9700_lab/radiance_cache.py",
     "src/qwen_r9700_lab/radiance_memory.py",
     "src/qwen_r9700_lab/radiance_cache_telemetry.py",
+    "src/qwen_r9700_lab/radiance_pinned_memory.py",
     "src/qwen_r9700_lab/radiance_kfd_trace.py"
   ],
   "integration_sha256": {
@@ -66,9 +67,9 @@
     "experiments/radiance-public/optimized_pi_release.py": "264d2acad78642f6bcb29220ee855105bf9d3f38633c8c0cae428c1c750f287d",
     "experiments/radiance-public/runtime-radiance-1.0.16.json": "a675da0db7c2c64a58762e90874eeab6a9319db8d34effa813f0e316d2203675",
     "experiments/radiance-public/patch_streaming_snapshot.py": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd",
-    "experiments/radiance-public/patch_chat_snapshot.py": "91c81219478b3f70d37f1925fd5b4a7b8f1fbd710c727c5d965152689284482e",
+    "experiments/radiance-public/patch_chat_snapshot.py": "a22cb361a7db3eba31c3f7c08dd9707b3cb598d62e01f2a80f3e2fae51e9ec0b",
     "experiments/radiance-public/radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
-    "experiments/radiance-public/radiance_fair_scheduler.py": "36e173aab7aa6a005283922e09667b9094755fd2ba9c9c2144b149b3ff495f17",
+    "experiments/radiance-public/radiance_fair_scheduler.py": "251e655fe5dbc63d87da22b397a528e8497ea66cc03470720b42bec121da67b9",
     "experiments/radiance-public/radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
     "experiments/radiance-public/patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
     "experiments/radiance-public/patch_dflash_response_cache.py": "65b63fb943d42ae0e7661fee72abaf37d174c1eee3ce08cfe26b851f4a51b1b0",
@@ -106,6 +107,7 @@
     "src/qwen_r9700_lab/radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
     "src/qwen_r9700_lab/radiance_memory.py": "e9148dcd5b20d4518d53864dfb8aef40640ffb3889a67af170661378e2ea7600",
     "src/qwen_r9700_lab/radiance_cache_telemetry.py": "27ad70a51c8bd1d41a34e65d1625e1534150ae6048282ea49100060b0cb5e6b1",
+    "src/qwen_r9700_lab/radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
     "src/qwen_r9700_lab/radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2"
   },
   "support_files": {

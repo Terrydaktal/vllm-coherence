@@ -139,6 +139,7 @@ manifest["runtime"]["chat_storage"] = {
             ROOT / "src/qwen_r9700_lab/radiance_cache.py",
             ROOT / "src/qwen_r9700_lab/radiance_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_cache_telemetry.py",
+            ROOT / "src/qwen_r9700_lab/radiance_pinned_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_kfd_trace.py",
             BASE / "radiance_chat_tier.py",
             BASE / "radiance_fair_scheduler.py",

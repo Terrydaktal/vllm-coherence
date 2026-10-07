@@ -1,0 +1,79 @@
+{
+  "schema": "urn:coherence:exact-pinned-handover-deployment:v1",
+  "recorded_at": "2026-10-07T15:21:23.429365+00:00",
+  "host": "ai",
+  "runtime_abi": "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "installed_source_hashes": {
+    "radiance_cache_telemetry.py": "b85cdb543d035710aa206566a519b154a9ae8e8988dfcdae5aa9545a75db86b5",
+    "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
+    "patch_chat_snapshot.py": "c00b56e72f88d1b9835a916195bf71b0f52a997095ca092e204d54e036cc73c9",
+    "launch_public_clean_snapshot_server.sh": "ed7c28939a69b668f804f013349bd1e63a32560edabdbc070e6ee4d740db51db"
+  },
+  "repair": [
+    "Page-aligned mmap and HIP registration replace power-of-two PyTorch backing arenas.",
+    "NOHUGEPAGE precedes eight-way CPU prefaulting and registration.",
+    "Both parking buffers and swap stage are prepared before API readiness.",
+    "Storage views retain registration until existing DMA completion fences finish."
+  ],
+  "baseline": {
+    "allocated_bytes": 20249051136,
+    "host_page_policy_bytes": 34628173824,
+    "allocation_seconds": 86.84321243793238
+  },
+  "baseline_worker_sha256": "ba6c1f66be7ae4d3c516e88f937ecb726eead741981f6f9df797cfe32fb98217",
+  "native_full_pool_startups": [
+    {
+      "backing_bytes": 20249051136,
+      "allocation_seconds": 2.204151686048135,
+      "allocation_events": 1
+    },
+    {
+      "backing_bytes": 20249051136,
+      "allocation_seconds": 2.206283394014463,
+      "allocation_events": 1
+    },
+    {
+      "backing_bytes": 20249051136,
+      "allocation_seconds": 2.0639636779669672,
+      "allocation_events": 1
+    }
+  ],
+  "native_synthetic_handover": {
+    "pinned": true,
+    "view_and_async_copy_cycles": 64,
+    "three_chat_handover_checks": 60,
+    "unique_gpu_storage_regions": 2,
+    "requested_view_buffer_bytes": 1048577,
+    "view_buffer_backing_bytes": 1052672,
+    "equal": true,
+    "elapsed_seconds": 0.6041051229694858,
+    "scope": "Synthetic uint8 data only; existing DMA fences, two parked banks, overlapping/noncontiguous saved blocks, storage-view lifetime. No model inference or session data."
+  },
+  "cpu_checks": {
+    "focused_checks": 404,
+    "status": "passed",
+    "launcher_preflight": "passed",
+    "lab_compatibility_drift": 0
+  },
+  "activation": {
+    "waited_for_idle": true,
+    "active_requests_at_stop": 0,
+    "queued_requests_at_stop": 0,
+    "graceful_stop": true,
+    "flushed_chats_before_stop": 0,
+    "saved_chat_caches_preserved": true
+  },
+  "scope": "Pinned buffer allocation and byte-for-byte synthetic transfer/parking/restore checks; no model arithmetic or snapshot layout changes.",
+  "qualification_limits": [
+    "Pool preparation observations on one host are not a matched end-to-end response-latency benchmark.",
+    "Disk restore, prompt prefill and unrelated GPU driver stalls are separate costs.",
+    "Synthetic checks are not a universal model/kernel equivalence proof."
+  ],
+  "backend": {
+    "running": true,
+    "ready": true,
+    "pinned": true,
+    "startup_operation_id": "870eaa8b37c94fd5b7fa2c5c2fd34351"
+  }
+}

@@ -284,9 +284,13 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     assert first_engine == engine.read_bytes()
     assert first_worker == worker.read_bytes()
     assert worker.read_text().count("start_memory_report(self.model_runner)") == 1
+    assert worker.read_text().count("prepare_handover_pool(self.model_runner)") == 1
     assert worker.read_text().count("stop_memory_report(getattr(self, 'model_runner', None))") == 1
     assert (tmp_path / "qwen_radiance_memory.py").read_bytes() == core.with_name(
         "radiance_memory.py"
+    ).read_bytes()
+    assert (tmp_path / "qwen_radiance_pinned_memory.py").read_bytes() == core.with_name(
+        "radiance_pinned_memory.py"
     ).read_bytes()
     assert (tmp_path / "qwen_radiance_kfd_trace.py").read_bytes() == core.with_name(
         "radiance_kfd_trace.py"
@@ -406,7 +410,7 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     assert manifest["storage"]["secondary_tier"] == "qwen_chat_fs"
     assert {
         "radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py",
-        "radiance_kfd_trace.py",
+        "radiance_pinned_memory.py", "radiance_kfd_trace.py",
     } <= manifest["runtime"]["chat_storage"]["modules"].keys()
     for name, expected in manifest["runtime"].get("release_files", {}).items():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
@@ -449,7 +453,7 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (
             REPO_ROOT / "src/qwen_r9700_lab"
-            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_kfd_trace.py")
+            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py")
             else base
         ) / name
         assert hashlib.sha256(source.read_bytes()).hexdigest() == expected
