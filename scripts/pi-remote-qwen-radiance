@@ -432,14 +432,6 @@ readonly operating_prompt="$project_root/integrations/pi/qwen-radiance-operating
 readonly abi_source="$project_root/experiments/radiance-public/snapshot-abi-chat-cache-v1.json"
 readonly launcher_source="$project_root/experiments/radiance-public/launch_public_clean_snapshot_server.sh"
 readonly patch_source="$project_root/experiments/radiance-public/patch_streaming_snapshot.py"
-readonly cache_module="$project_root/src/qwen_r9700_lab/radiance_cache.py"
-readonly memory_module="$project_root/src/qwen_r9700_lab/radiance_memory.py"
-readonly cache_telemetry_module="$project_root/src/qwen_r9700_lab/radiance_cache_telemetry.py"
-readonly pinned_memory_module="$project_root/src/qwen_r9700_lab/radiance_pinned_memory.py"
-readonly kfd_trace_module="$project_root/src/qwen_r9700_lab/radiance_kfd_trace.py"
-readonly cache_tier_module="$project_root/experiments/radiance-public/radiance_chat_tier.py"
-readonly fair_scheduler_module="$project_root/experiments/radiance-public/radiance_fair_scheduler.py"
-readonly cache_patch_module="$project_root/experiments/radiance-public/patch_chat_snapshot.py"
 readonly install_script="$project_root/scripts/install-pi-coding-agent"
 readonly deploy_script="$project_root/scripts/deploy-pi-models-config"
 readonly progress_extension="$project_root/integrations/pi/qwen-progress.mjs"
@@ -507,12 +499,26 @@ done
 if ((reuse_existing == 0)); then
 	[[ $(sha256sum -- "$launcher_source" | awk '{print $1}') == "$REMOTE_LAUNCHER_SHA256" ]] || die 'local server launcher hash mismatch'
 	[[ $(sha256sum -- "$patch_source" | awk '{print $1}') == "$SNAPSHOT_PATCH_SHA256" ]] || die 'local snapshot patch hash mismatch'
-	for module in "$cache_module" "$memory_module" "$cache_telemetry_module" "$pinned_memory_module" "$kfd_trace_module" "$cache_tier_module" "$fair_scheduler_module" "$cache_patch_module"; do
-		[[ -f $module && ! -L $module ]] || die "missing chat storage module: $module"
-		expected=$(jq -r --arg name "${module##*/}" '.runtime.chat_storage.modules[$name]' "$abi_source")
-		[[ $(sha256sum "$module" | awk '{print $1}') == "$expected" ]] || die "chat storage module hash mismatch: $module"
-	done
 fi
+declare -a chat_storage_preflight=()
+module_inventory=$(jq -er '
+  .runtime.chat_storage.modules
+  | if type == "object" and length > 0
+      and all(to_entries[];
+        (.key | test("^[A-Za-z0-9_]+\\.py$"))
+        and (.value | type == "string" and test("^[a-f0-9]{64}$")))
+    then to_entries[] | [.key, .value] | @tsv
+    else error("invalid or empty chat storage module inventory") end
+' "$abi_source") || die 'invalid chat storage module inventory'
+while IFS=$'\t' read -r module expected; do
+	if ((reuse_existing == 0)); then
+		path="$project_root/src/qwen_r9700_lab/$module"
+		if [[ ! -e $path && ! -L $path ]]; then path="${launcher_source%/*}/$module"; fi
+		[[ -f $path && ! -L $path ]] || die "missing chat storage module: $module"
+		[[ $(sha256sum -- "$path" | awk '{print $1}') == "$expected" ]] || die "chat storage module hash mismatch: $module"
+	fi
+	chat_storage_preflight+=("$REMOTE_ROOT/radiance-vllm-mxfp4/$module" "$expected")
+done <<<"$module_inventory"
 declare -a release_preflight=()
 while IFS=$'\t' read -r module expected; do
 	path="${launcher_source%/*}/$module"
@@ -565,22 +571,22 @@ remote_abi="$REMOTE_CACHE/snapshots/$SNAPSHOT_ABI/abi.json"
 ssh -T "$remote_host" /usr/bin/bash -s -- \
 	"$remote_launcher" "$REMOTE_LAUNCHER_SHA256" \
 	"$remote_patch" "$SNAPSHOT_PATCH_SHA256" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_cache.py" "$(jq -r '.runtime.chat_storage.modules["radiance_cache.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_memory.py" "$(jq -r '.runtime.chat_storage.modules["radiance_memory.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_cache_telemetry.py" "$(jq -r '.runtime.chat_storage.modules["radiance_cache_telemetry.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_pinned_memory.py" "$(jq -r '.runtime.chat_storage.modules["radiance_pinned_memory.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_kfd_trace.py" "$(jq -r '.runtime.chat_storage.modules["radiance_kfd_trace.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_chat_tier.py" "$(jq -r '.runtime.chat_storage.modules["radiance_chat_tier.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/radiance_fair_scheduler.py" "$(jq -r '.runtime.chat_storage.modules["radiance_fair_scheduler.py"]' "$abi_source")" \
-	"$REMOTE_ROOT/radiance-vllm-mxfp4/patch_chat_snapshot.py" "$(jq -r '.runtime.chat_storage.modules["patch_chat_snapshot.py"]' "$abi_source")" \
+	"${chat_storage_preflight[@]}" \
 	"$remote_abi" "$SNAPSHOT_ABI" "${release_preflight[@]}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 while (($#)); do
     path=$1
     expected=$2
     shift 2
-    [[ -f $path && ! -L $path && $(stat -c '%U:%h' -- "$path") == 'lewis:1' ]] || exit 2
-    [[ $(sha256sum -- "$path" | awk '{print $1}') == "$expected" ]] || exit 2
+    [[ -f $path && ! -L $path && $(stat -c '%U:%h' -- "$path") == 'lewis:1' ]] || {
+        printf 'Radiance preflight file is missing or unsafe: %s\n' "$path" >&2
+        exit 2
+    }
+    [[ $(sha256sum -- "$path" | awk '{print $1}') == "$expected" ]] || {
+        printf 'Radiance preflight file hash mismatch: %s (expected %s; found %s)\n' \
+            "$path" "$expected" "$(sha256sum -- "$path" | awk '{print $1}')" >&2
+        exit 2
+    }
 done
 REMOTE_PREFLIGHT
 
@@ -590,7 +596,7 @@ backend_log=$(
 	ssh -T "$remote_host" /usr/bin/bash -s -- \
 		"$CONTAINER" "$MODEL_ID" "$IMAGE_ID" "$REMOTE_PORT" \
 		"$remote_launcher" "$REMOTE_CACHE" "$SNAPSHOT_DATA_ABI" "$reuse_existing" "$SNAPSHOT_ABI" \
-		"$(jq -r '.runtime.memory_report.compatible_runtime_abis | join(" ")' "$abi_source")" <<'REMOTE_BACKEND'
+		"$(jq -r '.runtime.memory_report.compatible_runtime_abis | join(",")' "$abi_source")" <<'REMOTE_BACKEND'
 set -euo pipefail
 container=$1
 model=$2
@@ -614,7 +620,9 @@ validate_backend() {
     ' <<<"$inspect" >/dev/null || return 1
     args=$(jq -r '.[0].Args | join(" ")' <<<"$inspect") || return 1
     # Diagnostic additions preserve the exact qualified predecessors while live.
-    read -r -a compatible_runtime_abis <<<"$compatible_runtime_abi"
+    # SSH joins argv into a remote shell command. A space-separated list loses
+    # all but $10; commas preserve the complete authenticated list as one word.
+    IFS=, read -r -a compatible_runtime_abis <<<"$compatible_runtime_abi"
     for candidate in "$runtime_abi" "${compatible_runtime_abis[@]}"; do
         [[ $candidate =~ ^[0-9a-f]{64}$ ]] || continue
         if [[ $args == *"qwen-radiance-public-clean-${candidate:0:16}"* ]]; then

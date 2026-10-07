@@ -554,7 +554,7 @@ def test_launcher_accepts_only_explicit_telemetry_compatible_runtime(tmp_path, r
             "model": "test-model",
             "abi": "test-data-abi",
             "runtime_abi": current,
-            "compatible_runtime_abi": f"{previous} {pre_report}",
+            "compatible_runtime_abi": f"{previous},{pre_report}",
             "port": "8080",
             "inspect_file": str(path),
         }.items()
