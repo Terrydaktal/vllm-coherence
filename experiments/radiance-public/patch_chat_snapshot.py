@@ -28,8 +28,14 @@ TIMELINE_SERVING = (
     TIMELINE_IMPORT,
     (
         "        result = await self.render_chat_request(request)\n",
+        '        request_timeline.prefix_begin(request, tokenizer, chat_template_kwargs)\n'
         '        with request_timeline.api_render():\n'
         "            result = await self.render_chat_request(request)\n",
+    ),
+    (
+        "        conversation, engine_inputs = result\n",
+        "        conversation, engine_inputs = result\n"
+        "        request_timeline.prefix_rendered(self, engine_inputs)\n",
     ),
     (
         '            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"\n'
@@ -44,6 +50,25 @@ TIMELINE_SERVING = (
         "                    data = chunk.model_dump_json(exclude_unset=True)\n"
         "                    request_timeline.first_api_content(choice_data.delta)\n"
         '                    yield f"data: {data}\\n\\n"\n',
+    ),
+    (
+        "        response = ChatCompletionResponse(\n",
+        "        request_timeline.prefix_full_choices(choices)\n"
+        "        response = ChatCompletionResponse(\n",
+    ),
+)
+HF_PREFIX_SHA256 = "b0e83d95fc0aca6e248e28aa727d795bd74da681296634b15a0a0cf68a9feb48"
+HF_PREFIX_HOOKS = (
+    TIMELINE_IMPORT,
+    (
+        "        chat_template_kwargs = params.get_apply_chat_template_kwargs()\n",
+        "        chat_template_kwargs = params.get_apply_chat_template_kwargs()\n"
+        "        request_timeline.prefix_render_params(conversation, chat_template_kwargs)\n",
+    ),
+    (
+        "    resolved_kwargs = resolve_chat_template_kwargs(\n",
+        "    chat_template = request_timeline.prefix_template(chat_template, kwargs)\n"
+        "    resolved_kwargs = resolve_chat_template_kwargs(\n",
     ),
 )
 TIMELINE_ASYNC = (
@@ -266,6 +291,12 @@ def stream_buffered_tool_usage(text: str) -> str:
     for old, new in reversed(TIMELINE_SERVING):
         if text.count(new) == 1:
             text = text.replace(new, old)
+    # Older authenticated packages already carry the timing-only render hook.
+    text = text.replace(
+        '        with request_timeline.api_render():\n'
+        "            result = await self.render_chat_request(request)\n",
+        "        result = await self.render_chat_request(request)\n",
+    )
     for old, new in TOOL_HANDOVER_SERVING:
         if text.count(new) == 1:
             text = text.replace(new, old)
@@ -311,6 +342,22 @@ def request_timeline_async(text: str) -> str:
     wrapped = "".join("    " + line if line.strip() else line for line in region.splitlines(keepends=True))
     text = prefix + ASYNC_INPUT_WRAPPED + wrapped + ASYNC_INPUT_BRIDGE + ASYNC_INPUT_END + suffix
     return apply_replacements(text, TIMELINE_ASYNC)
+
+
+def prefix_renderer(text: str) -> str:
+    """Install lineage at the real renderer and Jinja invocation boundaries."""
+    for old, new in reversed(HF_PREFIX_HOOKS):
+        if new in text:
+            text = text.replace(new, old)
+    if hashlib.sha256(text.encode()).hexdigest() != HF_PREFIX_SHA256:
+        raise ValueError("prefix renderer source differs from the pinned runtime")
+    result = text
+    for old, new in HF_PREFIX_HOOKS:
+        expected = 2 if "params.get_apply_chat_template_kwargs" in old else 1
+        if result.count(old) != expected:
+            raise ValueError("prefix renderer observation boundary changed")
+        result = result.replace(old, new)
+    return result
 
 
 def retain_settled_mamba_tail(text: str) -> str:
@@ -402,6 +449,7 @@ def transformed_sources(
     runner = package_root / "vllm/v1/worker/gpu/model_runner.py"
     engine = package_root / "vllm/v1/engine/core.py"
     worker = package_root / "vllm/v1/worker/gpu_worker.py"
+    renderer = package_root / "vllm/renderers/hf.py"
     text = scheduler.read_text()
     replacements = [
         (
@@ -492,6 +540,7 @@ def transformed_sources(
         mamba: retain_settled_mamba_tail(mamba.read_text()),
         serving: stream_buffered_tool_usage(serving.read_text()),
         async_llm: request_timeline_async(async_llm.read_text()),
+        renderer: prefix_renderer(renderer.read_text()),
         output: add_fair_output(output.read_text()),
         runner: add_fair_runner_hooks(runner.read_text()),
         engine: tool_handover_core(engine.read_text()),
@@ -507,6 +556,12 @@ def transformed_sources(
         ).read_text(),
         package_root / "qwen_radiance_request_timeline.py": cache_source.with_name(
             "radiance_request_timeline.py"
+        ).read_text(),
+        package_root / "qwen_radiance_prefix_lineage.py": cache_source.with_name(
+            "radiance_prefix_lineage.py"
+        ).read_text(),
+        package_root / "qwen_radiance_prefix_runtime.py": cache_source.with_name(
+            "radiance_prefix_runtime.py"
         ).read_text(),
         package_root / "qwen_radiance_pinned_memory.py": cache_source.with_name(
             "radiance_pinned_memory.py"

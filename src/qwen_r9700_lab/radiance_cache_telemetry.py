@@ -71,8 +71,32 @@ _COUNTS = {
     "pending_dependencies",
     "tier_index",
     "status_code",
+    "compared_tokens",
+    "previous_tokens",
+    "current_tokens",
+    "first_difference",
+    "previous_characters",
+    "current_characters",
+    "compared_characters",
+    "difference_position",
+    "previous_fields",
+    "current_fields",
+    "compared_fields",
+    "message_index",
+    "dropped_records",
 }
-_LABELS = {"job_kind", "direction", "reason", "cache_source", "outcome"}
+_LABELS = {
+    "job_kind",
+    "direction",
+    "reason",
+    "cache_source",
+    "outcome",
+    "comparison",
+    "diagnostic_status",
+    "operation",
+    "unit",
+    "scope",
+}
 _LABEL_VALUES = {
     "gpu",
     "filesystem",
@@ -124,6 +148,38 @@ _LABEL_VALUES = {
     "normal_prefix_lookup",
     "unspecified",
     "unknown",
+    "raw_to_reencoded",
+    "output_to_message",
+    "template_normalization",
+    "prompt_prefix",
+    "input_processor",
+    "complete",
+    "incomplete",
+    "unavailable",
+    "not_applicable",
+    "missing",
+    "unsupported",
+    "evicted",
+    "restart",
+    "dropped",
+    "failed",
+    "partial_output",
+    "configuration_changed",
+    "overlapping_requests",
+    "missing_previous_output",
+    "missing_cache_salt",
+    "matching_prefix",
+    "content_trim",
+    "reasoning_trim",
+    "leading_delimiter",
+    "inline_reasoning_split",
+    "assistant_delimiters",
+    "trim",
+    "delimiter",
+    "tokens",
+    "characters",
+    "message_fields",
+    "assistant_message_without_terminator",
 }
 _METRICS = {
     "gpu_elapsed_ms",
@@ -157,7 +213,22 @@ def fields(values):
             if math.isfinite(value) and value >= 0:
                 result[name] = round(value, 6)
         elif (
-            name in {"success", "indices_truncated", "stream_match", "streaming"}
+            name
+            in {
+                "success",
+                "indices_truncated",
+                "stream_match",
+                "streaming",
+                "equal",
+                "trim_changed",
+                "delimiter_changed",
+                "history_changed",
+                "config_changed",
+                "comparison_complete",
+                "processed_endpoint_known",
+                "difference_position_available",
+                "recognized_stop_marker_removed",
+            }
             and type(value) is bool
         ):
             result[name] = value
@@ -349,6 +420,7 @@ class Recorder:
             "context_drops": self.context_drops,
             "gpu_hooks": self.gpu_hooks,
             "worker_first_work_hooks": self.worker_first_work_hooks,
+            "prefix_lineage_hooks": getattr(self, "prefix_lineage_hooks", None),
             "generation_round_telemetry": generation_timings_enabled(),
             "main_thread_samples": self.main_thread_samples,
             "round_sample_errors": self.round_sample_errors,

@@ -150,6 +150,8 @@ manifest["runtime"]["chat_storage"] = {
             ROOT / "src/qwen_r9700_lab/radiance_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_cache_telemetry.py",
             ROOT / "src/qwen_r9700_lab/radiance_request_timeline.py",
+            ROOT / "src/qwen_r9700_lab/radiance_prefix_lineage.py",
+            ROOT / "src/qwen_r9700_lab/radiance_prefix_runtime.py",
             ROOT / "src/qwen_r9700_lab/radiance_pinned_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_kfd_trace.py",
             BASE / "radiance_chat_tier.py",
@@ -190,6 +192,8 @@ manifest["runtime"]["memory_report"] = {
         ),
     },
     "compatible_runtime_abis": [
+        # Prefix and prefill diagnostic overlays; unchanged numerical/data contract.
+        "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
         # Storage-only retention repair; same numerical kernels and data ABI.
         "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
@@ -283,6 +287,18 @@ manifest["runtime"]["fair_scheduler"] = {
     },
 }
 manifest["serving"]["max_num_seqs"] = 2
+manifest["runtime"]["prefix_lineage"] = {
+    "schema": "urn:coherence:prefix-lineage:v1",
+    "modules": ["radiance_prefix_lineage.py", "radiance_prefix_runtime.py"],
+    "scope": "Pinned token-only Qwen chat renderer and synchronous TP1 request path",
+    "comparisons": [
+        "raw_to_reencoded", "output_to_message", "template_normalization",
+        "prompt_prefix", "input_processor",
+    ],
+    "retention": "Last completed response per exact cache salt; 8 chats; 32 MiB bounded process RAM",
+    "privacy": "No text, token IDs or content fingerprints emitted; only comparison results and counts",
+    "unsupported": "Explicit unavailable status; no cache or model behavior changes",
+}
 manifest["storage"]["secondary_tier"] = "qwen_chat_fs"
 manifest["serving"]["effective_chat_template_sha256"] = profile["chat_template_sha256"]
 manifest["serving"]["cudagraph_mode"] = "PIECEWISE"

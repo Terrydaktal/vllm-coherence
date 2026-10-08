@@ -202,17 +202,19 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
         "    async def create(self, request):\n"
         + installer.TOOL_HANDOVER_SERVING[0][0]
         + installer.TIMELINE_SERVING[1][0]
-        + "        request_id = (\n"
         + installer.TIMELINE_SERVING[2][0]
+        + "        request_id = (\n"
+        + installer.TIMELINE_SERVING[3][0]
         + "    async def stream(self, request):\n"
         + "        for _ in []:\n"
         + "".join("    " * i + "if True:\n" for i in range(3, 6))
     )
     fixture += installer.BUFFERED_USAGE_OLD
     fixture += installer.TOOL_HANDOVER_SERVING[1][0]
-    fixture += installer.TIMELINE_SERVING[3][0]
+    fixture += installer.TIMELINE_SERVING[4][0]
     fixture += "    async def complete(self, request):\n        for _ in []:\n"
     fixture += installer.TOOL_HANDOVER_SERVING[2][0]
+    fixture += installer.TIMELINE_SERVING[5][0] + "        )\n"
     serving.write_text(fixture)
     monkeypatch.setattr(
         installer, "STREAMING_CHAT_SHA256", hashlib.sha256(fixture.encode()).hexdigest()
@@ -276,6 +278,11 @@ def test_chat_storage_patch_is_idempotent_and_rejects_unknown_scheduler(
     async_llm = tmp_path / "vllm/v1/engine/async_llm.py"
     async_llm.write_bytes(gzip.decompress(
         (REPO_ROOT / "tests/fixtures/vllm_028_request_timeline_async_llm.py.gz").read_bytes()
+    ))
+    renderer = tmp_path / "vllm/renderers/hf.py"
+    renderer.parent.mkdir(parents=True)
+    renderer.write_bytes(gzip.decompress(
+        (REPO_ROOT / "tests/fixtures/vllm_028_prefix_lineage_hf.py.gz").read_bytes()
     ))
     installer.install(tmp_path, core, tier)
     first = scheduler.read_bytes()
@@ -426,6 +433,9 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
     assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == [
+        # The prefix observer and asynchronous prefill markers preserve the
+        # deployed numerical kernels and serialized cache contract.
+        "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
         # Storage retention changes preserve the deployed numerical/data ABI.
         "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
@@ -463,7 +473,7 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (
             REPO_ROOT / "src/qwen_r9700_lab"
-            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py", "radiance_request_timeline.py")
+            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py", "radiance_request_timeline.py", "radiance_prefix_lineage.py", "radiance_prefix_runtime.py")
             else base
         ) / name
         assert hashlib.sha256(source.read_bytes()).hexdigest() == expected

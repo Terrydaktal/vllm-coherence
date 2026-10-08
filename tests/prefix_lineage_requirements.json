@@ -1,0 +1,167 @@
+{
+  "schema": "urn:coherence:focused-verification:v1",
+  "scope": "Content-free request construction and prefix-reuse diagnosis in the pinned text-only TP1 lane",
+  "admitted_modes": ["single-request text chat", "streamed content/reasoning/tool-call fields", "CPU token lists", "pinned instrumented Qwen template"],
+  "required_rejection_comparisons": ["raw_to_reencoded", "output_to_message", "template_normalization", "prompt_prefix", "input_processor"],
+  "requirements": [
+    {
+      "id": "PL-CLIENT",
+      "boundary": "Pi context -> provider conversion -> payload hooks -> final SDK/wire request",
+      "contract": "Compare the actual construction boundaries, preserving history and configuration changes separately; a missing hook cannot establish complete client coverage.",
+      "negative_controls": ["inserted thinking separator", "removed whitespace-only block", "payload rewrite", "missing hook", "unsupported image", "truncated message inventory"],
+      "checks": [
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "every real provider boundary contributes to complete coverage"},
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "provider inserted thinking separator is visible as a conversion change"},
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "dropping a whitespace-only assistant block is detected"},
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "payload hooks are compared at the final wire boundary"},
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "missing hooks, unsupported images and truncation cannot claim complete"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_every_client_boundary_is_required_in_the_report"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_real_pi_module_records_can_be_joined_to_backend_without_http_requests"}
+      ]
+    },
+    {
+      "id": "PL-TRANSPORT",
+      "boundary": "HTTP admission/body -> API/internal request identity -> first engine/API/HTTP output",
+      "contract": "Retain explicit request bridges and distinct output milestones; an early role-only HTTP body is not a generated token.",
+      "negative_controls": ["missing boundary", "wrong clock domain", "unrelated request", "observer failure"],
+      "checks": [
+        {"file": "tests/test_radiance_request_timeline.py", "case": "test_transport_and_id_bridge_observe_without_parsing_or_changing_messages"},
+        {"file": "tests/test_radiance_request_timeline.py", "case": "test_failure_and_cancellation_preserve_original_exception"},
+        {"file": "tests/test_first_output_telemetry_analysis.py", "case": "test_missing_boundary_cannot_claim_complete"},
+        {"file": "tests/test_first_output_telemetry_analysis.py", "case": "test_cross_process_timeline_preserves_wall_time_without_double_count"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_chat_identity_and_matching_timestamp_cannot_replace_pi_response_bridge"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_pi_early_boundaries_join_through_observed_response_identity_not_clocks"}
+      ],
+      "limits": "Opaque network/tunnel flight time after server send is not a GPU duration or a measured cross-host interval. Client/backend identifiers need their explicit bridge; nearby timestamps never substitute."
+    },
+    {
+      "id": "PL-OUTPUT",
+      "boundary": "Engine output -> streamed assistant fields -> next incoming assistant message",
+      "contract": "Distinguish parser/client message changes from template changes; incomplete output cannot become a complete equality comparison.",
+      "negative_controls": ["changed assistant text", "changed tool arguments", "partial stream"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_parser_or_client_modification_is_distinct_from_template_change"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_streamed_tool_deltas_reassemble_and_tool_mutation_is_detected"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_partial_output_is_incomplete_not_a_complete_mismatch"},
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "previous assembled output and unchanged history are checked on continuation"}
+      ]
+    },
+    {
+      "id": "PL-TEMPLATE",
+      "boundary": "Incoming assistant fields -> actual template trim/delimiter operations -> aggregate normalization",
+      "contract": "Observe normalization of the relevant prior response; individual operations do not substitute for the final aggregate.",
+      "negative_controls": ["thinking trim", "delimiter rewrite", "unrelated historical message", "missing template observation"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_delimiter_and_trim_flags_are_not_mutually_exclusive"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_other_message_normalization_cannot_be_attributed_to_latest_response"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_missing_and_unsupported_template_observation_are_explicit"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_template_subevents_alone_do_not_certify_the_final_render"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_template_operation_comparison_scope_survives_analysis"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_invalid_template_operation_metadata_is_not_disclosed_or_certified"}
+      ]
+    },
+    {
+      "id": "PL-TOKENIZER",
+      "boundary": "Previous generated tokens -> decode -> reencode",
+      "contract": "Separate token roundtrip changes from template normalization; defer the extra tokenizer pass when the actual prefix already matches.",
+      "negative_controls": ["noncanonical token sequence", "changed tokenizer/template configuration", "tokenizer exception"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_roundtrip_trim_and_both_causes_are_independently_observed"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_matching_prefix_avoids_retokenization_and_matches_delivered_fields"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_history_and_configuration_changes_do_not_masquerade_as_roundtrip"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_emitter_and_tokenizer_failures_do_not_raise_or_report_a_false_pass"}
+      ]
+    },
+    {
+      "id": "PL-INPUT",
+      "boundary": "Rendered/tokenized prompt -> asynchronous input processing -> engine input",
+      "contract": "Inspect both rendered tokens and actual processed input; only request-scoped evidence can satisfy a required comparison.",
+      "negative_controls": ["input-processor token mutation", "another request's evidence"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_input_processor_mutation_is_detected_and_used_as_next_raw_baseline"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_each_required_comparison_is_enforced"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_another_requests_good_lineage_cannot_fill_missing_evidence"}
+      ]
+    },
+    {
+      "id": "PL-ENDPOINT",
+      "boundary": "Saved processed endpoint -> rendered/processed prefix -> local/offload lookup",
+      "contract": "A difference outside the actual processed endpoint cannot explain its rejection; missing endpoint scope is explicit.",
+      "negative_controls": ["emitted pending-token difference", "absent endpoint count", "insufficient retained prefix", "conflicting identity decisions"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_exact_first_difference_and_prefix_scope"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_bad_lookup_does_not_hide_a_recorded_identity_rejection"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_emitted_pending_suffix_does_not_explain_processed_endpoint_rejection"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_missing_actual_endpoint_scope_is_explicit"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_actual_input_change_can_explain_rejection_when_pending_suffix_does_not"}
+      ],
+      "limits": "This inventory adds diagnostic comparisons; existing response-end ownership and state-copy verification remain separate requirements in response_end_requirements.json."
+    },
+    {
+      "id": "PL-CACHE-TIMING",
+      "boundary": "Admission -> cache/block/state decisions -> load/transfer -> prefill/decode",
+      "contract": "Preserve actual phase intervals, transfer origins and fallback amount without adding GPU waits or treating nested durations as serial costs.",
+      "negative_controls": ["unrelated background chat", "nested spans", "recorder failure", "failed transfer"],
+      "checks": [
+        {"file": "tests/test_cache_job_telemetry.py", "case": "test_task_captures_origin_and_keeps_active_chat_separate"},
+        {"file": "tests/test_cache_job_telemetry.py", "case": "test_gpu_hooks_reuse_native_timing_and_preserve_results_and_waits"},
+        {"file": "tests/test_cache_job_telemetry.py", "case": "test_faults_drops_and_sink_failures_do_not_change_operation"},
+        {"file": "tests/test_first_output_telemetry_analysis.py", "case": "test_missing_boundary_cannot_claim_complete"}
+      ]
+    },
+    {
+      "id": "PL-COMPLETENESS",
+      "boundary": "Retained timing records + prefix lineage -> analysis report",
+      "contract": "Keep timing completeness and prefix-diagnosis completeness separate; never invent a cause from a rejection reason alone.",
+      "negative_controls": ["all five lineage observations absent", "one missing comparison", "invalid typed field", "conflicting observation", "lost recorder evidence"],
+      "checks": [
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_real_rejection_can_have_complete_timing_but_missing_causal_evidence"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_only_observed_failed_transformation_is_identified"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_actual_core_records_keep_roundtrip_and_template_changes_distinct"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_malformed_lineage_fails_closed_without_breaking_analysis"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_recorder_evidence_loss_invalidates_prefix_completeness"}
+      ]
+    },
+    {
+      "id": "PL-RETENTION",
+      "boundary": "Completed response evidence -> next request predecessor record",
+      "contract": "Bound diagnostic retention and explicitly distinguish restart, eviction, missing namespace, unsupported data and dropped capture from a successful comparison.",
+      "negative_controls": ["retention pressure", "process restart", "missing cache salt", "too many pending requests"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_restart_eviction_and_missing_cache_salt_are_explicit"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_payload_memory_and_concurrent_request_count_are_bounded"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_cpu_token_list_only_and_capacity_failure_remain_visible"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_source_failure_is_explicit_and_does_not_become_no_change"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_same_chat_overlap_is_an_explicit_gap_not_a_stale_completed_comparison"}
+      ]
+    },
+    {
+      "id": "PL-PRIVACY-ISOLATION",
+      "boundary": "All producers -> diagnostic sink/report",
+      "contract": "Persist only admitted enum/count/boolean evidence; cross-thread/chat capture and observer failures cannot alter inference or expose payloads.",
+      "negative_controls": ["private text/token injection", "emitter exception", "interleaved chats"],
+      "checks": [
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_only_enums_counts_and_booleans_leave_the_observer"},
+        {"file": "tests/test_radiance_prefix_lineage.py", "case": "test_request_callbacks_are_correct_across_threads_and_interleaved_chats"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_lineage_report_never_copies_payload_or_arbitrary_reason"},
+        {"file": "tests/test_pi_prefix_lineage.mjs", "case": "diagnostic failures cannot abort or change provider output"},
+        {"file": "tests/test_prefix_lineage_recorder.py", "case": "test_actual_template_and_token_differences_survive_the_production_sink"},
+        {"file": "tests/test_prefix_lineage_recorder.py", "case": "test_observer_gap_and_loss_counts_survive_the_production_sink"}
+      ]
+    },
+    {
+      "id": "PL-ACTIVATION",
+      "boundary": "Packaged runtime/provider hooks -> producer health/source identity -> analysis",
+      "contract": "Healthy writes alone do not establish installed prefix observers; source and hook activation must accompany the producer lifecycle, and source observer drops remain explicit.",
+      "negative_controls": ["missing source identity", "unconfirmed installed hooks", "core emitter drop", "disabled recorder"],
+      "checks": [
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_prefix_producer_activation_is_required_in_addition_to_healthy_writes"},
+        {"file": "tests/test_prefix_lineage_analysis.py", "case": "test_core_observer_drop_is_not_hidden_by_clean_background_writer_health"},
+        {"file": "tests/test_prefix_lineage_runtime.py", "case": "test_disabled_recorder_does_not_capture_or_retokenize"},
+        {"file": "tests/test_prefix_lineage_runtime.py", "case": "test_real_jinja_instrumentation_preserves_every_output_byte"}
+      ],
+      "limits": "This checks shipped source/runtime wiring. A live deployment needs its own loaded-module identities and retained capture; CPU tests alone do not establish native activation or overhead."
+    }
+  ],
+  "limits": "Implemented CPU/source contracts and named negative controls are not native activation, measured overhead, arbitrary-input proof, complete kernel instrumentation or a guarantee of diagnosing every hardware event. Unsupported modes and lost evidence remain explicit. The inventory validator checks traceability, not assertion quality."
+}

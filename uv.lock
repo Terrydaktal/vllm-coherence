@@ -1171,6 +1171,7 @@ cpu-tests = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "jinja2" },
     { name = "pydantic" },
     { name = "pytest" },
     { name = "regex" },
@@ -1194,6 +1195,7 @@ provides-extras = ["cpu-tests"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pytest", specifier = ">=8.3,<9" },
     { name = "regex", specifier = ">=2025.7.34" },

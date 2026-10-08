@@ -23,6 +23,7 @@ must reload the runtime. The stage profiler is not needed.
 | Filesystem jobs | Submission, queue delay, worker wall/thread CPU time, page faults, completion acknowledgement and bytes. GPU and filesystem job IDs occupy separate namespaces. |
 | Snapshot processing | Tail and restore RAM copies, compression, decompression, checksum, encoded-buffer copy, file write, file/directory fsync and atomic rename. Payload and metadata writes both appear, distinguished by byte count. |
 | Response-end reuse | Local GPU and offload endpoint decisions, explicit rejection reason, endpoint/input/computed token counts, hash block size and missing/pending dependency counts. Ordinary GPU prefix fallback records its matched token count. |
+| Prefix construction | Content-free comparisons of generated-token roundtrips, delivered versus incoming assistant fields, template normalization, rendered prompt prefixes and input processing; unsupported, lost or evicted predecessor evidence remains explicit. |
 | Shared state | Contended tier/block/manifest/I/O-counter lock acquisition (at least 0.05 ms), slow completion polling (at least 1 ms), tail publication and old-namespace collection. |
 | Python GC | Generation, duration, collected/uncollectable counts and executing thread. Existing GC callbacks and collection policy are retained. |
 | Recorder health | Dropped records/context, write errors, pending queue size, writer batch time, transfer-hook installation and installed source hashes. Slow recorder batches are recorded so the observer's own work is visible. |
@@ -103,9 +104,11 @@ window when added and must never be presented as a serial total.
 missing terminal completion, failed/cancelled phases, unmatched lifecycle health,
 invalid records, sequence gaps, recorder loss or unclosed scheduler phases.
 Unfinished phases remain explicit rather than receiving invented durations.
-`COMPLETE` means the retained boundary and recorder checks passed; it does not
-identify the blocking cause or certify every internal instruction. Ordinary
-rotation and a full recorder queue can still limit what a later capture proves.
+The legacy `status` and `timing_complete` describe the retained timing boundaries
+and recorder checks. `prefix_diagnosis_complete` is a separate result: a complete
+timing trace can still lack the comparisons needed to explain a prefix rejection.
+Neither result certifies every internal instruction. Ordinary rotation and a full
+recorder queue can still limit what a later capture proves.
 
 The [7 October activation receipt](../benchmarks/results/first-output-timeline-deployment-20261007.json)
 records 270 CPU checks and five complete synthetic request timelines after an
@@ -184,6 +187,89 @@ cache salts and exception text are not logged. Decisions inspect existing CPU
 bookkeeping at admission; they add no tensor reads or GPU events/synchronizations.
 They do not change acceptance checks or cache ownership. Backend modules must be
 reloaded before these additions appear in a running process.
+
+### Prefix lineage and diagnostic completeness
+
+`prefix_lineage` records compare the previous output with the actual next request
+at five boundaries: original tokens versus their decode/encode roundtrip,
+delivered assistant fields versus incoming message fields, template normalization,
+the rebuilt prompt prefix and input processing. Pi also records context conversion,
+payload hooks, final SDK/wire
+payload, response identity and assembled output, so a provider-side rewrite can
+be distinguished from a backend rewrite. These are comparisons of existing CPU
+data; no prompt, token value, tensor or GPU synchronization is added to the log.
+
+The analyzer reports each comparison's status, equality and counts. Token and
+character offsets retain their units; an aggregate message-field comparison does
+not invent a token offset. Sanitized `template_operations` retain the character
+comparison scope and whether a recognized terminal marker was removed. Their
+individual results do not substitute for the final normalization aggregate.
+A failed comparison identifies an observed
+change; it does not, by itself, prove that change caused a particular cache miss.
+
+A recorded prefix-identity rejection requires all five comparisons before
+`prefix_diagnosis_complete` can be true. Missing hooks or predecessor data,
+unsupported inputs, restart, bounded retention eviction, partial output, recorder
+loss and invalid or conflicting evidence remain explicit gaps. A recorded cache
+hit can make those comparisons inapplicable; an absent lookup record cannot be
+interpreted as a hit. The [focused requirements inventory](../tests/prefix_lineage_requirements.json)
+links these boundaries and negative controls to their actual tests. This is a
+prefix-reuse diagnostic contract, not a claim of complete hardware instrumentation
+or mathematical model equivalence.
+
+Endpoint scope is checked against the lookup's actual processed-token count.
+The retained raw output can include an emitted token that was not processed into
+the checkpoint. A difference confined to that pending suffix does not explain a
+checkpoint-prefix rejection; it leaves an explicit `emitted_unprocessed_boundary`
+gap. Missing or insufficient endpoint coverage is `exact_endpoint_missing`.
+
+For client evidence, preserve the Pi process's private
+`~/.local/state/qwen-r9700/diagnostics/pi-prefix-lineage-PID-TRACE.jsonl` and `.1`
+files and pass each available file as `--pi-lineage-log FILE` to the request-mode
+analyzer. The hash of the streamed response ID joins Pi's producer/ordinal group
+to the backend's explicit external request ID. Earlier context and wire records
+join through that group; chat identity and nearby timestamps are never substitutes.
+Client wall clocks may be on a different machine, so no cross-host duration is
+calculated from these records.
+
+`pi_prefix_diagnosis` reports client boundary coverage and observed conversion,
+payload, serialization, configuration or history changes separately from backend
+comparisons. `production_path_diagnosis_complete` requires complete timing,
+backend prefix evidence and client evidence for this admitted construction/reuse
+route. It remains false when client records, prior output, required hooks, source
+identities or recorder health are missing. This result does not cover every model
+kernel or hardware event. A lazy token roundtrip can be explicitly inapplicable
+when the rendered prefix matches and a covered input-processor change already
+identifies the difference inside the checkpoint.
+
+The healthy path retains bounded CPU token arrays and private in-memory message
+fingerprints, then checks the actual prefix. Backend diagnostic payload retention
+defaults to 32 MiB across at most eight completed chats and eight pending requests;
+working copies and Python object overhead are additional. Pi retains at most
+32 prior chat fingerprints, with 1,024-message snapshots and a bounded log queue.
+The extra tokenizer decode/encode
+roundtrip is deferred until a changed prefix needs explanation. This avoids
+performing that additional tokenization on every successful reuse; CPU comparisons,
+hashing and bounded bookkeeping still cost time and RAM. Observer failure must not
+change the request, model output, cache acceptance or cancellation behavior.
+Source tests establish the implementation contract, not a native overhead result.
+Observer work has its own `prefix_lineage_observer` span and is not attributed as
+a cache/prefill blocking operation. An enclosing render span still measures its
+actual elapsed time; the analyzer does not subtract an invented observer cost.
+
+Activation requires packaging these modules and provider hooks into the pinned
+runtime. An already running backend or Pi process does not acquire new hooks from
+a changed checkout. Lifecycle/source bindings and producer health must accompany
+the captured request; missing activation evidence is not a successful diagnosis.
+
+Known observer limitation: a delivered response whose JSON escaping exceeds the
+8 MiB fingerprint limit can abort diagnostic finalization after removing the
+pending turn but before releasing its callback entry. The production callback
+contains no response text and the serving wrapper preserves model output, but
+repeated exceptional completions can grow callback bookkeeping and leave the
+lineage evidence incomplete. Cleanup on this failure path requires a follow-up
+repair and requalification; the normal-path retention limits above are not a
+claim that this exceptional path is bounded.
 
 ## Handover allocation
 

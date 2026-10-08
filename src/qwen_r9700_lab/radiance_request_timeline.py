@@ -132,6 +132,59 @@ def api_render():
     return span("api_render")
 
 
+def _prefix(method, *args, **kwargs):
+    try:
+        try:
+            import qwen_radiance_prefix_runtime as runtime
+        except ModuleNotFoundError as error:
+            if error.name != "qwen_radiance_prefix_runtime":
+                raise
+            from qwen_r9700_lab import radiance_prefix_runtime as runtime
+        return getattr(runtime, method)(_request.get(), *args, **kwargs)
+    except Exception:  # noqa: BLE001 - optional diagnostics never change inference
+        _failed_diagnostic()
+        return None
+
+
+def prefix_begin(request, tokenizer, config):
+    return _prefix("begin", request, tokenizer, {
+        "template_kwargs": config,
+        "request_template": getattr(request, "chat_template", None),
+        "model": getattr(request, "model", None),
+        "tools": getattr(request, "tools", None),
+        "tokenizer_class": type(tokenizer).__qualname__,
+        "tokenizer_name": getattr(tokenizer, "name_or_path", None),
+    })
+
+
+def prefix_rendered(serving, engine_inputs):
+    return _prefix("rendered", serving, engine_inputs)
+
+
+def prefix_full_choices(choices):
+    return _prefix("full_choices", choices)
+
+
+def prefix_render_params(conversation, kwargs):
+    return _prefix("render_params", conversation, kwargs)
+
+
+def prefix_template(template, kwargs):
+    try:
+        try:
+            import qwen_radiance_prefix_runtime as runtime
+        except ModuleNotFoundError as error:
+            if error.name != "qwen_radiance_prefix_runtime":
+                raise
+            from qwen_r9700_lab import radiance_prefix_runtime as runtime
+        return runtime.instrument_template(template, kwargs)
+    except Exception:  # noqa: BLE001 - retain the original numerical prompt
+        _failed_diagnostic()
+        kwargs.pop("_coherence_prefix_trace", None)
+        kwargs.pop("_coherence_prefix_support", None)
+        return template
+
+
 def bind_external(request_id):
     state = _request.get()
     value = _hash(request_id)
@@ -151,6 +204,7 @@ def internal_id_bridge(request):
     if internal is not None:
         state["identities"]["request_id"] = internal
     _emit("internal_id_bridge")
+    _prefix("call", "input_processor", getattr(request, "prompt_token_ids", None))
 
 
 def _once(stage):
@@ -163,6 +217,7 @@ def _once(stage):
 
 def first_engine_output(output):
     state = _request.get()
+    _prefix("output", output)
     if state is None or "first_engine_output" in state["observed"]:
         return
     # CPU token-list lengths are the boundary, never the token values/text.
@@ -174,6 +229,7 @@ def first_engine_output(output):
 
 def first_api_content(delta):
     state = _request.get()
+    _prefix("call", "delivered_delta", delta)
     if state is None or "first_api_content" in state["observed"]:
         return
     # Empty role/usage chunks are protocol activity, not generated content.
@@ -284,4 +340,5 @@ class RequestTimelineMiddleware:
             if body_started is not None and not body_complete:
                 _emit("http_body_receive", body_started, success=False)
             _emit("http_end", success=stream_complete and normal_return)
+            _prefix("finish", stream_complete and normal_return)
             _request.reset(token)

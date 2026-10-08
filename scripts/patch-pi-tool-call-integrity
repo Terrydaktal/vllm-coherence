@@ -173,6 +173,60 @@ TRANSPORT_PATCHES = (
         new=b'            output.errorMessage = formatProviderError(normalizeProviderError(error));\n            const transportFailure = transport?.failure(error);\n            if (transportFailure) output[TRANSPORT_ERROR] = transportFailure;\n',
     ),
 )
+
+# Request provenance belongs to the same authenticated provider transform chain.
+# The usage patch reverses every TRANSPORT_PATCHES entry before authentication.
+LINEAGE_PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='bc3c689ca705d161abe7f445c976a1bd0be33d19d3edda60b554a99a4b097273',
+        old=b'import { createTransportDiagnostics, TRANSPORT_ERROR } from "./qwen-transport-diagnostics.mjs";\n',
+        new=b'import { createTransportDiagnostics, TRANSPORT_ERROR } from "./qwen-transport-diagnostics.mjs";\nimport { createPrefixLineage } from "./qwen-prefix-lineage.mjs";\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='fd2c64e7d825241ec31a9cee364e73ed18e70a8b1d57b4b63bb2d4ef5f115413',
+        old=b'        const transport = model.provider === "qwen-r9700"\n            ? createTransportDiagnostics({ fetch: options?.fetch, signal: options?.signal }) : undefined;\n',
+        new=b'        const transport = model.provider === "qwen-r9700"\n            ? createTransportDiagnostics({ fetch: options?.fetch, signal: options?.signal }) : undefined;\n        const prefixLineage = model.provider === "qwen-r9700"\n            ? createPrefixLineage({ context, sessionId: options?.sessionId, fetch: transport?.fetch ?? options?.fetch }) : undefined;\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='fcec9df175122a5c867cb85b0200117733b246165a64d8a2470171cdebbfbecf',
+        old=b'const client = createClient(model, context, apiKey, options?.headers, transport?.fetch ?? options?.fetch, cacheSessionId, compat);',
+        new=b'const client = createClient(model, context, apiKey, options?.headers, prefixLineage?.fetch ?? transport?.fetch ?? options?.fetch, cacheSessionId, compat);',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='f328bcb7d42007b837d1374d8b3aa64a6e558bf1b8619b696a4aadf1f3e18d48',
+        old=b'            let params = buildParams(model, context, options, compat, cacheRetention, grammarToolInputProperties);\n',
+        new=b'            let params = buildParams(model, context, options, compat, cacheRetention, grammarToolInputProperties);\n            prefixLineage?.converted(params);\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='7cdc1fe0c27771b4931b1881ffdcd64524c38540a511dd64ff306cd68bc572a8',
+        old=b'            const { data: openaiStream, response } = await retryProviderRequest(',
+        new=b'            prefixLineage?.wire(params);\n            const { data: openaiStream, response } = await retryProviderRequest(',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='cbf8fa0464316a94e531dcaea80448d1be5332619ef3687b5c90c7b3bc889223',
+        old=b'                const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;\n',
+        new=b'                prefixLineage?.responseId(chunk.id);\n                const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='3c546d21ebc5cab65374085980bf76c6cdf13c2940f249e68120739f6383329c',
+        old=b'            stream.push({ type: "done", reason: output.stopReason, message: output });\n',
+        new=b'            prefixLineage?.assembled(output, true);\n            stream.push({ type: "done", reason: output.stopReason, message: output });\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256='b73c46ec4a90868fb7080956d6ac93b115a9ae336e82282552c055b4d30f157b',
+        old=b'            stream.push({ type: "error", reason: output.stopReason, error: output });\n',
+        new=b'            prefixLineage?.assembled(output, false);\n            stream.push({ type: "error", reason: output.stopReason, error: output });\n',
+    ),
+)
+TRANSPORT_PATCHES += LINEAGE_PATCHES
 PATCHES += TRANSPORT_PATCHES
 
 
@@ -303,6 +357,21 @@ def install_transport_helper(root: Path, *, apply: bool) -> None:
         atomic_write(helper, expected, details)
 
 
+def install_lineage_helper(root: Path, *, apply: bool) -> None:
+    helper_source = Path(__file__).resolve().parents[1] / "integrations/pi/qwen-prefix-lineage.mjs"
+    helper = root / "node_modules/@earendil-works/pi-ai/dist/api/qwen-prefix-lineage.mjs"
+    expected, _ = stable_read(helper_source)
+    if helper.exists() or helper.is_symlink():
+        current, details = stable_read(helper)
+    else:
+        current = None
+        _, details = stable_read(root / PATCHES[0].relative_path)
+    if current != expected:
+        if not apply:
+            raise PatchError(f"prefix lineage helper is absent or outdated: {helper}")
+        atomic_write(helper, expected, details)
+
+
 def run(root: Path, *, apply: bool) -> None:
     validate_root(root)
     chains: dict[str, list[FilePatch]] = defaultdict(list)
@@ -315,6 +384,8 @@ def run(root: Path, *, apply: bool) -> None:
         applied = classify_chain(data, chain)
         if any(patch == TRANSPORT_PATCHES[0] for patch in chain):
             install_transport_helper(root, apply=apply)
+        if any(patch == LINEAGE_PATCHES[0] for patch in chain):
+            install_lineage_helper(root, apply=apply)
         if applied != len(chain):
             if not apply:
                 raise PatchError(f"provider integrity/output patch is absent: {path}")
