@@ -40,6 +40,141 @@ def store(tmp_path, name="one", generation="initial"):
     return result
 
 
+def test_payload_page_cache_hint_follows_fsync_and_preserves_publication(tmp_path, monkeypatch):
+    calls = []
+    fsync, replace = os.fsync, Path.replace
+
+    def sync(fd):
+        calls.append("fsync")
+        return fsync(fd)
+
+    def advise(fd, offset, length, advice):
+        assert (offset, length, advice) == (0, 0, os.POSIX_FADV_DONTNEED)
+        assert os.pread(fd, len(BLOCK), 0) == BLOCK
+        calls.append("advise")
+
+    def publish(source, destination):
+        calls.append("publish")
+        return replace(source, destination)
+
+    monkeypatch.setattr(os, "fsync", sync)
+    monkeypatch.setattr(os, "posix_fadvise", advise)
+    monkeypatch.setattr(Path, "replace", publish)
+    path = tmp_path / FIRST
+    cache.atomic_write(path, BLOCK, release_page_cache=True)
+    assert calls == ["fsync", "advise", "publish", "fsync"]
+    assert path.read_bytes() == BLOCK
+    assert not list(tmp_path.glob(".pending-*"))
+
+
+@pytest.mark.parametrize("unavailable", ["missing", "error"])
+def test_failed_payload_cache_hint_does_not_lose_a_durable_snapshot(tmp_path, monkeypatch, unavailable):
+    import errno
+
+    def fail(*args):
+        raise OSError(errno.EOPNOTSUPP, "advice unavailable")
+
+    if unavailable == "missing":
+        monkeypatch.delattr(os, "posix_fadvise")
+    else:
+        monkeypatch.setattr(os, "posix_fadvise", fail)
+    current = store(tmp_path)
+    assert current.write(FIRST, memoryview(BLOCK))
+    assert current.publish([FIRST], 1648, len(BLOCK))
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
+
+
+def test_only_snapshot_payload_writes_release_page_cache(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "posix_fadvise", lambda *args: calls.append(args[1:]))
+    current = store(tmp_path)
+    assert not calls  # activation and metadata stay in the ordinary page cache
+    assert current.write(FIRST, memoryview(BLOCK))
+    assert calls == [(0, 0, os.POSIX_FADV_DONTNEED)]
+    assert current.publish([FIRST], 1648, len(BLOCK))
+    assert len(calls) == 2  # publication also verifies the payload from disk
+    assert current.write(FIRST, memoryview(BLOCK))  # an existing block is not rewritten
+    assert len(calls) == 2
+
+
+def test_snapshot_restore_releases_only_the_os_copy(tmp_path, monkeypatch):
+    current = store(tmp_path)
+    assert current.write(FIRST, memoryview(BLOCK))
+    before = current.path(FIRST).read_bytes()
+    calls = []
+    monkeypatch.setattr(os, "posix_fadvise", lambda *args: calls.append(args[1:]))
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
+    assert calls == [(0, 0, os.POSIX_FADV_DONTNEED)]
+    assert current.path(FIRST).read_bytes() == before
+
+
+def test_publication_verification_does_not_repopulate_payload_page_cache(tmp_path, monkeypatch):
+    current = store(tmp_path)
+    assert current.write(FIRST, memoryview(BLOCK))
+    calls = []
+    monkeypatch.setattr(os, "posix_fadvise", lambda *args: calls.append(args[1:]))
+    assert current.publish([FIRST], 1648, len(BLOCK))
+    assert calls == [(0, 0, os.POSIX_FADV_DONTNEED)]
+    assert current.read(FIRST, len(BLOCK)) == BLOCK
+
+
+def test_model_cache_release_is_scoped_to_loaded_models_and_once(tmp_path, monkeypatch):
+    target, draft = tmp_path / "target", tmp_path / "draft"
+    target.mkdir()
+    draft.mkdir()
+    (target / "weights.safetensors").write_bytes(b"target checkpoint")
+    (draft / "weights.safetensors").write_bytes(b"draft checkpoint")
+    (target / "config.json").write_bytes(b"configuration")
+    (tmp_path / "other.safetensors").write_bytes(b"unrelated checkpoint")
+    (target / "link.safetensors").symlink_to(tmp_path / "other.safetensors")
+    runner = SimpleNamespace(vllm_config=SimpleNamespace(
+        model_config=SimpleNamespace(model=str(target)),
+        speculative_config=SimpleNamespace(model=str(draft),
+            draft_model_config=SimpleNamespace(model=str(draft))),
+    ))
+    advised = []
+
+    def advise(fd, offset, length, advice):
+        assert (offset, length, advice) == (0, 0, os.POSIX_FADV_DONTNEED)
+        advised.append(os.pread(fd, 100, 0))
+
+    monkeypatch.setattr(os, "posix_fadvise", advise)
+    cache.release_model_file_cache(runner)
+    cache.release_model_file_cache(runner)
+    assert sorted(advised) == [b"draft checkpoint", b"target checkpoint"]
+    assert (target / "weights.safetensors").read_bytes() == b"target checkpoint"
+
+
+def test_model_cache_release_failure_does_not_break_startup(tmp_path, monkeypatch):
+    (tmp_path / "weights.safetensors").write_bytes(b"checkpoint")
+    runner = SimpleNamespace(vllm_config=SimpleNamespace(
+        model_config=SimpleNamespace(model=str(tmp_path))))
+
+    def fail(*args):
+        raise OSError("unsupported advice")
+
+    monkeypatch.setattr(os, "posix_fadvise", fail)
+    cache.release_model_file_cache(runner)
+    assert runner._qwen_model_file_cache_released
+
+
+def test_failed_fsync_never_releases_or_publishes_payload(tmp_path, monkeypatch):
+    calls = []
+    path = tmp_path / FIRST
+    path.write_bytes(b"previous durable contents")
+
+    def fail(fd):
+        raise OSError("injected fsync failure")
+
+    monkeypatch.setattr(os, "fsync", fail)
+    monkeypatch.setattr(os, "posix_fadvise", lambda *args: calls.append(args))
+    with pytest.raises(OSError, match="injected fsync failure"):
+        cache.atomic_write(path, BLOCK, release_page_cache=True)
+    assert not calls
+    assert path.read_bytes() == b"previous durable contents"
+    assert not list(tmp_path.glob(".pending-*"))
+
+
 def test_exact_endpoint_publishes_atomically_and_rolls_back_with_its_blocks(tmp_path):
     current = store(tmp_path)
     endpoint = {"schema": "urn:coherence:response-end:v1", "tokens": 1701,
@@ -110,16 +245,17 @@ def test_read_failure_does_not_remove_valid_or_unreadable_objects(tmp_path, monk
     path = current.path(FIRST)
     original = path.read_bytes()
     if failure == "io":
-        read = Path.read_bytes
+        open_file = Path.open
 
-        def denied(p):
+        def denied(p, *args, **kwargs):
             if p == path:
                 raise PermissionError("synthetic I/O denial")
-            return read(p)
+            return open_file(p, *args, **kwargs)
 
-        monkeypatch.setattr(Path, "read_bytes", denied)
+        monkeypatch.setattr(Path, "open", denied)
         with pytest.raises(PermissionError):
             current.read(FIRST, len(BLOCK))
+        monkeypatch.setattr(Path, "open", open_file)
     else:
         with pytest.raises(ValueError) as caught:
             current.read(FIRST, len(BLOCK) + 1)
@@ -327,11 +463,11 @@ def test_retirement_waits_for_inflight_write_then_rejects_late_writer(tmp_path, 
     entered, release, retiring = Event(), Event(), Event()
     original = cache.atomic_write
 
-    def slow_write(path, content):
+    def slow_write(path, content, **kwargs):
         if path.suffix == ".qkv":
             entered.set()
             assert release.wait(5)
-        return original(path, content)
+        return original(path, content, **kwargs)
 
     monkeypatch.setattr(cache, "atomic_write", slow_write)
     successor = cache.ChatStore(tmp_path, chat(generation="compacted"))

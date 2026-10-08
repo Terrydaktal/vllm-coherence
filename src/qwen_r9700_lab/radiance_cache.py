@@ -60,6 +60,10 @@ except ModuleNotFoundError as error:
                 def measured(*args, **kwargs):
                     return lambda operation: operation
 
+                @staticmethod
+                def emit(*args, **kwargs):
+                    return None
+
             cache_telemetry = _HostCacheTelemetry()
 
 DEFAULT_ROOT = "/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1"
@@ -116,7 +120,76 @@ def sync_directory(path: Path) -> None:
         os.close(fd)
 
 
-def atomic_write(path: Path, content: bytes) -> None:
+def _release_payload_page_cache(fd: int, size: int, *, stage: str = "disk_page_cache_release") -> None:
+    """Release only the redundant OS copy of a durable snapshot payload.
+
+    The primary offload tier and parked chat images retain their own state.
+    This hint neither deletes the file nor changes durability. Unsupported or
+    failed advice must not turn a successful snapshot write into a failure.
+    """
+    advise = getattr(os, "posix_fadvise", None)
+    dontneed = getattr(os, "POSIX_FADV_DONTNEED", None)
+    with cache_telemetry.span(stage, bytes=size) as observation:
+        status, error_code = "unsupported", None
+        if advise is not None and dontneed is not None:
+            try:
+                advise(fd, 0, 0, dontneed)
+            except OSError as error:
+                status, error_code = "failed", error.errno or 0
+            else:
+                status = "complete"
+        if observation is not None:
+            observation.values["diagnostic_status"] = status
+            if error_code is not None:
+                observation.values["status_code"] = error_code
+
+
+def release_model_file_cache(runner) -> None:
+    """Release checkpoint-file residue after all target/drafter GPU warmup.
+
+    Called once, before allocating the parking pool. Only regular safetensors
+    files in the configured local model directories are advised. Existing CPU
+    mappings and device weights are untouched; advice cannot change file bytes.
+    """
+    if getattr(runner, "_qwen_model_file_cache_released", False):
+        return
+    config = getattr(runner, "vllm_config", None)
+    speculative = getattr(config, "speculative_config", None)
+    candidates = (
+        getattr(getattr(config, "model_config", None), "model", None),
+        getattr(speculative, "model", None),
+        getattr(getattr(speculative, "draft_model_config", None), "model", None),
+    )
+    directories = set()
+    for model in candidates:
+        if not isinstance(model, (str, Path)):
+            continue
+        try:
+            directory = Path(model).resolve(strict=True)
+            if not directory.is_dir() or directory in directories:
+                continue
+            directories.add(directory)
+            with os.scandir(directory) as entries:
+                for index, entry in enumerate(entries):
+                    if index >= 4096:
+                        cache_telemetry.emit("model_page_cache_release", diagnostic_status="incomplete")
+                        break
+                    if not entry.name.endswith(".safetensors") or not entry.is_file(follow_symlinks=False):
+                        continue
+                    fd = os.open(entry.path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+                    try:
+                        info = os.fstat(fd)
+                        if stat.S_ISREG(info.st_mode):
+                            _release_payload_page_cache(fd, info.st_size, stage="model_page_cache_release")
+                    finally:
+                        os.close(fd)
+        except (OSError, RuntimeError) as error:
+            cache_telemetry.emit("model_page_cache_release", success=False,
+                                 status_code=getattr(error, "errno", None) or 0)
+    runner._qwen_model_file_cache_released = True
+
+
+def atomic_write(path: Path, content: bytes, *, release_page_cache: bool = False) -> None:
     fd, name = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
     temporary = Path(name)
     try:
@@ -126,6 +199,8 @@ def atomic_write(path: Path, content: bytes) -> None:
                 stream.flush()
             with cache_telemetry.span("file_fsync"):
                 os.fsync(stream.fileno())
+            if release_page_cache:
+                _release_payload_page_cache(stream.fileno(), len(content))
         with cache_telemetry.span("file_publish"):
             temporary.replace(path)
         sync_directory(path.parent)
@@ -425,7 +500,7 @@ class ChatStore:
                         started = time.monotonic()
                         encoded = encode_block(data)
                         counts["compression_seconds"] += time.monotonic() - started
-                        atomic_write(path, encoded)
+                        atomic_write(path, encoded, release_page_cache=True)
                         counts["written_file_bytes"] += len(encoded)
                         counts["written_raw_bytes"] += len(data)
                         counts["written_blocks"] += 1
@@ -461,8 +536,9 @@ class ChatStore:
                     with cache_telemetry.lock(
                         _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)], "block_read_lock"
                     ):
-                        with cache_telemetry.span("disk_read"):
-                            encoded = path.read_bytes()
+                        with cache_telemetry.span("disk_read"), path.open("rb") as stream:
+                            encoded = stream.read()
+                            _release_payload_page_cache(stream.fileno(), len(encoded))
                         try:
                             data = decode_block(encoded, expected_size)
                         except SnapshotIntegrityError:
@@ -514,7 +590,9 @@ class ChatStore:
                 try:
                     before = self._fingerprint(path)
                     if known.get(key) != before and self._verified.get((key, block_size)) != before:
-                        encoded = path.read_bytes()
+                        with path.open("rb") as stream:
+                            encoded = stream.read()
+                            _release_payload_page_cache(stream.fileno(), len(encoded))
                         decode_block(encoded, block_size)
                         verified_bytes += len(encoded)
                         if before != self._fingerprint(path):

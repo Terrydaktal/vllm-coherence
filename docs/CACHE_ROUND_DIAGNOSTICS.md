@@ -18,7 +18,7 @@ must reload the runtime. The stage profiler is not needed.
 | Generation and prefill GPU timing | Two HIP markers bracket `execute_model` entry through `sample_tokens` return. Completed current-stream duration and the previous end-to-next-start gap are collected asynchronously. Prefill records include scheduled and processed ranges; gaps join only adjacent chunks of the same request, generation and stream. These elapsed intervals can include host dispatch starvation; they are not pure kernel busy time. Worker host/thread counters are included separately. |
 | GPU transfer submission | Host wall/thread CPU time, thread page faults, job ID, direction, bytes, per-group logical ranges `[first GPU-block index, count]`. These are logical indices, not physical pointers. |
 | GPU transfer completion | Native completed HIP start/end duration, submission-to-observed-completion lifetime, success and originating request/round. Lifetime includes dependency/queue waits and completion polling delay; it is not DMA duration. |
-| Existing GPU waits | Duration of the existing offload wait and decode-transition/recovery fence, with job IDs/reason. No new wait is inserted. |
+| Existing GPU waits | Duration of the existing offload wait and decode-transition/recovery fence, with job IDs/reason. Prefill and first-output results also retain the wall/thread CPU time and page faults of their existing `AsyncOutput.get_output` completion wait. Context belongs to the actual result object, even if results are collected out of order. No new wait is inserted. |
 | Startup RAM and chat handover | Individual pinned mappings, huge-page policy, parallel prefault, HIP registration, copy submission, existing device waits and RAM-to-RAM stage copies. Host wall/thread CPU time and page faults distinguish allocation/registration from copying and completion waiting. No device event or synchronization is added. The page-aligned backing size is checked against available RAM; production prepares the pool before readiness. Main-thread counters exclude prefault helper threads. |
 | Filesystem jobs | Submission, queue delay, worker wall/thread CPU time, page faults, completion acknowledgement and bytes. GPU and filesystem job IDs occupy separate namespaces. |
 | Snapshot processing | Tail and restore RAM copies, compression, decompression, checksum, encoded-buffer copy, file write, file/directory fsync and atomic rename. Payload and metadata writes both appear, distinguished by byte count. |
@@ -262,6 +262,23 @@ runtime. An already running backend or Pi process does not acquire new hooks fro
 a changed checkout. Lifecycle/source bindings and producer health must accompany
 the captured request; missing activation evidence is not a successful diagnosis.
 
+### Stable Pi prompt asset paths
+
+Pi's built-in system prompt includes its package's README, documentation and
+example paths. In the VM, those paths previously included the runtime bundle
+hash. A runtime-only update therefore changed the model input even when the
+operating prompt and provider settings were unchanged. The checkpoint correctly
+rejected that changed prefix; weakening the prefix check would reuse the wrong
+model state.
+
+The VM installer now keeps a validated package-asset anchor for each Pi version
+and sets `PI_PACKAGE_DIR` to that fixed target while executing the new runtime.
+For existing installations, it preserves the currently used package path, avoiding
+another migration-induced cold fill. The anchored release must remain available.
+An actual installed-Pi test verifies identical public system-prompt bytes across
+runtime updates; unsafe anchors and mismatched package versions fail validation.
+The normal host launcher already installs Pi under a stable version directory.
+
 Known observer limitation: a delivered response whose JSON escaping exceeds the
 8 MiB fingerprint limit can abort diagnostic finalization after removing the
 pending turn but before releasing its callback entry. The production callback
@@ -428,6 +445,59 @@ numeric context is attached to that result, so a later request cannot relabel
 it. It introduces no additional GPU query, wait, event, or synchronization.
 Marker elapsed time includes any host-dispatch starvation between its markers;
 it is not a pure kernel-busy measurement.
+
+The writer also samples host and own-cgroup memory pressure once a second as
+`host_memory_pressure`, after the worker hooks are installed. It records available
+memory, file/anonymous/shared-memory accounting, swap-in/out, zero-page swap-in,
+anonymous refaults and memory-pressure totals. The six bounded reads stay off the
+model-serving thread. Missing fields and read/parse failures remain explicit in
+each sample and recorder health; unavailable counters are not reported as zero.
+These cumulative counters can be differenced across a GPU interval. They identify
+reclaim/refault activity, not the exact driver instruction responsible for a wait.
+
+### Prefill pauses from redundant checkpoint file cache
+
+On the 64 GiB AI host, a fresh-process 60K/60K/120K synthetic sequence reproduced
+a 76.117-second second 60K prefill. One chunk spent 31.658 seconds in the existing
+asynchronous output wait while GPU clocks fell nearly idle. During the request,
+the backend cgroup recorded 2,883,378 anonymous refaults: 776,628 swap-ins and
+2,106,750 zero-page swap-ins. The host uses compressed zram, so these are not
+NVMe reads. A separate first-use 120K request took 158.792 seconds; its matched
+repeat took 97.481 seconds without renewed swap-out. Output hashes agreed.
+
+Redundant checkpoint pages contributed avoidable pressure alongside the roughly
+38 GiB primary-offload and parked-chat arenas. Snapshot writes, restores **and
+publication-verification reads** now advise their copied payload pages as
+`POSIX_FADV_DONTNEED`. After target/drafter warmup and before preparing the parking
+pool, startup also advises regular safetensors files in the configured local
+model directories. No global cache drop, file deletion, model-state change or
+precision change is involved. Advice failures are nonfatal and recorded; it is
+a cache hint rather than a guarantee that every mapped page can be reclaimed.
+The primary offload tier and parked chat images retain their own copies. A later
+disk-only restore may read the NVMe instead of an extra OS copy of the same file.
+
+The [matched repair check](../benchmarks/results/prefill-memory-pressure-repair-20261008.json)
+repeated the fresh-process sequence with unchanged numerical settings and one
+greedy output token per request:
+
+| Cold synthetic request | Before complete repair | Complete repair |
+| --- | ---: | ---: |
+| First 60K | 33.553 s | 33.025 s |
+| Second 60K after chat handover | 76.117 s | 33.390 s |
+| First 120K | 98.263 s | 89.848 s |
+
+All three repaired requests recorded zero swap-in/out, zero-page swap-in,
+anonymous refaults and cgroup major faults. All 75 prompt GPU intervals and
+completion waits were captured, without recorder drops/errors; the 1 Hz memory
+samples were complete. Both checkpoint-file groups had zero resident file-cache
+bytes before and after the sequence. Output hashes matched the earlier runs.
+A separate completed-response continuation reused exactly 4,120 of 4,136 input
+tokens and prefilled only its 16 new tokens in 73.271 ms, with first data at
+257.210 ms. This qualifies the reproduced failure and cache-reuse paths, not
+every future workload or a universal numerical-equivalence claim.
+The [deployment receipt](../benchmarks/results/prefill-memory-repair-deployment-20261008.json)
+binds those five native requests to the verified installed source hashes and
+unchanged snapshot data ABI. Earlier activation receipts remain historical evidence.
 
 CPU tests cover snapshot bytes, locks, propagation of original results/errors,
 bounded drops/rotation, real writing, GC callbacks, native transfer-result reuse

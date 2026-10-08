@@ -403,16 +403,16 @@
       "format": "qwen-chat-cache-v1",
       "tier": "qwen_chat_fs",
       "modules": {
-        "radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
+        "radiance_cache.py": "4a293241e6caeaf45791bb7cdb296e73f7f139e73c338aa9a9accde68d2667b5",
         "radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
-        "radiance_cache_telemetry.py": "1e2ee054b2dc7c0e7de94748e2db89bf4876f2ab3c2100fcdc07e57b45281109",
+        "radiance_cache_telemetry.py": "7c6d307df1eb68492e6c9b6b55203e5d2fa8c0bc6e50a28a928c5d2d6e5f3f28",
         "radiance_request_timeline.py": "d5342e50f86e7296fa0a1dfc84c06921da591c5e2f4d9c69b172ed88c58a2a25",
         "radiance_prefix_lineage.py": "c5bfcc3da9bcce531fe110b1423f6ca8f09797fcb652ef2704d3c5bea3d00c82",
         "radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
         "radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
-        "radiance_fair_scheduler.py": "529774faf0b870e372124f44881105b4388e05dcb203901c3377a8d92d412842",
+        "radiance_fair_scheduler.py": "8090e2d4b3b6a83c10613dfbe68c55b2d14df6a19f432cc8b0db3f86a98e0b31",
         "patch_chat_snapshot.py": "8111aa7c69591d4072ec5248ba87151ceb8e19e73325a1ae022c922908906ed2"
       }
     },
@@ -433,6 +433,8 @@
         "contract": "on-request allocator snapshot with include_traces=False; numeric segment/block sizes; best-effort fixed-root storage owners; no addresses, trace history or tensor values; separate private/default/unknown pools; bounded analysis and overwritten tmpfs output"
       },
       "compatible_runtime_abis": [
+        "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
+        "463acc0e77210aca656099864cda189a06d320bb37f9f67fa5d9caebab881c6c",
         "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
         "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
         "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",

@@ -192,6 +192,10 @@ manifest["runtime"]["memory_report"] = {
         ),
     },
     "compatible_runtime_abis": [
+        # Complete checkpoint-file cache advice and numeric memory observation.
+        "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
+        # Releasing redundant durable-file page cache preserves numerical/data ABI.
+        "463acc0e77210aca656099864cda189a06d320bb37f9f67fa5d9caebab881c6c",
         # Prefix and prefill diagnostic overlays; unchanged numerical/data contract.
         "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
         # Storage-only retention repair; same numerical kernels and data ABI.

@@ -34,6 +34,8 @@ MAX_BYTES = 16 * 1024 * 1024
 MAX_PENDING = 4096
 MAX_JOBS = 256
 MAX_GPU_ROUNDS = 64
+MEMORY_SAMPLE_NS = 1_000_000_000
+MAX_MEMORY_SOURCE_BYTES = 64 * 1024
 _recorder = None
 _local = threading.local()
 _round = {}
@@ -84,6 +86,30 @@ _COUNTS = {
     "compared_fields",
     "message_index",
     "dropped_records",
+    "host_mem_available_bytes",
+    "host_mem_total_bytes",
+    "host_swap_total_bytes",
+    "host_swap_free_bytes",
+    "host_swapin_pages",
+    "host_swapout_pages",
+    "host_pgmajfault",
+    "host_anon_refaults",
+    "host_memory_psi_some_us",
+    "host_memory_psi_full_us",
+    "cgroup_memory_current_bytes",
+    "cgroup_anon_bytes",
+    "cgroup_shmem_bytes",
+    "cgroup_file_bytes",
+    "cgroup_anon_refaults",
+    "cgroup_pgmajfault",
+    "cgroup_swapin_pages",
+    "cgroup_swapout_pages",
+    "cgroup_swapin_zero_pages",
+    "cgroup_memory_psi_some_us",
+    "cgroup_memory_psi_full_us",
+    "memory_missing_fields",
+    "memory_read_errors",
+    "memory_parse_errors",
 }
 _LABELS = {
     "job_kind",
@@ -247,6 +273,221 @@ def fields(values):
     return result
 
 
+class MemoryPressureSamples:
+    """One bounded writer-thread sample per second; never read session data.
+
+    Cumulative counters allow analysis over a blocked serving-thread interval.
+    Missing counters are omitted, not reported as zero. All source paths remain
+    private implementation details and never enter records or health output.
+    """
+
+    def __init__(self):
+        self.last_sample_ns = None
+        self.samples = self.read_errors = self.parse_errors = 0
+        self.status = "inactive"
+        self.missing = []
+        self.failed_sources = []
+        self.cgroup = None
+        self.cgroup_discovered = False
+        self.cgroup_status = "pending"
+
+    @staticmethod
+    def _read(path):
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        try:
+            data = os.read(fd, MAX_MEMORY_SOURCE_BYTES + 1)
+            if len(data) > MAX_MEMORY_SOURCE_BYTES:
+                raise ValueError("memory source exceeds bound")
+            return data.decode("ascii")
+        finally:
+            os.close(fd)
+
+    @staticmethod
+    def _integer(value):
+        if not value.isascii() or not value.isdecimal() or len(value) > 20:
+            raise ValueError("invalid memory counter")
+        result = int(value)
+        if result > 2**64 - 1:
+            raise ValueError("memory counter exceeds bound")
+        return result
+
+    def _source(self, name, path):
+        try:
+            return self._read(path)
+        except OSError:
+            self.read_errors += 1
+        except (UnicodeError, ValueError):
+            self.parse_errors += 1
+        self.failed_sources.append(name)
+        return None
+
+    def _discover_cgroup(self):
+        self.cgroup_discovered = True
+        text = self._source("cgroup_discovery", Path("/proc/self/cgroup"))
+        if text is None:
+            self.cgroup_status = "failed"
+            return
+        for line in text.splitlines():
+            parts = line.split(":", 2)
+            if len(parts) != 3 or parts[:2] != ["0", ""]:
+                continue
+            path = parts[2]
+            if (
+                not path.startswith("/")
+                or any(part in {".", ".."} for part in path.split("/"))
+                or "\x00" in path
+            ):
+                self.parse_errors += 1
+                self.cgroup_status = "failed"
+                return
+            self.cgroup = Path("/sys/fs/cgroup") / path.lstrip("/")
+            self.cgroup_status = "complete"
+            return
+        self.cgroup_status = "unsupported"
+
+    def _mapped(self, values, source, path, mapping, *, kib=False):
+        text = self._source(source, path)
+        expected = set(mapping.values())
+        if text is not None:
+            seen = set()
+            for line in text.splitlines():
+                parts = line.split()
+                if not parts or parts[0].rstrip(":") not in mapping:
+                    continue
+                key = parts[0].rstrip(":")
+                target = mapping[key]
+                try:
+                    if target in seen or len(parts) != (3 if kib else 2):
+                        raise ValueError("invalid memory row")
+                    seen.add(target)
+                    if kib and parts[2] != "kB":
+                        raise ValueError("invalid memory unit")
+                    number = self._integer(parts[1])
+                    values[target] = number * 1024 if kib else number
+                except ValueError:
+                    values.pop(target, None)
+                    self.parse_errors += 1
+        self.missing.extend(sorted(expected - values.keys()))
+
+    def _pressure(self, values, source, path, prefix):
+        text = self._source(source, path)
+        expected = {f"{prefix}_memory_psi_{kind}_us" for kind in ("some", "full")}
+        if text is not None:
+            seen = set()
+            for line in text.splitlines():
+                parts = line.split()
+                if not parts or parts[0] not in {"some", "full"}:
+                    continue
+                target = f"{prefix}_memory_psi_{parts[0]}_us"
+                try:
+                    totals = [
+                        part[6:] for part in parts[1:] if part.startswith("total=")
+                    ]
+                    if len(totals) != 1 or target in seen:
+                        raise ValueError("invalid pressure counter")
+                    seen.add(target)
+                    values[target] = self._integer(totals[0])
+                except ValueError:
+                    values.pop(target, None)
+                    self.parse_errors += 1
+        self.missing.extend(sorted(expected - values.keys()))
+
+    def sample(self, recorder, now_ns):
+        # Called by Recorder._writer only; never by flush(), producer hooks, or
+        # API recorders. Slow diagnostics cannot stall model execution.
+        if not recorder.worker_first_work_hooks or (
+            self.last_sample_ns is not None
+            and now_ns - self.last_sample_ns < MEMORY_SAMPLE_NS
+        ):
+            return
+        self.last_sample_ns = now_ns
+        self.missing, self.failed_sources = [], []
+        before = (self.read_errors, self.parse_errors)
+        values = {}
+        if not self.cgroup_discovered:
+            self._discover_cgroup()
+        self._mapped(
+            values,
+            "meminfo",
+            Path("/proc/meminfo"),
+            {
+                "MemAvailable": "host_mem_available_bytes",
+                "MemTotal": "host_mem_total_bytes",
+                "SwapTotal": "host_swap_total_bytes",
+                "SwapFree": "host_swap_free_bytes",
+            },
+            kib=True,
+        )
+        self._mapped(
+            values,
+            "vmstat",
+            Path("/proc/vmstat"),
+            {
+                "pswpin": "host_swapin_pages",
+                "pswpout": "host_swapout_pages",
+                "pgmajfault": "host_pgmajfault",
+                "workingset_refault_anon": "host_anon_refaults",
+            },
+        )
+        self._pressure(values, "host_pressure", Path("/proc/pressure/memory"), "host")
+        if self.cgroup is not None:
+            text = self._source("cgroup_current", self.cgroup / "memory.current")
+            if text is not None:
+                try:
+                    values["cgroup_memory_current_bytes"] = self._integer(text.strip())
+                except ValueError:
+                    self.parse_errors += 1
+            if "cgroup_memory_current_bytes" not in values:
+                self.missing.append("cgroup_memory_current_bytes")
+            self._mapped(
+                values,
+                "cgroup_stat",
+                self.cgroup / "memory.stat",
+                {
+                    "anon": "cgroup_anon_bytes",
+                    "shmem": "cgroup_shmem_bytes",
+                    "file": "cgroup_file_bytes",
+                    "workingset_refault_anon": "cgroup_anon_refaults",
+                    "pgmajfault": "cgroup_pgmajfault",
+                    "pswpin": "cgroup_swapin_pages",
+                    "pswpout": "cgroup_swapout_pages",
+                    "swpin_zero": "cgroup_swapin_zero_pages",
+                },
+            )
+            self._pressure(
+                values, "cgroup_pressure", self.cgroup / "memory.pressure", "cgroup"
+            )
+        else:
+            self.missing.append("cgroup")
+        self.status = "complete" if not self.missing else "incomplete"
+        self.samples += 1
+        recorder.emit(
+            "host_memory_pressure",
+            now_ns,
+            time.monotonic_ns(),
+            {
+                **values,
+                "diagnostic_status": self.status,
+                "memory_missing_fields": len(self.missing),
+                "memory_read_errors": self.read_errors - before[0],
+                "memory_parse_errors": self.parse_errors - before[1],
+            },
+        )
+
+    def health(self):
+        return {
+            "status": self.status,
+            "interval_ms": MEMORY_SAMPLE_NS // 1_000_000,
+            "samples": self.samples,
+            "read_errors": self.read_errors,
+            "parse_errors": self.parse_errors,
+            "last_sample_ns": self.last_sample_ns,
+            "missing_fields": self.missing,
+            "failed_sources": self.failed_sources,
+            "cgroup_discovery": self.cgroup_status,
+        }
+
+
 class Recorder:
     def __init__(
         self,
@@ -282,6 +523,7 @@ class Recorder:
         self.kfd_capture = None
         self.kfd_attempted = False
         self.main_thread_samples = self.round_sample_errors = 0
+        self.memory_pressure = MemoryPressureSamples()
         self.source_hashes = {
             "recorder": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         }
@@ -424,6 +666,10 @@ class Recorder:
             "generation_round_telemetry": generation_timings_enabled(),
             "main_thread_samples": self.main_thread_samples,
             "round_sample_errors": self.round_sample_errors,
+            "memory_pressure": {
+                "enabled": self.worker_first_work_hooks,
+                **self.memory_pressure.health(),
+            },
             "gpu_rounds": self.round_sampler.health()
             if self.round_sampler is not None
             else None,
@@ -451,6 +697,11 @@ class Recorder:
 
     def _writer(self):
         while not self.stop.wait(0.1):
+            try:
+                self.memory_pressure.sample(self, time.monotonic_ns())
+            except Exception:
+                self.memory_pressure.status = "failed"
+                self.memory_pressure.read_errors += 1
             self.flush()
         # Bounded best-effort shutdown; cache durability never depends on this.
         while self.pending:

@@ -433,6 +433,10 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
     assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == [
+        # Checkpoint page-cache residency changes do not alter model arithmetic.
+        "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
+        # Durable-file cache advice changes residency, not serialized state.
+        "463acc0e77210aca656099864cda189a06d320bb37f9f67fa5d9caebab881c6c",
         # The prefix observer and asynchronous prefill markers preserve the
         # deployed numerical kernels and serialized cache contract.
         "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",

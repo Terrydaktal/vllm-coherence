@@ -1,0 +1,88 @@
+{
+  "schema": "urn:coherence:prefill-memory-repair-deployment:v1",
+  "status": "PASS",
+  "observed_at": "2026-10-08T17:48:31.804878+00:00",
+  "runtime_abi": "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
+  "authenticated_manifest_abi": "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "snapshot_data_abi_changed": false,
+  "model_arithmetic_changed": false,
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "smoke_status": "PASS",
+  "smoke": [
+    {
+      "status": 200,
+      "prompt_tokens": 60000,
+      "completion_tokens": 1,
+      "cached_tokens": 0,
+      "first_content_ms": 33113.17588,
+      "elapsed_ms": 33113.295482,
+      "finish_reason": "length",
+      "output_sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3"
+    },
+    {
+      "status": 200,
+      "prompt_tokens": 60000,
+      "completion_tokens": 1,
+      "cached_tokens": 0,
+      "first_content_ms": 33675.798014,
+      "elapsed_ms": 33675.925937,
+      "finish_reason": "length",
+      "output_sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3"
+    },
+    {
+      "status": 200,
+      "prompt_tokens": 120000,
+      "completion_tokens": 1,
+      "cached_tokens": 0,
+      "first_content_ms": 90168.436944,
+      "elapsed_ms": 90168.541967,
+      "finish_reason": "length",
+      "output_sha256": "7fb4d9eb55e57619636f06bf24a4b5b04d759c919d572a6274be24e3897302b9"
+    },
+    {
+      "status": 200,
+      "prompt_tokens": 4096,
+      "completion_tokens": 24,
+      "cached_tokens": 0,
+      "first_content_ms": 1912.14602,
+      "elapsed_ms": 2176.310755,
+      "finish_reason": "length",
+      "output_sha256": "9ec07ee2536624fd62092d3d9f05678ff661b497413988d3ef761e602790ee0d"
+    },
+    {
+      "status": 200,
+      "prompt_tokens": 4136,
+      "completion_tokens": 1,
+      "cached_tokens": 4120,
+      "first_content_ms": 257.209705,
+      "elapsed_ms": 257.461471,
+      "finish_reason": "length",
+      "output_sha256": "cd0455040fbc946056fd2052d80ef8130fb1e90346af7d6dafd12f2536f9cc7f"
+    }
+  ],
+  "installed_source_hashes": {
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_fair_scheduler.py": "8090e2d4b3b6a83c10613dfbe68c55b2d14df6a19f432cc8b0db3f86a98e0b31",
+    "qwen_radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "qwen_radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71",
+    "qwen_radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+    "qwen_radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
+    "qwen_radiance_cache.py": "4a293241e6caeaf45791bb7cdb296e73f7f139e73c338aa9a9accde68d2667b5",
+    "qwen_radiance_cache_telemetry.py": "7c6d307df1eb68492e6c9b6b55203e5d2fa8c0bc6e50a28a928c5d2d6e5f3f28",
+    "qwen_radiance_request_timeline.py": "d5342e50f86e7296fa0a1dfc84c06921da591c5e2f4d9c69b172ed88c58a2a25",
+    "qwen_radiance_prefix_lineage.py": "c5bfcc3da9bcce531fe110b1423f6ca8f09797fcb652ef2704d3c5bea3d00c82",
+    "qwen_radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936"
+  },
+  "worker_processes": [
+    {
+      "pid": 629,
+      "THP_enabled": "0"
+    }
+  ],
+  "health_status": 200,
+  "cpu_checks_passed": 690,
+  "measurements": "benchmarks/results/prefill-memory-pressure-repair-20261008.json",
+  "scope": "Three cold synthetic 60K/60K/120K prefills and a two-request exact response-end reuse check. Installed module hashes verified without inference. Native tests preceded committing; no new GPU benchmark was run for this receipt. Kernel arithmetic and existing numerical/lifecycle qualification are unchanged. These sampled checks do not prove universal correctness or absence of all future memory-pressure stalls."
+}

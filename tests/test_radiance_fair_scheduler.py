@@ -687,6 +687,28 @@ def test_stock_scheduler_startup_does_not_allocate_chat_pool(constructed_worker)
     assert not hasattr(runner, "qwen_banks")
 
 
+def test_startup_releases_model_file_cache_before_parking_allocation(constructed_worker, monkeypatch):
+    from qwen_r9700_lab import radiance_cache
+
+    fixture = constructed_worker
+    worker = fixture.create(max_banks=3)
+    runner = worker.runner
+    runner.vllm_config = SimpleNamespace(
+        scheduler_config=SimpleNamespace(scheduler_cls=fixture.module.FairScheduler),
+        additional_config={"qwen_fair": {"max_cached_chats": 3, "status_path": worker.status_path}},
+    )
+    observations = []
+
+    def release(observed_runner):
+        assert observed_runner is runner
+        observations.append(list(fixture.allocations))
+
+    monkeypatch.setattr(radiance_cache, "release_model_file_cache", release)
+    fixture.module.prepare_handover_pool(runner)
+    assert observations == [[]]
+    assert fixture.allocations == [32, 32, 32]
+
+
 def test_worker_retains_two_ram_images_and_restores_all_three_chats(constructed_worker):
     fixture = constructed_worker
     worker = fixture.create(max_banks=3)

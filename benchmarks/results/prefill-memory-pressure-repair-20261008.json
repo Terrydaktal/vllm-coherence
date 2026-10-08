@@ -1,0 +1,213 @@
+{
+  "schema": "urn:coherence:prefill-memory-repair:v1",
+  "date": "2026-10-08",
+  "runtime_abi": "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "before_runtime_abi": "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
+  "synthetic_only": true,
+  "fixture_sha256": "526946bb16f131a2f6cb5fa930f23951e621f65a267081982b2946373836283b",
+  "method": "Fresh process; cold 60K/60K/120K requests, distinct chat generations, same public repeated-prefix fixture, 3296-token prefill chunks, one greedy output token per request. Before already included write/restore cache advice; complete repair adds publication-verification and model-loader advice.",
+  "repairs": [
+    "Release snapshot payload file-cache pages after durable writes, restore reads and publication-verification reads.",
+    "Release configured local target/drafter safetensors file-cache pages after warmup, before parking-pool allocation.",
+    "Keep a validated stable Pi package-asset directory across VM runtime-only updates."
+  ],
+  "rows": [
+    {
+      "arm": 0,
+      "context_tokens": 60000,
+      "before_complete_repair_prefill_ms": 33553.286,
+      "after_complete_repair_prefill_ms": 33024.915,
+      "after_first_data_ms": 33113.17588,
+      "cached_tokens": 0,
+      "output_tokens": 1,
+      "output_sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "output_hash_matches": true,
+      "after_memory_delta": {
+        "cgroup_workingset_refault_anon": 0,
+        "cgroup_pswpin": 0,
+        "cgroup_pswpout": 0,
+        "cgroup_swpin_zero": 0,
+        "cgroup_pgmajfault": 0
+      },
+      "after_peak_sampled_cgroup_memory_bytes": 44969897984,
+      "after_process_swap_kib": 0,
+      "gpu_intervals": 19,
+      "completion_wait_intervals": 19,
+      "inter_prefill_gap_sum_ms": 0.24536
+    },
+    {
+      "arm": 1,
+      "context_tokens": 60000,
+      "before_complete_repair_prefill_ms": 76117.054,
+      "after_complete_repair_prefill_ms": 33390.105,
+      "after_first_data_ms": 33675.798014,
+      "cached_tokens": 0,
+      "output_tokens": 1,
+      "output_sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "output_hash_matches": true,
+      "after_memory_delta": {
+        "cgroup_workingset_refault_anon": 0,
+        "cgroup_pswpin": 0,
+        "cgroup_pswpout": 0,
+        "cgroup_swpin_zero": 0,
+        "cgroup_pgmajfault": 0
+      },
+      "after_peak_sampled_cgroup_memory_bytes": 45478240256,
+      "after_process_swap_kib": 0,
+      "gpu_intervals": 19,
+      "completion_wait_intervals": 19,
+      "inter_prefill_gap_sum_ms": 0.27724
+    },
+    {
+      "arm": 2,
+      "context_tokens": 120000,
+      "before_complete_repair_prefill_ms": 98263.0,
+      "after_complete_repair_prefill_ms": 89847.7,
+      "after_first_data_ms": 90168.436944,
+      "cached_tokens": 0,
+      "output_tokens": 1,
+      "output_sha256": "7fb4d9eb55e57619636f06bf24a4b5b04d759c919d572a6274be24e3897302b9",
+      "output_hash_matches": true,
+      "after_memory_delta": {
+        "cgroup_workingset_refault_anon": 0,
+        "cgroup_pswpin": 0,
+        "cgroup_pswpout": 0,
+        "cgroup_swpin_zero": 0,
+        "cgroup_pgmajfault": 0
+      },
+      "after_peak_sampled_cgroup_memory_bytes": 45825179648,
+      "after_process_swap_kib": 0,
+      "gpu_intervals": 37,
+      "completion_wait_intervals": 37,
+      "inter_prefill_gap_sum_ms": 0.506483
+    }
+  ],
+  "response_end_reuse": {
+    "initial_prompt_tokens": 4096,
+    "initial_output_tokens": 24,
+    "continuation_prompt_tokens": 4136,
+    "cached_tokens": 4120,
+    "new_tokens": 16,
+    "prefill_ms": 73.271,
+    "first_data_ms": 257.209705,
+    "matching_endpoint_accepted": true
+  },
+  "residency_after_sequence": [
+    {
+      "kind": "model",
+      "files": 4,
+      "observed": 4,
+      "failed_batches": 0,
+      "resident_bytes": 0,
+      "file_bytes": 19373777640
+    },
+    {
+      "kind": "snapshot",
+      "files": 2255,
+      "observed": 2255,
+      "failed_batches": 0,
+      "resident_bytes": 0,
+      "file_bytes": 50081620778
+    }
+  ],
+  "memory_recorder_health": {
+    "enabled": true,
+    "status": "complete",
+    "interval_ms": 1000,
+    "samples": 219,
+    "read_errors": 0,
+    "parse_errors": 0,
+    "last_sample_ns": 88241490717735,
+    "missing_fields": [],
+    "failed_sources": [],
+    "cgroup_discovery": "complete"
+  },
+  "recorder_health": {
+    "dropped": 0,
+    "write_errors": 0,
+    "context_drops": 0,
+    "gpu_rounds": {
+      "capacity": 64,
+      "pending": 0,
+      "free": 63,
+      "completed": 85,
+      "dropped": 0,
+      "errors": 0,
+      "quarantined": 0
+    },
+    "source_sha256": {
+      "recorder": "7c6d307df1eb68492e6c9b6b55203e5d2fa8c0bc6e50a28a928c5d2d6e5f3f28",
+      "request_timeline": "d5342e50f86e7296fa0a1dfc84c06921da591c5e2f4d9c69b172ed88c58a2a25",
+      "transfer_handler": "6154da32665430780d17c6ae1d2bf76a5399d1f807fcfb4b111aa951e5ba8e01",
+      "connector": "c3ed81b167466294e453da35b7253a4798135f959ee9350caf78e3c913171a67",
+      "round_runner": "bc514cf65612fb06cdf4cadba29539dffe09915a55533f299b0d2c01048fdf69"
+    }
+  },
+  "native_cache_advice": {
+    "disk_page_cache_release": {
+      "count": 670,
+      "statuses": {
+        "complete": 670
+      },
+      "success": {
+        "True": 670
+      },
+      "bytes": 14711659143
+    },
+    "host_memory_pressure": {
+      "count": 157,
+      "statuses": {
+        "complete": 157
+      },
+      "success": {
+        "missing": 157
+      },
+      "bytes": 0,
+      "missing_fields_max": 0,
+      "read_errors": 0,
+      "parse_errors": 0,
+      "sample": {
+        "stage": "host_memory_pressure",
+        "duration_ms": 0.38755,
+        "host_mem_total_bytes": 67315912704,
+        "host_mem_available_bytes": 20430397440,
+        "host_swap_total_bytes": 33657712640,
+        "host_swap_free_bytes": 33409888256,
+        "host_anon_refaults": 10741860,
+        "host_swapin_pages": 4055794,
+        "host_swapout_pages": 5073023,
+        "host_pgmajfault": 10744166,
+        "host_memory_psi_some_us": 24547980,
+        "host_memory_psi_full_us": 24485783,
+        "cgroup_memory_current_bytes": 45786423296,
+        "cgroup_anon_bytes": 24601153536,
+        "cgroup_file_bytes": 20933132288,
+        "cgroup_shmem_bytes": 19702628352,
+        "cgroup_anon_refaults": 0,
+        "cgroup_swapin_pages": 0,
+        "cgroup_swapout_pages": 0,
+        "cgroup_pgmajfault": 1062,
+        "cgroup_swapin_zero_pages": 0,
+        "cgroup_memory_psi_some_us": 919,
+        "cgroup_memory_psi_full_us": 919,
+        "diagnostic_status": "complete",
+        "memory_missing_fields": 0,
+        "memory_read_errors": 0,
+        "memory_parse_errors": 0
+      }
+    },
+    "model_page_cache_release": {
+      "count": 5,
+      "statuses": {
+        "complete": 5
+      },
+      "success": {
+        "True": 5
+      },
+      "bytes": 21492660424
+    }
+  },
+  "cpu_checks": 307,
+  "scope": "The reproduced reclaim/refault stalls did not recur in this sequence. Exact driver-internal blocking is not proved. Unchanged one-token output hashes are a regression check, not universal model-equivalence proof. File-cache advice changes residency, not persistent file bytes or numerical kernels. Disk-only restores can require NVMe reads instead of an additional OS cache copy."
+}

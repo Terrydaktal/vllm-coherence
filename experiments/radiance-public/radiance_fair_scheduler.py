@@ -2375,6 +2375,13 @@ def prepare_handover_pool(runner):
     metadata = {"max_banks": max_banks, "status_path": str(config.get("status_path", STATUS))}
     cache_telemetry.configure(metadata["status_path"])
     cache_telemetry.install_runtime_hooks()
+    try:
+        from qwen_radiance_cache import release_model_file_cache
+    except ModuleNotFoundError as error:
+        if error.name != "qwen_radiance_cache":
+            raise
+        from qwen_r9700_lab.radiance_cache import release_model_file_cache
+    release_model_file_cache(runner)
     if not hasattr(runner, "qwen_banks"):
         runner.qwen_banks = WorkerBanks(runner, metadata)
     amount, seconds = runner.qwen_banks._ensure_buffers()
