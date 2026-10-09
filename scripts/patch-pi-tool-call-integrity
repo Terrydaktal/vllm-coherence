@@ -229,6 +229,92 @@ LINEAGE_PATCHES = (
 TRANSPORT_PATCHES += LINEAGE_PATCHES
 PATCHES += TRANSPORT_PATCHES
 
+# Preserve useful interrupted Qwen output in request history without promoting
+# aborted attempts to successful turns or replaying tool calls that never ran.
+ABORTED_CONTEXT_PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
+        preimage_sha256="e51975857b2fefa7e9cc108850ddab5a2fd1753a399f3cde00d76cd700ce6d10",
+        old=b"""            // Skip errored/aborted assistant messages entirely.
+            // These are incomplete turns that shouldn't be replayed:
+            // - May have partial content (reasoning without message, incomplete tool calls)
+            // - Replaying them can cause API errors (e.g., OpenAI "reasoning without following item")
+            // - The model should retry from the last valid state
+            const assistantMsg = msg;
+            if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
+                continue;
+            }
+            // Track tool calls from this assistant message
+            const toolCalls = assistantMsg.content.filter((b) => b.type === "toolCall");
+""",
+        new=b"""            // Same-model Qwen interruptions retain useful reasoning and prose.
+            // Errors and other providers keep the normal discard policy.
+            const assistantMsg = msg;
+            const retainInterrupted = assistantMsg.stopReason === "aborted" &&
+                model.provider === "qwen-r9700" && model.api === "openai-completions" && [
+                    "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate",
+                    "qwen3.8-27b-uncensored-mxfp4-experimental",
+                ].includes(model.id) && assistantMsg.provider === model.provider &&
+                assistantMsg.model === model.id && assistantMsg.api === model.api;
+            if (assistantMsg.stopReason === "error" ||
+                (assistantMsg.stopReason === "aborted" && !retainInterrupted)) {
+                continue;
+            }
+            // A request-only copy retains prose/reasoning while leaving the
+            // saved abort status intact. Unexecuted tools are never replayed.
+            const retained = retainInterrupted ? {
+                ...assistantMsg,
+                content: assistantMsg.content.flatMap((block) => {
+                    if (block.type === "text" && typeof block.text === "string" && block.text.trim()) return [block];
+                    if (block.type === "thinking" && !block.redacted &&
+                        typeof block.thinking === "string" && block.thinking.trim()) {
+                        return [{ ...block, thinkingSignature: "reasoning_content" }];
+                    }
+                    return [];
+                }),
+            } : msg;
+            if (retainInterrupted && retained.content.length === 0) continue;
+            // Track tool calls from this assistant message
+            const toolCalls = retained.content.filter((b) => b.type === "toolCall");
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
+        preimage_sha256="54a33eb76eecbdd83239b6a4f0dab71153df65574ff5266abc47027ef6da8f9f",
+        old=b"""            result.push(msg);
+        }
+        else if (msg.role === "toolResult") {
+""",
+        new=b"""            result.push(retained);
+        }
+        else if (msg.role === "toolResult") {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+        preimage_sha256="ce44c329e709e1eab50794c1314a6c72a4466f71fbdbc465badc63e47a1cb6f3",
+        old=b"""            if (!hasContent && !assistantMsg.tool_calls) {
+                continue;
+            }
+""",
+        new=b"""            const hasInterruptedReasoning = msg.stopReason === "aborted" &&
+                model.provider === "qwen-r9700" && [
+                    "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate",
+                    "qwen3.8-27b-uncensored-mxfp4-experimental",
+                ].includes(model.id) && typeof assistantMsg.reasoning_content === "string" &&
+                assistantMsg.reasoning_content.trim().length > 0;
+            if (!hasContent && !assistantMsg.tool_calls && !hasInterruptedReasoning) {
+                continue;
+            }
+""",
+    ),
+)
+# The usage verifier reverses all later adapter-only transforms in this chain.
+TRANSPORT_PATCHES += tuple(
+    patch for patch in ABORTED_CONTEXT_PATCHES if patch.relative_path.endswith("/openai-completions.js")
+)
+PATCHES += ABORTED_CONTEXT_PATCHES
+
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()

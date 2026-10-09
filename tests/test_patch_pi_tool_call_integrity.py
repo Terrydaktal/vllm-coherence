@@ -168,12 +168,16 @@ def test_transport_upgrade_and_both_patch_verifiers_on_the_real_adapter(tmp_path
     source = runtime / relative
     if not source.exists():
         pytest.skip("pinned Pi runtime unavailable")
+    patches = tuple(patch for patch in api["PATCHES"] if patch.relative_path == relative)
+    api["run"].__globals__["PATCHES"] = patches
     data = source.read_bytes().removesuffix(b"\n")
-    applied = api["classify_chain"](data, api["PATCHES"])
-    for patch in reversed(api["PATCHES"][:applied]):
+    applied = api["classify_chain"](data, patches)
+    for patch in reversed(patches[:applied]):
         data = data.replace(patch.new, patch.old)
     # Upgrade the previous complete release, then repeat --apply/--check.
-    for patch in api["PATCHES"][:-len(api["TRANSPORT_PATCHES"])]:
+    for patch in patches:
+        if patch in api["TRANSPORT_PATCHES"]:
+            break
         data = data.replace(patch.old, patch.new)
     target = tmp_path / relative
     target.parent.mkdir(parents=True)
@@ -183,7 +187,7 @@ def test_transport_upgrade_and_both_patch_verifiers_on_the_real_adapter(tmp_path
     api["run"](tmp_path, apply=True)
     api["run"](tmp_path, apply=False)
     api["run"](tmp_path, apply=True)
-    assert api["classify_chain"](target.read_bytes(), api["PATCHES"]) == len(api["PATCHES"])
+    assert api["classify_chain"](target.read_bytes(), patches) == len(patches)
     usage = runpy.run_path(str(USAGE_PATCHER))
     assert usage["classify"](target.read_bytes(), usage["PATCHES"][0]) == "patched"
     helper = target.with_name("qwen-transport-diagnostics.mjs")
@@ -193,5 +197,31 @@ def test_transport_upgrade_and_both_patch_verifiers_on_the_real_adapter(tmp_path
         api["run"](tmp_path, apply=False)
     api["run"](tmp_path, apply=True)
     target.write_bytes(target.read_bytes().replace(b"transport?.failure(error)", b"transport?.failure(null)"))
+    with pytest.raises(api["PatchError"], match="differs from both pinned patch states"):
+        api["run"](tmp_path, apply=True)
+
+
+def test_aborted_context_transform_upgrade_is_pinned_and_idempotent(tmp_path: Path) -> None:
+    api = load_api()
+    relative = "node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js"
+    source = Path.home() / ".local/share/qwen-r9700/pi/0.84.2" / relative
+    if not source.exists():
+        pytest.skip("pinned Pi runtime unavailable")
+    patches = tuple(patch for patch in api["PATCHES"] if patch.relative_path == relative)
+    data = source.read_bytes()
+    applied = api["classify_chain"](data, patches)
+    for patch in reversed(patches[:applied]):
+        data = data.replace(patch.new, patch.old)
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True)
+    target.write_bytes(data)
+    api["run"].__globals__["PATCHES"] = patches
+    with pytest.raises(api["PatchError"], match="patch is absent"):
+        api["run"](tmp_path, apply=False)
+    api["run"](tmp_path, apply=True)
+    api["run"](tmp_path, apply=False)
+    api["run"](tmp_path, apply=True)
+    assert api["classify_chain"](target.read_bytes(), patches) == len(patches)
+    target.write_bytes(target.read_bytes() + b"// unrelated change\n")
     with pytest.raises(api["PatchError"], match="differs from both pinned patch states"):
         api["run"](tmp_path, apply=True)

@@ -138,13 +138,13 @@ test("installed picker persists context exclusions through resume/compaction, su
     assert.equal((await readFile(path, "utf8")).split("\n").find((line) => line && JSON.parse(line).id === callId), callLine);
     await session.prompt("/context status"); assert.match(notices.at(-1), /Saved transcript retained/);
     // Resume a real saved session after Escape interrupted a streamed call.
-    // The provider omits these attempts; selection/purge validation must not
-    // demand fabricated tool results before that normal conversion can run.
+    // The provider retains interrupted prose, omits failures, and never replays
+    // unexecuted tools; selection/purge validation must not invent results.
     for (const stopReason of ["aborted", "error"]) {
       await close();
       manager.appendMessage({ role: "assistant", api: model.api, provider: model.provider, model: model.id,
         timestamp: Date.now(), stopReason, usage,
-        content: [{ type: "text", text: "FAILED_ATTEMPT_MUST_NOT_REPLAY" },
+        content: [{ type: "text", text: `${stopReason}_partial_output` },
           { type: "toolCall", id: `unfinished-${stopReason}`, name: "lookup", arguments: {} }] });
       session = await create(manager);
       if (stopReason === "error") {
@@ -153,14 +153,16 @@ test("installed picker persists context exclusions through resume/compaction, su
         const checkpointRequests = tokenizations.slice(prior).filter((body) => body.messages);
         assert.ok(checkpointRequests.length, notices.join("\n"));
         for (const body of checkpointRequests) {
-          assert.doesNotMatch(JSON.stringify(body.messages), /FAILED_ATTEMPT_MUST_NOT_REPLAY|unfinished-|No result provided/);
+          assert.doesNotMatch(JSON.stringify(body.messages), /error_partial_output|unfinished-|No result provided/);
         }
       }
       const before = requests.length;
       await session.prompt("After interrupted synthetic tool emission.");
       assert.equal(requests.length, before + 1, notices.join("\n"));
       assert.equal(session.messages.at(-1).stopReason, "stop");
-      assert.doesNotMatch(JSON.stringify(requests.at(-1).messages), /FAILED_ATTEMPT_MUST_NOT_REPLAY|unfinished-|No result provided/);
+      const payload = JSON.stringify(requests.at(-1).messages);
+      assert.doesNotMatch(payload, /error_partial_output|unfinished-|No result provided/);
+      if (stopReason === "aborted") assert.match(payload, /aborted_partial_output/);
       assert.ok(manager.getEntries().some((e) => e.type === "message" && e.message.stopReason === stopReason));
     }
     // A corrupt saved policy must not fall through the SDK's swallowed hook
