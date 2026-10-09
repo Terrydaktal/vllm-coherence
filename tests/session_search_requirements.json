@@ -1,0 +1,11 @@
+{
+  "scope": "CPU transcript search using authoritative JSONL and a derived contentless FTS5 index",
+  "requirements": [
+    {"id":"SEARCH-STORAGE","contract":"No duplicated message bodies; full word positions and document lengths; private derived storage", "tests":"test_session_index.mjs"},
+    {"id":"SEARCH-SOURCE","contract":"Append/rewrite/delete/partial-record refresh; authenticate hydrated text; reject unsafe paths and stale records", "tests":"test_session_index.mjs"},
+    {"id":"SEARCH-RETRIEVAL","contract":"Ranked words/phrases, exact literal matching, selected branch ancestry and bounded source expansion", "tests":"test_session_index.mjs"},
+    {"id":"SEARCH-WORKER","contract":"UI-independent work, explicit project scope, cancellation, deadline and worker recovery", "tests":"test_session_search.mjs"},
+    {"id":"SEARCH-PI","contract":"Real Pi tool/context wiring, recover original pre-compaction messages and preserve existing active tools", "tests":"test_session_search_sdk.mjs"},
+    {"id":"SEARCH-RELEASE","contract":"Host and VM launchers package entrypoint, worker and index; installed offline execution requires no inference", "tests":"test_radiance_launcher_preflight.py and test_prefix_lineage_packaging.py"}
+  ]
+}

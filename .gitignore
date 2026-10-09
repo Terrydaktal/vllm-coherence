@@ -40,4 +40,9 @@ private/
 artifacts/
 sessions/
 .pi/
+# Derived transcript search databases contain private words and source metadata.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
 test-results.xml
