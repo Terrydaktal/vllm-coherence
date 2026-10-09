@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import math
 import statistics
@@ -46,8 +47,10 @@ def render_head_candidate_benchmark():
         lines.append(f"| {label} | {timing:.3f} ms | " + " | ".join(cells) + " |")
     misses = [rows - evidence["modes"][mode]["top40_complete_including_ties"] for mode in ("global256", "global512")]
     added = evidence["timings_m8"]["global512"]["median_ms"] - evidence["timings_m8"]["global256"]["median_ms"]
+    current_head = evidence["modes"]["global512"]
     lines += ["", f"The comparison covers **{rows:,} prediction rows**, including prefill and rejected speculative rows, not {rows:,} generated tokens. Timing uses {samples // 5} eight-row hidden inputs with five randomized-order repetitions: {samples} measurements per method. These isolated head timings include native dispatch gaps and exclude comparison/reporting; they do not measure whole-round time or tok/s.", "",
         f"Incomplete top-40 retention occurred in {misses[0]:,} rows with Global-256 and {misses[1]:,} with Global-512; the added median head time was {added:.3f} ms. Retention includes cutoff ties and does not establish score equality, ordering or identical sampling probabilities. Both shortlists remain approximate; the full BF16 head is the reference for this comparison, not an independently proved model. The drafter is unchanged.", "",
+        f"Global-512 reranked values differed from the full-head reference in {current_head['retained_value_mismatches']:,}/{current_head['retained_values']:,} retained scores (maximum absolute difference {current_head['max_retained_logit_difference']:g}); the diagnostic filtered probabilities differed in {current_head['rows_with_diagnostic_probability_difference']:,}/{rows:,} rows. Candidate recall and retained-score fidelity are separate checks.", "",
         f"[Methodology and limits](docs/HEAD_CANDIDATE_DEPTH.md) · [Numeric results]({reference}) · [Earlier Global-256 study](docs/VERIFY_HEAD_GLOBAL_TOPK.md)."]
     return lines
 
@@ -99,6 +102,41 @@ def commit_marker(commit):
     return f"[`{commit[:7]}`]({REPOSITORY}/commit/{commit})"
 
 
+def validate_stage_correctness(data, profile, stages, full_model):
+    """Keep retained correctness evidence bound to the release it actually tested."""
+    if stages["status"] != "SAMPLE_CHECKED" or full_model["status"] != "SAMPLE_CHECKED":
+        raise ValueError("stage or whole-model correctness evidence is incomplete")
+    for key in ("optimized_manifest_sha256", "fixture_sha256"):
+        if stages[key] != full_model[key]:
+            raise ValueError("stage and whole-model correctness differ: " + key)
+    binding = stages["binding"]
+    expected = {
+        "release_manifest_sha256": stages["optimized_manifest_sha256"],
+        "fixture_sha256": stages["fixture_sha256"],
+        "source_binding_sha256": binding["source_binding_sha256"],
+    }
+    if any(binding[key] != value for key, value in expected.items()):
+        raise ValueError("stage correctness binding differs from its reported identity")
+    for execution in full_model["executions"].values():
+        if any(execution["binding"][key] != value for key, value in expected.items()):
+            raise ValueError("stage and whole-model source bindings differ")
+    refresh = data.get("correctness_refresh", {})
+    historical = refresh.get("status") == "NOT_RERUN"
+    if historical:
+        if refresh["optimized_manifest_sha256"] != stages["optimized_manifest_sha256"]:
+            raise ValueError("retained correctness manifest differs from its declaration")
+        evidence_date = datetime.strptime(refresh["evidence_date"], "%Y-%m-%d")
+        suffix = evidence_date.strftime("%Y%m%d") + ".json"
+        if not refresh.get("reason") or not all(
+            data[key].endswith(suffix)
+            for key in ("current_stage_confirmations", "current_confirmations")
+        ):
+            raise ValueError("retained correctness evidence date or reason is missing")
+    elif stages["optimized_manifest_sha256"] != profile["optimized_manifest_sha256"]:
+        raise ValueError("current stage evidence belongs to another speed release")
+    return historical
+
+
 def evidence_with_commits(data, stage, evidence):
     configured = data.get("evidence_commits", {}).get(stage)
     commits = configured or [data["measurement_commit"]]
@@ -131,17 +169,13 @@ def current_stage_profile(data):
     raw = json.loads(evidence.read_text())
     matched = raw.get("status") == "matched_estimate"
 
-    # This is the commit that packages the retained capture and the renderer;
-    # the artifact itself records the older source checkout used to take the
-    # measurement.  The table link therefore identifies the reproducible
-    # evidence bundle rather than pretending the capture ran after a later
-    # source change.
+    # The archived diagnostic table names its evidence bundle. Matched captures
+    # name the measured checkout; later packaging or qualification must not
+    # retag an older capture as a measurement of newer code.
     evidence_commit = "b8d681001cc726089c387eeddfc7c78e2e74ac3c"
     grouped = copy.deepcopy(base)
     if matched:
-        evidence_commit = data.get(
-            "current_qualification_commit", raw["stage26_execution"]["measurement_commit"]
-        )
+        evidence_commit = raw["stage26_execution"]["measurement_commit"]
     grouped["measurement_commit"] = evidence_commit
     grouped["matched"] = matched
     grouped["measurement_date"] = raw.get("measurement_date", "2026-09-23")
@@ -177,7 +211,10 @@ def current_stage_profile(data):
             "a natural warmup followed by clean control, trace, and clean control; each arm generated "
             + outputs + " tokens respectively. Generated-token hashes and accepted-token schedules matched. "
             "The stage means retain " + counts + " complete M8 cycles (0K / 60K / 200K), and controls "
-            "use exactly those same decode indices. Trace setup/export boundaries and incomplete or inconsistent trace "
+            "use exactly those same decode indices. The shared suite has a nominal 1,152-call trace budget "
+            "after 64 warmup calls, plus one closing boundary per 128-call chunk; only complete eight-row target cycles enter "
+            "the stage means. Each chunk's closing boundary and first two trace-activation cycles "
+            "are excluded; natural EOS can end the capture earlier. Trace setup/export boundaries and incomplete or inconsistent trace "
             "inventories are excluded by structure, never by duration; complete native round logs retain "
             "all rounds and stalls. GPU activity timestamps supply the stage times; CPU annotations, "
             "Python hooks and export time are excluded. No per-stage event probes or forced-token replay "
@@ -185,26 +222,23 @@ def current_stage_profile(data):
             "reported separately and is **not charged to row 26**. Row 26 is the clean control mean minus "
             "the union of GPU activity intervals. This remains an estimate: tracing can indirectly affect "
             "clocks and scheduling. Overlap is counted once in the total. "
-            + ("The header links the qualification bundled with these repairs; its captures retain their original source identities. "
-               if data.get("current_qualification_document") else
-               "The header identifies the base revision and marks the uncommitted source changes. "
+            + ("The header identifies the base revision and marks the uncommitted source changes. "
                if data.get("uncommitted_qualification") else
-               "The header identifies the commit containing the measured backend repairs and captured results. ")
+               "The header identifies the measured source commit. ")
             + "The capture retains its original checkout and source identities. "
             f"[Capture and source identities]({data['matched_stage_profile']}) "
             f"· [controls]({data['matched_stage_control']}) · [method and uncertainty](docs/STAGE_TIMING.md)."
         )
         if data.get("current_qualification_document"):
             grouped["scope"] += (
-                "\n\nThis candidate rerun includes the full-graph cache-preparation repair and "
-                "measurement adapters in the [qualified speed refresh]("
+                "\n\nThe backend includes the full-graph cache-preparation repair and "
+                "measurement adapters described in the [September 25 speed investigation]("
                 + data["current_qualification_document"] + "). Captured checkout identities "
-                "remain unchanged after the history rewrite; the installed source and binary "
+                "and installed source and binary "
                 "hashes bind the measured implementation. "
                 + (
-                    "The lifecycle-qualified worker is now selected by the live Pi backend; "
-                    f"its [deployment receipt]({data['current_deployment']}) preserves the "
-                    "installed source identities."
+                    f"The separately dated [Pi deployment receipt]({data['current_deployment']}) "
+                    "records its installed identities; the isolated profiling worker is not the live Pi server."
                     if data.get("current_deployment") else
                     "The experimental worker is separate from the normal Pi deployment."
                 )
@@ -444,20 +478,21 @@ def _render_stage_profile_table(data):
     order = profile["stage_order"]
     context_order = profile["context_order"]
     contexts = profile["contexts"]
-    commit = (
-        f"[qualified speed refresh]({data['current_qualification_document']})"
-        if data.get("current_qualification_document")
-        else commit_marker(profile["measurement_commit"])
-    )
+    commit = commit_marker(profile["measurement_commit"])
     old_rows = {row["stage"]: row for row in data["stages"] if row["ms"] is not None}
     deployment = json.loads((ROOT / "benchmarks/results/eager-m1-normalization-deployment-20260924.json").read_text())
     confirmations_ref = data.get("current_stage_confirmations")
     confirmations = json.loads((ROOT / confirmations_ref).read_text()) if confirmations_ref else None
-    if confirmations and (
-        confirmations["status"] != "SAMPLE_CHECKED"
-        or confirmations["optimized_manifest_sha256"] != deployment["optimized_manifest_sha256"]
-    ):
-        raise ValueError("current stage evidence is incomplete or belongs to another release")
+    historical_correctness = False
+    if confirmations:
+        full_model = json.loads((ROOT / data["current_confirmations"]).read_text())
+        historical_correctness = validate_stage_correctness(data, profile, confirmations, full_model)
+    study_label = "current 320-token run"
+    study_binding = ""
+    if historical_correctness:
+        evidence_date = datetime.strptime(data["correctness_refresh"]["evidence_date"], "%Y-%m-%d")
+        study_label = evidence_date.strftime("%B") + f" {evidence_date.day} study"
+        study_binding = f" · source binding `{confirmations['binding']['source_binding_sha256'][:12]}`"
     heading = ("Current GPU activity per retained compiled M8 cycle" if profile.get("matched") else
                "Archived diagnostic interval per retained compiled profile cycle")
     run_label = (f"{profile['measurement_date']}; run {commit}" if profile.get("matched") else
@@ -527,7 +562,7 @@ def _render_stage_profile_table(data):
                 evidence = (
                     f"M1/M8: {fixed['top20_set_exact']}/{count}; {fixed['top20_order_exact']}/{count}. "
                     f"Eager/compiled M8: {modes['top20_set_exact']}/{count}; {modes['top20_order_exact']}/{count} "
-                    f"· [current 320-token run]({confirmations_ref})."
+                    f"· [{study_label}]({confirmations_ref}){study_binding}."
                 )
                 if paired_stage != stage:
                     evidence += " Decode and merge checked together."
@@ -535,7 +570,7 @@ def _render_stage_profile_table(data):
                 evidence = (
                     f"Authoritative cache/state restored in all {confirmations['cache_restored_groups']} "
                     f"eight-token groups; state/output corruption controls detected "
-                    f"· [current replay]({confirmations_ref}). No separate layout top-20 attribution."
+                    f"· [{study_label if historical_correctness else 'current replay'}]({confirmations_ref}){study_binding}. No separate layout top-20 attribution."
                 )
             elif stage == "Drafter":
                 evidence = "Separate proposal model; target M1/M8 comparisons do not independently qualify it."
@@ -630,7 +665,19 @@ def render_stage_profile_table(data):
         enriched.append("| " + " | ".join(cells) + " |")
     if observed != set(evidence["rows"]):
         raise ValueError("eager-M1 evidence does not cover every compiled stage row")
-    return evidence["paragraphs"].splitlines() + [""] + enriched
+    scope = []
+    refresh = data.get("correctness_refresh", {})
+    if refresh.get("status") == "NOT_RERUN":
+        profile = current_stage_profile(data)
+        scope = [
+            f"**Correctness comparisons were not rerun.** The speed measurements dated {profile['measurement_date']} "
+            f"use {commit_marker(profile['measurement_commit'])}; the M1/M8 and eager/compiled correctness cells "
+            f"retain the {refresh['evidence_date']} study, its original release and source bindings. "
+            "Those historical passes do not establish correctness of the newly timed build. "
+            + refresh["reason"] + ".",
+            "",
+        ]
+    return scope + evidence["paragraphs"].splitlines() + [""] + enriched
 
 
 CHAINED_RESULTS = ROOT / "benchmarks/results/pi-coding-json-compaction.json"
@@ -745,9 +792,7 @@ def render_chained_workload_results(report=None):
         "",
         (
             f"{run_date} rerun status: `{report['status']}`. [Numeric results and release identity]"
-            f"(benchmarks/results/pi-coding-json-compaction.json). These results use top-k {sampling['top_k']}, "
-            "while the older September 20 table used top-k 20, so the output "
-            "and acceptance changes are not a controlled before/after comparison."
+            "(benchmarks/results/pi-coding-json-compaction.json)."
         ),
         "",
     ])
@@ -770,134 +815,49 @@ def render_coding_json_compaction_benchmark():
 def render_known_remaining_symptoms():
     current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
     head = json.loads((ROOT / current["head_candidate_result"]).read_text())["modes"]["global512"]
-    profile = json.loads((ROOT / current["matched_stage_profile"]).read_text())
-    control = profile["observer_comparison"]["contexts"]["200K"]
-    later = control["control_after_round_ms"]
-    pauses = [value for value in later if value > 100]
-    low, high = control["remainder_before_after_range_ms"]
-    if current.get("full_graph_repair"):
-        shared = bool(profile["binding"].get("shared_suite"))
-        workload = json.loads(CODING_CONTEXT_RESULTS.read_text())
-        feed_pauses = []
-        control_pauses = []
-        for context in profile["context_order"]:
-            records = workload["contexts"][context]["round_capture"]["records"]
-            slow = [row for row in records if (row.get("round_ms") or 0) > 100]
-            if slow:
-                feed_pauses.append(
-                    f"{context}: {len(slow)} interval(s), longest {max(row['round_ms'] for row in slow):,.3f} ms"
-                )
-            observed_controls = profile["observer_comparison"]["contexts"][context]
-            for arm in ("before", "after"):
-                slow = [ms for ms in observed_controls[f"control_{arm}_round_ms"] if ms > 100]
-                if slow:
-                    control_pauses.append(
-                        f"{context} {arm}: {len(slow)} interval(s), longest {max(slow):,.3f} ms"
-                    )
-        pause_note = (
-            "**Isolated pauses remain.** The complete coding/histogram feeds retain "
-            + ("; ".join(feed_pauses) if feed_pauses else "no intervals above 100 ms")
-            + ". The retained paired controls separately contain "
-            + ("; ".join(control_pauses) if control_pauses else "no intervals above 100 ms")
-            + ". Their cause has not been localized. The histogram uses the predetermined after-control; "
-            "row 26 uses both controls at the trace's retained indices. Warmup and trace-boundary "
-            "exclusions are structural, not duration-based; every coding round remains in the public feed."
+    workload = json.loads(CODING_CONTEXT_RESULTS.read_text())
+    pauses = []
+    for context in ("0K", "60K", "200K"):
+        records = workload["contexts"][context]["round_capture"]["records"]
+        timed = [row["round_ms"] for row in records if row.get("round_ms") is not None]
+        slow = [ms for ms in timed if ms > 100]
+        pauses.append(
+            f"{context}: {len(slow)}/{len(timed):,} timed rounds above 100 ms"
+            + (f", longest {max(slow):,.3f} ms" if slow else "")
         )
-        if pauses:
-            observed = (
-                f"The later 200K clean control retained {len(pauses)} of {len(later):,} "
-                f"matched intervals above 100 ms, reaching {max(pauses):,.3f} ms; "
-                f"its median was {statistics.median(later):.3f} ms. "
-            )
-        else:
-            observed = (
-                f"None of the {len(later):,} matched intervals in the later 200K clean control "
-                f"exceeded 100 ms; its median was {statistics.median(later):.3f} ms. "
-            )
-        return [
-            "### Known remaining symptoms and likely causes", "",
-            *([current["prefill_alignment_note"], ""] if current.get("prefill_alignment_note") else []),
-            ("**The missing full-graph preparation hook is repaired.** The first integrated speed run "
-            "took 59.44 ms at 60K because FULL replay bypassed the existing post-cache-preparation "
-            "synchronization and recovery hook. After installing it on both execution branches, "
-            "the matched comparison measured 43.38 ms control versus 41.14 ms optimized, with "
-            "identical output and acceptance. Fresh-chat reproductions also recovered. "
-            "This fixes a specific integration defect; it does not prove that all HIP/ROCr queue "
-            "stalls are impossible. "
-            f"[Reproduction and repair evidence]({current['full_graph_repair']})."), "",
-            observed
-            + ("The histogram includes this same predetermined control's entire round feed; the stage "
-               "residual uses its subset of exactly matched M8 cycles plus the preceding control. "
-               if shared else "The context histogram and matched controls are separate captures. ")
-            + f"The paired residual estimates span {low:.3f}–{high:.3f} ms. "
-            "Profiling overhead is reported separately. Indirect changes in clocks, execution duration "
-            "and scheduling remain measurement uncertainty, so the residual is an estimate rather "
-            "than a proved exact sum of runtime gaps. "
-            f"[Current controls]({current['matched_stage_control']}).", "",
-            ("**The completions stream still lacks a separate reasoning channel.** Thinking-enabled "
-            "requests are reported as observed prose; their reasoning throughput cannot be isolated "
-            "from this stream. The checkpoint benchmark measures generation and requested tail "
-            "flushing, not a complete Pi transcript commit. Its format-validation result is reported "
-            "in the table. Natural completions shorter than the coding target remain explicit "
-            "validation failures, even when their timing and round captures are complete."), "",
-            pause_note, "",
-            ("**Global-512 candidate selection remains approximate.** The current head study matched "
-            f"reference top-1 in {head['argmax_equal']:,}/{head['rows']:,} rows and retained the complete "
-            f"reference top-20 in {head['top20_complete_including_ties']:,}/{head['rows']:,}. "
-            "Full-head M1/M8 and eager/compiled agreement does not certify shortlist completeness "
-            "or eliminate model-generated loops. "
-            f"[Current head evidence]({current['head_candidate_result']})."),
-        ]
-    return [
-        "### Known remaining symptoms and likely causes",
-        "",
-        (
-            "**Occasional long-context pauses remain.** The evidence comes from the separate "
-            "compiled-stage timing experiment. Its later unprofiled 200K control, run after "
-            f"the profiling arm, recorded {len(pauses)} of {len(later):,} retained intervals "
-            "above 100 ms: " + ", ".join(f"{value:,.3f} ms" for value in pauses) + ". "
-            f"Its median was {statistics.median(later):.3f} ms. The coding-context histogram "
-            "above covers a different run; these control intervals are recorded separately. "
-            f"The paired control residuals span {low:.3f}–{high:.3f} ms. "
-            "This is an intermittent stall, not a sustained increase in every kernel's cost. "
-            "Its cause is not localized: host scheduling, cache/dependency waits and HIP/ROCr "
-            "queue state remain candidates. Correlated per-round host and GPU event records "
-            "are needed to distinguish them. All measured intervals, including the pauses, "
-            f"remain in the [current controls]({current['matched_stage_control']})."
-        ),
-        "",
-        (
-            "**Stage attribution has a separate trace limitation.** One 200K cycle recorded "
-            "normalization after its consuming projection. That inconsistent timestamp order "
-            "is excluded from per-stage attribution, while the original records are retained. "
-            "It does not establish that the GPU executed the dependency incorrectly. "
-            "Profiling can also affect clocks and scheduling indirectly; subtracting traced "
-            "activity from the clean control is not proof of an exact, observer-free gap total. "
-            "[Trace witness](benchmarks/results/trace-stage-order-witness-20260924.json) · "
-            "[timing method](docs/STAGE_TIMING.md)."
-        ),
-        "",
-        (
-            "**The benchmark stream still lacks a separate reasoning channel.** "
-            "Thinking-enabled requests exposed only prose, so the table cannot isolate their "
-            "reasoning throughput. The unresolved boundary is the provider/parser metadata path; "
-            "this observation alone does not show whether internal reasoning was absent. "
-            "The latest checkpoint passed its section and completion-marker checks. "
-            "That benchmark covers checkpoint generation and tail flushing; full Pi transcript "
-            "commit, retirement, cancellation and concurrent-chat recovery need their own "
-            "integration checks. [Current chained run](benchmarks/results/pi-coding-json-compaction.json)."
-        ),
-        "",
-        (
-            "**Global-512 candidate selection remains approximate.** The current study retained "
-            f"the reference top-1 in {head['argmax_equal']:,}/{head['rows']:,} rows and the complete "
-            f"top-20 in {head['top20_complete_including_ties']:,}/{head['rows']:,}. "
-            "An excluded vocabulary token can still belong in the reference sampling support. "
-            "The new exact M1/M8 and eager/compiled confirmations use the full BF16 comparison "
-            "head; they do not certify shortlist completeness or eliminate model-generated loops. "
-            f"[Current head evidence]({current['head_candidate_result']})."
-        ),
+    chained = json.loads(CHAINED_RESULTS.read_text())
+    missing_reasoning = [
+        row["stage"] for row in chained["stages"]
+        if row.get("thinking_enabled") and not row.get("reasoning_channel_observed")
     ]
+    lines = [
+        "### Known remaining symptoms and likely causes", "",
+        "**Isolated round stalls remain.** The current complete coding feeds recorded "
+        + "; ".join(pauses) + ". Their cause has not been localized; these numeric round "
+        "records alone cannot distinguish a host pause from a GPU queue or cache delay. "
+        "This run did not reproduce the sustained slow state. "
+        "[Complete round records](benchmarks/results/pi-coding-contexts.json) and "
+        f"[matched controls]({current['matched_stage_control']}).", "",
+    ]
+    if missing_reasoning:
+        lines += [
+            "**Reasoning throughput could not be isolated.** The completions stream exposed "
+            "no separate reasoning channel for " + ", ".join(missing_reasoning)
+            + ". Those thinking-enabled requests are reported as observed prose; the "
+            "remaining gap is in stream classification, not a demonstrated target-model "
+            "arithmetic error.", "",
+        ]
+    lines += [
+        "**Global-512 remains approximate.** The current head study matched reference "
+        f"top-1 in {head['argmax_equal']:,}/{head['rows']:,} rows, but missed complete "
+        f"reference top-20 support in {head['rows'] - head['top20_complete_including_ties']:,} rows. "
+        "Retained-score differences are also reported in the head section. Full-head "
+        "M1/M8 and eager/compiled agreement does not certify the shortlist or its "
+        "rescoring arithmetic. Use the full BF16 head to remove these head approximations. "
+        "Neither mode guarantees freedom from model-generated loops. "
+        f"[Current head evidence]({current['head_candidate_result']}).",
+    ]
+    return lines
 
 
 def render_hugepage_comparison():
@@ -1153,7 +1113,7 @@ def render_round_capture_summary():
 
 
 def render_round_histogram():
-    """Render the histogram produced by the context benchmark itself."""
+    """Rebin complete captured rounds for display without changing the capture."""
 
     report = {}
     if CODING_CONTEXT_RESULTS.is_file():
@@ -1179,13 +1139,87 @@ def render_round_histogram():
     }
     if len(histograms) == 3:
         context_order = ("0K", "60K", "200K")
-        bins = histograms[context_order[0]].get("bins", [])
+        display_edges = (
+            -math.inf,
+            *(value / 2 for value in range(70, 85)),
+            43, 45, 46, 47, 48, 48.5,
+            *(value / 2 for value in range(98, 107)),
+            53.5, 54, 55, 56, 60, 62.5, 63, 63.5, 64, 65, 70,
+            100, 250, 500, math.inf,
+        )
+        display_bins = list(zip(display_edges, display_edges[1:]))
+        values_by_context = {}
+        display_counts = {}
+        for context in context_order:
+            capture = captures[context]
+            stored = histograms[context]
+            records = capture.get("records")
+            if not isinstance(records, list) or len(records) != capture.get("record_count"):
+                raise ValueError(f"{context} round histogram requires every captured record")
+            values = []
+            for index, record in enumerate(records, 1):
+                if (not isinstance(record, dict)
+                    or type(record.get("round")) is not int
+                    or record["round"] != index):
+                    raise ValueError(f"{context} round histogram has a missing or duplicate round")
+                if "round_ms" not in record:
+                    raise ValueError(f"{context} round histogram has an invalid round duration")
+                value = record.get("round_ms")
+                if value is None:
+                    continue
+                if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                    raise ValueError(f"{context} round histogram has an invalid round duration")
+                values.append(value)
+            measured = len(values)
+            untimed = len(records) - measured
+            if any(
+                owner.get("measured_round_count") != measured
+                or owner.get("unmeasured_round_count") != untimed
+                for owner in (capture, stored)
+            ):
+                raise ValueError(f"{context} round histogram count disagrees with captured records")
+            previous_upper = -math.inf
+            stored_count = 0
+            for row in stored.get("bins", []):
+                label = row["label"]
+                if label.startswith("<"):
+                    lower, upper = -math.inf, float(label[1:])
+                elif label.startswith("≥"):
+                    lower, upper = float(label[1:]), math.inf
+                else:
+                    lower, upper = map(float, label.split("–"))
+                if lower != previous_upper or upper <= lower:
+                    raise ValueError(f"{context} stored histogram bins overlap or have a gap")
+                count = sum(lower <= value < upper for value in values)
+                if count != row.get("count"):
+                    raise ValueError(f"{context} stored histogram bin disagrees with captured records")
+                stored_count += count
+                previous_upper = upper
+            if previous_upper != math.inf or stored_count != measured:
+                raise ValueError(f"{context} stored histogram does not cover every captured round")
+            for metric, expected in (
+                ("mean_ms", statistics.mean(values) if values else None),
+                ("median_ms", statistics.median(values) if values else None),
+            ):
+                reported = stored.get(metric)
+                if (expected is None and reported is not None) or (
+                    expected is not None
+                    and (type(reported) not in (int, float)
+                         or not math.isclose(reported, expected, abs_tol=1e-8))
+                ):
+                    raise ValueError(f"{context} stored histogram {metric} disagrees with captured records")
+            counts = [sum(lower <= value < upper for value in values)
+                      for lower, upper in display_bins]
+            if sum(counts) != measured:
+                raise ValueError(f"{context} display histogram omitted a captured round")
+            values_by_context[context] = values
+            display_counts[context] = counts
+
         def mean_median(context):
-            mean = histograms[context].get("mean_ms")
-            median = histograms[context].get("median_ms")
-            if mean is None or median is None:
+            values = values_by_context[context]
+            if not values:
                 return "— / — ms"
-            return f"{mean:.2f} / {median:.2f} ms"
+            return f"{statistics.mean(values):.2f} / {statistics.median(values):.2f} ms"
 
         lines = [
             "The histogram below is generated from the complete per-round records of the "
@@ -1197,20 +1231,26 @@ def render_round_histogram():
              if report.get("suite_capture_id") else
              "The compiled-stage timing experiment has separate unprofiled control runs; their "
              "pauses are discussed below and are not part of this histogram."),
+            "Half-millisecond display bins resolve the current dense clusters at 35–42 and "
+            "49–53 ms. These bins are recomputed from the original records; the captured "
+            "bins, round counts and measurement identity are unchanged.",
             "",
             "| Round time | 0K arm | 60K arm | 200K arm |",
             "|---|---:|---:|---:|",
         ]
-        for index, first_bin in enumerate(bins):
+        for index, (lower, upper) in enumerate(display_bins):
+            label = (f"<{upper:g}" if lower == -math.inf else
+                     f"≥{lower:g}" if upper == math.inf else f"{lower:g}–{upper:g}")
             cells = []
             for context in context_order:
-                row = histograms[context]["bins"][index]
-                percentage = row.get("percentage")
+                count = display_counts[context][index]
+                measured = len(values_by_context[context])
+                percentage = 100 * count / measured if measured else None
                 cells.append(
-                    f"{row.get('count', 0):,}"
+                    f"{count:,}"
                     + (f" ({percentage:.1f}%)" if percentage is not None else "")
                 )
-            lines.append(f"| `{first_bin['label']}` | {' | '.join(cells)} |")
+            lines.append(f"| `{label}` | {' | '.join(cells)} |")
         lines.extend(
             [
                 "| **Timed rounds** | "
@@ -1331,35 +1371,24 @@ def render_cache_state_equivalence(data):
     snapshot = json.loads((ROOT / snapshot_path).read_text())
     rows = []
 
-    def add(comparison, workload, correctness, timing, evidence, *, before=None, before_time=None):
-        if evidence.startswith("[Earlier"):
-            before, before_time = correctness, timing
-            correctness, timing = "Not rerun after this repair", "Not rerun"
+    def add(comparison, workload, correctness, timing, evidence):
         rows.append(
-            f"| {comparison} | {workload} | {before or 'Not captured'} | {correctness} | "
-            f"{before_time or 'Not benchmarked'} | {timing} | {evidence} |"
+            f"| {comparison} | {workload} | {correctness} | {timing} | {evidence} |"
         )
 
     def span(values, unit="s"):
         lo, hi = min(values), max(values)
         return f"{lo:.3f} {unit}" if lo == hi else f"{lo:.3f}–{hi:.3f} {unit}"
 
-    aligned_link = f"[Aligned release]({alignment_path})"
-    cache_link = f"[Earlier cache release]({cache_path})"
-    lifecycle_link = f"[Aligned release]({deployment_path})"
-    # These diagnostic timings are preserved in the alignment report, not in
-    # the token-comparison JSON. Their different measurement boundaries remain
-    # explicit; none is a disk-restore latency or a decode-round measurement.
+    aligned_link = f"[2026-09-27 alignment]({alignment_path})"
+    cache_link = f"[2026-09-27 cache paths]({cache_path})"
+    lifecycle_link = f"[2026-09-27 lifecycle]({deployment_path})"
+    # Numerical replay and the current cold-prefill speed arm have different
+    # workloads. Do not substitute a prefill timing for the replay itself.
     prefill_times = {
-        1651: ("Not separately benchmarked", "Not separately benchmarked"),
-        60000: (
-            "61K cold whole-model diagnostic: **36.56 s**. Attention only, 1,003 query rows at 60K: **20.17 ms**",
-            "61K cold whole-model diagnostic: **45.34 s**. Attention only, 1,003 query rows at 60K: **34.50 ms**",
-        ),
-        200000: (
-            "Attention only, 1,003 query rows at 200K: **63.49 ms**; no matched whole-model timing",
-            "Attention only, 1,003 query rows at 200K: **112.08 ms**; no matched whole-model timing",
-        ),
+        1651: "Not separately benchmarked",
+        60000: "Vector replay not separately timed; current cold-prefill speeds below",
+        200000: "Vector replay not separately timed; current cold-prefill speeds below",
     }
 
     def numerical_result(case):
@@ -1375,18 +1404,12 @@ def render_cache_state_equivalence(data):
         return (f"Byte-exact hidden rows {case['hidden_exact_rows']:,}/{count:,}; full BF16-logit rows "
                 f"{case['logits']['full_logits_exact']:,}/{count:,}.<br>{ranks}")
 
-    baselines = {case["first_position"]: case for case in alignment["baseline_comparisons"]}
     for case in alignment["model_comparisons"]:
         count = case["positions"]
-        baseline = baselines.get(case["first_position"])
-        before_time, after_time = prefill_times[case["first_position"]]
         add(
             "Cold prefill ↔ retained decode history",
             f"{case['first_position']:,}-token prefix + {count:,} forced token positions",
-            numerical_result(case), after_time,
-            aligned_link + " · [timing scope](docs/PREFILL_ALIGNMENT.md#performance-and-memory)",
-            before=numerical_result(baseline) if baseline else "No full-model baseline captured",
-            before_time=before_time,
+            numerical_result(case), prefill_times[case["first_position"]], aligned_link,
         )
 
     copies = cache["native_byte_preservation"]
@@ -1399,7 +1422,7 @@ def render_cache_state_equivalence(data):
         "Not a production timing capture", cache_link,
     )
 
-    def continuations(label, cases, evidence, scope="", *, before=None, before_time=None):
+    def continuations(label, cases, evidence, scope=""):
         passed = sum(case["same_tokens"] for case in cases)
         prompts = sorted({case["prompt_tokens"] for case in cases})
         missing = sorted({case["uncached_tokens"] for case in cases})
@@ -1411,7 +1434,7 @@ def render_cache_state_equivalence(data):
             f"{passed}/{len(cases)} exact continuations, "
             f"{' / '.join(map(str, output))} generated tokens each" + (f"; {scope}" if scope else ""),
             "First data **" + span([case["first_data_seconds"] for case in cases]) + "**",
-            evidence, before=before, before_time=before_time,
+            evidence,
         )
 
     runs = cache["native_continuations"]
@@ -1433,18 +1456,9 @@ def render_cache_state_equivalence(data):
     continuations("Reuse after explicit stop boundary", runs["stop-v4"]["cases"], cache_link)
     for report in alignment["tool_continuations"]:
         head = "full BF16" if report["target_head_policy"] == "full-bf16" else "Global-512"
-        failure = cache["separate_numerical_failure"]
-        if report["target_head_policy"] == "full-bf16":
-            original = next(c for c in failure["full_bf16_head_control"]["cases"] if c["kind"] == "generated-end")
-            original_time = original["first_data"]
-        else:
-            original = failure["failed_cold_control"]["cases"][0]
-            original_time = original["first_data_seconds"]
         continuations(
             f"Cached tool continuation ↔ cold full prompt ({head})", report["cases"],
-            aligned_link + f" · [baseline]({cache_path})", "greedy; same appended 41-token tool suffix",
-            before=f"**FAIL**: original 1,711-input-token case first differs at output offset {original['first_difference']}; no complete six-case baseline",
-            before_time=f"First data **{original_time:.3f} s** (original failing case only)",
+            aligned_link, "greedy; same appended 41-token tool suffix",
         )
     continuations(
         "Repeated sampled tool continuation",
@@ -1453,22 +1467,17 @@ def render_cache_state_equivalence(data):
     )
     continuations(
         "Cancelled continuation ↔ uninterrupted control", pressure["cancelled_continuations"],
-        f"[Earlier pressure repair]({pressure_path})",
+        f"[2026-09-27 pressure checks]({pressure_path})",
     )
 
     lifecycle = {case["name"]: case for case in deployment["packaged_lifecycle"]["cases"]}
-    old_lifecycle = {case["name"]: case for case in cache["lifecycle"]["cases"]}
-    lifecycle_link += f" · [baseline]({cache_path})"
     cancel = lifecycle["cancel_decode_and_replay"]["interruptions"]
-    old_cancel = old_lifecycle["cancel_decode_and_replay"]["interruptions"]
     add(
         "Cancel during decode → replay",
         "Interrupted after " + ", ".join(str(c["received_tokens"]) for c in cancel) + " received tokens",
         f"{sum(c['replay_equal'] for c in cancel)}/{len(cancel)} replays equal uninterrupted control",
         "Cancellation to scheduler release: **" + span([c["release_seconds"] * 1000 for c in cancel], "ms") + "**",
         lifecycle_link,
-        before=f"{sum(c['replay_equal'] for c in old_cancel)}/{len(old_cancel)} replays equal uninterrupted control",
-        before_time="Cancellation to scheduler release: **" + span([c["release_seconds"] * 1000 for c in old_cancel], "ms") + "**",
     )
     for key, label, result in (
         ("cancel_cold_prefill_and_replay", "Cancel during cold prefill → replay", "replay_equal"),
@@ -1483,9 +1492,7 @@ def render_cache_state_equivalence(data):
             if key == "sampled_cancel_and_waiter_replay" else "Two chats; cancelled request had not generated"
         )
         add(label, context, "Replay equal" if case[result] else "Replay DIFFERENT",
-            f"Cancellation to scheduler release: **{case['release_seconds'] * 1000:.3f} ms**", lifecycle_link,
-            before="Replay equal" if old_lifecycle[key][result] else "Replay DIFFERENT",
-            before_time=f"Cancellation to scheduler release: **{old_lifecycle[key]['release_seconds'] * 1000:.3f} ms**")
+            f"Cancellation to scheduler release: **{case['release_seconds'] * 1000:.3f} ms**", lifecycle_link)
     handovers = [lifecycle[name] for name in (
         "equal_priority_response_handover", "priority2_complete", "priority2_parked",
         "priority2_urgent", "priority1_tool_boundary_hold",
@@ -1495,8 +1502,6 @@ def render_cache_state_equivalence(data):
         "Equal priority, immediate priority-2 takeover/cancellation, priority-1 tool-boundary hold",
         f"{sum(c['status'] == 'PASS' for c in handovers)}/{len(handovers)} lifecycle cases pass their output/ownership checks",
         "Isolated handover latency not measured", lifecycle_link,
-        before=f"{sum(old_lifecycle[c['name']]['status'] == 'PASS' for c in handovers)}/{len(handovers)} lifecycle cases pass their output/ownership checks",
-        before_time="Isolated handover latency not measured",
     )
     for case in pressure["capacity_cases"]:
         preemptions = max(sample["preemptions"] for sample in case["samples"])
@@ -1506,7 +1511,7 @@ def render_cache_state_equivalence(data):
             f"{case['usage']['prompt_tokens_details']['cached_tokens']:,} cached; {case['tokens']:,} generated",
             f"{preemptions} allocator preemptions; forward progress (not numerical-equivalence evidence)",
             f"First data **{case['first_data_seconds']:.3f} s**",
-            f"[Earlier pressure repair]({pressure_path})",
+            f"[2026-09-27 pressure checks]({pressure_path})",
         )
     cycles = snapshot["cycles"]
     safe = sum(c["removed_before_verification_bytes"] == 0 and c["fallback_removed_after_verification"]
@@ -1516,27 +1521,23 @@ def render_cache_state_equivalence(data):
         f"{len(cycles)} publication/retirement cycles",
         f"{safe}/{len(cycles)} keep the previous disk head until replacement verification, then retain one generation; "
         "lifecycle safety, not old/new summary equivalence",
-        "Not separately benchmarked", f"[Earlier snapshot release]({snapshot_path})",
+        "Not separately benchmarked", f"[2026-09-25 snapshots]({snapshot_path})",
     )
     return [
         "### Cache-state equivalence and prefill/restore timings", "",
         (
-            "**Before / after refers to the prefill arithmetic repair introduced on September 27.** "
-            "The table distinguishes exact state bytes, hidden/logit equality and generated-token replay. "
-            "**Aligned release** is the repaired September 27 build; **earlier cache/pressure/snapshot release** "
-            "is the baseline. Where a path was not rerun or a baseline was not captured, that is explicit. "
-            "All workloads here are synthetic, and each source retains its tested identities."
+            "The latest recorded result for each path is shown once, with its capture date. "
+            "These synthetic cache/equality checks were not rerun in the October 9 speed refresh; "
+            "their timings describe the captured builds. Current cold-prefill speeds are shown below."
         ), "",
-        "| State / execution comparison | Workload and cache coverage | Correctness before | Correctness after | Speed / latency before | Speed / latency after | Capture |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| State / execution comparison | Workload and cache coverage | Latest correctness evidence | Latest measured speed / latency | Capture |",
+        "| --- | --- | --- | --- | --- |",
         *rows, "",
         "**Timing boundaries:** first data is request-to-first-output wall time, including admission, "
         "handover, restore and any required prefill; it is not pure disk or RAM transfer time. Restart "
-        "measurements start after the backend is ready. Attention times are five GPU-event samples of "
-        "one 1,003-query invocation; the 61K whole-model time is one diagnostic request. Cancellation "
+        "measurements start after the backend is ready. Cancellation "
         "times measure scheduler release, not completion of the replay. No qualification-suite runtime "
-        "is substituted for an operation benchmark. The tool rows compare the original failing case "
-        "with an expanded six-case repaired run; their timing ranges are not a matched speedup estimate.", "",
+        "is substituted for an operation benchmark.", "",
         "**Equality boundaries:** set/order lists identical token sets followed by identical ordering. "
         "The full-vector prefill checks cover 2,320 distinct forced-token positions; the packaged "
         "1,000-position repeat does not add new positions. Matching generated tokens alone does not "
@@ -1548,7 +1549,7 @@ def render_cache_state_equivalence(data):
 
 
 def render_prefill_speed(data):
-    """Keep later prefill optimization measurements separate from decode tables."""
+    """Show current cold-prefill speed without historical comparison columns."""
     if not data.get("prefill_speed_timing"):
         return []
     timing = json.loads((ROOT / data["prefill_speed_timing"]).read_text())
@@ -1557,88 +1558,95 @@ def render_prefill_speed(data):
     for row in timing["cases"]:
         rows.setdefault((row["context"], row["variant"]), []).append(row)
     checks = {row["first_position"]: row for row in qualification["model_comparisons"]}
-    lines = [
-        "### Prefill speed recovery, September 28",
-        "",
-        (
-            "The September 28 build preserves the corrected arithmetic while packing attention work and sharing loads, "
-            "retaining projection partials in registers, preparing GDN inputs once and reusing compiled "
-            "kernels across changing prompt lengths. A qualified 4,096-row admission limit lets the scheduler "
-            "use 3,296-row chunks instead of 1,648. The existing decode kernels, Global-512 head and "
-            "corrected snapshot data format are unchanged."
-        ),
-        "",
-        "| Cold context | Older, numerically inconsistent prefill | Corrected before optimization | Current corrected prefill | Full hidden/logit equality against corrected decode |",
-        "| --- | ---: | ---: | ---: | --- |",
-    ]
-    first_data = []
-    ranges = []
-    for context in (60000, 200000):
-        before, after = (rows[context, name] for name in ("baseline", "candidate"))
-        b, a = (
-            sum(row["backend_timings_ms"]["prefill"] for row in group)
-            / len(group)
-            / 1000
-            for group in (before, after)
-        )
-        check = checks[context]
+    measurement_date = data.get("prefill_speed_measurement_date") or timing.get("measurement_date")
+    qualification_date = qualification.get("measurement_date") or datetime.strptime(
+        Path(data["prefill_speed_evidence"]).stem[-8:], "%Y%m%d"
+    ).date().isoformat()
+    retained_vectors = (
+        data.get("correctness_refresh", {}).get("status") == "NOT_RERUN"
+        or qualification_date != measurement_date
+    )
+    candidate_only = timing.get("candidate_only", False)
+    fresh_prepacking_control = timing.get("baseline_scope") == "corrected_prepacking_control"
+    if candidate_only:
+        if timing.get("baseline_scope") != "historical_corrected_control":
+            raise ValueError("candidate-only prefill timings must identify historical corrected controls")
+        if any(row["variant"] != "candidate" for row in timing["cases"]):
+            raise ValueError("candidate-only prefill timings contain a fresh control")
+        historical_control = timing["historical_corrected_control"]
+        source = historical_control["source"]
+        historical_date = datetime.strptime(Path(source).stem[-8:], "%Y%m%d").date().isoformat()
+        recorded_bytes = (ROOT / source).read_bytes()
+        recorded = json.loads(recorded_bytes)
+        before_rows = [row for row in recorded["cases"] if row["variant"] == "baseline"]
         if (
-            check["hidden_exact_rows"] != check["positions"]
-            or check["hidden_different_elements"]
+            historical_control["measurement_date"] != historical_date
+            or historical_control["cases"] != before_rows
+            or historical_control["source_report_sha256"] != hashlib.sha256(recorded_bytes).hexdigest()
         ):
-            raise ValueError("prefill speed evidence has a hidden-state divergence")
+            raise ValueError("historical corrected controls differ from their retained evidence")
+
+    lines = [
+        f"### Cold-prefill speeds ({measurement_date} measurements)", "",
+        "The serving build uses packed attention, register-resident projection partials, "
+        "prepared GDN inputs and compiled kernels reusable across prompt lengths. Its "
+        "4,096-row admission limit permits 3,296-row scheduler chunks while preserving "
+        "the corrected arithmetic.", "",
+        "| Cold context | Mean prefill | Prefill tokens/s | Mean first data | Samples |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    ranges = []
+    repetitions = []
+    for context in (60000, 200000):
+        after = rows[context, "candidate"]
+        if fresh_prepacking_control or candidate_only:
+            compared = after if candidate_only else rows[context, "baseline"] + after
+            if fresh_prepacking_control:
+                prompt_hashes = {row.get("prompt_sha256") for row in compared}
+                if len(prompt_hashes) != 1 or None in prompt_hashes:
+                    raise ValueError("prefill controls do not identify one matching prompt")
+            for row in compared:
+                usage = row["usage"]
+                if (
+                    usage["prompt_tokens"] != context
+                    or usage["prompt_tokens_details"]["cached_tokens"] != 0
+                    or usage["completion_tokens"] != 1
+                    or row["tokens"] != 1
+                ):
+                    raise ValueError("prefill timing is not a one-token cold request")
+        check = checks[context]
         n = check["positions"]
+        if check["hidden_exact_rows"] != n or check["hidden_different_elements"]:
+            raise ValueError("prefill speed evidence has a hidden-state divergence")
         if check["logits"]["full_logits_exact"] != n or any(
             check["logits"][str(k)][metric] != n
-            for k in (1, 10, 20)
-            for metric in ("set_exact", "ranked_exact")
+            for k in (1, 10, 20) for metric in ("set_exact", "ranked_exact")
         ):
             raise ValueError("prefill speed evidence has a logit divergence")
-        old = next(
-            row
-            for row in timing["earlier_uncorrected_control"]["cases"]
-            if row["context"] == context
-        )
-        old_seconds = old["backend_timings_ms"]["prefill"] / 1000
+        seconds = [row["backend_timings_ms"]["prefill"] / 1000 for row in after]
+        mean = statistics.mean(seconds)
+        first_data = statistics.mean(row["first_data_seconds"] for row in after)
         lines.append(
-            f"| {context:,} tokens | {old_seconds:.2f} s | {b:.2f} s | **{a:.2f} s** | "
-            f"**{n:,}/{n:,}**, including top-1/10/20 sets and ordering |"
+            f"| {context:,} tokens | **{mean:.2f} s** | **{context / mean:,.0f}** | "
+            f"{first_data:.2f} s | {len(after)} |"
         )
-        values = [row["backend_timings_ms"]["prefill"] / 1000 for row in after]
-        ranges.append(f"{min(values):.2f}–{max(values):.2f} s")
-        first_data.append(
-            f"{sum(row['first_data_seconds'] for row in after) / len(after):.2f} s"
-        )
+        ranges.append(f"{min(seconds):.2f}–{max(seconds):.2f} s")
+        repetitions.append(str(len(after)))
     lines += [
         "",
-        "Current values are the means of two unprofiled cold requests per context; their ranges were "
-        + " / ".join(ranges)
-        + ". The older columns retain one request per context from the recorded control runs, "
-        "using synthetic prefixes. Current prefixes have matching hashes against the older inconsistent controls; "
-        "the initial corrected record did not retain per-prompt hashes, so that historical comparison is indicative. "
-        "All requests reused zero prompt tokens and generated one token "
-        "using greedy sampling. Current mean request-to-first-data times were "
-        + " / ".join(first_data)
-        + ". "
-        "The "
-        f"[measurement]({data['prefill_speed_timing']}) is a prefill test, not a generation-throughput benchmark.",
+        "Current values are means of " + " / ".join(repetitions)
+        + " unprofiled cold requests at 60K / 200K; prefill ranges were "
+        + " / ".join(ranges) + ". Each request reused zero prompt tokens and generated "
+        "one token with greedy sampling; the log-probability request selects the full "
+        "BF16 head for that output. Prefill tokens/s is prompt length divided by "
+        "mean backend-prefill time; first data also includes request setup and the first "
+        f"generated token. [Current measurement]({data['prefill_speed_timing']}).",
         "",
-        "This recovers approximately the old prefill speed: 60K is about 3.1% faster than the old control; "
-        "the 200K mean is about 0.9% slower, with individual repeats spanning the old time. "
-        "The reduction from the initial corrected path is about 26.5% / 25.5%. "
-        "These few measurements do not establish a speedup for every workload. No arithmetic relaxation was used. "
-        "The [initial corrected comparison](benchmarks/results/prefill-speed-initial-timings-20260928.json) "
-        "and [packed-kernel comparison](benchmarks/results/prefill-packed-timings-20260928.json) remain available separately.",
-        "",
-        (
-            f"[Qualification]({data['prefill_speed_evidence']}) also covers complete operator outputs and recurrent state, "
-            "plus twelve exact cached tool continuations. The frozen build passed "
-            f"[six corrected-parent snapshot restores and nine greedy/control cancellation/scheduling cases]({data['prefill_speed_lifecycle']}). "
-            "A seeded stochastic replay differed; follow-up captures matched all 244 target hidden/logit rows "
-            "through the first different sample while draft proposals differed. "
-            "These are exact sampled checks, not an arbitrary-input proof. See "
-            f"[implementation and scope]({data['prefill_speed_document']})."
-        ),
+        f"[Historical vector qualification ({qualification_date})]({data['prefill_speed_evidence']}) "
+        "records complete hidden/logit agreement at 1,000 sampled positions at 60K and "
+        "320 at 200K. "
+        + ("Those vector checks were not rerun for the newly timed build. " if retained_vectors else "")
+        + f"[Implementation and numerical scope]({data['prefill_speed_document']}).",
         "",
     ]
     return lines
@@ -1705,14 +1713,13 @@ def render(data):
         *render_stage_profile_table(data),
         "",
         (
-            "The table restores the historical grouped 26 measured-row layout and "
-            "adds a total row. Each timing cell is ordered **0K / 60K / 200K**. "
+            "The table groups the backend into 26 stages. Each timing cell is ordered "
+            "**0K / 60K / 200K**. "
             "Fused kernels are charged once to their containing stage; "
             "the ↳ rows are detail-only inclusion records and add no timing; "
             "rows without a separate profiler scope are labelled in the timing "
             "cell rather than displayed as 0.000. The total counts overlapping GPU "
-            "activity once. The old forced-replay subtraction is superseded; "
-            "[its audit](benchmarks/results/stage-timing-audit-20260923.json) remains available."
+            "activity once."
         ),
         "",
         (

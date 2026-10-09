@@ -24,13 +24,13 @@ These are shared observations, not independent benchmark repetitions.
 
 ## Run
 
-Use an isolated `matched_stage_profile_worker.MatchedStageWorker` server with the
-current frozen numerical release, its compiled PIECEWISE path and Global-512
-target head. To qualify the banked speed candidate, use
-`speed_matched_stage_worker.SpeedMatchedStageWorker`: it records the target GEMM
-binary, drafter attention implementation and FULL graph capture identities. Its
-analyzer requires one target graph per retained M8 round; the PIECEWISE release
-requires 65. These diagnostic workers are not installed into the normal Pi server.
+Use an isolated `speed_matched_stage_worker.SpeedMatchedStageWorker` server with
+the current frozen numerical release, compiled FULL target graphs and Global-512.
+It records the target GEMM binary, drafter attention implementation and graph
+capture identities. Its analyzer requires one target graph per retained M8
+round. The historical PIECEWISE baseline used
+`matched_stage_profile_worker.MatchedStageWorker` and required 65 graphs per
+round. These profiling workers are not installed into the normal Pi server.
 The command validates the live head selection and compiled mode; it does not
 start, stop or change a backend. A busy backend is rejected by the request helper.
 
@@ -46,11 +46,15 @@ UV_CACHE_DIR=/data/.cache/uv uv run --locked python \
   --fixture-200k PATH_TO_200K_FIXTURE \
   --tokenizer-json PATH_TO_TOKENIZER \
   --runtime-manifest PATH_TO_MEASURED_DEPLOYMENT_MANIFEST \
-  --abi SNAPSHOT_ABI \
+  --abi SNAPSHOT_DATA_ABI \
   --base-url http://127.0.0.1:8081 \
   --round-log /dev/shm/qwen-stage-timing-rounds.jsonl \
   --head global512 --temperature 1 --top-p 0.95 --top-k 40 --seed 0
 ```
+
+`--abi` is the storage data ABI accepted by the chat snapshot request guard,
+not the separately recorded deployment/runtime namespace ABI. Keep both
+identities in the capture; substituting one for the other rejects admission.
 
 EOS remains enabled. The coding prompt targets about 5–6K output tokens, with a
 10K safety ceiling. Short natural completions and incomplete round feeds remain
@@ -86,6 +90,13 @@ captures. Repeating offline analysis does not require another GPU run. Existing
 reviewed numeric reports; never publish `checkpoint.json`, continuations or raw
 private capture directories.
 
+The packager authenticates the declared source commit against every recorded
+measurement and host-runtime source hash. When packaging from an exported tree,
+pass `--source-repository PATH_TO_GIT_CHECKOUT` so it can read that commit's Git
+objects. Only a complete match produces `source_artifact_commit`; unavailable or
+different files remain an explicitly unverified source binding. The measured
+source commit is distinct from the later commit that publishes the reports.
+
 ## Measurement boundaries
 
 The histogram includes every timed round in the selected coding response. The
@@ -109,3 +120,38 @@ their output and accepted-token schedules, allowing matched stage analysis.
 The public reports share capture ID `6ec96682eeba444b9c1cddaa0cdb5cc2` and bind
 the exact measured source hashes. This benchmark does not itself deploy the
 candidate or establish universal numerical equivalence.
+
+## October 9 refresh
+
+The completed shared capture used frozen source
+[`99d5fcf`](https://github.com/Terrydaktal/vllm-coherence/commit/99d5fcfd1bcd0fe6f70445d154e63b7092b02f24),
+compiled FULL target graphs and Global-512. Its capture ID is
+`7210aa09111946adb3d80462bdcfbce4`.
+This refresh measures speed. The earlier 320-token arithmetic, independent
+operator and cache-state correctness studies retain their original source
+identities and dates; they were not rerun for this refresh.
+
+| Starting context | Natural output tokens per coding arm | Timed rounds in the selected clean control | Retained M8 cycles for stage attribution |
+| --- | ---: | ---: | ---: |
+| 0K | 4,912 | 1,091 | 1,003 |
+| 60K | 5,675 | 1,383 | 1,134 |
+| 200K | 7,948 | 1,714 | 1,134 |
+
+Every context also retains its first untimed scheduler event. Before/profile/after
+outputs and accepted-token schedules matched. The trace budget is 1,152 decode
+calls after 64 warmup calls, in 128-call chunks. Only complete M8 cycles enter
+the stage means; closing boundaries and the first two trace-activation cycles
+per chunk are excluded. The complete control feeds remain the histogram source,
+including stalls outside the retained profile indices.
+
+Only the 0K coding completion failed the 5K minimum-length check; its natural
+4,912-token stop remains an explicit validation failure. The 60K and 200K arms
+passed. All four chained tasks completed, and the 4,730-token checkpoint passed
+its section and completion-marker checks. This checks checkpoint generation
+and requested cache-tail flushing, not a complete Pi transcript commit.
+
+[Context results](../benchmarks/results/pi-coding-contexts.json),
+[chained results](../benchmarks/results/pi-coding-json-compaction.json), and the
+[matched stage capture](../benchmarks/results/compiled-global512-stage-profile-20261009.json)
+retain numeric records and source identities. Generated text, raw token arrays
+and private fixtures remain outside the repository.

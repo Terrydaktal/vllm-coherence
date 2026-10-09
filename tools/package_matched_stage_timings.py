@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import statistics
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -31,6 +32,32 @@ def runtime(metadata):
     if "speed_candidate" in metadata:
         result["speed_candidate"] = metadata["speed_candidate"]
     return result
+
+
+def bind_source_commit(binding, commit, repository):
+    """Name a committed source tree only when every captured source matches it."""
+    binding.pop("source_artifact_commit", None)
+    if len(commit) != 40 or any(c not in "0123456789abcdef" for c in commit):
+        raise ValueError("source commit must be a full lowercase SHA-1")
+    sources = dict(binding["source_sha256"])
+    sources.update({
+        f"experiments/radiance-public/{name}": expected
+        for name, expected in binding.get("host_runtime", {}).get("source_sha256", {}).items()
+    })
+    for path, expected in sources.items():
+        result = subprocess.run(
+            ["git", "-C", str(repository), "show", f"{commit}:{path}"],
+            capture_output=True, check=False,
+        )
+        if result.returncode or hashlib.sha256(result.stdout).hexdigest() != expected:
+            binding["measurement_source_state"] = (
+                f"{commit} base plus recorded source hashes; committed-tree equality not established"
+            )
+            return
+    binding["source_artifact_commit"] = commit
+    binding["measurement_source_state"] = (
+        f"Frozen committed source {commit}; all captured source hashes match the named tree"
+    )
 
 
 def package(args):
@@ -130,6 +157,7 @@ def package(args):
                 if observation["host_page_policy_bytes"] < observation["allocated_bytes"]:
                     raise ValueError(f"{context}: page policy does not cover the pinned allocation")
             binding["host_page_policy_observations"][context] = observation
+    bind_source_commit(binding, args.source_commit, args.source_repository)
     depth = binding["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"]
     if depth not in ("256", "512"):
         raise ValueError("A configured Global-256/512 serving head is required")
@@ -210,6 +238,8 @@ if __name__ == "__main__":
     parser.add_argument("--captures", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--source-repository", type=Path, default=ROOT,
+                        help="Git repository used to authenticate the captured source commit")
     parser.add_argument("--manifest-sha256", required=True)
     parser.add_argument("--measurement-date", required=True, help="ISO date of this capture")
     package(parser.parse_args())

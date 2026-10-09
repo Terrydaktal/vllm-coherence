@@ -1,0 +1,89 @@
+{
+  "schema": "urn:coherence:token-continuation-deployment:v1",
+  "status": "PASS",
+  "observed_at": "2026-10-08T23:11:40.155867+00:00",
+  "continuation_contract": "suffix-only-before-history-tokenization-v1",
+  "runtime_abi": "027853640d984856984c33c087c77fe189eb95dad40ec046be20f22d62020aa9",
+  "authenticated_manifest_abi": "027853640d984856984c33c087c77fe189eb95dad40ec046be20f22d62020aa9",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "installed_source_hashes": {
+    "qwen_radiance_cache.py": "4a293241e6caeaf45791bb7cdb296e73f7f139e73c338aa9a9accde68d2667b5",
+    "qwen_radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
+    "qwen_radiance_cache_telemetry.py": "b91fb65bda48a6adce05725a43d4d90026cedcd300e7f958f7fa6a7540e39cc7",
+    "qwen_radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
+    "qwen_radiance_prefix_lineage.py": "2f4b3d08e7051c766be584e78ab3b58215b3ba85bb04169560b5b37fe4058021",
+    "qwen_radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936",
+    "qwen_radiance_token_continuation.py": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
+    "qwen_radiance_token_continuation_runtime.py": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
+    "qwen_radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
+    "qwen_radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
+    "qwen_radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
+    "qwen_radiance_fair_scheduler.py": "8090e2d4b3b6a83c10613dfbe68c55b2d14df6a19f432cc8b0db3f86a98e0b31",
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "qwen_radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "qwen_radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71"
+  },
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "serving_source_sha256": "815550341fd1b84a3dea24602bcea81c67a35f131dae4844f36c4322ee7c2b20",
+  "hf_renderer_source_sha256": "6943844fcccc55c1add9d6669e7a0d635fa67f3dfc7056d64c578ad437370528",
+  "worker_processes": [
+    {
+      "pid": 629,
+      "name": "VLLM::EngineCor",
+      "THP_enabled": "0"
+    }
+  ],
+  "health_status": 200,
+  "journal_root_mode": "0o700",
+  "journal_file_modes": [
+    "0o600"
+  ],
+  "smoke": [
+    {
+      "status": 200,
+      "streamed": true,
+      "prompt_tokens": 7020,
+      "completion_tokens": 4,
+      "cached_tokens": 0,
+      "finish_reason": "stop",
+      "external_request_id": "8cd0c6ba7dff3181f866bdccf4783d68671967e7eafca9d0727b45ab5c55994e",
+      "output_sha256": "ef6376ae965b11cec2b86d868099f0145496c81cb30503ab0e1feacbce89d3e8",
+      "first_content_ms": 3624.6113430097466,
+      "elapsed_ms": 3669.6980020060437
+    },
+    {
+      "status": 200,
+      "streamed": true,
+      "prompt_tokens": 7045,
+      "completion_tokens": 5,
+      "cached_tokens": 7024,
+      "finish_reason": "stop",
+      "external_request_id": "70ae3898c8ac4a77c28380c7c6c643340234a32d9c5adb609e6048a7c558bae9",
+      "output_sha256": "4542f873752d787f8d7abaee846288af5f7cd99247a284cf40f936bb2fe6be0f",
+      "first_content_ms": 377.9413260053843,
+      "elapsed_ms": 413.1979960075114
+    }
+  ],
+  "token_continuation_events": {
+    "no_previous_journal": 2,
+    "journal_saved": 2,
+    "incremental_suffix_encoded": 1
+  },
+  "journal_files": 5,
+  "incremental_tokenization": [
+    {
+      "reason": "incremental_suffix_encoded",
+      "previous_tokens": 7024,
+      "suffix_tokens": 21,
+      "admitted_tokens": 7045
+    }
+  ],
+  "snapshot_data_abi_changed": false,
+  "model_arithmetic_changed": false,
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "smoke_status": "PASS",
+  "cpu_checks_passed": 518,
+  "measurements": "benchmarks/results/token-continuation-cpu-20261008.json",
+  "previous_deployment": "benchmarks/results/prefill-memory-repair-deployment-20261008.json",
+  "scope": "Installed source hashes, patched production text-renderer hash and process memory policy verified on the running backend. Two public synthetic natural-stop streamed turns saved journals; the follow-up preserved 7024 previous IDs and encoded only 21 new suffix IDs before history tokenization, reused 7024 cached tokens and produced first content after 377.94 ms. The token_continuation event was correlated to the exact HTTP request. Native CPU checks used the actual pooled serving tokenizer, production text-render path, downstream token parsing and budget validation at short, 60K and 200K contexts, including durable restart and edited-history/capacity fallback. The 200K continuation preserved 200020 previous IDs while encoding a 17-token suffix and performed zero full-history tokenizations. This defines a generated-token history contract, not equality to canonical full-history re-encoding. The numerical/data ABI is unchanged; prior numerical/lifecycle evidence is retained, not rerun or newly proved."
+}

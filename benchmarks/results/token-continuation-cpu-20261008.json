@@ -1,0 +1,323 @@
+{
+  "schema": "urn:coherence:token-continuation-qualification:v1",
+  "status": "PASS",
+  "scope": "CPU actual vLLM pooled tokenizer, safe_apply_chat_template in production text mode, token prompt parsing/length validation and durable journal. Deliberately noncanonical original histories are preserved while only the suffix is encoded. No GPU runtime initialized; no inference-arithmetic equivalence claim.",
+  "cpu_regressions": {
+    "passed": 518,
+    "runner": "uv run pytest; token continuation, actual renderer hooks, prefix lineage, telemetry sink, release packaging, snapshot bindings and live deployment receipt with negative controls"
+  },
+  "cases": [
+    {
+      "schema": "urn:coherence:token-continuation-cpu-qualification:v1",
+      "status": "PASS",
+      "scope": "CPU tokenizer/template/adapter/journal; no inference or GPU state",
+      "renderer_pipeline": "vllm_safe_apply_text_then_parse_and_tokenize_params",
+      "requested_prefix_tokens": 0,
+      "counts": {
+        "initial_prompt_tokens": 16,
+        "generated_output_tokens": 12,
+        "canonical_answer_tokens": 3,
+        "raw_history_tokens": 28,
+        "canonical_history_tokens": 19,
+        "next_canonical_prompt_tokens": 36,
+        "next_admitted_prompt_tokens": 45,
+        "new_suffix_tokens": 17,
+        "new_suffix_characters": 97
+      },
+      "checks": {
+        "generated_segmentation_is_noncanonical": true,
+        "generated_answer_decodes_identically": true,
+        "canonical_history_is_actual_next_prompt_prefix": true,
+        "renderer_thread_has_no_request_context": true,
+        "request_bound_template_callback_passed": true,
+        "request_bound_tokenize_callback_passed": true,
+        "template_callback_removed_before_rendering": true,
+        "worker_render_matches_expected_admitted_tokens": true,
+        "template_authenticated_across_executor_boundary": true,
+        "first_request_remains_canonical": true,
+        "first_original_input_unchanged": true,
+        "completed_answer_saved": true,
+        "unchanged_continuation_skips_full_prompt_tokenization": true,
+        "unchanged_continuation_encodes_only_the_verified_suffix": true,
+        "proposal_preserves_generated_prefix": true,
+        "proposal_appends_only_new_canonical_suffix": true,
+        "proposal_preserves_full_decoded_prompt": true,
+        "original_input_unchanged": true,
+        "proposal_was_applied_before_full_tokenization": true,
+        "arrival_time_preserved": true,
+        "rewritten_ids_confirmed_at_engine_admission": true,
+        "persisted_restart_skips_full_prompt_tokenization": true,
+        "persisted_restart_encodes_only_the_verified_suffix": true,
+        "persisted_restart_preserves_same_token_history": true,
+        "edited_history_retains_canonical_fallback": true,
+        "capacity_overflow_keeps_full_canonical_prompt": true,
+        "gpu_runtime_not_initialized": true
+      },
+      "cpu_timings_ms": {
+        "fixture_prepare_ms": 63.52128498838283,
+        "first_answer_record_ms": 644.6917580033187,
+        "continuation_admission_ms": 200.094084997545,
+        "persisted_restart_admission_ms": 195.68657099443953
+      },
+      "tokenizer_work": {
+        "initial": {
+          "encode_calls": 1,
+          "encode_input_characters": 90,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "no_previous_journal"
+        },
+        "unchanged_continuation": {
+          "encode_calls": 1,
+          "encode_input_characters": 97,
+          "full_prompt_tokenization_calls": 0,
+          "continuation_reason": "incremental_suffix_encoded"
+        },
+        "persisted_restart": {
+          "encode_calls": 1,
+          "encode_input_characters": 97,
+          "full_prompt_tokenization_calls": 0,
+          "continuation_reason": "incremental_suffix_encoded"
+        },
+        "edited_history": {
+          "encode_calls": 1,
+          "encode_input_characters": 224,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "history_changed"
+        },
+        "capacity_fallback": {
+          "encode_calls": 2,
+          "encode_input_characters": 305,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "token_budget"
+        }
+      },
+      "tensor_backend_imported": true,
+      "source_sha256": {
+        "driver": "0bbb49b91620967f9bfd98a83478d8ca4e37137a07123405d5668f3264f531c8",
+        "runtime": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
+        "ledger": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
+        "timeline": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
+        "native_renderer": "c9a8370ae20f93dadb02b14defc91f635bfdfaf508da0533a60a141790d74073",
+        "executed_native_renderer": "6943844fcccc55c1add9d6669e7a0d635fa67f3dfc7056d64c578ad437370528",
+        "renderer_patcher": "789b4010f125f691fc94fb63fdd8b8d9e8704e8cbf996059d1990569ed6a01e9"
+      },
+      "template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+      "tokenizer_identity_sha256": "eff63b2c3182dc5ea62b3323a7661a360037ba15ff2536b49901d163b93977a3",
+      "tokenizer_file_sha256": {
+        "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+        "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+        "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+      },
+      "gpu_runtime_initialized": false
+    },
+    {
+      "schema": "urn:coherence:token-continuation-cpu-qualification:v1",
+      "status": "PASS",
+      "scope": "CPU tokenizer/template/adapter/journal; no inference or GPU state",
+      "renderer_pipeline": "vllm_safe_apply_text_then_parse_and_tokenize_params",
+      "requested_prefix_tokens": 60000,
+      "counts": {
+        "initial_prompt_tokens": 60004,
+        "generated_output_tokens": 12,
+        "canonical_answer_tokens": 3,
+        "raw_history_tokens": 60016,
+        "canonical_history_tokens": 60007,
+        "next_canonical_prompt_tokens": 60024,
+        "next_admitted_prompt_tokens": 60033,
+        "new_suffix_tokens": 17,
+        "new_suffix_characters": 97
+      },
+      "checks": {
+        "generated_segmentation_is_noncanonical": true,
+        "generated_answer_decodes_identically": true,
+        "canonical_history_is_actual_next_prompt_prefix": true,
+        "renderer_thread_has_no_request_context": true,
+        "request_bound_template_callback_passed": true,
+        "request_bound_tokenize_callback_passed": true,
+        "template_callback_removed_before_rendering": true,
+        "worker_render_matches_expected_admitted_tokens": true,
+        "template_authenticated_across_executor_boundary": true,
+        "first_request_remains_canonical": true,
+        "first_original_input_unchanged": true,
+        "completed_answer_saved": true,
+        "unchanged_continuation_skips_full_prompt_tokenization": true,
+        "unchanged_continuation_encodes_only_the_verified_suffix": true,
+        "proposal_preserves_generated_prefix": true,
+        "proposal_appends_only_new_canonical_suffix": true,
+        "proposal_preserves_full_decoded_prompt": true,
+        "original_input_unchanged": true,
+        "proposal_was_applied_before_full_tokenization": true,
+        "arrival_time_preserved": true,
+        "rewritten_ids_confirmed_at_engine_admission": true,
+        "persisted_restart_skips_full_prompt_tokenization": true,
+        "persisted_restart_encodes_only_the_verified_suffix": true,
+        "persisted_restart_preserves_same_token_history": true,
+        "edited_history_retains_canonical_fallback": true,
+        "capacity_overflow_keeps_full_canonical_prompt": true,
+        "gpu_runtime_not_initialized": true
+      },
+      "cpu_timings_ms": {
+        "fixture_prepare_ms": 391.93660199816804,
+        "first_answer_record_ms": 748.0173769872636,
+        "continuation_admission_ms": 321.1199729994405,
+        "persisted_restart_admission_ms": 258.48204400972463
+      },
+      "tokenizer_work": {
+        "initial": {
+          "encode_calls": 1,
+          "encode_input_characters": 300030,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "no_previous_journal"
+        },
+        "unchanged_continuation": {
+          "encode_calls": 1,
+          "encode_input_characters": 97,
+          "full_prompt_tokenization_calls": 0,
+          "continuation_reason": "incremental_suffix_encoded"
+        },
+        "persisted_restart": {
+          "encode_calls": 1,
+          "encode_input_characters": 97,
+          "full_prompt_tokenization_calls": 0,
+          "continuation_reason": "incremental_suffix_encoded"
+        },
+        "edited_history": {
+          "encode_calls": 1,
+          "encode_input_characters": 300164,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "history_changed"
+        },
+        "capacity_fallback": {
+          "encode_calls": 2,
+          "encode_input_characters": 300245,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "token_budget"
+        }
+      },
+      "tensor_backend_imported": true,
+      "source_sha256": {
+        "driver": "0bbb49b91620967f9bfd98a83478d8ca4e37137a07123405d5668f3264f531c8",
+        "runtime": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
+        "ledger": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
+        "timeline": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
+        "native_renderer": "c9a8370ae20f93dadb02b14defc91f635bfdfaf508da0533a60a141790d74073",
+        "executed_native_renderer": "6943844fcccc55c1add9d6669e7a0d635fa67f3dfc7056d64c578ad437370528",
+        "renderer_patcher": "789b4010f125f691fc94fb63fdd8b8d9e8704e8cbf996059d1990569ed6a01e9"
+      },
+      "template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+      "tokenizer_identity_sha256": "eff63b2c3182dc5ea62b3323a7661a360037ba15ff2536b49901d163b93977a3",
+      "tokenizer_file_sha256": {
+        "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+        "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+        "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+      },
+      "gpu_runtime_initialized": false
+    },
+    {
+      "schema": "urn:coherence:token-continuation-cpu-qualification:v1",
+      "status": "PASS",
+      "scope": "CPU tokenizer/template/adapter/journal; no inference or GPU state",
+      "renderer_pipeline": "vllm_safe_apply_text_then_parse_and_tokenize_params",
+      "requested_prefix_tokens": 200000,
+      "counts": {
+        "initial_prompt_tokens": 200008,
+        "generated_output_tokens": 12,
+        "canonical_answer_tokens": 3,
+        "raw_history_tokens": 200020,
+        "canonical_history_tokens": 200011,
+        "next_canonical_prompt_tokens": 200028,
+        "next_admitted_prompt_tokens": 200037,
+        "new_suffix_tokens": 17,
+        "new_suffix_characters": 97
+      },
+      "checks": {
+        "generated_segmentation_is_noncanonical": true,
+        "generated_answer_decodes_identically": true,
+        "canonical_history_is_actual_next_prompt_prefix": true,
+        "renderer_thread_has_no_request_context": true,
+        "request_bound_template_callback_passed": true,
+        "request_bound_tokenize_callback_passed": true,
+        "template_callback_removed_before_rendering": true,
+        "worker_render_matches_expected_admitted_tokens": true,
+        "template_authenticated_across_executor_boundary": true,
+        "first_request_remains_canonical": true,
+        "first_original_input_unchanged": true,
+        "completed_answer_saved": true,
+        "unchanged_continuation_skips_full_prompt_tokenization": true,
+        "unchanged_continuation_encodes_only_the_verified_suffix": true,
+        "proposal_preserves_generated_prefix": true,
+        "proposal_appends_only_new_canonical_suffix": true,
+        "proposal_preserves_full_decoded_prompt": true,
+        "original_input_unchanged": true,
+        "proposal_was_applied_before_full_tokenization": true,
+        "arrival_time_preserved": true,
+        "rewritten_ids_confirmed_at_engine_admission": true,
+        "persisted_restart_skips_full_prompt_tokenization": true,
+        "persisted_restart_encodes_only_the_verified_suffix": true,
+        "persisted_restart_preserves_same_token_history": true,
+        "edited_history_retains_canonical_fallback": true,
+        "capacity_overflow_keeps_full_canonical_prompt": true,
+        "gpu_runtime_not_initialized": true
+      },
+      "cpu_timings_ms": {
+        "fixture_prepare_ms": 1224.7246949991677,
+        "first_answer_record_ms": 1061.6134040028555,
+        "continuation_admission_ms": 568.2708969980013,
+        "persisted_restart_admission_ms": 439.9995459971251
+      },
+      "tokenizer_work": {
+        "initial": {
+          "encode_calls": 1,
+          "encode_input_characters": 1000050,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "no_previous_journal"
+        },
+        "unchanged_continuation": {
+          "encode_calls": 1,
+          "encode_input_characters": 97,
+          "full_prompt_tokenization_calls": 0,
+          "continuation_reason": "incremental_suffix_encoded"
+        },
+        "persisted_restart": {
+          "encode_calls": 1,
+          "encode_input_characters": 97,
+          "full_prompt_tokenization_calls": 0,
+          "continuation_reason": "incremental_suffix_encoded"
+        },
+        "edited_history": {
+          "encode_calls": 1,
+          "encode_input_characters": 1000184,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "history_changed"
+        },
+        "capacity_fallback": {
+          "encode_calls": 2,
+          "encode_input_characters": 1000265,
+          "full_prompt_tokenization_calls": 1,
+          "continuation_reason": "token_budget"
+        }
+      },
+      "tensor_backend_imported": true,
+      "source_sha256": {
+        "driver": "0bbb49b91620967f9bfd98a83478d8ca4e37137a07123405d5668f3264f531c8",
+        "runtime": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
+        "ledger": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
+        "timeline": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
+        "native_renderer": "c9a8370ae20f93dadb02b14defc91f635bfdfaf508da0533a60a141790d74073",
+        "executed_native_renderer": "6943844fcccc55c1add9d6669e7a0d635fa67f3dfc7056d64c578ad437370528",
+        "renderer_patcher": "789b4010f125f691fc94fb63fdd8b8d9e8704e8cbf996059d1990569ed6a01e9"
+      },
+      "template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
+      "tokenizer_identity_sha256": "eff63b2c3182dc5ea62b3323a7661a360037ba15ff2536b49901d163b93977a3",
+      "tokenizer_file_sha256": {
+        "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+        "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+        "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+      },
+      "gpu_runtime_initialized": false
+    }
+  ]
+}

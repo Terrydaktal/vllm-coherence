@@ -8,8 +8,38 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from compute_stage26_residual import compute
+from package_matched_stage_timings import bind_source_commit
 
 CONTEXTS = ("0K", "60K", "200K")
+
+
+def test_packager_authenticates_source_tree_and_invalidates_changed_host_binding():
+    root = Path(__file__).resolve().parents[1]
+    commit = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+
+    def committed_hash(path):
+        content = subprocess.check_output(["git", "-C", str(root), "show", f"{commit}:{path}"])
+        return hashlib.sha256(content).hexdigest()
+
+    binding = {
+        "source_sha256": {"tools/compute_stage26_residual.py": committed_hash("tools/compute_stage26_residual.py")},
+        "host_runtime": {"source_sha256": {
+            "radiance_fair_scheduler.py": committed_hash("experiments/radiance-public/radiance_fair_scheduler.py")
+        }},
+    }
+    bind_source_commit(binding, commit, root)
+    assert binding["source_artifact_commit"] == commit
+    assert "Frozen committed source" in binding["measurement_source_state"]
+    binding["host_runtime"]["source_sha256"]["radiance_fair_scheduler.py"] = "0" * 64
+    bind_source_commit(binding, commit, root)
+    assert "source_artifact_commit" not in binding
+    assert "committed-tree equality not established" in binding["measurement_source_state"]
+
+
+def test_packager_does_not_certify_source_without_a_git_tree(tmp_path):
+    binding = {"source_sha256": {"absent.py": "0" * 64}}
+    bind_source_commit(binding, "a" * 40, tmp_path)
+    assert "source_artifact_commit" not in binding
 
 
 def profile():
@@ -195,14 +225,16 @@ def test_native_matched_evidence_keeps_tracing_slowdown_out_of_runtime_gaps():
     assert result["status"] == "matched_estimate"
     assert result["zero_observer_effect_proven"] is False
 
+    source_commit = profile_data["binding"]["source_artifact_commit"]
+    assert len(source_commit) == 40
+    assert all(character in "0123456789abcdef" for character in source_commit)
+
     def measured_source(path):
-        # The qualification bundled with a rewritten commit binds actual source
-        # bytes, without relabelling immutable captures with a later commit ID.
-        if current.get("uncommitted_qualification") or current.get("current_qualification_document"):
-            return (root / path).read_bytes()
+        # Authenticate the frozen measured tree. Later documentation or source
+        # changes must not alter the identity of an immutable capture.
         return subprocess.check_output([
             "git", "-C", str(root), "show",
-            f"{current['current_qualification_commit']}:{path}",
+            f"{source_commit}:{path}",
         ])
 
     for path, expected in profile_data["binding"]["source_sha256"].items():

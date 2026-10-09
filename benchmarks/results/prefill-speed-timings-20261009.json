@@ -1,0 +1,526 @@
+{
+  "baseline_speed": false,
+  "candidate_only": true,
+  "cases": [
+    {
+      "backend_timings_ms": {
+        "admission": 4.611,
+        "cache_lookup": 5.062,
+        "complete": 0.061,
+        "generate": 0.304,
+        "handover": 5.696,
+        "prefill": 33046.239
+      },
+      "context": 60000,
+      "finish": "length",
+      "first_data_seconds": 33.10642248697695,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "e3d15b84e7adf3598265634bb229f0e6a341a6b83d076689619918698b17e691",
+      "repeat": 0,
+      "seconds": 33.106708941981196,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "tokens": 1,
+      "tokens_per_second": 1812.337168825842,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "variant": "candidate",
+      "sampling_receipt": {
+        "driver_sha256": "316a8a31ff0e8fd4cf08bddc81b9a8b1d472399e3ec4aec82e9455252291b35a",
+        "parameters": {
+          "temperature": 0,
+          "top_k": 129,
+          "seed": 0,
+          "logprobs": 1,
+          "ignore_eos": true
+        },
+        "provenance": "Authenticated frozen driver request construction"
+      }
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 377.455,
+        "cache_lookup": 4.865,
+        "complete": 0.058,
+        "generate": 0.66,
+        "handover": 5.421,
+        "prefill": 33452.595
+      },
+      "context": 60000,
+      "finish": "length",
+      "first_data_seconds": 33.88841936699464,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "e3d15b84e7adf3598265634bb229f0e6a341a6b83d076689619918698b17e691",
+      "repeat": 1,
+      "seconds": 33.88871916299104,
+      "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+      "tokens": 1,
+      "tokens_per_second": 1770.516333329979,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 60000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 60001
+      },
+      "variant": "candidate",
+      "sampling_receipt": {
+        "driver_sha256": "316a8a31ff0e8fd4cf08bddc81b9a8b1d472399e3ec4aec82e9455252291b35a",
+        "parameters": {
+          "temperature": 0,
+          "top_k": 129,
+          "seed": 0,
+          "logprobs": 1,
+          "ignore_eos": true
+        },
+        "provenance": "Authenticated frozen driver request construction"
+      }
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 378.169,
+        "cache_lookup": 13.907,
+        "complete": 0.058,
+        "generate": 0.686,
+        "handover": 6.659,
+        "prefill": 200275.135
+      },
+      "context": 200000,
+      "finish": "length",
+      "first_data_seconds": 200.84281296099653,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+      "repeat": 0,
+      "seconds": 200.84304598599556,
+      "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+      "tokens": 1,
+      "tokens_per_second": 995.8036190164286,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "variant": "candidate",
+      "sampling_receipt": {
+        "driver_sha256": "316a8a31ff0e8fd4cf08bddc81b9a8b1d472399e3ec4aec82e9455252291b35a",
+        "parameters": {
+          "temperature": 0,
+          "top_k": 129,
+          "seed": 0,
+          "logprobs": 1,
+          "ignore_eos": true
+        },
+        "provenance": "Authenticated frozen driver request construction"
+      }
+    },
+    {
+      "backend_timings_ms": {
+        "admission": 373.066,
+        "cache_lookup": 13.41,
+        "complete": 0.06,
+        "generate": 0.525,
+        "handover": 6.821,
+        "prefill": 199940.932
+      },
+      "context": 200000,
+      "finish": "length",
+      "first_data_seconds": 200.48925890598912,
+      "installed": {
+        "attention_build": "261be6002cd21629dc9b5f20e5ba6d449a81bcc5fced4ec6b31c9fe60c2f6711",
+        "calls": {
+          "attention_prefill": 0,
+          "convolution": {
+            "calls": {
+              "fallback": 0,
+              "prefill": 0
+            },
+            "native_source_sha256": "12c50fef85a1f31fc0e4508ae93605753eb39f82cb4aaa13a4c99d5b98fdef8e"
+          },
+          "gdn": {
+            "prepared": 0
+          },
+          "projection_prefill": 0
+        },
+        "projection_build": "a9a6c68f6cc238a0f71c117cffe49dccd77d848802006dd969984a1b1f47f9d6",
+        "scope": "TP1, one causal sequence, at most 4096 prefill rows, existing decode arithmetic",
+        "workspace_bytes": 101449732
+      },
+      "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+      "repeat": 1,
+      "seconds": 200.48947458999464,
+      "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+      "tokens": 1,
+      "tokens_per_second": 997.5596752232071,
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 200000,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 200001
+      },
+      "variant": "candidate",
+      "sampling_receipt": {
+        "driver_sha256": "316a8a31ff0e8fd4cf08bddc81b9a8b1d472399e3ec4aec82e9455252291b35a",
+        "parameters": {
+          "temperature": 0,
+          "top_k": 129,
+          "seed": 0,
+          "logprobs": 1,
+          "ignore_eos": true
+        },
+        "provenance": "Authenticated frozen driver request construction"
+      }
+    }
+  ],
+  "driver_sha256": "316a8a31ff0e8fd4cf08bddc81b9a8b1d472399e3ec4aec82e9455252291b35a",
+  "fixture_sha256": "3f52c482fd685444bd3d195d738b56fd07f5471cabdc55fe1c03a85e18b5e530",
+  "schema": "urn:coherence:paired-prefill-speed:v1",
+  "scope": "Unprofiled cold synthetic prefill plus one first token; same process, fresh chat generations",
+  "sources": {
+    "candidate_sources": {
+      "prefill_activation_tiles.py": "eed3dcde2790b2afade99f36bb67593aa740560e7954dcce6fc0fc203c544a5f",
+      "prefill_alignment_runtime.py": "5ab7d95abdb5fa05e63d7f74b738cc01055d6cd0b268fa0666cb499d95363c60",
+      "prefill_attention_alignment.py": "9342dd68eb180b9abaf2afb74419a19298eb846f561f84ec8c9515616c2cd8e4",
+      "prefill_dynamic_conv.py": "df5afb93747bda97eb6ad367c8c7c93560e8a5f7b9e7b75e16e36962b23601a0",
+      "prefill_gemm_alignment.py": "f3352144584eb9307888a5460c5c67e294f287d38abd741585f3b7f20f9793b4",
+      "prepared_prefill_scan.py": "96e2ababcba1bec21272caed31c716c6d81b216485be39961cfe7e053b3a6ea0"
+    }
+  },
+  "status": "MEASURED",
+  "earlier_uncorrected_control": {
+    "scope": "Earlier numerically inconsistent timing-only controls; never deploy. Prompt hashes match current requests.",
+    "cases": [
+      {
+        "backend_timings_ms": {
+          "admission": 83.077,
+          "cache_lookup": 3.602,
+          "complete": 0.003,
+          "generate": 0.525,
+          "handover": 5.085,
+          "prefill": 36636.148
+        },
+        "context": 60000,
+        "finish": "length",
+        "first_data_seconds": 36.86948507302441,
+        "installed": {
+          "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        },
+        "prompt_sha256": "e3d15b84e7adf3598265634bb229f0e6a341a6b83d076689619918698b17e691",
+        "repeat": 0,
+        "seconds": 36.86978280902258,
+        "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+        "tokens": 1,
+        "tokens_per_second": 1627.3620280067066,
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 60000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 60001
+        },
+        "variant": "legacy"
+      },
+      {
+        "backend_timings_ms": {
+          "admission": 1387.981,
+          "cache_lookup": 14.68,
+          "complete": 0.003,
+          "generate": 0.529,
+          "handover": 4.838,
+          "prefill": 207077.546
+        },
+        "context": 200000,
+        "finish": "length",
+        "first_data_seconds": 208.6452100489987,
+        "installed": {
+          "scope": "UNCORRECTED attention and output projection; timing control only; never deploy"
+        },
+        "prompt_sha256": "9f79f9adb3628fff1c51cbcc55d7da8bb1de00f084f1339f931bacf6c6639e12",
+        "repeat": 0,
+        "seconds": 208.6455173350114,
+        "sha256": "038966de9f6b9a901b20b4c6ca8b2a46009feebe031babc842d43690c0bc222b",
+        "tokens": 1,
+        "tokens_per_second": 958.5650202706861,
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 200000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 200001
+        },
+        "variant": "legacy"
+      }
+    ],
+    "measurement_date": "2026-09-28",
+    "historical": true
+  },
+  "historical_corrected_control": {
+    "measurement_date": "2026-09-28",
+    "source": "benchmarks/results/prefill-speed-initial-timings-20260928.json",
+    "historical": true,
+    "source_report_sha256": "d68360eb76039af98f72ec8d8316392d0d07fadc9d7b83e3ce3d7f2f9f2a39d3",
+    "cases": [
+      {
+        "context": 60000,
+        "repeat": 0,
+        "variant": "baseline",
+        "first_data_seconds": 49.1679351819912,
+        "tokens_per_second": 1220.307498737028,
+        "tokens": 1,
+        "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+        "finish": "length",
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 60000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 60001
+        },
+        "backend_timings_ms": {
+          "admission": 5.25,
+          "cache_lookup": 6.05,
+          "complete": 0.003,
+          "generate": 0.953,
+          "handover": 470.586,
+          "prefill": 48299.604
+        },
+        "installed": {
+          "attention_build": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8",
+          "calls": {
+            "attention_prefill": 0,
+            "projection_prefill": 0
+          },
+          "projection_build": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623",
+          "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+          "workspace_bytes": 71696384
+        }
+      },
+      {
+        "context": 200000,
+        "repeat": 0,
+        "variant": "baseline",
+        "first_data_seconds": 282.7470420880127,
+        "tokens_per_second": 707.3460380807259,
+        "tokens": 1,
+        "sha256": "840d60afcf8aeb607ff32e9b4fba7e3132722c2148136c5f4e4816fec59f4ff3",
+        "finish": "length",
+        "usage": {
+          "completion_tokens": 1,
+          "prompt_tokens": 200000,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 200001
+        },
+        "backend_timings_ms": {
+          "admission": 1083.614,
+          "cache_lookup": 17.425,
+          "complete": 0.003,
+          "generate": 0.852,
+          "handover": 891.871,
+          "prefill": 280404.021
+        },
+        "installed": {
+          "attention_build": "25f533cb347726b06d8503a960d151c9d40e10272a14ab3885b0950c2cdee8a8",
+          "calls": {
+            "attention_prefill": 0,
+            "projection_prefill": 0
+          },
+          "projection_build": "2ac41c2c92951144a5b3359a7695970b38b050cfc79576b9fc5a67bd9157e623",
+          "scope": "TP1, one causal sequence, at most 2048 prefill rows, existing decode arithmetic",
+          "workspace_bytes": 71696384
+        }
+      }
+    ]
+  },
+  "baseline_scope": "historical_corrected_control",
+  "baseline_description": "No fresh control was measured. Retained initial corrected timing cases remain dated September 28; they are not a paired current comparison.",
+  "repeats_per_context_and_variant": 2,
+  "qualification_scope": "Fresh speed measurements only; no new correctness capture. Retained numerical qualifications preserve their historical dates and identities.",
+  "hardware_observations": {
+    "before": {
+      "captured_at": 1791554598.755968,
+      "read_only_sysfs": {
+        "/sys/class/drm/card0/device/hwmon/hwmon2/temp3_input": "40000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/temp1_input": "31000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/temp2_input": "31000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/power1_average": "1000000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/freq1_input": "0",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/freq2_input": "96000000",
+        "/sys/class/drm/card0/device/pp_dpm_sclk": "S: 0Mhz *\n1: 500Mhz \n2: 2350Mhz",
+        "/sys/class/drm/card0/device/pp_dpm_mclk": "0: 96Mhz *\n1: 456Mhz \n2: 772Mhz \n3: 875Mhz \n4: 1124Mhz \n5: 1258Mhz",
+        "/sys/class/drm/card0/device/power_dpm_force_performance_level": "auto"
+      }
+    },
+    "after": {
+      "captured_at": 1791555206.670076,
+      "read_only_sysfs": {
+        "/sys/class/drm/card0/device/hwmon/hwmon2/temp3_input": "54000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/temp1_input": "46000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/temp2_input": "48000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/power1_average": "2000000",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/freq1_input": "0",
+        "/sys/class/drm/card0/device/hwmon/hwmon2/freq2_input": "96000000",
+        "/sys/class/drm/card0/device/pp_dpm_sclk": "S: 0Mhz *\n1: 500Mhz \n2: 2350Mhz",
+        "/sys/class/drm/card0/device/pp_dpm_mclk": "0: 96Mhz *\n1: 456Mhz \n2: 772Mhz \n3: 875Mhz \n4: 1124Mhz \n5: 1258Mhz",
+        "/sys/class/drm/card0/device/power_dpm_force_performance_level": "auto"
+      }
+    }
+  },
+  "sampling": {
+    "temperature": 0,
+    "top_k": 129,
+    "seed": 0,
+    "logprobs": 1
+  },
+  "validation": {
+    "matching_fresh_prompt_hashes": true,
+    "matching_historical_prompt_hashes": true,
+    "zero_reused_prompt_tokens": true,
+    "one_generated_token_per_request": true,
+    "complete_prescribed_repeats": true,
+    "counterbalanced_current_control": false,
+    "historical_corrected_control_prompt_identity_verified": false,
+    "greedy_sampling": true,
+    "sampling_provenance": "Request parameters derived from the authenticated frozen driver; top_p omitted by the request, temperature zero selects greedy sampling."
+  },
+  "measurement_commit": "99d5fcfd1bcd0fe6f70445d154e63b7092b02f24",
+  "current_qualification_commit": "99d5fcfd1bcd0fe6f70445d154e63b7092b02f24",
+  "measurement_date": "2026-10-09",
+  "runtime_abi": "027853640d984856984c33c087c77fe189eb95dad40ec046be20f22d62020aa9",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "optimized_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+  "qualified_speed_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "frozen_measurement_source_sha256": {
+    "tests/test_speed_candidate_worker.py": "873b2ccb7551ba3a73b87530369feab6752c5fc252e5ab2b93b94dba1d2b8e46",
+    "tests/test_speed_matched_stage_worker.py": "4050239d54a702d158ee72947d19da03488175b577a5ec24a9822c78958f8f99",
+    "experiments/radiance-public/benchmark_compiled_d7_corpus.py": "7211fb3edfacff0a5e1a2f0cbaac324b6eb0a5a08f96c5ecada0a039d2231ef8",
+    "experiments/radiance-public/benchmark_crossmode_d7_corpus.py": "4917b3a9b8974849c81f8dbe6adab3be2ae74c5c63f4c1abe965f9db9bdf2ad8",
+    "experiments/radiance-public/benchmark_current_confirmations.py": "3f45661abc748db850674d5f1ff590039fc1ed848cbd0d593252d4ad6153b491",
+    "experiments/radiance-public/benchmark_d7_equivalence.py": "647971a460eaa5cd54a824f5d205a65636066edd17f1ef141dab0168ba6d4991",
+    "experiments/radiance-public/benchmark_gemm_round_audit.py": "836f670371aebd6839de6a6c70d879417e126a160952fd032b92f7c6402d09ee",
+    "experiments/radiance-public/benchmark_head_candidate_depth.py": "9c40d89faf4b727058b7502c100702e2598a659cf1d97205f06a14879a6ecd8d",
+    "experiments/radiance-public/benchmark_kernel_matrix.py": "8d385f467215469f0059bd3d463e66f6248f63753ec107c6e6bb73e98915c9d5",
+    "experiments/radiance-public/benchmark_matched_stage_timings.py": "a43ce5e3e384f7d1b318d173809d6a20b8a438d63d274abab41309a873f1ebd7",
+    "experiments/radiance-public/benchmark_native_catalog_d7.py": "8e515f19b1c81d3aad7bd86df548367de73ebad034d40066a742e39603bb91b5",
+    "experiments/radiance-public/benchmark_native_tape_d7.py": "9a3b6cd11bfea24442aa8eaf8be1ea3cc0c32b990914cc62f3ed314528686285",
+    "experiments/radiance-public/benchmark_old_stack.py": "e0fb69ef814d6f92bcf4086819f0b034b51cd31867d534508a8cb4fe746f2266",
+    "experiments/radiance-public/benchmark_optimized_d7.py": "fabd47e16ba7a03629f2cdb7bca5d36113c5eeb5e83ae1f390c1625f39f701ab",
+    "experiments/radiance-public/benchmark_pi_coding_contexts.py": "0dc32b86b607f08b1a30d2e8ab660f6b093de798b66e1a29d0006cfd06ca92c3",
+    "experiments/radiance-public/benchmark_pi_coding_json_compaction.py": "92bcd27481917b845ced05362d2fac4652debb69dd486357fc5ee0074fe0b57b",
+    "experiments/radiance-public/benchmark_pi_optimized_serving.py": "85f1c504a6ccaac96681834e876515d50a7016b77b0d56d1bf755b7d15ebd9f5",
+    "experiments/radiance-public/benchmark_pi_suite.py": "991cc2663dd137b915be26785821b4291266c00af660f00baa3cf8096642808c",
+    "experiments/radiance-public/benchmark_pi_task_workloads.py": "112f1f8df25d2faa082f0b797cbfd030ce1cbd4e7132cf59d1c264bbc31b8c7e",
+    "experiments/radiance-public/benchmark_prefill_attention.py": "33128b16bdcf7ed5ef10794c55c5454831f8d9b03513e2fff74078502dff8f6d",
+    "experiments/radiance-public/benchmark_prefill_conv.py": "b16cbac59b397182fd607e0471b67a3baa29fe74b2ba83ee0dc71e629c55d309",
+    "experiments/radiance-public/benchmark_prefill_projection.py": "9ca92b84e84b51498efdf4ccf16e6892f704d825cc7dc443f5a1d20033f66ae5",
+    "experiments/radiance-public/benchmark_prefill_scan.py": "60108d2a257e80be213d37e2e5597168fe786a4ab1d2b834bfdac46a4bb83229",
+    "experiments/radiance-public/benchmark_prefill_speed.py": "316a8a31ff0e8fd4cf08bddc81b9a8b1d472399e3ec4aec82e9455252291b35a",
+    "experiments/radiance-public/benchmark_private_head.py": "4450674826b86d0890bb772660598d7824beca999db31e7281ccd1ff33902718",
+    "experiments/radiance-public/benchmark_private_head_long.py": "4e6128533c18930325faa677ede657fab3fb32fa69b58461c4ccc43ea75050b8",
+    "experiments/radiance-public/benchmark_private_head_stage.py": "f9bc8dee46851b86f79d1c3f0b9279b4a17c0a66140ad4375aa76b8f295f18ae",
+    "experiments/radiance-public/benchmark_rotary_contract_d7.py": "a77f8a2055ff7a0a23796754edd8ceb04aa99db80f44c3befa3f328c1e0bcfb2",
+    "experiments/radiance-public/benchmark_runtime_flags.py": "b98b9a08a8a657dda15676994238e57cc641c0a5bc56176925e2dcb0e58fafed",
+    "experiments/radiance-public/benchmark_server.py": "9cafd226bbbdd395897a7ef4ba3a709bd669ab7c6e47f0c52773aa063e618a8d",
+    "experiments/radiance-public/benchmark_silu_contract_d7.py": "1bb5cf3cd82aa8d1e16b8e09daf6a258b18f0083cefffa0b4e7e0f4194010a64",
+    "experiments/radiance-public/benchmark_speed_candidate_pairs.py": "ccf69dd727881b835dd128d3d6e283aefbd084cede55f06a9f49aeda7c71980c",
+    "experiments/radiance-public/benchmark_speed_forced.py": "48fe75dd6baa34050c6fdd834fdcef96e0b6f83272d6915f73d24461ec87e806",
+    "experiments/radiance-public/qualify_buffered_usage.py": "15a38c742ec095eb7ba5376bde0df1512fdc46a9256cbd24c431cafa67168bff",
+    "experiments/radiance-public/qualify_chat_cleanup.py": "1c47d9f8dd4f544518d93766f99a09d18a932f90f47b2dd218b8f200a54ccf88",
+    "experiments/radiance-public/qualify_chat_model.py": "0b1a5a2f56ba09bedef3218a7f0da75e2da9cad5e3159c6dc7060759e1cdb2c0",
+    "experiments/radiance-public/qualify_chat_storage.py": "e11a00696f3b066877da689c78af205335a62a09e4668e710b1a2c4ae02ad4b9",
+    "experiments/radiance-public/qualify_fair_scheduler.py": "d078a8c41bac1839ff18209e8aeadffe680b9a29d6efe8d572fae8e3b0349822",
+    "experiments/radiance-public/qualify_gdn_causal_model.py": "7240d9bc4983330b34457107c6a500f324d7166186aad8f41f1b64bd4bc668ff",
+    "experiments/radiance-public/qualify_optimized_pi_serving.py": "98f0284bf8d51dff02004a81a062968610c9ad96c8c07f997dbdb12602b70317",
+    "experiments/radiance-public/qualify_parallel_reference.py": "3590db2985ce237b5b74723661e5469e5589d383d432e7526370ce2b63e8148a",
+    "experiments/radiance-public/qualify_pi_precontinuation_compaction.mjs": "7385ee519600dca6ba6e2ca523794dabc98d78cdfe32eeaa24d1a389b3a074e6",
+    "experiments/radiance-public/qualify_pi_snapshot_resume.mjs": "44476725df4b6b80bffabb35999b2413efd2fe8bb635e713964628b7af62c6a0",
+    "experiments/radiance-public/qualify_prefill_speed.py": "ef662d80fabe60924024626e2b9804515194fb7a2e14a8176bcf95a7d99be207",
+    "experiments/radiance-public/qualify_prefill_wide.py": "f061a4ce03adb611c7fc6e8376c486f6464d4dc0a1f92f2f261fad6630457bd4",
+    "experiments/radiance-public/qualify_prefix_compaction.mjs": "e2afd0caaad1603d61f6026081b544dbc6924f7b3a4bb42cbb6224b762957fb0",
+    "experiments/radiance-public/qualify_radiance_release.py": "7ff91fefc089186674aa7b9810c877a994703cfeef8d2ef6eb3c1a56f06eb4aa",
+    "experiments/radiance-public/qualify_response_end.py": "45f340c1de213e2fabcfdea431ebd668f1516f5514bb2b47555c3255c812d399",
+    "experiments/radiance-public/qualify_response_end_state.py": "3aca723f3e8b07db978f54b5f43e14b77c850071ec3175cd62e463f57bf1d15a",
+    "experiments/radiance-public/qualify_serial_reference_reuse.py": "9c518075a116ea116a8d34968c786db330b0d9f8ce8656cda97338bcbba519b0",
+    "experiments/radiance-public/qualify_snapshot_repair.py": "b7aa7d482d831874dec96d8ab0c12ade2f9b334d9cc934d1398737589b5c02b7",
+    "experiments/radiance-public/qualify_speed_lifecycle.py": "c1dc10b66adcd2a93a760de69a2f3a5f92480c7db8839fef10d03c64618c0398",
+    "experiments/radiance-public/qualify_stock_gdn_model.py": "a051496ef6a14f15fd1bd62be0622307ed63587c880301deac54e6efa604bc2c",
+    "experiments/radiance-public/qualify_tail_journal.py": "768e601b3a55b9f75ce9ddf14c778539c164a8d62ec340c70315461abe93a142",
+    "experiments/radiance-public/qualify_verify_head_audit.py": "7e6b7df5f033b7624de14fff0b2d7673981c48588555bd12a27fe3ea57cc6c75",
+    "experiments/radiance-public/speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+    "experiments/radiance-public/speed_confirmation_worker.py": "0ece81e7fb861853d0aaf23324985eb6f6180243499d31135eeed9f30d3fc964",
+    "experiments/radiance-public/speed_matched_stage_worker.py": "a035f6620525697a8756cdfee16d3ac63a69ec21164e020142865371cf815def"
+  },
+  "privacy": "Numeric aggregates, identities and hashes only; no chat contents or token arrays.",
+  "sha256": "bf0f39a07c959fbff2759acfbb9a42b29dc9007abadb80003e413263e93fc118"
+}

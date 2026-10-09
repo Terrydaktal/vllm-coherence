@@ -1,6 +1,7 @@
 """Keep the published current tables accountable to their retained evidence."""
 
 import hashlib
+import copy
 import json
 import math
 import sys
@@ -15,6 +16,9 @@ from render_current_tables import (
     commit_marker,
     current_stage_profile,
     render_chained_workload_results,
+    render_prefill_speed,
+    render_stage_profile_table,
+    validate_stage_correctness,
     workload_target_head,
     update,
 )
@@ -94,10 +98,25 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "pending commit" not in readme
     assert "Current stage confirmations identify M1/M8 and eager/compiled M8 separately" in readme
     confirmations = json.loads((ROOT / data["current_confirmations"]).read_text())
-    assert confirmations["optimized_manifest_sha256"] == matched["binding"]["optimized_manifest_sha256"]
+    assert confirmations["status"] == "SAMPLE_CHECKED"
+    refresh = data.get("correctness_refresh", {})
+    if refresh.get("status") == "NOT_RERUN":
+        assert refresh["evidence_date"] == "2026-09-25"
+        assert refresh["reason"]
+        assert confirmations["optimized_manifest_sha256"] == refresh["optimized_manifest_sha256"]
+        assert matched["binding"]["optimized_manifest_sha256"] == hashlib.sha256(
+            (ROOT / "experiments/radiance-public/optimized-release.json").read_bytes()
+        ).hexdigest()
+        assert "Correctness comparisons were not rerun" in readme
+        assert "September 25 study" in readme
+    else:
+        assert confirmations["optimized_manifest_sha256"] == matched["binding"]["optimized_manifest_sha256"]
     assert confirmations["decode_tokens_per_arm"] == 320
     assert len(confirmations["comparisons"]) == 4
     stages = json.loads((ROOT / data["current_stage_confirmations"]).read_text())
+    assert validate_stage_correctness(data, current_stage_profile(data), stages, confirmations) is (
+        refresh.get("status") == "NOT_RERUN"
+    )
     assert stages["optimized_manifest_sha256"] == confirmations["optimized_manifest_sha256"]
     assert stages["fixture_sha256"] == confirmations["fixture_sha256"]
     assert len(stages["inventory"]) == 22
@@ -107,8 +126,6 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert all(v["positions"] == v["full_logits_exact"] == v["top20_set_exact"] == v["top20_order_exact"] == 320
                for s in stages["stages"].values() for v in s.values())
     run_label = (
-        f"; run [qualified speed refresh]({data['current_qualification_document']})"
-        if data.get("current_qualification_document") else
         f"; base {commit_marker(profile_commit)} + recorded working-tree changes"
         if data.get("uncommitted_qualification") else f"; run {commit_marker(profile_commit)}"
     )
@@ -118,7 +135,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
         in readme
     )
     compiled_table = readme.split("## Compiled backend stages\n\n", 1)[1].split(
-        "\n\nThe table restores", 1
+        "\n\nThe table groups", 1
     )[0]
     assert "exact source hashes in capture" not in compiled_table.splitlines()[0]
     row_names = [
@@ -177,7 +194,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     totals = " / ".join(f"{audit['contexts'][c]['full_uninstrumented_round_ms']:.3f}" for c in matched["context_order"])
     assert f"| **26. Estimated runtime overhead** | {residuals} (estimate)" in readme
     assert f"| **Total reconstructed round (stages 1–26)** | **{totals}**" in readme
-    assert "old forced-replay subtraction is superseded" in readme
+    assert "old forced-replay subtraction is superseded" not in readme
     assert "profile-cycle wall time minus the 25 named stage kernel totals" not in readme
     assert data["stage_profile_2k"]["stage26_benchmark"]["status"] == "unqualified_as_runtime_gap"
     assert data["stage_profile_2k"]["stage26_benchmark"]["artifact"].endswith(
@@ -224,14 +241,18 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "### Remaining symptoms and likely causes" not in readme
     assert "Status: pending fix" not in readme
     remaining = readme.split("### Known remaining symptoms and likely causes", 1)[1].split("\n## ", 1)[0]
-    if data.get("full_graph_repair"):
-        assert "The missing full-graph preparation hook is repaired" in remaining
-        assert data["full_graph_repair"] in remaining
-        assert "does not prove that all HIP/ROCr queue" in remaining
+    assert "Isolated round stalls remain" in remaining
+    assert "Their cause has not been localized" in remaining
+    assert "The missing full-graph preparation hook is repaired" not in remaining
+    assert "cold-prefill/continuation study demonstrated the arithmetic repair" not in remaining
+    missing_reasoning = any(
+        row.get("thinking_enabled") and not row.get("reasoning_channel_observed")
+        for row in json.loads((ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text())["stages"]
+    )
+    if missing_reasoning:
+        assert "no separate reasoning channel" in remaining
     else:
-        assert "Occasional long-context pauses remain" in remaining
-        assert "trace limitation" in remaining
-    assert "lacks a separate reasoning channel" in remaining
+        assert "no separate reasoning channel" not in remaining
     assert data["matched_stage_control"] in remaining
     for obsolete in ("cbbf495", "abb7668", "b8d6810", "September 20 chained run", "September 21"):
         assert obsolete not in remaining
@@ -240,12 +261,153 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "Draft proposals" not in readme
     assert "Total elapsed GPU cycle" not in readme
     assert "Before: same set" not in readme and "Old ms per round" not in readme
+    assert "Correctness before" not in readme and "Correctness after" not in readme
+    assert "Speed / latency before" not in readme and "Speed / latency after" not in readme
+    assert "Historical numerically inconsistent prefill" not in readme
     for layer in data["layers"]:
         assert math.isclose(
             sum(layer[k] for k in ("input", "output", "gate_up", "down", "other")),
             layer["total"],
             abs_tol=1e-8,
         )
+
+
+@pytest.fixture
+def retained_correctness_evidence():
+    data = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
+    data["current_confirmations"] = "benchmarks/results/current-320-confirmations-20260925.json"
+    data["current_stage_confirmations"] = "benchmarks/results/current-stage-confirmations-20260925.json"
+    full_model = json.loads((ROOT / data["current_confirmations"]).read_text())
+    stages = json.loads((ROOT / data["current_stage_confirmations"]).read_text())
+    data["correctness_refresh"] = {
+        "status": "NOT_RERUN",
+        "reason": "User requested speed measurements only",
+        "evidence_date": "2026-09-25",
+        "optimized_manifest_sha256": full_model["optimized_manifest_sha256"],
+    }
+    return data, stages, full_model
+
+
+def test_speed_refresh_retains_historical_correctness_identity(retained_correctness_evidence):
+    data, stages, full_model = retained_correctness_evidence
+    speed = {"optimized_manifest_sha256": "0" * 64}
+    assert validate_stage_correctness(data, speed, stages, full_model) is True
+    rendered = "\n".join(render_stage_profile_table(data))
+    row = next(line for line in rendered.splitlines() if line.startswith("| **2. Embedding"))
+    correctness_cell = row.strip("|").strip().split(" | ")[2]
+    assert "[September 25 study](" + data["current_stage_confirmations"] + ")" in correctness_cell
+    assert stages["binding"]["source_binding_sha256"][:12] in correctness_cell
+    assert current_stage_profile(data)["measurement_commit"] not in correctness_cell
+    assert "Correctness comparisons were not rerun" in rendered
+    assert "do not establish correctness of the newly timed build" in rendered
+
+
+@pytest.mark.parametrize("mismatch", [
+    "stage_manifest", "full_model_manifest", "stage_fixture", "full_model_fixture",
+    "stage_binding", "full_model_binding", "declared_manifest", "evidence_date",
+])
+def test_retained_correctness_rejects_mixed_capture_identities(retained_correctness_evidence, mismatch):
+    data, stages, full_model = retained_correctness_evidence
+    if mismatch == "stage_manifest":
+        stages["optimized_manifest_sha256"] = "0" * 64
+    elif mismatch == "full_model_manifest":
+        full_model["optimized_manifest_sha256"] = "0" * 64
+    elif mismatch == "stage_fixture":
+        stages["fixture_sha256"] = "0" * 64
+    elif mismatch == "full_model_fixture":
+        full_model["fixture_sha256"] = "0" * 64
+    elif mismatch == "stage_binding":
+        stages["binding"]["release_manifest_sha256"] = "0" * 64
+    elif mismatch == "full_model_binding":
+        full_model["executions"]["compiled-m1"]["binding"]["source_binding_sha256"] = "0" * 64
+    elif mismatch == "declared_manifest":
+        data["correctness_refresh"]["optimized_manifest_sha256"] = "0" * 64
+    else:
+        data["correctness_refresh"]["evidence_date"] = "2026-10-09"
+    with pytest.raises(ValueError):
+        validate_stage_correctness(data, {"optimized_manifest_sha256": "1" * 64}, stages, full_model)
+
+
+def test_current_correctness_still_requires_the_speed_release(retained_correctness_evidence):
+    data, stages, full_model = retained_correctness_evidence
+    data.pop("correctness_refresh")
+    with pytest.raises(ValueError, match="another speed release"):
+        validate_stage_correctness(data, {"optimized_manifest_sha256": "0" * 64}, stages, full_model)
+    assert validate_stage_correctness(
+        data, {"optimized_manifest_sha256": stages["optimized_manifest_sha256"]}, stages, full_model
+    ) is False
+
+
+def test_prefill_speed_does_not_claim_new_vector_correctness(retained_correctness_evidence):
+    data, _, _ = retained_correctness_evidence
+    data["prefill_speed_evidence"] = "benchmarks/results/prefill-speed-qualification-20260928.json"
+    data["prefill_speed_timing"] = "benchmarks/results/prefill-speed-timings-20260928.json"
+    data["prefill_speed_measurement_date"] = "2026-10-09"
+    rendered = "\n".join(render_prefill_speed(data))
+    assert "2026-10-09 measurements" in rendered
+    assert "Historical vector qualification (2026-09-28)" in rendered
+    assert "vector checks were not rerun for the newly timed build" in rendered
+
+
+@pytest.fixture
+def candidate_only_prefill_evidence(retained_correctness_evidence):
+    data, _, _ = retained_correctness_evidence
+    timing = json.loads((ROOT / "benchmarks/results/prefill-speed-timings-20260928.json").read_text())
+    timing["cases"] = [row for row in timing["cases"] if row["variant"] == "candidate"]
+    source = "benchmarks/results/prefill-speed-initial-timings-20260928.json"
+    recorded_bytes = (ROOT / source).read_bytes()
+    baseline = json.loads(recorded_bytes)
+    timing.update(
+        candidate_only=True,
+        baseline_scope="historical_corrected_control",
+        historical_corrected_control={
+            "source": source,
+            "measurement_date": "2026-09-28",
+            "cases": [row for row in baseline["cases"] if row["variant"] == "baseline"],
+            "source_report_sha256": hashlib.sha256(recorded_bytes).hexdigest(),
+            "historical": True,
+        },
+        historical_corrected_control_prompt_identity_verified=False,
+    )
+    data["prefill_speed_evidence"] = "benchmarks/results/prefill-speed-qualification-20260928.json"
+    data["prefill_speed_measurement_date"] = "2026-10-09"
+    return data, timing
+
+
+def test_candidate_only_prefill_keeps_old_controls_and_vectors_dated(candidate_only_prefill_evidence, tmp_path):
+    data, timing = candidate_only_prefill_evidence
+    report = tmp_path / "candidate-only.json"
+    report.write_text(json.dumps(timing))
+    data["prefill_speed_timing"] = str(report)
+    rendered = "\n".join(render_prefill_speed(data))
+    assert "2026-10-09 measurements" in rendered
+    assert "Historical initial corrected path" not in rendered
+    assert "Current values are means of 2 / 2 unprofiled cold requests" in rendered
+    assert "| Cold context | Mean prefill | Prefill tokens/s | Mean first data | Samples |" in rendered
+    assert "Fresh corrected prepacking control" not in rendered
+    assert "fresh paired corrected control" not in rendered
+    assert "vector checks were not rerun for the newly timed build" in rendered
+
+
+@pytest.mark.parametrize("mismatch", ["case", "date", "digest", "scope", "fresh_control"])
+def test_candidate_only_prefill_rejects_changed_historical_controls(candidate_only_prefill_evidence, tmp_path, mismatch):
+    data, original = candidate_only_prefill_evidence
+    timing = copy.deepcopy(original)
+    if mismatch == "case":
+        timing["historical_corrected_control"]["cases"][0]["backend_timings_ms"]["prefill"] += 1
+    elif mismatch == "date":
+        timing["historical_corrected_control"]["measurement_date"] = "2026-10-09"
+    elif mismatch == "digest":
+        timing["historical_corrected_control"]["source_report_sha256"] = "0" * 64
+    elif mismatch == "scope":
+        timing["baseline_scope"] = "corrected_prepacking_control"
+    else:
+        timing["cases"][0]["variant"] = "baseline"
+    report = tmp_path / "candidate-only.json"
+    report.write_text(json.dumps(timing))
+    data["prefill_speed_timing"] = str(report)
+    with pytest.raises(ValueError):
+        render_prefill_speed(data)
 
 
 def test_workload_table_uses_result_values_and_validation_status():
