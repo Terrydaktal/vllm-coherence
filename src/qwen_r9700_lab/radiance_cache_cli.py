@@ -80,6 +80,9 @@ OPERATION
     Disk-head checks and temperature probes retain their existing 1-second cadence.
     Disk sizes, cumulative traffic, local Pi metadata and audit issues refresh on
     a separate background timer; their inventory age is shown explicitly.
+    Reopening reuses a private inventory up to 10 minutes old while live counters
+    remain current. Inventories older than the refresh interval are rescanned in
+    the background. Local chat names/context appear before a cold disk scan ends.
     Lifetime disk traffic includes deleted chats and old data ABIs, using durable
     counters and the retirement ledger. It is not reset by a purge or compaction.
     purge-tests removes Synthetic release smoke and Synthetic relay probe caches
@@ -136,6 +139,7 @@ FILES
     Tail residency: /dev/shm/qwen-radiance-snapshot-tail.json
     Shared Pi telemetry: $XDG_RUNTIME_DIR/qwen-radiance-gpu-temperature/<HOST-HASH>/
     Combined live snapshot: telemetry-v1.json
+    Reusable disk inventory: inventory-<SCOPE-HASH>.json in the same private directory
     Flush control: /dev/shm/qwen-radiance-snapshot-control-v1/
     Memory report/control: /dev/shm/qwen-radiance-memory-v1/
 
@@ -492,7 +496,16 @@ def correlate(report, sessions, active_processes=()):
     report["local_transcript_bytes"] = sum(s["transcript_bytes"] for s in sessions)
 
 
-def collect(args):
+def collect(args, *, metadata_ready=None):
+    roots = [Path(p).expanduser().absolute() for p in args.sessions_root]
+    if args.no_sessions:
+        sessions, problems, active_processes = [], [], []
+    else:
+        sessions, problems = discover_sessions(roots)
+        active_processes, activity_problems = discover_active_processes(roots)
+        problems.extend(activity_problems)
+    if metadata_ready is not None:
+        metadata_ready(sessions, active_processes)
     if args.host in ("local", "localhost", "127.0.0.1"):
         result = audit.scan(
             args.cache_root, abi=args.abi, stale_after=args.stale_after, verify=args.verify
@@ -535,13 +548,6 @@ def collect(args):
         result = json.loads(completed.stdout)
         if result.get("error"):
             raise ValueError(result["error"])
-    roots = [Path(p).expanduser().absolute() for p in args.sessions_root]
-    if args.no_sessions:
-        sessions, problems, active_processes = [], [], []
-    else:
-        sessions, problems = discover_sessions(roots)
-        active_processes, activity_problems = discover_active_processes(roots)
-        problems.extend(activity_problems)
     correlate(result, sessions, active_processes)
     result["active_processes"] = active_processes
     result["issues"].extend(problems)

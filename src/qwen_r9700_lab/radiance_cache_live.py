@@ -234,13 +234,27 @@ class SharedTelemetry:
 class Inventory:
     """One bounded background scan, never on the fast display path."""
 
-    def __init__(self, args, collect):
+    def __init__(self, args, collect, directory=None):
+        from . import radiance_cache_inventory as saved_inventory
+
         self.args, self.collect = args, collect
+        self.directory = directory
+        self.metadata = None
         self.report = None
         self.error = None
         self.completed_at = None
         self.started_at = -math.inf
         self.thread = None
+        self.reused = False
+        if directory is not None:
+            self.report, age = saved_inventory.load(args, directory)
+            if self.report is not None:
+                self.completed_at = time.monotonic() - age
+                self.started_at = self.completed_at
+                self.reused = True
+
+    def metadata_ready(self, sessions, active_processes):
+        self.metadata = (sessions, active_processes)
 
     def refresh(self, *, force=False):
         if self.thread is not None and self.thread.is_alive():
@@ -251,10 +265,18 @@ class Inventory:
 
         def capture():
             try:
-                report = self.collect(self.args)
+                report = self.collect(self.args, metadata_ready=self.metadata_ready)
                 self.completed_at = time.monotonic()
                 self.report = report
+                self.reused = False
                 self.error = None
+                if self.directory is not None:
+                    from . import radiance_cache_inventory as saved_inventory
+
+                    try:
+                        saved_inventory.save(self.args, self.directory, report)
+                    except (OSError, ValueError):
+                        pass  # Inventory reuse is optional; the fresh scan remains valid.
             except (OSError, ValueError, subprocess.TimeoutExpired) as error:
                 self.error = str(error)
 
@@ -316,7 +338,7 @@ def coverage_state(context, cold):
     return "COLD" if cold == context else "PARTLY CACHED"
 
 
-def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
+def build_rows(report, sample, *, selector=None, abi=None, now_ms=None, metadata=None):
     from . import radiance_cache_cli as cli
 
     now_ms = time.time() * 1000 if now_ms is None else now_ms
@@ -346,6 +368,18 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
             "traffic_bytes": None, "state": "NO SNAPSHOT", "active_processes": row.get("active_processes", []),
             "session": row, "cwd": row.get("cwd", ""),
         })
+    if metadata is not None:
+        sessions, active_processes = metadata
+        for session in sessions:
+            row = records.setdefault(session["id"], {
+                "id": session["id"], "abi": None, "published": None,
+                "disk_bytes": None, "traffic_bytes": None, "state": "LIVE",
+            })
+            row.update(title=session["title"], generation=session["generation"],
+                       context=session.get("last_turn_tokens"), session=session,
+                       cwd=session.get("cwd", ""), active_processes=[
+                           process for process in active_processes if process["chat_id"] == session["id"]
+                       ])
     current, recent, cache = {}, {}, {}
     if sample:
         current, recent = phase_rows(sample, now_ms)
@@ -394,6 +428,8 @@ def build_rows(report, sample, *, selector=None, abi=None, now_ms=None):
         key = row["id"], row["generation"]
         phase = current.get(key) or recent.get(key)
         cache_row = cached.get(key)
+        if row["abi"] is None and cache_row is not None:
+            row["abi"] = cache.get("abi")
         row.update(cache_breakdown(cache, cache_row, row["context"]))
         row["save_pending"] = key in pending
         if cache_row is not None:
@@ -475,6 +511,7 @@ def dashboard_lines(report, sample, error, inventory, args, *, issues=False):
         if traffic.get("complete") is False or traffic.get("untracked_chats"):
             lines.append("Write history incomplete: lifetime total covers recorded completed payload writes.")
         lines.append(f"Disk inventory {age:.1f}s old · disk sizes, traffic and audit refresh every {args.inventory_interval:g}s"
+                     + (" · previous inventory" if getattr(inventory, "reused", False) else "")
                      + (" · scanning" if inventory.thread and inventory.thread.is_alive() else ""))
     else:
         lines.extend(["Loading disk inventory…", "Live counters do not wait for the disk scan."])
@@ -483,7 +520,8 @@ def dashboard_lines(report, sample, error, inventory, args, *, issues=False):
     if inventory.error:
         lines.append(f"Disk inventory: {cli.clean(inventory.error)}")
     lines.append("")
-    rows = build_rows(report, sample, selector=args.chat, abi=args.abi, now_ms=now_ms)
+    rows = build_rows(report, sample, selector=args.chat, abi=args.abi, now_ms=now_ms,
+                      metadata=getattr(inventory, "metadata", None))
     chat_width = max([24, *(len(cli.clean(row["title"])) for row in rows)])
     state_width = max([18, *(len(cli.clean(row["state"])) for row in rows)])
     headings = (
@@ -581,7 +619,7 @@ def watch(args, collect):
     import sys
 
     with SharedTelemetry(args) as reader:
-        inventory = Inventory(args, collect)
+        inventory = Inventory(args, collect, getattr(reader, "directory", None))
         inventory.refresh()
         if not args.json and sys.stdout.isatty() and sys.stdin.isatty():
             try:
@@ -599,7 +637,11 @@ def watch(args, collect):
                     "observed_at_ms": int(time.time() * 1000), "telemetry": sample,
                     "telemetry_error": error, "inventory": inventory.report,
                     "inventory_error": inventory.error,
-                    "chats": build_rows(inventory.report, sample, selector=args.chat, abi=args.abi),
+                    "inventory_reused": inventory.reused,
+                    "inventory_age_seconds": (max(0, time.monotonic() - inventory.completed_at)
+                                              if inventory.completed_at is not None else None),
+                    "chats": build_rows(inventory.report, sample, selector=args.chat, abi=args.abi,
+                                        metadata=inventory.metadata),
                 }, separators=(",", ":")), flush=True)
             else:
                 lines, _, footer = dashboard_lines(inventory.report, sample, error, inventory, args)

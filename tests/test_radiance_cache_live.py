@@ -527,7 +527,7 @@ def test_background_scan_is_single_and_cannot_block_fast_json_frames(tmp_path, m
     unblock = threading.Event()
     calls = []
 
-    def collect(_args):
+    def collect(_args, **_kwargs):
         calls.append("scan")
         unblock.wait(5)
         return report()
@@ -561,7 +561,7 @@ def test_keyboard_interrupt_cleans_up_only_dashboard_client(tmp_path, monkeypatc
     monkeypatch.setattr(live.subprocess, "Popen", lambda *_a, **_k: SimpleNamespace(poll=lambda: 0, wait=lambda **_: 0))
     monkeypatch.setattr(live.time, "sleep", lambda _: (_ for _ in ()).throw(KeyboardInterrupt()))
     with pytest.raises(KeyboardInterrupt):
-        live.watch(arguments(tmp_path, json=True), lambda _: report())
+        live.watch(arguments(tmp_path, json=True), lambda *_a, **_k: report())
     assert not list((state / "clients").iterdir())
 
 
@@ -636,3 +636,83 @@ def test_fullscreen_real_pty_can_resize_scroll_and_exit_without_leaking_terminal
             child.wait(timeout=5)
         os.close(master)
         os.close(slave)
+
+def test_chat_metadata_arrives_before_slow_disk_inventory(tmp_path, monkeypatch, capsys):
+    unblock = threading.Event()
+    session = {"id": CHAT, "generation": GENERATION, "title": "Early metadata", "cwd": "/fixture",
+               "last_turn_tokens": 10_010, "pending_messages": False}
+
+    def collect(_args, *, metadata_ready):
+        metadata_ready([session], [{"chat_id": CHAT, "pid": 321, "port": 8012}])
+        unblock.wait(5)
+        return report()
+
+    class Reader:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def read(self):
+            return sample(), None
+
+    monkeypatch.setattr(live, "SharedTelemetry", lambda _: Reader())
+    try:
+        assert live.watch(arguments(tmp_path, json=True, count=3), collect) == 0
+        frames = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert all(frame["inventory"] is None for frame in frames)
+        ready = [row for frame in frames for row in frame["chats"] if row["title"] == "Early metadata"]
+        assert ready
+        assert all(row["context"] == 10_010 and row["cold"] == 10 and row["abi"] == ABI for row in ready)
+        assert all(row["active_processes"] == [{"chat_id": CHAT, "pid": 321, "port": 8012}] for row in ready)
+        assert all(row["disk_bytes"] is None for row in ready), "metadata is not a disk audit"
+    finally:
+        unblock.set()
+
+
+def test_metadata_callback_precedes_disk_scan_and_is_not_read_twice(tmp_path, monkeypatch):
+    events = []
+    args = arguments(tmp_path, sessions_root=[str(tmp_path)], no_sessions=False,
+                     stale_after=300, verify=False)
+    monkeypatch.setattr(cli, "discover_sessions", lambda _: (events.append("sessions") or [], []))
+    monkeypatch.setattr(cli, "discover_active_processes", lambda _: ([], []))
+    monkeypatch.setattr(cli.audit, "scan", lambda *_a, **_k: events.append("disk") or report())
+    result = cli.collect(args, metadata_ready=lambda *_: events.append("metadata"))
+    assert events == ["sessions", "metadata", "disk"]
+    assert result["host"] == "local"
+
+
+def test_reopening_reuses_inventory_without_repeating_a_recent_scan(tmp_path):
+    from qwen_r9700_lab import radiance_cache_inventory as saved_inventory
+
+    directory = tmp_path / "shared"
+    directory.mkdir(mode=0o700)
+    args = arguments(tmp_path)
+    saved_inventory.save(args, directory, report())
+    inventory = live.Inventory(args, lambda *_a, **_k: pytest.fail("recent disk scan repeated"), directory)
+    assert inventory.reused and inventory.report["totals"]["file_bytes"] == 1_000_000
+    inventory.refresh()
+    assert inventory.thread is None
+    value = sample()
+    value["cache"]["chats"][0]["gpu_tokens"] = 10_010
+    lines, _, _ = live.dashboard_lines(inventory.report, value, None, inventory, args)
+    assert "previous inventory" in "\n".join(lines)
+    assert live.build_rows(inventory.report, value)[0]["cold"] == 0, "live counters must override reused inventory"
+
+
+def test_failed_refresh_keeps_reused_inventory_age_and_report(tmp_path):
+    from qwen_r9700_lab import radiance_cache_inventory as saved_inventory
+
+    directory = tmp_path / "shared"
+    directory.mkdir(mode=0o700)
+    args = arguments(tmp_path)
+    saved_inventory.save(args, directory, report())
+    def fail(*_a, **_k):
+        raise ValueError("scan failed")
+    inventory = live.Inventory(args, fail, directory)
+    completed = inventory.completed_at
+    inventory.refresh(force=True)
+    inventory.thread.join(timeout=2)
+    assert inventory.error == "scan failed"
+    assert inventory.reused and inventory.completed_at == completed and inventory.report is not None
