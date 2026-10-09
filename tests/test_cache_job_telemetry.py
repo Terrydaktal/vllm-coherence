@@ -42,6 +42,35 @@ def rows(value):
     return [json.loads(line) for line in value.path.read_text().splitlines()]
 
 
+def test_incremental_continuation_decisions_survive_real_telemetry_sink(recorder):
+    for reason in (
+        "incremental_suffix_encoded",
+        "incremental_generated_tokens",
+        "incremental_unsupported_tokenizer_or_template",
+        "incremental_rendered_prefix_changed",
+        "incremental_decoded_text_changed",
+        "incremental_unavailable",
+    ):
+        telemetry.emit_at(
+            "token_continuation",
+            1,
+            2,
+            reason=reason,
+            previous_tokens=60000,
+            suffix_tokens=21,
+            admitted_tokens=60021,
+            text="must not enter telemetry",
+            token_ids=[999],
+        )
+    captured = rows(recorder)
+    assert len(captured) == 6
+    for row in captured:
+        assert row["reason"].startswith("incremental_")
+        assert row["suffix_tokens"] == 21
+        assert row["admitted_tokens"] == row["previous_tokens"] + row["suffix_tokens"]
+        assert "text" not in row and "token_ids" not in row
+
+
 def test_main_thread_interval_covers_time_outside_forward(recorder, monkeypatch):
     samples = deque(
         [(1_000_000, 0.01, 0.005, 10, 2, 3, 4), (6_000_000, 0.013, 0.007, 13, 4, 6, 5)]
@@ -200,7 +229,15 @@ def test_gpu_round_pool_is_bounded_and_skips_instead_of_waiting(recorder):
 
 @pytest.mark.parametrize(
     "boundary",
-    [None, "computed_tokens", "request_id", "generation", "input_tokens", "failed", "decode"],
+    [
+        None,
+        "computed_tokens",
+        "request_id",
+        "generation",
+        "input_tokens",
+        "failed",
+        "decode",
+    ],
 )
 def test_prefill_gpu_gaps_require_adjacent_ranges_and_stay_out_of_decode(
     recorder, boundary
@@ -210,7 +247,10 @@ def test_prefill_gpu_gaps_require_adjacent_ranges_and_stay_out_of_decode(
         cuda, recorder, capacity=3
     )
     context = round_context(
-        1, job_kind="prefill", computed_tokens=0, input_tokens=60000,
+        1,
+        job_kind="prefill",
+        computed_tokens=0,
+        input_tokens=60000,
         scheduled_tokens=3296,
     )
     sampler.end(
@@ -232,7 +272,9 @@ def test_prefill_gpu_gaps_require_adjacent_ranges_and_stay_out_of_decode(
     sampler.collect()
     captured = rows(recorder)
     assert captured[0]["stage"] == "gpu_prefill"
-    assert captured[1]["stage"] == ("gpu_round" if boundary == "decode" else "gpu_prefill")
+    assert captured[1]["stage"] == (
+        "gpu_round" if boundary == "decode" else "gpu_prefill"
+    )
     assert ("gpu_inter_prefill_gap_ms" in captured[1]) == (boundary is None)
     assert "gpu_inter_round_gap_ms" not in captured[1]
     assert captured[1]["gpu_elapsed_ms"] == 1
@@ -358,7 +400,9 @@ def test_approved_kfd_capture_starts_once_on_owned_real_forward(recorder, monkey
 @pytest.mark.parametrize(
     "excluded", ["dummy", "barrier", "unclassified_large", "batch", "unowned"]
 )
-def test_round_hooks_do_not_instrument_startup_handover_or_unowned_work(recorder, excluded):
+def test_round_hooks_do_not_instrument_startup_handover_or_unowned_work(
+    recorder, excluded
+):
     cuda, _, calls = fake_round_cuda()
 
     class Runner:

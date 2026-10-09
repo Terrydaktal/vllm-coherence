@@ -152,6 +152,8 @@ manifest["runtime"]["chat_storage"] = {
             ROOT / "src/qwen_r9700_lab/radiance_request_timeline.py",
             ROOT / "src/qwen_r9700_lab/radiance_prefix_lineage.py",
             ROOT / "src/qwen_r9700_lab/radiance_prefix_runtime.py",
+            ROOT / "src/qwen_r9700_lab/radiance_token_continuation.py",
+            ROOT / "src/qwen_r9700_lab/radiance_token_continuation_runtime.py",
             ROOT / "src/qwen_r9700_lab/radiance_pinned_memory.py",
             ROOT / "src/qwen_r9700_lab/radiance_kfd_trace.py",
             BASE / "radiance_chat_tier.py",
@@ -192,6 +194,17 @@ manifest["runtime"]["memory_report"] = {
         ),
     },
     "compatible_runtime_abis": [
+        # Correct the production text-render boundary; no numerical/state change.
+        "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
+        # Same numerical state and compiled kernels; moves authenticated token
+        # continuation before full-history encoding, with a pinned BPE boundary.
+        "7fc9b5c6083ce353eaf12535bca550579607155cb7c930a961661e3cb1080cb1",
+        # Same numerical state; fixes request-local authentication across the
+        # pinned renderer executor boundary without changing cache layout.
+        "ab9f9a025c2af425aef38fffbffe54e71d043e53444558bbdbecef0f86d2c7e5",
+        # Same numerical state ABI; generated-token session adapter is separate
+        # from the existing exact processed-prefix snapshot contract.
+        "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
         # Complete checkpoint-file cache advice and numeric memory observation.
         "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
         # Releasing redundant durable-file page cache preserves numerical/data ABI.
@@ -296,12 +309,30 @@ manifest["runtime"]["prefix_lineage"] = {
     "modules": ["radiance_prefix_lineage.py", "radiance_prefix_runtime.py"],
     "scope": "Pinned token-only Qwen chat renderer and synchronous TP1 request path",
     "comparisons": [
-        "raw_to_reencoded", "output_to_message", "template_normalization",
-        "prompt_prefix", "input_processor",
+        "raw_to_reencoded",
+        "output_to_message",
+        "template_normalization",
+        "prompt_prefix",
+        "input_processor",
     ],
     "retention": "Last completed response per exact cache salt; 8 chats; 32 MiB bounded process RAM",
     "privacy": "No text, token IDs or content fingerprints emitted; only comparison results and counts",
     "unsupported": "Explicit unavailable status; no cache or model behavior changes",
+}
+manifest["runtime"]["token_continuation"] = {
+    "schema": "urn:coherence:generated-token-continuation:v1",
+    "modules": [
+        "radiance_token_continuation.py",
+        "radiance_token_continuation_runtime.py",
+    ],
+    "contract": "Unchanged chat turns preserve original generated token IDs; not bit-equivalent to full-history text re-encoding.",
+    "gate": "Exact message/output/configuration identity, authenticated full tokenizer backend/template, unchanged decoded prefix of the actual rendered text and full-prompt text equality; tokenize only the new suffix at the pinned special-token boundary. Normal cache state validation remains authoritative.",
+    "fallback": "Changed or unsupported inputs use full-history rendering/tokenization; existing canonical-prefix substitution remains guarded by exact canonical prefix and decoded full-prompt equality.",
+    "retention": "Latest private journal per cache salt; at most 8 chats and 32 MiB; 253792 IDs per chat; atomic 0600 files in a 0700 directory.",
+    "root": "/cache/token-continuation/<snapshot-data-abi>",
+    "unsupported": "Canonical rendering on edits, cancellation, concurrency, missing or corrupt journal, unsupported metadata or context limit.",
+    "processed_state": "Journal records emitted IDs, not an invented processed-token count; existing KV/GDN/conv/drafter endpoint checks decide reusable state.",
+    "privacy": "Raw IDs stay in private journal; telemetry emits fixed reasons and counts only.",
 }
 manifest["storage"]["secondary_tier"] = "qwen_chat_fs"
 manifest["serving"]["effective_chat_template_sha256"] = profile["chat_template_sha256"]
@@ -350,8 +381,10 @@ manifest["storage"]["data_contract"] = data_contract
 # drop the live predecessors; a new arithmetic/data ABI cannot inherit them.
 if prior.get("storage", {}).get("data_abi") == data_abi:
     compatible = manifest["runtime"]["memory_report"]["compatible_runtime_abis"]
-    for predecessor in prior.get("runtime", {}).get("memory_report", {}).get(
-        "compatible_runtime_abis", []
+    for predecessor in (
+        prior.get("runtime", {})
+        .get("memory_report", {})
+        .get("compatible_runtime_abis", [])
     ):
         if not re.fullmatch(r"[0-9a-f]{64}", predecessor):
             raise ValueError("invalid reviewed predecessor runtime ABI")

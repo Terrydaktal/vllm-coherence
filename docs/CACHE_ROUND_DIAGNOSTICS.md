@@ -41,6 +41,23 @@ No prompt text, token values, cache keys, tensors, paths, pointers or exception
 messages are included. Logical ranges are capped at 16 groups; truncation is
 explicit. GPU job contexts are capped at 256, with evictions counted.
 
+## Pi wait status
+
+Normal waits use one updating line naming the current observed stage: request
+preparation, admission, queue/priority waits, RAM allocation, cache-bank handover,
+cache update, reusable-context checks, snapshot loading, prefill or first output.
+Tools and continuation preparation also have timed states. Unknown backend
+phases remain explicitly unknown. Prefill includes actual prepared and reused
+token counts when available; it does not invent progress between samples.
+
+The line reuses Pi's existing 100 ms telemetry read/redraw cycle and adds no
+backend request, GPU query, event or synchronization. Native retry countdowns
+remain one line at their existing one-second cadence. Backend-control progress
+uses one line with the observed host stage and timers, keeping its existing
+one-second polling cadence and 100 ms elapsed display. Compaction retains its
+separate multiline step display. Cancellation and session changes clear status;
+ordinary progress yields to compaction rather than overwriting its panel.
+
 ## Long first-output delays
 
 The first tiny request in the [process-policy deployment receipt](../benchmarks/results/process-wide-thp-deployment-20261007.json)
@@ -279,14 +296,93 @@ An actual installed-Pi test verifies identical public system-prompt bytes across
 runtime updates; unsafe anchors and mismatched package versions fail validation.
 The normal host launcher already installs Pi under a stable version directory.
 
-Known observer limitation: a delivered response whose JSON escaping exceeds the
-8 MiB fingerprint limit can abort diagnostic finalization after removing the
-pending turn but before releasing its callback entry. The production callback
-contains no response text and the serving wrapper preserves model output, but
-repeated exceptional completions can grow callback bookkeeping and leave the
-lineage evidence incomplete. Cleanup on this failure path requires a follow-up
-repair and requalification; the normal-path retention limits above are not a
-claim that this exceptional path is bounded.
+If JSON escaping pushes delivered metadata beyond the 8 MiB fingerprint limit,
+finalization now records an unsupported comparison and releases transient text
+and callback bookkeeping. Such a response does not provide complete lineage
+evidence; it cannot silently qualify a continuation.
+
+### Generated-token continuation
+
+The serving adapter retains the exact admitted prompt and generated output IDs
+in a separate private journal. An unchanged next turn can extend those IDs
+instead of replacing historical IDs with another tokenization of the same text.
+This is an explicit generated-token conversation contract: it preserves native
+autoregressive history, and is not bit-equivalent to always re-encoding the
+entire text transcript. The numerical kernels and accepted quantization remain
+unchanged. Text equality alone never authorizes using state for different IDs.
+
+Before tokenization, the adapter checks the exact prior message prefix, the
+assistant content/reasoning/tool fields actually delivered, model/data ABI,
+the complete tokenizer backend (including normalization, merges, decoding and
+special-token flags), effective rendering configuration and authenticated template.
+It renders the actual full template to **text**, requiring the decoded original
+IDs to be its exact prefix. It then encodes **only the new suffix** and appends
+those IDs to the saved original IDs. The cut is the complete validated prefix
+length, never a search for a marker that might occur inside message content.
+
+The shortcut is restricted to the pinned tokenizer's non-normalized
+`<|im_end|>` special-token boundary. The suffix and complete constructed prompt
+must decode to exactly the rendered text; normalization changes reject the
+shortcut. Journal version and request ownership are rechecked before admission.
+The existing cache endpoint checks still decide which tokens have matching KV,
+GDN, convolution and drafter state. An emitted but unprocessed final token is
+not falsely declared cached. No historical text is re-encoded on this path.
+
+The renderer executes templates in a thread pool without copying request
+ContextVars. Request-bound authentication and encoding callbacks cross that
+boundary in private kwargs, removed before Jinja receives them. The production
+renderer normally requests text (`tokenize=False`); only this authenticated
+streaming-session callback may return original IDs instead. vLLM then parses
+them as a token prompt and applies its normal token-length validation, without
+encoding the old text in its later tokenization step. This works
+independently of the optional diagnostic recorder. Unsupported inputs retain
+ordinary full rendering/tokenization and the separately guarded canonical-prefix
+substitution, rather than bypassing checks.
+
+Only complete, single-choice streamed responses seed the journal, after the
+actual engine input is confirmed and the HTTP response finishes. Cancelled,
+overlapping, edited, truncated, multimodal or unsupported requests and missing,
+corrupt or unsafe journals retain canonical rendering. Compaction and thinking
+purges therefore cannot accidentally resurrect excluded history. A fresh
+installation needs one completed answer to seed its journal; it cannot recover
+the previous server's original generated IDs from text alone.
+
+Both launchers configure `QWEN_TOKEN_CONTINUATION_ROOT` beneath the mounted cache
+at `token-continuation/<snapshot-data-abi>`. Each cache salt has one atomically
+replaced journal: at most eight journals, 32 MiB total payload and 253,792 IDs per
+journal. Files are 0600 in a 0700 directory, with no symlink traversal. The
+journals contain private token IDs and must not be published or copied into
+diagnostic reports. They are small continuation metadata, separate from KV
+snapshots and their lifetime disk-traffic counters. Deleted/generation-replaced
+chats' journals are bounded by this eviction policy; deleting the entire
+`token-continuation` directory while the backend is stopped safely clears them
+without deleting snapshots. Missing journals cause fallback, never invented
+state. No per-round GPU work or synchronization is added.
+
+`token_continuation` telemetry records fixed decision codes and token counts,
+including incremental suffix length, retained prefix length and fallback reasons. It
+does not record token values, text, journal paths or content digests. Diagnostic
+lineage explicitly identifies incremental construction and does not claim a
+full-history re-encoding comparison; it compares input processing against the admitted IDs so intentional preservation is not reported as an
+unexplained processor modification. CPU regressions exercise both segmentation
+directions, the pinned serving admission/budget AST, recorder-disabled HTTP
+completion, durable restart, edited history, tool streams, cancellation, overlap,
+corruption and bounds. These tests are not universal model-arithmetic evidence.
+
+The [CPU qualification](../benchmarks/results/token-continuation-cpu-20261008.json)
+checks deliberately noncanonical token histories using the actual pooled serving
+tokenizer, production text-render path and downstream token validation at short,
+60K and 200K contexts. At 200K it preserves 200,020 prior IDs, encodes only a
+17-token suffix and performs zero full-history tokenizations, including after a
+durable journal reload. Edited history and capacity limits take the full-render
+fallback.
+The [deployment receipt](../benchmarks/results/token-continuation-deployment-20261008.json)
+records verified installed hashes and a live two-turn streamed check: both answers
+saved journals. The follow-up's request-correlated `incremental_suffix_encoded`
+event confirms 7,024 retained IDs plus 21 newly encoded suffix IDs; it reused
+7,024 cached tokens and produced first content after 377.94 ms. This short live
+check confirms the serving path, not long-context latency or universal arithmetic
+equivalence.
 
 ## Handover allocation
 

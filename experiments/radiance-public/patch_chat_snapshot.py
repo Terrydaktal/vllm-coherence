@@ -35,7 +35,7 @@ TIMELINE_SERVING = (
     (
         "        conversation, engine_inputs = result\n",
         "        conversation, engine_inputs = result\n"
-        "        request_timeline.prefix_rendered(self, engine_inputs)\n",
+        "        engine_inputs = request_timeline.prefix_rendered(self, engine_inputs)\n",
     ),
     (
         '            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"\n'
@@ -58,7 +58,7 @@ TIMELINE_SERVING = (
     ),
 )
 HF_PREFIX_SHA256 = "b0e83d95fc0aca6e248e28aa727d795bd74da681296634b15a0a0cf68a9feb48"
-HF_PREFIX_HOOKS = (
+HF_PREFIX_V1_HOOKS = (
     TIMELINE_IMPORT,
     (
         "        chat_template_kwargs = params.get_apply_chat_template_kwargs()\n",
@@ -69,6 +69,55 @@ HF_PREFIX_HOOKS = (
         "    resolved_kwargs = resolve_chat_template_kwargs(\n",
         "    chat_template = request_timeline.prefix_template(chat_template, kwargs)\n"
         "    resolved_kwargs = resolve_chat_template_kwargs(\n",
+    ),
+)
+HF_PREFIX_HOOKS = (
+    *HF_PREFIX_V1_HOOKS[:2],
+    (
+        "    resolved_kwargs = resolve_chat_template_kwargs(\n",
+        '    continuation_tokenize = kwargs.pop("_coherence_token_encode", None)\n'
+        "    chat_template = request_timeline.prefix_template(chat_template, kwargs)\n"
+        "    resolved_kwargs = resolve_chat_template_kwargs(\n",
+    ),
+    (
+        "    try:\n"
+        "        plain = tokenizer.apply_chat_template(\n"
+        "            conversation=conversation,  # type: ignore[arg-type]\n"
+        "            tools=tools,  # type: ignore[arg-type]\n"
+        "            chat_template=chat_template,\n"
+        "            tokenize=tokenize,\n"
+        "            **resolved_kwargs,\n"
+        "        )\n",
+        "    try:\n"
+        "        plain = None\n"
+        "        if not return_assistant_tokens_mask and (\n"
+        "            tokenize or getattr(continuation_tokenize, '_coherence_text_to_tokens', False)\n"
+        "        ):\n"
+        "            plain = request_timeline.prefix_tokenize(\n"
+        "                tokenizer, conversation, tools, chat_template,\n"
+        "                resolved_kwargs, tokenize, return_assistant_tokens_mask,\n"
+        "                continuation=continuation_tokenize,\n"
+        "            )\n"
+        "        if plain is None:\n"
+        "            plain = tokenizer.apply_chat_template(\n"
+        "                conversation=conversation,  # type: ignore[arg-type]\n"
+        "                tools=tools,  # type: ignore[arg-type]\n"
+        "                chat_template=chat_template,\n"
+        "                tokenize=tokenize,\n"
+        "                **resolved_kwargs,\n"
+        "            )\n",
+    ),
+)
+HF_PREFIX_V2_HOOKS = (
+    *HF_PREFIX_HOOKS[:-1],
+    (
+        HF_PREFIX_HOOKS[-1][0],
+        HF_PREFIX_HOOKS[-1][1].replace(
+            "        if not return_assistant_tokens_mask and (\n"
+            "            tokenize or getattr(continuation_tokenize, '_coherence_text_to_tokens', False)\n"
+            "        ):\n",
+            "        if tokenize and not return_assistant_tokens_mask:\n",
+        ),
     ),
 )
 TIMELINE_ASYNC = (
@@ -288,6 +337,13 @@ def memory_report_worker(text):
 
 def stream_buffered_tool_usage(text: str) -> str:
     """Let empty parser deltas reach the normal per-choice continuous-usage path."""
+    # Upgrade the prior read-only lineage hook to a returned admitted prompt.
+    text = text.replace(
+        "        conversation, engine_inputs = result\n"
+        "        request_timeline.prefix_rendered(self, engine_inputs)\n",
+        "        conversation, engine_inputs = result\n"
+        "        engine_inputs = request_timeline.prefix_rendered(self, engine_inputs)\n",
+    )
     for old, new in reversed(TIMELINE_SERVING):
         if text.count(new) == 1:
             text = text.replace(new, old)
@@ -346,9 +402,10 @@ def request_timeline_async(text: str) -> str:
 
 def prefix_renderer(text: str) -> str:
     """Install lineage at the real renderer and Jinja invocation boundaries."""
-    for old, new in reversed(HF_PREFIX_HOOKS):
-        if new in text:
-            text = text.replace(new, old)
+    for hooks in (HF_PREFIX_HOOKS, HF_PREFIX_V2_HOOKS, HF_PREFIX_V1_HOOKS):
+        for old, new in reversed(hooks):
+            if new in text:
+                text = text.replace(new, old)
     if hashlib.sha256(text.encode()).hexdigest() != HF_PREFIX_SHA256:
         raise ValueError("prefix renderer source differs from the pinned runtime")
     result = text
@@ -562,6 +619,12 @@ def transformed_sources(
         ).read_text(),
         package_root / "qwen_radiance_prefix_runtime.py": cache_source.with_name(
             "radiance_prefix_runtime.py"
+        ).read_text(),
+        package_root / "qwen_radiance_token_continuation.py": cache_source.with_name(
+            "radiance_token_continuation.py"
+        ).read_text(),
+        package_root / "qwen_radiance_token_continuation_runtime.py": cache_source.with_name(
+            "radiance_token_continuation_runtime.py"
         ).read_text(),
         package_root / "qwen_radiance_pinned_memory.py": cache_source.with_name(
             "radiance_pinned_memory.py"

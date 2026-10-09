@@ -171,6 +171,7 @@ class _Turn:
     delivered_tool_count: int = 0
     config_changed: bool = False
     history_changed: bool = False
+    incremental_prompt: bool = False
 
     @property
     def bytes(self):
@@ -473,7 +474,14 @@ class PrefixLineageObserver:
                 history_changed=turn.history_changed,
                 processed_endpoint_known=False,
             )
-            if result["equal"]:
+            if turn.incremental_prompt:
+                self._record_for(
+                    handle,
+                    "raw_to_reencoded",
+                    "not_applicable",
+                    reason="incremental_generated_tokens",
+                )
+            elif result["equal"]:
                 self._record_for(
                     handle,
                     "raw_to_reencoded",
@@ -593,6 +601,24 @@ class PrefixLineageObserver:
             self._record_for(turn.handle, "template_normalization", **values)
         except Exception:  # noqa: BLE001 - failures become explicit diagnostic gaps
             turn.delimiter_gap = "unsupported"
+
+    def prompt_construction(self, handle, construction):
+        with self._lock:
+            turn = self._turn(handle)
+            if turn is not None:
+                turn.incremental_prompt = construction == "incremental_generated_tokens"
+
+    def admitted_prompt(self, handle, token_ids):
+        """Track an explicitly admitted generated-token continuation.
+
+        rendered() retains the canonical reconstruction comparison. The next
+        boundary must compare the processor against the actual admitted IDs.
+        """
+        with self._lock:
+            turn = self._turn(handle)
+            if turn is not None:
+                turn.prompt = self._ids(token_ids)
+                self._bound(turn)
 
     def input_processor(self, handle, token_ids):
         with self._lock:
@@ -803,16 +829,22 @@ class PrefixLineageObserver:
             turn.complete = bool(complete)
             turn.previous = None
             if turn.delivered_seen and not turn.capture_gap:
-                turn.delivered_digest = _fingerprint(
-                    {
-                        "content": "".join(turn.delivered_content),
-                        "reasoning": "".join(turn.delivered_reasoning),
-                        "tool_calls": [
-                            turn.delivered_tools[index]
-                            for index in sorted(turn.delivered_tools)
-                        ],
-                    }
-                )
+                try:
+                    turn.delivered_digest = _fingerprint(
+                        {
+                            "content": "".join(turn.delivered_content),
+                            "reasoning": "".join(turn.delivered_reasoning),
+                            "tool_calls": [
+                                turn.delivered_tools[index]
+                                for index in sorted(turn.delivered_tools)
+                            ],
+                        }
+                    )
+                except Exception:  # noqa: BLE001 - finalization must retire unsupported metadata
+                    # JSON escaping can exceed the fingerprint budget even
+                    # when the unescaped stream fit. Retire the callback and
+                    # all transient text instead of leaking completion state.
+                    turn.capture_gap = "unsupported"
             turn.delivered_content.clear()
             turn.delivered_reasoning.clear()
             turn.delivered_tool_count = len(turn.delivered_tools)

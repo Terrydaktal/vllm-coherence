@@ -146,30 +146,110 @@ def _prefix(method, *args, **kwargs):
         return None
 
 
+def _continuation(method, *args):
+    """Independent serving contract; diagnostics may be entirely disabled."""
+    try:
+        try:
+            import qwen_radiance_token_continuation_runtime as runtime
+        except ModuleNotFoundError as error:
+            if error.name != "qwen_radiance_token_continuation_runtime":
+                raise
+            from qwen_r9700_lab import radiance_token_continuation_runtime as runtime
+        return getattr(runtime, method)(_request.get(), *args)
+    except Exception:  # noqa: BLE001 - unavailable adapter retains canonical input
+        state = _request.get() or {}
+        if (
+            method in ("rendered", "input_processor")
+            and state.get("token_continuation", {}).get("incremental_prompt")
+            is not None
+        ):
+            raise ValueError(
+                "incremental prompt admission is no longer valid"
+            ) from None
+        # No request is mutated by this adapter. An unavailable journal retains
+        # the canonical prompt and the existing exact cache validation path.
+        _failed_diagnostic()
+        return None
+
+
 def prefix_begin(request, tokenizer, config):
-    return _prefix("begin", request, tokenizer, {
+    configuration = {
         "template_kwargs": config,
         "request_template": getattr(request, "chat_template", None),
         "model": getattr(request, "model", None),
         "tools": getattr(request, "tools", None),
         "tokenizer_class": type(tokenizer).__qualname__,
         "tokenizer_name": getattr(tokenizer, "name_or_path", None),
-    })
+    }
+    _continuation("begin", request, tokenizer, configuration)
+    return _prefix("begin", request, tokenizer, configuration)
 
 
 def prefix_rendered(serving, engine_inputs):
-    return _prefix("rendered", serving, engine_inputs)
+    turn = (_request.get() or {}).get("token_continuation", {})
+    if turn.get("incremental_prompt") is not None:
+        _prefix("call", "prompt_construction", "incremental_generated_tokens")
+    _prefix("rendered", serving, engine_inputs)
+    admitted = _continuation("rendered", serving, engine_inputs)
+    if admitted is None:
+        admitted = engine_inputs
+    if admitted is not engine_inputs:
+        _prefix(
+            "call",
+            "admitted_prompt",
+            serving._extract_prompt_components(admitted[0]).token_ids,
+        )
+    return admitted
 
 
 def prefix_full_choices(choices):
+    _continuation("full_choices", choices)
     return _prefix("full_choices", choices)
 
 
 def prefix_render_params(conversation, kwargs):
+    _continuation("render_params", conversation, kwargs)
     return _prefix("render_params", conversation, kwargs)
 
 
+def prefix_tokenize(
+    tokenizer,
+    conversation,
+    tools,
+    template,
+    resolved_kwargs,
+    tokenize,
+    return_assistant_tokens_mask,
+    *,
+    continuation=None,
+):
+    if return_assistant_tokens_mask or (
+        tokenize is not True
+        and not (
+            tokenize is False
+            and getattr(continuation, "_coherence_text_to_tokens", False)
+        )
+    ):
+        return None
+    try:
+        args = (tokenizer, conversation, tools, template, resolved_kwargs)
+        if callable(continuation):
+            return continuation(*args)
+        return _continuation("encode_prompt", *args)
+    except Exception:  # noqa: BLE001 - callback has not supplied any prompt IDs
+        _failed_diagnostic()
+        return None
+
+
 def prefix_template(template, kwargs):
+    authenticate = kwargs.pop("_coherence_token_template", None)
+    if callable(authenticate):
+        try:
+            authenticate(template)
+        except Exception:  # noqa: BLE001 - unavailable authentication keeps canonical input
+            _failed_diagnostic()
+    else:
+        _continuation("template", template)
     try:
         try:
             import qwen_radiance_prefix_runtime as runtime
@@ -204,6 +284,7 @@ def internal_id_bridge(request):
     if internal is not None:
         state["identities"]["request_id"] = internal
     _emit("internal_id_bridge")
+    _continuation("input_processor", getattr(request, "prompt_token_ids", None))
     _prefix("call", "input_processor", getattr(request, "prompt_token_ids", None))
 
 
@@ -217,6 +298,7 @@ def _once(stage):
 
 def first_engine_output(output):
     state = _request.get()
+    _continuation("output", output)
     _prefix("output", output)
     if state is None or "first_engine_output" in state["observed"]:
         return
@@ -229,6 +311,7 @@ def first_engine_output(output):
 
 def first_api_content(delta):
     state = _request.get()
+    _continuation("delivered", delta)
     _prefix("call", "delivered_delta", delta)
     if state is None or "first_api_content" in state["observed"]:
         return
@@ -340,5 +423,6 @@ class RequestTimelineMiddleware:
             if body_started is not None and not body_complete:
                 _emit("http_body_receive", body_started, success=False)
             _emit("http_end", success=stream_complete and normal_return)
+            _continuation("finish", stream_complete and normal_return)
             _prefix("finish", stream_complete and normal_return)
             _request.reset(token)

@@ -347,3 +347,20 @@ def test_emitter_and_tokenizer_failures_do_not_raise_or_report_a_false_pass():
     assert latest(rows, "raw_to_reencoded")["diagnostic_status"] == "unavailable"
     assert latest(rows, "raw_to_reencoded")["dropped_records"] > 0
     assert "secret" not in json.dumps(rows)
+
+
+def test_escaped_completion_budget_failure_retires_callbacks_and_text():
+    rows, tokenizer = [], Tokenizer()
+    observer = PrefixLineageObserver(rows.append)
+    # Raw text fits but JSON control-character escaping exceeds 8 MiB.
+    content = '\x01' * (2 * 1024 * 1024)
+    for _ in range(3):
+        completed(observer, tokenizer, content=content)
+        assert not observer._callbacks
+        assert not observer._pending
+        retained = next(reversed(observer._completed.values()))
+        assert retained.capture_gap == 'unsupported'
+        assert not retained.delivered_content
+        assert not retained.delivered_reasoning
+        assert not retained.delivered_tools
+    assert '\x01' not in json.dumps(rows)

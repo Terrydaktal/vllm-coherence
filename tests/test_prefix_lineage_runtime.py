@@ -388,12 +388,9 @@ def test_template_callback_exception_keeps_identical_rendered_output(
     assert st["prefix_trace_failed"] is True
 
 
-def test_actual_renderer_kwarg_filter_keeps_the_injected_observer(observed):
-    """Run the actual pinned helper/filter after source transformation.
-
-    This catches instrumentation inserted after kwargs filtering: private
-    callbacks would be discarded before the new template receives them.
-    """
+@pytest.fixture
+def pinned_hf_helpers():
+    """Execute authenticated HF helpers with CPU-only tokenizer stubs."""
     spec = importlib.util.spec_from_file_location(
         "prefix_patch_test", ROOT / "experiments/radiance-public/patch_chat_snapshot.py"
     )
@@ -426,7 +423,8 @@ def test_actual_renderer_kwarg_filter_keeps_the_injected_observer(observed):
     env = Environment()
     namespace = {
         "request_timeline": SimpleNamespace(
-            prefix_template=runtime.instrument_template
+            prefix_template=runtime.instrument_template,
+            prefix_tokenize=timeline.prefix_tokenize,
         ),
         "resolve_chat_template": lambda _tokenizer, **values: values["chat_template"],
         "supports_kw": lambda *_a, **_kw: False,
@@ -450,6 +448,14 @@ def test_actual_renderer_kwarg_filter_keeps_the_injected_observer(observed):
         ),
         namespace,
     )
+    return namespace
+
+
+def test_actual_renderer_kwarg_filter_keeps_the_injected_observer(
+    observed, pinned_hf_helpers
+):
+    """Callbacks inserted after filtering would be lost before Jinja sees them."""
+    namespace = pinned_hf_helpers
     tokenizer, st = Tokenizer(), state()
     messages = [
         {"role": "user", "content": "question"},
@@ -467,3 +473,62 @@ def test_actual_renderer_kwarg_filter_keeps_the_injected_observer(observed):
     )
     assert text == render(messages, tokenizer=tokenizer, original=True)
     assert st["prefix_template_supported"] is True
+
+
+@pytest.mark.parametrize("tagged", [True, False])
+def test_actual_hf_text_mode_only_accepts_request_bound_token_callback(
+    pinned_hf_helpers, tagged
+):
+    messages = [{"role": "user", "content": "synthetic question"}]
+    tokenizer = Tokenizer()
+    expected_ids = [80, 999, 1000, 78]
+    calls = []
+
+    def continuation(*args):
+        calls.append(args)
+        assert args[0] is tokenizer
+        assert args[1] == messages
+        assert "_coherence_token_encode" not in args[4]
+        return expected_ids
+
+    if tagged:
+        continuation._coherence_text_to_tokens = True
+    actual = pinned_hf_helpers["safe_apply_chat_template"](
+        None,
+        tokenizer,
+        messages,
+        chat_template=TEMPLATE,
+        tokenize=False,
+        _coherence_token_encode=continuation,
+        enable_thinking=True,
+        preserve_thinking=True,
+        add_generation_prompt=True,
+    )
+    if tagged:
+        assert actual is expected_ids
+        assert len(calls) == 1
+    else:
+        assert actual == render(messages, tokenizer=tokenizer, original=True)
+        assert calls == []
+
+
+def test_token_mode_only_hf_patch_upgrades_to_text_mode_continuation():
+    spec = importlib.util.spec_from_file_location(
+        "prefix_v2_upgrade_test",
+        ROOT / "experiments/radiance-public/patch_chat_snapshot.py",
+    )
+    patcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(patcher)
+    source = gzip.decompress(
+        (ROOT / "tests/fixtures/vllm_028_prefix_lineage_hf.py.gz").read_bytes()
+    ).decode()
+    previous = source
+    for old, new in patcher.HF_PREFIX_V2_HOOKS:
+        assert old in previous  # Both sync and async renderer entry points exist.
+        previous = previous.replace(old, new)
+    latest = patcher.prefix_renderer(source)
+    assert patcher.prefix_renderer(previous) == latest
+    assert patcher.prefix_renderer(latest) == latest
+    compile(latest, "upgraded_hf_renderer", "exec")
+    with pytest.raises(ValueError, match="source differs"):
+        patcher.prefix_renderer(previous + "\n# unqualified source change\n")
