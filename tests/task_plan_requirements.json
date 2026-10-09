@@ -1,0 +1,43 @@
+{
+  "schema": "urn:coherence:task-plan-requirements:v1",
+  "scope": "Synthetic CPU and installed-Pi-SDK lifecycle checks; no model planning-quality or OS sandbox certification",
+  "requirements": [
+    {
+      "id": "structured-state",
+      "checks": [
+        "test_task_plan.mjs"
+      ],
+      "property": "Bounded goals, stable step IDs, statuses, files, constraints and evidence persist on the selected branch and reject unsupported state"
+    },
+    {
+      "id": "read-only-tool-gate",
+      "checks": [
+        "test_task_plan.mjs",
+        "test_task_plan_sdk.mjs"
+      ],
+      "property": "Planning blocks mutating and unknown tools, unverified same-name replacements and user shell escapes; allowed shell argv are constrained"
+    },
+    {
+      "id": "harness-context",
+      "checks": [
+        "test_task_plan_sdk.mjs"
+      ],
+      "property": "The actual SDK loads the plan tool, deduplicates unchanged active plan context and restores it after compaction"
+    },
+    {
+      "id": "source-selection",
+      "checks": [
+        "test_task_plan.mjs",
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Plan restoration honors explicit context exclusions without changing the canonical persisted plan"
+    },
+    {
+      "id": "session-reopen",
+      "checks": [
+        "test_task_plan.mjs"
+      ],
+      "property": "Actual SessionManager resume and branch navigation preserve mode and clear operations without inheriting siblings"
+    }
+  ]
+}

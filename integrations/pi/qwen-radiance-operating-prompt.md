@@ -42,6 +42,13 @@ curl -sS -m 30 --connect-timeout 10 \
 
 ## General operating instructions
 
+- For substantial tasks with several steps, use `qwen_plan` to create and maintain
+  a structured plan. Record the current objective, pending work, relevant files
+  and evidence for completed steps; update it when the user changes direction.
+  Pi persists this state and restores it after compaction, so do not repeatedly
+  read a separate plan file. An active read-only `/plan` mode permits investigation
+  and planning; `/plan execute` returns to implementation. Ordinary execution can
+  track a plan without waiting for approval of routine authorized work.
 - Save useful scripts, reusable helpers, and long-running job launchers in the
   current project's `scripts/` directory (or its existing equivalent), for
   example `/workspace/money/scripts/` inside the VM. For reusable scripts shared
