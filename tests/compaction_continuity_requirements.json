@@ -1,0 +1,144 @@
+{
+  "schema": "urn:coherence:compaction-continuity-requirements:v1",
+  "scope": "Synthetic CPU and pinned-Pi-SDK structure/lifecycle checks; no semantic quality or superiority certification",
+  "requirements": [
+    {
+      "id": "selected-source-only",
+      "checks": [
+        "test_compaction_memory.mjs",
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Only active selected branch entries populate memory; exclusions and thinking purges remain effective"
+    },
+    {
+      "id": "bounded-provenance",
+      "checks": [
+        "test_compaction_memory.mjs"
+      ],
+      "property": "Excerpts fit an explicit estimator budget, preserve source identities and chronology, and label omission and unverified claims"
+    },
+    {
+      "id": "tool-atomicity",
+      "checks": [
+        "test_compaction_memory.mjs",
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Recent-tail selection never splits a tool group; orphan, duplicate and missing results fail closed; oversized units are explicit"
+    },
+    {
+      "id": "one-model-request",
+      "checks": [
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Deterministic memory construction uses no extra inference, preserving the canonical provider history"
+    },
+    {
+      "id": "originals-and-persistence",
+      "checks": [
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Original messages remain immutable and continuity metadata survives real SDK reopen and repeated compaction"
+    },
+    {
+      "id": "workspace-boundary",
+      "checks": [
+        "test_compaction_workspace.mjs"
+      ],
+      "property": "Bounded read-only Git status targets only the requested workspace, suppresses fsmonitor/filter side effects and excludes untracked file contents"
+    },
+    {
+      "id": "receipt-binding",
+      "checks": [
+        "test_compaction_continuity_sdk.mjs",
+        "test_radiance_compaction.mjs"
+      ],
+      "property": "Recovery binds source identity and continuity content rather than reusing stale summary evidence"
+    },
+    {
+      "id": "exact-cutoff",
+      "checks": [
+        "test_compaction_continuity_sdk.mjs",
+        "test_radiance_compaction_finish.mjs",
+        "test_radiance_compaction_sdk.mjs"
+      ],
+      "property": "Alt+C uses exactly the existing checkpoint text and never a replacement request; Escape retains cancellation semantics"
+    },
+    {
+      "id": "safe-quotations",
+      "checks": [
+        "test_compaction_memory.mjs"
+      ],
+      "property": "Source controls are JSON-escaped; excerpts preserve Unicode and cannot become raw chat-template delimiters"
+    },
+    {
+      "id": "shared-restoration-budget",
+      "checks": [
+        "test_compaction_restoration.mjs"
+      ],
+      "property": "All rendered plan, source, task, Git and file envelopes fit one headroom-adjusted character budget; loaded instructions are not duplicated"
+    },
+    {
+      "id": "fresh-relevant-files",
+      "checks": [
+        "test_compaction_files.mjs",
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Only eligible selected tool or plan paths are captured; exact bounded UTF-8 files and digests take precedence over stale write arguments, while large and unsafe paths become explicit references"
+    },
+    {
+      "id": "persistent-plan-continuity",
+      "checks": [
+        "test_task_plan.mjs",
+        "test_task_plan_sdk.mjs",
+        "test_compaction_continuity_sdk.mjs"
+      ],
+      "property": "Selected-branch plan state persists independently of summary generation; explicit context exclusions suppress linked material"
+    },
+    {
+      "id": "honest-task-reminders",
+      "checks": [
+        "test_compaction_tasks.mjs"
+      ],
+      "property": "Only structured recorded handles and unresolved calls are restored; historical handles and missing results are never asserted to be live processes"
+    },
+    {
+      "id": "receipt-byte-contract",
+      "checks": [
+        "test_radiance_compaction.mjs"
+      ],
+      "property": "Writer and reader share a byte ceiling, valid multibyte summaries recover intact, and oversized receipts never publish"
+    },
+    {
+      "id": "selected-history-count",
+      "checks": [
+        "test_radiance_compaction.mjs",
+        "test_compaction_continuity_sdk.mjs",
+        "test_compaction_token_count_sdk.mjs"
+      ],
+      "property": "The completed notice and new saved compaction count use selected historical tokenization after exclusions rather than stale assistant usage; old authenticated receipts and Radiance history displays use their recorded exact count without rewriting source bytes or extra inference"
+    },
+    {
+      "id": "streaming-context-guard",
+      "checks": [
+        "test_stream_compaction_sdk.mjs",
+        "test_patch_pi_precontinuation_compaction.py"
+      ],
+      "property": "Fresh same-model Qwen usage triggers at the earlier of 240000 and context window minus configured reserve; disabled, malformed, absent and stale usage do not interrupt"
+    },
+    {
+      "id": "interrupted-turn-archive",
+      "checks": [
+        "test_stream_compaction_sdk.mjs",
+        "test_pi_aborted_context.mjs"
+      ],
+      "property": "Received reasoning and prose are persisted exactly once before checkpoint generation and survive JSONL reopen; an oversized interrupted message is summarized in active context rather than silently kept past the tail budget; unexecuted partial tool calls never execute or gain fabricated results"
+    },
+    {
+      "id": "checkpoint-before-continuation",
+      "checks": [
+        "test_stream_compaction_sdk.mjs"
+      ],
+      "property": "Original work continues without a synthetic user prompt only after a durably saved checkpoint; cancellation, disk-save failure, checkpoint failure and superseding context prevent automatic continuation"
+    }
+  ]
+}

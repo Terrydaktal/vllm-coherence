@@ -5,7 +5,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeSummaryThinking, checkpointOutputBudget, summaryInstruction, validateSummary, readCompletion, compactFromPayload,
-  fileOperations, readReceipt, CONTRACT, MODEL, installRadianceCompaction, writeReceipt,
+  fileOperations, readReceipt, CONTRACT, MODEL, installRadianceCompaction, writeReceipt, MAX_COMPACTION_RECEIPT_BYTES,
   compactionReceiptKey, compactionRetryIdentities, postJson } from "../integrations/pi/qwen-radiance-compaction.mjs";
 import { getCompactionProgress } from "../integrations/pi/qwen-radiance-compaction-progress.mjs";
 
@@ -13,6 +13,20 @@ const headings = ["Goal", "Current Authoritative State", "Constraints & Invarian
   "Key Decisions", "Rejected / Failed Approaches", "Unresolved Questions & Hypotheses", "Next Steps", "Critical Context"];
 const summary = headings.map((name) => `### ${name}\nVerified state.`).join("\n\n");
 const signal = () => new AbortController().signal;
+
+test("valid multibyte checkpoints recover intact and oversized receipts never publish", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "radiance-unicode-receipt-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const result = { summary: "界".repeat(70_000), details: { forcedCheckpoint: true, checkpointComplete: false } };
+  const receipt = { contract: CONTRACT, key: "unicode", result, userForced: true,
+    resultHash: createHash("sha256").update(JSON.stringify(result)).digest("hex") };
+  await writeReceipt(directory, "unicode", receipt);
+  assert.deepEqual(await readReceipt(directory, "unicode"), result);
+  await assert.rejects(writeReceipt(directory, "oversized", { text: "x".repeat(MAX_COMPACTION_RECEIPT_BYTES) }), /byte limit/);
+  assert.deepEqual(await readdir(directory), ["unicode.json"]);
+  await writeFile(join(directory, "oversized.json"), "x".repeat(MAX_COMPACTION_RECEIPT_BYTES + 1));
+  await assert.rejects(readReceipt(directory, "oversized"), /unsafe compaction receipt/);
+});
 function sse(frames, width = 7) {
   const bytes = new TextEncoder().encode(frames.map((data) => `data: ${typeof data === "string" ? data : JSON.stringify(data)}\r\n\r\n`).join(""));
   return new Response(new ReadableStream({ start(controller) {
@@ -205,6 +219,41 @@ test("one summary covers split turns, retains tools and exact file tracking", as
     ["tokenize", "submit", "wait", "generate", "validate"]);
 });
 
+test("compaction records exact selected history instead of stale pre-selection usage", async () => {
+  const f = fixture();
+  f.input.preparation.tokensBefore = 253792;
+  const result = await compactFromPayload(f.input);
+  assert.equal(result.tokensBefore, 2, "the independent tokenizer returned two historical tokens");
+  assert.equal(result.details.preparedTokensBefore, 253792, "retain the old estimate only as diagnostic metadata");
+  assert.equal(result.details.tokensBeforeSource, "selected_history_tokenization");
+  assert.equal(result.usage.input + result.usage.cacheRead, 6, "checkpoint instructions belong to request usage, not tokensBefore");
+});
+
+test("completed legacy receipts repair stale notice counts without a tokenizer or model request", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "radiance-count-recovery-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const forced of [false, true]) {
+    const f = fixture();
+    f.input.sourceIdentity.leaf = forced ? "forced-count" : "normal-count";
+    const key = compactionReceiptKey(f.input);
+    const result = { summary: forced ? "Exact unfinished cutoff text " : summary, tokensBefore: 253792,
+      usage: { input: 4, cacheRead: 2, output: 350 }, details: { historicalTokens: 2,
+        ...(forced ? { forcedCheckpoint: true, checkpointComplete: false } : {}) } };
+    await writeReceipt(directory, key, { contract: CONTRACT, key, marker: "END", result,
+      ...(forced ? { userForced: true } : {}),
+      resultHash: createHash("sha256").update(JSON.stringify(result)).digest("hex") });
+    const before = await readFile(join(directory, `${key}.json`));
+    const recovered = await compactFromPayload({ ...f.input, receiptDirectory: directory,
+      fetcher: () => assert.fail("completed receipt recovery must remain network-free") });
+    assert.equal(recovered.tokensBefore, 2);
+    assert.equal(recovered.details.preparedTokensBefore, 253792);
+    assert.equal(recovered.details.tokensBeforeSource, "selected_history_tokenization");
+    assert.equal(recovered.details.receiptReused, true);
+    assert.equal(recovered.summary, result.summary);
+    assert.deepEqual(await readFile(join(directory, `${key}.json`)), before, "recovery does not rewrite old receipt bytes");
+  }
+});
+
 test("a checkpoint can exceed former fixed, ordinary-response and reserve limits", async () => {
   const { input } = fixture({ completionTokens: 35000 });
   const updates = [];
@@ -336,6 +385,24 @@ test("retry identity traversal stops at real activity; error-only descendants ca
   branch.push({ id: "new-user", parentId: "error2", type: "message", message: { role: "user" } });
   assert.deepEqual(compactionRetryIdentities(branch, { ...sourceIdentity, leaf: "new-user" }), []);
   assert.deepEqual(compactionRetryIdentities(branch, { ...sourceIdentity, leaf: "unknown" }), []);
+});
+
+test("retry identity traversal cannot skip retained interrupted reasoning or prose", () => {
+  for (const content of [
+    [{ type: "thinking", thinking: "Synthetic partial reasoning" }],
+    [{ type: "text", text: "Synthetic partial answer" }],
+  ]) {
+    const branch = [
+      { id: "old", type: "message", message: { role: "user" } },
+      { id: "abort", parentId: "old", type: "message", message: { role: "assistant", stopReason: "aborted", content } },
+      { id: "diagnostic", parentId: "abort", type: "custom", customType: "qwen-radiance-backend-error-v1" },
+    ];
+    const identity = { sessionFile: "synthetic-abort-retention", leaf: "abort" };
+    assert.deepEqual(compactionRetryIdentities(branch, identity), []);
+    assert.deepEqual(compactionRetryIdentities(branch, { ...identity, leaf: "diagnostic" }).map((value) => value.leaf), ["abort"]);
+    branch[1].message.content = [{ type: "toolCall", id: "unfinished", name: "lookup", arguments: {} }];
+    assert.deepEqual(compactionRetryIdentities(branch, identity).map((value) => value.leaf), ["old"]);
+  }
 });
 
 test("completed failure recovery refuses mismatched usage, token hashes and other sessions", async () => {

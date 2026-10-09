@@ -92,3 +92,43 @@ def test_real_patch_compacts_at_the_inter_tool_boundary_and_fails_closed() -> No
     assert b"this.showStatusIndicator(new WorkingStatusIndicator" in combined
     assert b'if (err?.code === "QWEN_CONTEXT_FILTER_FAILURE") throw err' in combined
     assert b"contextFilterErrorsPropagate: true" in combined
+
+
+def test_retry_remains_single_line_and_admits_multiline_predecessor() -> None:
+    api = load_api()
+    patch = next(item for item in api["PATCHES"] if b"const retryMessage" in item.old)
+
+    assert patch.relative_path.endswith("components/status-indicator.js")
+    assert b'keyText("app.interrupt")' in patch.new
+    assert b'.join("\\n")' not in patch.new
+    assert b"Retry backoff: ${seconds}s remaining" in patch.legacy[0]
+    assert b'.join("\\n")' in patch.legacy[0]
+
+    # Working progress must not replace the native retry with stale response state.
+    ui_patch = next(item for item in api["PATCHES"] if b"setWorkingMessage:" in item.old)
+    assert b'kind === "retry"' not in ui_patch.new
+
+
+@pytest.mark.parametrize("initial_state", ["stock", "multiline"])
+def test_real_retry_patch_migrates_and_is_idempotent(tmp_path: Path, initial_state: str) -> None:
+    api = load_api()
+    patch = next(item for item in api["PATCHES"] if b"const retryMessage" in item.old)
+    installed = Path.home() / ".local/share/qwen-r9700/pi/0.84.2" / patch.relative_path
+    if not installed.is_file():
+        pytest.skip("pinned Pi runtime is not installed")
+    data = installed.read_bytes()
+    for known in (patch.new, *patch.legacy):
+        if known in data:
+            data = data.replace(known, patch.old)
+            break
+    assert hashlib.sha256(data).hexdigest() == patch.preimage_sha256
+    target = tmp_path / patch.relative_path
+    target.parent.mkdir(parents=True)
+    target.write_bytes(data if initial_state == "stock" else data.replace(patch.old, patch.legacy[0]))
+    api["run"].__globals__["PATCHES"] = (patch,)
+
+    api["run"](tmp_path, apply=True)
+    assert patch.new in target.read_bytes()
+    assert patch.legacy[0] not in target.read_bytes()
+    api["run"](tmp_path, apply=False)
+    api["run"](tmp_path, apply=True)

@@ -24,9 +24,50 @@ class FilePatch:
     old: bytes
     new: bytes
     legacy: tuple[bytes, ...] = ()
+    alternate_preimage_sha256: tuple[str, ...] = ()
 
 
 PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+        preimage_sha256="bb34e517ffed0abf8fb7782d220d6fe10d3d4dcf4d23aa42cb127c63efffa903",
+        # The host has the earlier project-local session-directory patch. The
+        # Opsec guest keeps Pi's default encoded-cwd directory; authenticate both
+        # complete public SDK baselines without changing either directory policy.
+        alternate_preimage_sha256=("af809d47818a3bf6a10173c167905e013ad7303261919a5a35a8466b801daf2e",),
+        old=b"""        return [createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp)];
+""",
+        new=b"""        // Old Radiance entries saved a stale pre-filter usage estimate. Project
+        // their recorded selected-history tokenizer count without rewriting JSONL.
+        const historicalTokens = entry.details?.contract === "radiance-prefix-compaction-v1"
+            ? entry.details.historicalTokens
+            : undefined;
+        const tokensBefore = Number.isSafeInteger(historicalTokens) && historicalTokens >= 0
+            ? historicalTokens
+            : entry.tokensBefore;
+        return [createCompactionSummaryMessage(entry.summary, tokensBefore, entry.timestamp)];
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/status-indicator.js",
+        preimage_sha256="17ab1d377df099d69f4a4404b8a36dc1f060d0f73dd21a9f258c8ab465e1a21b",
+        old=b"""        const retryMessage = (seconds) => `Retrying (${attempt}/${maxAttempts}) in ${seconds}s... (${keyText("app.interrupt")} to cancel)`;
+""",
+        new=b"""        const retryMessage = (seconds) =>
+            `Retrying (${attempt}/${maxAttempts}) in ${seconds}s... (${keyText("app.interrupt")} to cancel)`;
+""",
+        legacy=(b"""        const retryMessage = (seconds) => [
+            `Retrying (${attempt}/${maxAttempts}) in ${seconds}s... (${keyText("app.interrupt")} to cancel)`,
+            `   \\u203a Retry backoff: ${seconds}s remaining`,
+            "   \\u00b7 Send next request: waiting",
+            "   \\u00b7 Scheduler admission: if needed",
+            "   \\u00b7 Check reusable context: waiting",
+            "   \\u00b7 Find and load cached context: if needed",
+            "   \\u00b7 Prompt prefill: if needed",
+            "   \\u00b7 Await first model output: waiting",
+        ].join("\\n");
+""",),
+    ),
     FilePatch(
         relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js",
         preimage_sha256="b39d59b8f86693b9aca15f13e14f367fce9a0ad8ed7ce9ad17950906f226951d",
@@ -513,6 +554,488 @@ PATCHES = (
 )
 
 
+# The session owns the decision and durable commit; agent-core owns stream
+# cancellation and the otherwise forbidden continuation from an assistant.
+# Keep both sides byte-authenticated against the complete pinned SDK sources.
+STREAM_COMPACTION_PATCHES = (
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b'import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";\n',
+        new=b'import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";\n',
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+        preimage_sha256="bb34e517ffed0abf8fb7782d220d6fe10d3d4dcf4d23aa42cb127c63efffa903",
+        alternate_preimage_sha256=("af809d47818a3bf6a10173c167905e013ad7303261919a5a35a8466b801daf2e",),
+        old=b"""    const contextEntries = [compaction];
+    let foundFirstKept = false;
+""",
+        new=b"""    const contextEntries = [compaction];
+    // One oversized interrupted turn remains whole in JSONL but cannot be a
+    // bounded recent tail. The Radiance checkpoint explicitly records this
+    // empty-tail projection; reloading follows the same committed boundary.
+    if (compaction.details?.contract === "radiance-prefix-compaction-v1" &&
+        compaction.details?.streamCompaction?.contract === "radiance-stream-compaction-v1" &&
+        compaction.details.streamCompaction.emptyRetainedTail === true) {
+        contextEntries.push(...path.slice(compactionIdx + 1));
+        return contextEntries;
+    }
+    let foundFirstKept = false;
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js",
+        preimage_sha256="9214a98070719bca4d4162510c95627d61dda8850fe22071905a63a477f575a8",
+        old=b"""        else if (!hasToolCalls) {
+            if (message.stopReason === "aborted") {
+""",
+        new=b"""        else if (message.stopReason === "aborted" && message.provider === "qwen-r9700" &&
+            message.api === "openai-completions" &&
+            message.model === "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate" &&
+            message.errorMessage === "Interrupted for automatic context compaction.") {
+            this.contentContainer.addChild(new Spacer(1));
+            this.contentContainer.addChild(new Text(theme.fg("dim", message.errorMessage), this.outputPad, 0));
+        }
+        else if (!hasToolCalls) {
+            if (message.stopReason === "aborted") {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    // Track last assistant message for auto-compaction check
+    _lastAssistantMessage = undefined;
+""",
+        new=b"""    // Track last assistant message for auto-compaction check
+    _lastAssistantMessage = undefined;
+    _streamCompactionStream = undefined;
+    _streamCompactionAttempt = undefined;
+    _streamCompactionResume = false;
+    _streamCompactionCancelledRun = false;
+    _syncStreamCompactionTranscript() {
+        const sessionFile = this.sessionManager.getSessionFile();
+        if (!sessionFile) throw new Error("Automatic stream compaction requires a persistent session transcript");
+        const file = openSync(sessionFile, "r");
+        try { fsyncSync(file); } finally { closeSync(file); }
+        const directory = openSync(dirname(sessionFile), "r");
+        try { fsyncSync(directory); } finally { closeSync(directory); }
+    }
+    _cancelStreamCompaction() {
+        const attempt = this._streamCompactionAttempt;
+        if (!attempt) return;
+        attempt.cancelled = true;
+        this._streamCompactionCancelledRun = true;
+        this._streamCompactionResume = false;
+        this._autoCompactionAbortController?.abort();
+    }
+    _canContinueStreamCompaction(attempt) {
+        const model = this.model;
+        return !attempt.cancelled && this.settingsManager.getCompactionSettings().enabled &&
+            model?.provider === attempt.provider && model?.id === attempt.model &&
+            model?.api === attempt.api && this.sessionManager.getSessionId() === attempt.sessionId;
+    }
+    _observeStreamCompaction(event) {
+        const message = event.message;
+        if (event.type === "message_start" && message?.role === "assistant") {
+            this._streamCompactionStream = {
+                signal: this.agent.signal, timestamp: message.timestamp,
+                provider: message.provider, model: message.model, api: message.api,
+                compactionId: getLatestCompactionEntry(this.sessionManager.getBranch())?.id,
+                sessionId: this.sessionManager.getSessionId(), promptTokens: undefined, outputTokens: -1,
+            };
+            return;
+        }
+        const stream = this._streamCompactionStream;
+        if (!stream || stream.signal !== this.agent.signal || message?.role !== "assistant" ||
+            message.timestamp !== stream.timestamp || message.provider !== stream.provider ||
+            message.model !== stream.model || message.api !== stream.api) return;
+        if (event.type === "message_end") {
+            const attempt = this._streamCompactionAttempt;
+            if (attempt?.stream === stream) {
+                // A natural stop that wins the final-token race has completed the
+                // task. Compact it, but do not produce a second answer. A tool
+                // draft that races cancellation must remain unexecuted.
+                attempt.completed = message.stopReason === "stop" &&
+                    !message.content.some((block) => block.type === "toolCall");
+                if (!attempt.completed && message.stopReason !== "error") {
+                    message.stopReason = "aborted";
+                    message.errorMessage = "Interrupted for automatic context compaction.";
+                }
+                attempt.finalMessage = message;
+            }
+            this._streamCompactionStream = undefined;
+            return;
+        }
+        if (event.type !== "message_update" || this._streamCompactionAttempt || stream.signal?.aborted) return;
+        const model = this.model;
+        const settings = this.settingsManager.getCompactionSettings();
+        if (!settings.enabled || model?.provider !== "qwen-r9700" || model?.api !== "openai-completions" ||
+            model?.id !== "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate" ||
+            model.provider !== stream.provider || model.id !== stream.model || model.api !== stream.api ||
+            this.sessionManager.getSessionId() !== stream.sessionId ||
+            getLatestCompactionEntry(this.sessionManager.getBranch())?.id !== stream.compactionId) return;
+        const usage = message.usage;
+        if (![usage?.input, usage?.output, usage?.cacheRead, usage?.cacheWrite].every(
+            (value) => Number.isSafeInteger(value) && value >= 0,
+        )) return;
+        const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+        const tokens = promptTokens + usage.output;
+        if (promptTokens <= 0 || !Number.isSafeInteger(tokens) ||
+            (usage.totalTokens !== undefined && usage.totalTokens !== 0 && usage.totalTokens !== tokens) ||
+            (stream.promptTokens !== undefined && stream.promptTokens !== promptTokens) ||
+            usage.output < stream.outputTokens) return;
+        stream.promptTokens = promptTokens;
+        stream.outputTokens = usage.output;
+        const window = model.contextWindow;
+        const reserve = settings.reserveTokens;
+        if (!Number.isSafeInteger(window) || window <= 0 ||
+            !Number.isSafeInteger(reserve) || reserve < 0 || reserve >= window) return;
+        const threshold = Math.min(240000, window - reserve);
+        if (tokens < threshold) return;
+        this._streamCompactionAttempt = {
+            stream, provider: stream.provider, model: stream.model, api: stream.api,
+            sessionId: stream.sessionId, compactionId: stream.compactionId,
+            tokens, threshold, cancelled: false, persistedMessage: undefined,
+        };
+        // Never await session.abort()/waitForIdle() inside the awaited agent
+        // listener. The provider unwinds, message_end persists, and finishRun()
+        // shuts the stream down before _handlePostAgentRun starts compaction.
+        this.agent.abort();
+    }
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    _handleAgentEvent = async (event) => {
+        // When a user message starts, check if it's from either queue and remove it BEFORE emitting
+""",
+        new=b"""    _handleAgentEvent = async (event) => {
+        this._observeStreamCompaction(event);
+        // When a user message starts, check if it's from either queue and remove it BEFORE emitting
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""                this.sessionManager.appendMessage(event.message);
+            }
+            // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
+""",
+        new=b"""                this.sessionManager.appendMessage(event.message);
+                const attempt = this._streamCompactionAttempt;
+                if (attempt?.finalMessage === event.message) attempt.persistedMessage = event.message;
+            }
+            // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    async _runAgentPrompt(messages) {
+        this._isAgentRunActive = true;
+        try {
+            await this.agent.prompt(messages);
+            while (await this._handlePostAgentRun()) {
+                await this.agent.continue();
+            }
+""",
+        new=b"""    async _runAgentPrompt(messages) {
+        this._isAgentRunActive = true;
+        this._streamCompactionCancelledRun = false;
+        try {
+            await this.agent.prompt(messages);
+            while (await this._handlePostAgentRun()) {
+                const resumeInterruptedAfterCompaction = this._streamCompactionResume;
+                const pendingStreamCompaction = this._streamCompactionAttempt;
+                this._streamCompactionResume = false;
+                this._streamCompactionAttempt = undefined;
+                if (this._streamCompactionCancelledRun ||
+                    (pendingStreamCompaction && !this._canContinueStreamCompaction(pendingStreamCompaction))) break;
+                await this.agent.continue({ resumeInterruptedAfterCompaction });
+            }
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    async _handlePostAgentRun() {
+        const msg = this._lastAssistantMessage;
+        this._lastAssistantMessage = undefined;
+        if (!msg) {
+""",
+        new=b"""    async _handlePostAgentRun() {
+        const msg = this._lastAssistantMessage;
+        this._lastAssistantMessage = undefined;
+        const attempt = this._streamCompactionAttempt;
+        if (attempt) {
+            let continuationReady = false;
+            try {
+                if (this.agent.state.isStreaming || !attempt.persistedMessage ||
+                    attempt.persistedMessage !== msg || msg.stopReason === "error" ||
+                    !this._canContinueStreamCompaction(attempt) ||
+                    getLatestCompactionEntry(this.sessionManager.getBranch())?.id !== attempt.compactionId) return false;
+                const willRetry = !attempt.completed;
+                const continued = await this._runAutoCompaction("threshold", willRetry, attempt);
+                const committed = getLatestCompactionEntry(this.sessionManager.getBranch())?.id;
+                if (!continued || !committed || committed === attempt.compactionId ||
+                    !this._canContinueStreamCompaction(attempt)) return false;
+                this._streamCompactionResume = willRetry;
+                continuationReady = true;
+                return true;
+            }
+            finally {
+                // Keep cancellation reachable until the awaiting prompt loop
+                // actually starts continuation, including its microtask gap.
+                if (!continuationReady) this._streamCompactionAttempt = undefined;
+            }
+        }
+        if (this._streamCompactionCancelledRun) return false;
+        if (!msg) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    async abort() {
+        this.abortRetry();
+""",
+        new=b"""    async abort() {
+        this._cancelStreamCompaction();
+        this.abortRetry();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    async _emitModelSelect(nextModel, previousModel, source) {
+        if (modelsAreEqual(previousModel, nextModel))
+""",
+        new=b"""    async _emitModelSelect(nextModel, previousModel, source) {
+        if (!modelsAreEqual(previousModel, nextModel)) this._cancelStreamCompaction();
+        if (modelsAreEqual(previousModel, nextModel))
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    abortCompaction() {
+        this._compactionAbortController?.abort();
+""",
+        new=b"""    abortCompaction() {
+        this._cancelStreamCompaction();
+        this._compactionAbortController?.abort();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    async _runAutoCompaction(reason, willRetry) {
+""",
+        new=b"""    async _runAutoCompaction(reason, willRetry, streamAttempt) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""            const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
+            const pathEntries = this.sessionManager.getBranch();
+            const preparation = prepareCompaction(pathEntries, settings);
+""",
+        new=b"""            if (streamAttempt) this._syncStreamCompactionTranscript();
+            const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
+            const pathEntries = this.sessionManager.getBranch();
+            const preparation = prepareCompaction(pathEntries, settings);
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""                    willRetry: false,
+                });
+                return false;
+            }
+            this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
+            const newEntries = this.sessionManager.getEntries();
+""",
+        new=b"""                    willRetry: false,
+                });
+                return false;
+            }
+            this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension, usage);
+            // A streamed-task restart requires the checkpoint itself and its
+            // directory entry to be durable before context replacement/cleanup.
+            if (streamAttempt) this._syncStreamCompactionTranscript();
+            const newEntries = this.sessionManager.getEntries();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""            this._emit({ type: "compaction_start", reason });
+            this._autoCompactionAbortController = new AbortController();
+            started = true;
+""",
+        new=b"""            if (streamAttempt && !this._canContinueStreamCompaction(streamAttempt)) return false;
+            // Install cancellation before notifying the UI. Escape from a
+            // compaction_start listener must cancel this very attempt.
+            this._autoCompactionAbortController = new AbortController();
+            started = true;
+            this._emit({ type: "compaction_start", reason });
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""                    customInstructions: undefined,
+                    reason,
+                    willRetry,
+                    signal: this._autoCompactionAbortController.signal,
+""",
+        new=b"""                    customInstructions: undefined,
+                    reason,
+                    willRetry,
+                    ...(streamAttempt ? { streamCompaction: {
+                        contract: "radiance-stream-compaction-v1",
+                        tokens: streamAttempt.tokens, threshold: streamAttempt.threshold,
+                        interruptedMessageTimestamp: streamAttempt.persistedMessage.timestamp,
+                        completed: streamAttempt.completed,
+                    } } : {}),
+                    signal: this._autoCompactionAbortController.signal,
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""            if (this._autoCompactionAbortController.signal.aborted) {
+""",
+        new=b"""            if (this._autoCompactionAbortController.signal.aborted ||
+                (streamAttempt && !this._canContinueStreamCompaction(streamAttempt))) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""            if (willRetry) {
+                const messages = this.agent.state.messages;
+""",
+        new=b"""            if (streamAttempt) {
+                if (!this._canContinueStreamCompaction(streamAttempt)) return false;
+                // The committed context retains the interrupted assistant. Its
+                // private marker permits one explicit continuation from it;
+                // no user prompt, tool result, or successful stop is fabricated.
+                const last = this.agent.state.messages.at(-1);
+                if (willRetry && last?.role === "assistant") {
+                    if (last.stopReason !== "aborted" || last.provider !== streamAttempt.provider ||
+                        last.model !== streamAttempt.model || last.api !== streamAttempt.api ||
+                        last.timestamp !== streamAttempt.persistedMessage.timestamp) return false;
+                    last[Symbol.for("qwen-r9700:stream-compaction-interruption:v1")] = true;
+                }
+                return willRetry || this.agent.hasQueuedMessages();
+            }
+            if (willRetry) {
+                const messages = this.agent.state.messages;
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+        preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
+        old=b"""    setAutoCompactionEnabled(enabled) {
+        this.settingsManager.setCompactionEnabled(enabled);
+""",
+        new=b"""    setAutoCompactionEnabled(enabled) {
+        if (!enabled) this._cancelStreamCompaction();
+        this.settingsManager.setCompactionEnabled(enabled);
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+        preimage_sha256="d84351e451b9fef40fe2532c446aca90d26a4be9038b2d77d3d45dd6eab21d41",
+        old=b"""    async continue() {
+""",
+        new=b"""    async continue(options = {}) {
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+        preimage_sha256="d84351e451b9fef40fe2532c446aca90d26a4be9038b2d77d3d45dd6eab21d41",
+        old=b"""        if (lastMessage.role === "assistant") {
+            const queuedSteering = this.steeringQueue.drain();
+""",
+        new=b"""        const resumeInterruptedAfterCompaction = options.resumeInterruptedAfterCompaction === true &&
+            lastMessage.role === "assistant" && lastMessage.stopReason === "aborted" &&
+            lastMessage[Symbol.for("qwen-r9700:stream-compaction-interruption:v1")] === true &&
+            this._state.model.provider === "qwen-r9700" && this._state.model.api === "openai-completions" &&
+            this._state.model.id === "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate" &&
+            lastMessage.provider === this._state.model.provider && lastMessage.model === this._state.model.id &&
+            lastMessage.api === this._state.model.api;
+        if (resumeInterruptedAfterCompaction) {
+            // Consume the capability before starting another run. Ordinary
+            // continue() retains its assistant-tail rejection and queue policy.
+            delete lastMessage[Symbol.for("qwen-r9700:stream-compaction-interruption:v1")];
+            await this.runContinuation({ resumeInterruptedAfterCompaction: lastMessage });
+            return;
+        }
+        if (lastMessage.role === "assistant") {
+            const queuedSteering = this.steeringQueue.drain();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+        preimage_sha256="d84351e451b9fef40fe2532c446aca90d26a4be9038b2d77d3d45dd6eab21d41",
+        old=b"""    async runContinuation() {
+        await this.runWithLifecycle(async (signal) => {
+            await runAgentLoopContinue(this.createContextSnapshot(), this.createLoopConfig(), (event) => this.processEvents(event), signal, this.streamFunction);
+""",
+        new=b"""    async runContinuation(options = {}) {
+        await this.runWithLifecycle(async (signal) => {
+            await runAgentLoopContinue(this.createContextSnapshot(), this.createLoopConfig(options), (event) => this.processEvents(event), signal, this.streamFunction);
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+        preimage_sha256="d84351e451b9fef40fe2532c446aca90d26a4be9038b2d77d3d45dd6eab21d41",
+        old=b"""            model: this._state.model,
+            reasoning: this._state.thinkingLevel === "off" ? undefined : this._state.thinkingLevel,
+""",
+        new=b"""            model: this._state.model,
+            resumeInterruptedAfterCompaction: options.resumeInterruptedAfterCompaction,
+            reasoning: this._state.thinkingLevel === "off" ? undefined : this._state.thinkingLevel,
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+        preimage_sha256="3726c6ce2328a18723f1d47db59c387fbad4115ddc413cddedc7d858cd314215",
+        old=b"""export async function runAgentLoopContinue(context, config, emit, signal, streamFn) {
+    if (context.messages.length === 0) {
+        throw new Error("Cannot continue: no messages in context");
+    }
+    if (context.messages[context.messages.length - 1].role === "assistant") {
+        throw new Error("Cannot continue from message role: assistant");
+    }
+""",
+        new=b"""export async function runAgentLoopContinue(context, config, emit, signal, streamFn) {
+    if (context.messages.length === 0) {
+        throw new Error("Cannot continue: no messages in context");
+    }
+    const lastMessage = context.messages[context.messages.length - 1];
+    const interrupted = config.resumeInterruptedAfterCompaction;
+    const resumeInterruptedAfterCompaction = interrupted === lastMessage && lastMessage.role === "assistant" &&
+        lastMessage.stopReason === "aborted" && config.model.provider === "qwen-r9700" &&
+        config.model.api === "openai-completions" &&
+        config.model.id === "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate" &&
+        lastMessage.provider === config.model.provider && lastMessage.model === config.model.id &&
+        lastMessage.api === config.model.api;
+    if (lastMessage.role === "assistant" && !resumeInterruptedAfterCompaction) {
+        throw new Error("Cannot continue from message role: assistant");
+    }
+""",
+    ),
+)
+PATCHES += STREAM_COMPACTION_PATCHES
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -540,7 +1063,10 @@ def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
 def classify(data: bytes, patches: FilePatch | tuple[FilePatch, ...]) -> str:
     if isinstance(patches, FilePatch):
         patches = (patches,)
-    preimages = {patch.preimage_sha256 for patch in patches}
+    preimages = {
+        frozenset((patch.preimage_sha256, *patch.alternate_preimage_sha256))
+        for patch in patches
+    }
     relative_paths = {patch.relative_path for patch in patches}
     if len(preimages) != 1 or len(relative_paths) != 1:
         raise PatchError("grouped patches disagree about their file or preimage")
@@ -552,17 +1078,20 @@ def classify(data: bytes, patches: FilePatch | tuple[FilePatch, ...]) -> str:
         new_count = candidate.count(patch.new)
         if old_count == 1 and new_count == 0:
             continue
-        if old_count == 0 and new_count == 1:
+        # A replacement can retain its original statement as a suffix. Reverse
+        # the entire unique replacement first; the complete preimage digest
+        # below still rejects an extra original statement or any other change.
+        if new_count == 1:
             candidate = candidate.replace(patch.new, patch.old)
             applied += 1
             continue
         matching_legacy = [legacy for legacy in patch.legacy if candidate.count(legacy) == 1]
-        if old_count == 0 and new_count == 0 and len(matching_legacy) == 1:
+        if new_count == 0 and len(matching_legacy) == 1:
             candidate = candidate.replace(matching_legacy[0], patch.old)
             legacy_applied += 1
             continue
         raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
-    if sha256(candidate) != next(iter(preimages)):
+    if sha256(candidate) not in next(iter(preimages)):
         raise PatchError(f"file differs from both pinned patch states: {patches[0].relative_path}")
     if applied == 0 and legacy_applied == 0:
         return "unpatched"

@@ -228,7 +228,7 @@ def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
 
 
 def classify(data: bytes, patch: FilePatch) -> str:
-    normalized = data
+    normalized = without_known_precontinuation_loop(data, patch)
     if patch.relative_path == TOOL_CALL_INTEGRITY_RELATIVE:
         transport = runpy.run_path(str(Path(__file__).with_name("patch-pi-tool-call-integrity")))
         for transform in reversed(transport["TRANSPORT_PATCHES"]):
@@ -280,6 +280,37 @@ def classify(data: bytes, patch: FilePatch) -> str:
         if sha256(candidate) == patch.preimage_sha256:
             return "outdated"
     raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
+
+
+def without_known_precontinuation_loop(data: bytes, patch: FilePatch) -> bytes:
+    """Reverse only the fully authenticated adjacent compaction loop patch."""
+    relative = "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js"
+    if patch.relative_path != relative:
+        return data
+    adjacent = runpy.run_path(str(Path(__file__).with_name("patch-pi-precontinuation-compaction")))
+    transforms = tuple(transform for transform in adjacent["PATCHES"] if transform.relative_path == relative)
+    if not transforms or not any(
+        transform.new in data or any(legacy in data for legacy in transform.legacy)
+        for transform in transforms
+    ):
+        return data
+    # The adjacent classifier checks the complete SDK file against its pinned
+    # digest, including this usage patch. A matching snippet alone never grants
+    # permission to ignore changed bytes elsewhere in the loop.
+    try:
+        adjacent["classify"](data, transforms)
+    except adjacent["PatchError"] as exc:
+        raise PatchError(f"pre-continuation compatibility file differs from both pinned patch states: {relative}") from exc
+    normalized = data
+    for transform in transforms:
+        if normalized.count(transform.new) == 1:
+            normalized = normalized.replace(transform.new, transform.old)
+            continue
+        for legacy in transform.legacy:
+            if normalized.count(legacy) == 1:
+                normalized = normalized.replace(legacy, transform.old)
+                break
+    return normalized
 
 
 def atomic_write(path: Path, data: bytes, source: os.stat_result) -> None:

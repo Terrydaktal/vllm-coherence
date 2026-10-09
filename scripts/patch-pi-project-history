@@ -7,10 +7,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import runpy
 import stat
 import tempfile
 from contextlib import suppress
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -117,7 +119,40 @@ def stable_read(path: Path) -> tuple[bytes, os.stat_result]:
     return data, before
 
 
+@lru_cache(maxsize=1)
+def compaction_patch_api() -> dict[str, object] | None:
+    path = Path(__file__).with_name("patch-pi-precontinuation-compaction")
+    if not path.is_file():
+        return None
+    return runpy.run_path(str(path), run_name="project_history_known_compaction_patch")
+
+
+def without_known_compaction_projection(data: bytes, patch: FilePatch) -> bytes:
+    if patch.relative_path != "node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js":
+        return data
+    api = compaction_patch_api()
+    if api is None:
+        return data
+    known = tuple(item for item in api["PATCHES"] if item.relative_path == patch.relative_path)
+    if not known:
+        return data
+    # Authenticate the complete group: selected-count projection and streamed
+    # compaction's empty-tail projection share this file. Reverse only those
+    # exact known additions for the independent history patch's full-file check.
+    try:
+        api["classify"](data, known)
+    except api["PatchError"] as exc:
+        raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}") from exc
+    for item in known:
+        for replacement in (item.new, *item.legacy):
+            if replacement in data:
+                data = data.replace(replacement, item.old)
+                break
+    return data
+
+
 def classify(data: bytes, patch: FilePatch) -> str:
+    data = without_known_compaction_projection(data, patch)
     old_count = data.count(patch.old)
     new_count = data.count(patch.new)
     if old_count == 1 and new_count == 0 and sha256(data) == patch.preimage_sha256:

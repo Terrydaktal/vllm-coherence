@@ -8,6 +8,7 @@ const STAGES = [
   ["submit", "Submit checkpoint request"],
   ["wait", "Prepare model context"],
   ["generate", "Generate checkpoint"],
+  ["finalize", "Finishing checkpoint"],
   ["validate", "Validate and save checkpoint"],
   ["flush", "Flush pending KV tail"],
   ["commit", "Commit conversation"],
@@ -188,7 +189,8 @@ export function startCompactionProgress(ctx, {
   const waitDetails = new Map();
   let phase = "prepare", phaseStarted = started, state = "running", lastRender = -Infinity, timer, saving, finishedAt;
   let activeWaitId, activeWaitStarted, schedulerStopped = false;
-  let transcriptAppended = false, durableCommit = false, reusedCheckpoint = false;
+  let transcriptAppended = false, durableCommit = false, reusedCheckpoint = false, finishRequested = false, forcedCheckpoint = false;
+  let finishAvailable;
   const tokens = {};
   const rateSamples = [];
   let firstRateAt, firstRateTokens, lastRateAt, ratePausedAt, excludedRateWaitMs = 0, generationWait;
@@ -216,7 +218,7 @@ export function startCompactionProgress(ctx, {
   }
 
   function observeGeneration(at, outputAdvanced, observation) {
-    if (state !== "running" || phase !== "generate") return;
+    if (state !== "running" || !["generate", "finalize"].includes(phase)) return;
     // A new stream delta wins over a scheduler sample awaiting its next refresh.
     const activity = outputAdvanced ? undefined : classifyCompactionWait(observation);
     if (activity && ["queue", "handover"].includes(activity.id)) {
@@ -317,7 +319,8 @@ export function startCompactionProgress(ctx, {
         id === activeWaitId && activeWaitStarted !== undefined ? at - activeWaitStarted : 0)) }]));
     return { ...identity, state, phase, elapsedMs: Object.values(phaseTimings).reduce((sum, value) => sum + value.elapsedMs, 0),
       phases: phaseTimings, waitPhases: waitPhaseTimings, tokens: { ...tokens }, reusedCheckpoint,
-      transcriptAppended, durableCommit,
+      transcriptAppended, durableCommit, finishRequested, forcedCheckpoint,
+      ...(typeof finishAvailable === "boolean" ? { finishAvailable } : {}),
       ...(finishReason ? { finishReason } : {}),
       ...(finishedAt ? { finishedAt } : {}),
       ...(removedBytes === undefined ? {} : { removedBytes }) };
@@ -352,7 +355,8 @@ export function startCompactionProgress(ctx, {
     lastRender = at;
     observeWait(at, observation);
     const report = snapshot(at);
-    const label = phase === "generate" && generationWait ? "Checkpoint generation paused" :
+    const label = ["generate", "finalize"].includes(phase) && generationWait
+      ? phase === "finalize" ? "Checkpoint finalization paused" : "Checkpoint generation paused" :
       phase === "wait" && activeWaitId ? waitStageLabel(activeWaitId) : stageLabel(phase);
     const outcome = state === "running" ? label : {
       complete: "Compacted", failed: `Failed at: ${label}`, cancelled: "Cancelled; transcript retained",
@@ -363,6 +367,7 @@ export function startCompactionProgress(ctx, {
     if (state === "running") {
       for (const [id] of STAGES) {
         const stage = report.phases[id];
+        if (id === "finalize" && !finishRequested && ["pending", "skipped"].includes(stage.state)) continue;
         if (id === "wait" && !["pending", "skipped"].includes(stage.state)) {
           pushWaitLines(lines, report);
         } else {
@@ -373,7 +378,8 @@ export function startCompactionProgress(ctx, {
       }
     } else {
       const completed = [];
-      for (const [id] of STAGES.filter(([stage]) => report.phases[stage].state !== "pending")) {
+      for (const [id] of STAGES.filter(([stage]) => report.phases[stage].state !== "pending" &&
+        (stage !== "finalize" || finishRequested || report.phases[stage].state !== "skipped"))) {
         if (id === "wait" && report.phases[id].state !== "skipped") {
           for (const [waitId, waitLabel] of WAIT_STAGES) {
             const timing = report.waitPhases[waitId];
@@ -392,8 +398,9 @@ export function startCompactionProgress(ctx, {
     }
     if (reusedCheckpoint) lines.push("Saved checkpoint reused; no new generation" +
       (tokens.outputTokens ? ` (${count(tokens.outputTokens)} tokens)` : "") + ". Counts describe the saved request.");
+    if (forcedCheckpoint) lines.push("User-selected cutoff; checkpoint may be incomplete.");
     if (!reusedCheckpoint && (tokens.outputTokens || tokens.characters)) {
-      const generating = state === "running" && phase === "generate";
+      const generating = state === "running" && ["generate", "finalize"].includes(phase);
       const recentRate = generating ? rollingRate(at) : undefined;
       const average = generating ? averageRate() : undefined;
       const throughput = generationWait ? `paused: ${generationWait.detail}` :
@@ -407,6 +414,11 @@ export function startCompactionProgress(ctx, {
         `Checkpoint: ${count(tokens.characters)} characters; token count pending`);
     }
     if (state !== "running" && removedBytes !== undefined) lines.push(`Old snapshots: freed ${(removedBytes / 1024 ** 3).toFixed(2)} GiB`);
+    if (state === "running" && !transcriptAppended) {
+      const canFinish = !finishRequested && !reusedCheckpoint && (finishAvailable ?? (tokens.characters > 0)) &&
+        ["wait", "generate"].includes(phase);
+      lines.push(`Esc cancel${canFinish ? " · Alt+C finish now" : ""}`);
+    }
     // The pinned runtime forwards this message to its native compaction spinner.
     // Pi removes that component at compaction_end, including cancellation/failure.
     ctx.ui.setWorkingMessage?.(lines.join("\n"));
@@ -416,9 +428,10 @@ export function startCompactionProgress(ctx, {
     if (state !== "running") return;
     const at = now();
     const changed = value.phase && value.phase !== phase;
+    const newlyRequested = value.finishRequested === true && !finishRequested;
+    const newlyForced = value.forcedCheckpoint === true && !forcedCheckpoint;
+    const availabilityChanged = typeof value.finishAvailable === "boolean" && value.finishAvailable !== finishAvailable;
     const previousCacheRead = tokens.cacheRead;
-    const tokensAdvanced = validCount(value.outputTokens) && value.outputTokens > (tokens.outputTokens ?? 0);
-    const outputAdvanced = tokensAdvanced || (validCount(value.characters) && value.characters > (tokens.characters ?? 0));
     if (changed) {
       const nextIndex = STAGES.findIndex(([id]) => id === value.phase);
       if (nextIndex < 0) throw new Error("unknown compaction phase");
@@ -434,16 +447,22 @@ export function startCompactionProgress(ctx, {
       stages.get(phase).state = "running";
       if (phase === "wait") observeWait(at);
     }
+    const tokensAdvanced = validCount(value.outputTokens) && value.outputTokens > (tokens.outputTokens ?? 0);
+    const outputAdvanced = tokensAdvanced || (validCount(value.characters) && value.characters > (tokens.characters ?? 0));
     for (const field of ["inputTokens", "outputTokens", "outputTokenLimit", "characters"]) {
-      if (validCount(value[field]) && (field !== "outputTokens" || value[field] >= (tokens[field] ?? 0))) tokens[field] = value[field];
+      if (validCount(value[field]) && (!["outputTokens", "characters"].includes(field) ||
+          value[field] >= (tokens[field] ?? 0))) tokens[field] = value[field];
     }
-    if (phase === "generate" && outputAdvanced) resumeRate(at);
-    if (phase === "generate" && tokensAdvanced) recordRate(at, tokens.outputTokens);
+    if (["generate", "finalize"].includes(phase) && outputAdvanced) resumeRate(at);
+    if (["generate", "finalize"].includes(phase) && tokensAdvanced) recordRate(at, tokens.outputTokens);
     if (validCount(value.cacheRead) && value.cacheRead <= tokens.inputTokens) tokens.cacheRead = value.cacheRead;
     if (value.reusedCheckpoint) reusedCheckpoint = true;
+    if (value.finishRequested === true) finishRequested = true;
+    if (value.forcedCheckpoint === true) forcedCheckpoint = true;
+    if (typeof value.finishAvailable === "boolean") finishAvailable = value.finishAvailable;
     if (["stop", "length", "content_filter", "tool_calls", "error"].includes(value.finishReason)) finishReason = value.finishReason;
     if (validCount(value.removedBytes)) removedBytes = value.removedBytes;
-    render(changed || tokens.cacheRead !== previousCacheRead, outputAdvanced);
+    render(changed || newlyRequested || newlyForced || availabilityChanged || tokens.cacheRead !== previousCacheRead, outputAdvanced);
     return snapshot();
   }
 
@@ -469,10 +488,21 @@ export function startCompactionProgress(ctx, {
   }
 
   const onAbort = () => { void finish("cancelled"); };
-  const controller = { update, snapshot, finish, markAppended() {
+  function getContextTokens() {
+    // This request runs outside Pi's normal streaming assistant message. Expose
+    // only its measured live context for display, never transcript accounting.
+    if (state !== "running" || reusedCheckpoint || transcriptAppended ||
+        !["submit", "wait", "generate", "finalize"].includes(phase) ||
+        !validCount(tokens.inputTokens) || tokens.inputTokens === 0) return undefined;
+    const total = tokens.inputTokens + (tokens.outputTokens ?? 0);
+    return Number.isSafeInteger(total) ? total : undefined;
+  }
+
+  const controller = { update, snapshot, finish, getContextTokens, markAppended() {
     transcriptAppended = true;
     // Escape can no longer undo an entry that Pi has already appended.
     signal?.removeEventListener("abort", onAbort);
+    render(true);
   }, markCommitted() { durableCommit = true; } };
   registry.set(key, controller);
   try {

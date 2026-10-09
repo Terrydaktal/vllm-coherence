@@ -35,6 +35,169 @@ function fixture(t, { observationAt = () => ({ available: false, configured: fal
     advance: (ms, render = true) => { clock += ms; if (!stopped && render) tick(); } };
 }
 
+test("active compaction offers finish only after checkpoint text exists and clears controls at every outcome", async (t) => {
+  for (const outcome of ["complete", "failed", "cancelled"]) {
+    const f = fixture(t);
+    assert.match(f.messages.at(-1), /\nEsc cancel$/);
+    f.progress.update({ phase: "wait", inputTokens: 100, outputTokenLimit: 1000 });
+    assert.match(f.messages.at(-1), /\nEsc cancel$/);
+    f.progress.update({ phase: "generate", inputTokens: 100, outputTokens: 10 });
+    assert.match(f.messages.at(-1), /\nEsc cancel$/);
+    f.advance(100, false);
+    f.progress.update({ characters: 40 });
+    assert.match(f.messages.at(-1), /\nEsc cancel · Alt\+C finish now$/);
+    await f.progress.finish(outcome);
+    assert.doesNotMatch(f.messages.at(-2), /Esc cancel|Alt\+C finish now/);
+    assert.equal(f.messages.at(-1), undefined, "ordinary generation must not inherit compaction controls");
+  }
+});
+
+test("explicit finish availability hides whitespace-only output and redraws when real text arrives", (t) => {
+  const f = fixture(t);
+  f.progress.update({ phase: "generate", inputTokens: 100, outputTokens: 1, characters: 4, finishAvailable: false });
+  assert.equal(f.progress.snapshot().finishAvailable, false);
+  assert.match(f.messages.at(-1), /\nEsc cancel$/);
+  assert.doesNotMatch(f.messages.at(-1), /Alt\+C finish now/);
+  f.progress.update({ outputTokens: 2, characters: 8, finishAvailable: true });
+  assert.equal(f.progress.snapshot().finishAvailable, true);
+  assert.match(f.messages.at(-1), /\nEsc cancel · Alt\+C finish now$/);
+  const cutoff = f.progress.snapshot().tokens;
+  f.progress.update({ phase: "finalize", finishRequested: true, forcedCheckpoint: true });
+  assert.deepEqual(f.progress.snapshot().tokens, cutoff);
+  assert.equal(f.progress.snapshot().forcedCheckpoint, true);
+  assert.match(f.messages.at(-1), /User-selected cutoff; checkpoint may be incomplete\./);
+  assert.match(f.messages.at(-1), /\nEsc cancel$/);
+});
+
+test("finish requests show finalization without claiming a committed checkpoint", async (t) => {
+  const f = fixture(t);
+  f.progress.update({ phase: "generate", inputTokens: 100, outputTokens: 10, characters: 40 });
+  f.advance(1000);
+  f.progress.update({ finishRequested: true });
+  assert.match(f.messages.at(-1), /\nEsc cancel$/);
+  assert.doesNotMatch(f.messages.at(-1), /Alt\+C finish now/);
+  assert.equal(f.progress.snapshot().finishRequested, true);
+  f.progress.update({ finishRequested: true, phase: "finalize" });
+  assert.match(f.messages.at(-1), /^Radiance compaction: Finishing checkpoint/);
+  assert.match(f.messages.at(-1), /\nEsc cancel$/);
+  assert.doesNotMatch(f.messages.at(-1).split("\n")[0], /Compacted|committed/i);
+  assert.equal(f.progress.snapshot().transcriptAppended, false);
+  assert.equal(f.progress.snapshot().durableCommit, false);
+  assert.equal(f.progress.snapshot().phases.generate.elapsedMs, 1000);
+  f.advance(500, false);
+  f.progress.update({ outputTokens: 20, finishRequested: false });
+  assert.equal(f.progress.snapshot().finishRequested, true, "a later update cannot undo a finish request");
+  assert.equal(f.progress.getContextTokens(), 120, "finalization still displays measured live context");
+  f.abort.abort();
+  await f.progress.finish("cancelled");
+  assert.equal(f.reports[0].state, "cancelled");
+  assert.equal(f.reports[0].finishRequested, true);
+  assert.equal(f.reports[0].phases.finalize.elapsedMs, 500);
+  assert.doesNotMatch(f.messages.at(-2), /Esc cancel|Alt\+C finish now/);
+  assert.equal(f.messages.at(-1), undefined);
+});
+
+test("finishing the existing checkpoint preserves cutoff counters, cache usage and throughput", async (t) => {
+  const f = fixture(t);
+  f.progress.update({ phase: "wait" });
+  f.advance(2000);
+  f.progress.update({ phase: "generate", inputTokens: 245000, cacheRead: 244000,
+    outputTokens: 1, characters: 4, outputTokenLimit: 8792 });
+  f.advance(1000, false);
+  f.progress.update({ outputTokens: 5000, characters: 20000 });
+  assert.match(f.messages.at(-1), /4999.0 t\/s/);
+  const cutoff = f.progress.snapshot();
+  f.progress.update({ phase: "finalize", finishRequested: true, forcedCheckpoint: true });
+  assert.deepEqual(f.progress.snapshot().tokens, cutoff.tokens, "Alt+C keeps the original request accounting");
+  assert.equal(f.progress.snapshot().phases.wait.elapsedMs, 2000);
+  assert.equal(f.progress.snapshot().phases.generate.elapsedMs, 1000);
+  assert.equal(f.progress.getContextTokens(), 250000);
+  assert.match(f.messages.at(-1), /Checkpoint: 5,000 \/ 8,792 tokens · 4999.0 t\/s, 4999.0 t\/s avg/);
+  assert.match(f.messages.at(-1), /cached 244,000/);
+  assert.match(f.messages.at(-1), /User-selected cutoff; checkpoint may be incomplete\./);
+  assert.match(f.messages.at(-1), /\nEsc cancel$/);
+  assert.equal(f.progress.snapshot().forcedCheckpoint, true);
+  assert.equal(f.progress.snapshot().transcriptAppended, false);
+  assert.equal(f.progress.snapshot().durableCommit, false);
+  f.advance(500, false);
+  f.progress.update({ phase: "validate", outputTokens: 0, characters: 0, forcedCheckpoint: false });
+  assert.deepEqual(f.progress.snapshot().tokens, cutoff.tokens, "late counters cannot erase the cutoff");
+  assert.equal(f.progress.snapshot().forcedCheckpoint, true, "the cutoff remains explicitly distinguished");
+  await f.progress.finish("complete");
+  assert.deepEqual(f.reports[0].tokens, cutoff.tokens);
+  assert.equal(f.reports[0].forcedCheckpoint, true);
+  assert.equal(f.reports[0].phases.wait.elapsedMs, 2000);
+  assert.equal(f.reports[0].phases.generate.elapsedMs, 1000);
+  assert.equal(f.reports[0].phases.finalize.elapsedMs, 500);
+  assert.match(f.messages.at(-2), /User-selected cutoff; checkpoint may be incomplete\./);
+  assert.equal(f.messages.at(-1), undefined);
+});
+
+test("controls reflect validation, saved checkpoints and the irreversible append boundary", (t) => {
+  const f = fixture(t);
+  f.progress.update({ phase: "validate" });
+  assert.match(f.messages.at(-1), /\nEsc cancel$/);
+  assert.doesNotMatch(f.messages.at(-1), /Alt\+C finish now/);
+  f.progress.update({ phase: "commit" });
+  f.progress.markAppended();
+  assert.doesNotMatch(f.messages.at(-1), /Esc cancel|Alt\+C finish now/);
+  const restored = fixture(t);
+  restored.progress.update({ phase: "validate", reusedCheckpoint: true });
+  assert.match(restored.messages.at(-1), /\nEsc cancel$/);
+  assert.doesNotMatch(restored.messages.at(-1), /Alt\+C finish now/);
+});
+
+test("live compaction context includes measured prompt and streamed output only", async (t) => {
+  const f = fixture(t);
+  assert.equal(f.progress.getContextTokens(), undefined);
+  f.progress.update({ phase: "tokenize", inputTokens: 218328 });
+  assert.equal(f.progress.getContextTokens(), undefined, "preparation is not an active request");
+  f.progress.update({ phase: "submit", inputTokens: 218328, outputTokenLimit: 35464 });
+  assert.equal(f.progress.getContextTokens(), 218328, "do not add the output budget");
+  f.progress.update({ phase: "wait", cacheRead: 217366 });
+  assert.equal(f.progress.getContextTokens(), 218328, "cached input is already counted");
+  f.progress.update({ phase: "generate", outputTokens: 9162 });
+  assert.equal(f.progress.getContextTokens(), 227490);
+  f.progress.update({ outputTokens: 9200 });
+  assert.equal(f.progress.getContextTokens(), 227528);
+  f.progress.update({ outputTokens: 9100 });
+  assert.equal(f.progress.getContextTokens(), 227528, "late counters cannot move usage backwards");
+  f.progress.update({ phase: "validate" });
+  assert.equal(f.progress.getContextTokens(), undefined, "completed request is no longer live");
+  await f.progress.finish("complete");
+  assert.equal(f.progress.getContextTokens(), undefined);
+});
+
+test("compaction context override is cleared for cancellation, failure and appended transcripts", async (t) => {
+  for (const outcome of ["cancelled", "failed"]) {
+    const f = fixture(t);
+    f.progress.update({ phase: "generate", inputTokens: 100, outputTokens: 10 });
+    assert.equal(f.progress.getContextTokens(), 110);
+    await f.progress.finish(outcome);
+    assert.equal(f.progress.getContextTokens(), undefined);
+  }
+  const f = fixture(t);
+  f.progress.update({ phase: "generate", inputTokens: 100, outputTokens: 10 });
+  f.progress.markAppended();
+  assert.equal(f.progress.getContextTokens(), undefined);
+  await clearCompactionProgress(f.ctx);
+  assert.equal(getCompactionProgress(f.ctx), undefined);
+});
+
+test("compaction context rejects historical, unknown and overflowing counts", (t) => {
+  const f = fixture(t);
+  f.progress.update({ phase: "submit", inputTokens: -1 });
+  assert.equal(f.progress.getContextTokens(), undefined);
+  f.progress.update({ inputTokens: 0 });
+  assert.equal(f.progress.getContextTokens(), undefined);
+  f.progress.update({ inputTokens: 100, characters: 400 });
+  assert.equal(f.progress.getContextTokens(), 100, "characters are not token estimates");
+  f.progress.update({ inputTokens: Number.MAX_SAFE_INTEGER, outputTokens: 1 });
+  assert.equal(f.progress.getContextTokens(), undefined);
+  f.progress.update({ inputTokens: 100, reusedCheckpoint: true });
+  assert.equal(f.progress.getContextTokens(), undefined, "receipt counters are not a live stream");
+});
+
 test("context preparation separately times GPU queue, cache restore, prefill and first-token work", async (t) => {
   const f = fixture(t, { observationAt: (clock) => {
     if (clock < 13_000) return { available: true,
