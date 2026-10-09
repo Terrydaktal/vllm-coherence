@@ -5,6 +5,7 @@ are collected; no forced tokens, tensor reads, stage events or round fences.
 Trace activation/export happens between declared chunks, outside retained rounds.
 """
 
+import gc
 import json
 import os
 import time
@@ -14,8 +15,40 @@ from pathlib import Path
 from optimized_d7_worker import GraphObservation, OptimizedWorker
 
 
+class TimingGraphObservation(GraphObservation):
+    """Reclaim stopped profiler cycles at the excluded trace boundary."""
+
+    def stop_profile(self):
+        was_active = self.profile_active
+        try:
+            return super().stop_profile()
+        finally:
+            # PyTorch's bound action-map callbacks can keep the stopped profiler
+            # and native Kineto results alive after the last owner drops it.
+            # Export failures also leave the base observer's field populated.
+            # A failed stop remains active and must abort the timing arm instead
+            # of claiming that an active profiler was safely released.
+            if was_active and not self.profile_active:
+                self.profiler = None
+                started = time.perf_counter_ns()
+                collected = gc.collect()
+                cleanup = {
+                    "elapsed_ms": (time.perf_counter_ns() - started) / 1_000_000,
+                    "collected_objects": collected,
+                    "boundary": "excluded_profile_teardown",
+                }
+                if not hasattr(self, "profile_cleanup"):
+                    self.profile_cleanup = []
+                self.profile_cleanup.append(cleanup)
+
+    def close(self):
+        result = super().close()
+        result["profile_cleanup"] = list(getattr(self, "profile_cleanup", []))
+        return result
+
+
 class MatchedStageWorker(OptimizedWorker):
-    observation_class = GraphObservation
+    observation_class = TimingGraphObservation
 
     def qwen_timing_status(self):
         if not hasattr(self, "_timing_instance"):

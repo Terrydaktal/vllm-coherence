@@ -13,6 +13,8 @@ import fcntl
 import hashlib
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -39,6 +41,10 @@ SOURCE_FILES = (
     "matched_stage_profile_worker.py", "benchmark_pi_coding_contexts.py",
     "benchmark_pi_coding_json_compaction.py", "benchmark_pi_task_workloads.py",
 )
+DIAGNOSTIC_MAX_FILES = 32
+DIAGNOSTIC_MAX_BYTES = 128 * 1024 * 1024
+DIAGNOSTIC_FILE_MAX_BYTES = 16 * 1024 * 1024
+DIAGNOSTIC_ATTEMPTS = 3
 
 
 def digest(value):
@@ -67,6 +73,230 @@ def write_private(path, value):
 
 def read(path):
     return json.loads(path.read_text())
+
+
+_IDENTITY_UNSET = object()
+
+
+def latest_round_recorder_identity(round_log):
+    """Ignore earlier lifetimes and incomplete final records in a bounded tail."""
+    round_log = Path(round_log)
+    try:
+        descriptor = os.open(round_log, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if stat.S_ISREG(info.st_mode):
+                stream.seek(max(0, info.st_size - 65536))
+                for line in reversed(stream.read(65536).splitlines()):
+                    try:
+                        row = json.loads(line)
+                    except (ValueError, UnicodeDecodeError):
+                        continue
+                    if not isinstance(row, dict):
+                        continue
+                    trace, pid = row.get("cache_trace_id"), row.get("pid")
+                    if (isinstance(trace, str) and trace and isinstance(pid, int)
+                            and not isinstance(pid, bool) and pid > 0):
+                        return trace, pid
+    except OSError:
+        pass
+    return None
+
+
+def diagnostic_cache_prefix(round_log, explicit=None, *, current_identity=_IDENTITY_UNSET):
+    """Resolve recorder identity without assuming it follows the round writer."""
+    round_log = Path(round_log)
+    if explicit is not None:
+        return Path(explicit), "explicit"
+    suffix = "-rounds.jsonl"
+    name = round_log.name[:-len(suffix)] if round_log.name.endswith(suffix) else round_log.stem
+    expected = round_log.with_name(name)
+    # Worker initialization can configure the recorder before the scheduler
+    # chooses a different round-log path. Its current health identity is authoritative.
+    if current_identity is _IDENTITY_UNSET:
+        current_identity = latest_round_recorder_identity(round_log)
+    matches = []
+    for health in round_log.parent.glob("*-cache-jobs-health.json"):
+        try:
+            descriptor = os.open(health, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+                    continue
+                row = json.loads(stream.read(65536))
+            if (current_identity is not None and isinstance(row, dict)
+                    and (row.get("trace_id"), row.get("pid")) == current_identity):
+                matches.append(health.with_name(health.name.removesuffix("-cache-jobs-health.json")))
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+    if len(matches) == 1:
+        return matches[0], "matching_round_trace_health"
+    if expected.with_name(name + "-cache-jobs-health.json").is_file():
+        return expected, "round_path"
+    return expected, "round_path_unconfirmed"
+
+
+def retain_diagnostics(round_log, directory, cache_telemetry_prefix=None):
+    """Copy existing numeric feeds before their container tmpfs disappears.
+
+    Copies happen between requests, with no recorder/GPU calls. Append-only
+    feeds are copied to their initial size; rotations trigger bounded retries.
+    The manifest describes a bounded snapshot, never complete lifetime history.
+    """
+    round_log, directory = Path(round_log), Path(directory)
+    directory.mkdir(parents=True, mode=0o700)
+    current_identity = latest_round_recorder_identity(round_log)
+    cache_prefix, prefix_source = diagnostic_cache_prefix(
+        round_log, cache_telemetry_prefix, current_identity=current_identity)
+    prefix = cache_prefix.name
+    cache_name = prefix + "-cache-jobs.jsonl"
+    health_name = prefix + "-cache-jobs-health.json"
+    pattern = re.compile(re.escape(prefix) + r"(?:-api-[0-9]+)?-cache-jobs(?:\.jsonl(?:\.1)?|-health\.json)$")
+
+    def inventory():
+        paths = {round_log, round_log.with_name(round_log.name + ".1")}
+        paths.update(path for path in cache_prefix.parent.iterdir() if pattern.fullmatch(path.name))
+        result = {}
+        for path in sorted(paths):
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
+            result[path.name] = (path, info.st_dev, info.st_ino, info.st_size, info.st_mode)
+        return result
+
+    manifest = {"schema": "urn:coherence:benchmark-diagnostics:v1", "started_at_ns": time.time_ns(),
+                "source_directory": str(round_log.parent), "round_log": round_log.name,
+                "cache_telemetry_prefix": str(cache_prefix),
+                "cache_telemetry_prefix_source": prefix_source,
+                "round_recorder_identity": ({"trace_id": current_identity[0], "pid": current_identity[1]}
+                                            if current_identity is not None else None),
+                "scope": "Bounded current/previous numeric feeds; not permanent lifetime history.",
+                "limits": {"files": DIAGNOSTIC_MAX_FILES, "bytes": DIAGNOSTIC_MAX_BYTES,
+                           "file_bytes": DIAGNOSTIC_FILE_MAX_BYTES, "attempts": DIAGNOSTIC_ATTEMPTS},
+                "rotation_retries": 0, "files": [], "issues": []}
+    for attempt in range(DIAGNOSTIC_ATTEMPTS):
+        copied, issues, total = [], [], 0
+        try:
+            before = inventory()
+        except OSError as error:
+            issues.append({"code": "inventory_unavailable", "errno": error.errno})
+            before = {}
+        for name in (round_log.name, cache_name, health_name):
+            if name not in before:
+                issues.append({"code": "required_feed_missing", "file": name})
+        if len(before) > DIAGNOSTIC_MAX_FILES:
+            issues.append({"code": "file_count_limit", "available": len(before)})
+        for name, (source, device, inode, size, mode) in list(before.items())[:DIAGNOSTIC_MAX_FILES]:
+            if not stat.S_ISREG(mode):
+                issues.append({"code": "non_regular_file", "file": name})
+                continue
+            if size > DIAGNOSTIC_FILE_MAX_BYTES or total + size > DIAGNOSTIC_MAX_BYTES:
+                issues.append({"code": "byte_limit", "file": name, "source_bytes": size})
+                continue
+            try:
+                fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(fd, "rb") as stream:
+                    opened = os.fstat(stream.fileno())
+                    if (opened.st_dev, opened.st_ino) != (device, inode):
+                        raise FileNotFoundError("diagnostic feed rotated before open")
+                    data = stream.read(size)
+                    if len(data) != size or os.fstat(stream.fileno()).st_size < size:
+                        raise FileNotFoundError("diagnostic feed truncated during copy")
+                incomplete_tail = 0
+                if name.endswith((".jsonl", ".jsonl.1")) and data and not data.endswith(b"\n"):
+                    end = data.rfind(b"\n") + 1
+                    incomplete_tail = len(data) - end
+                    issues.append({"code": "incomplete_record", "file": name, "tail_bytes": incomplete_tail})
+                records = data.splitlines() if name.endswith((".jsonl", ".jsonl.1")) else [data]
+                decoded, parse_errors = [], 0
+                for row in records:
+                    try:
+                        value = json.loads(row)
+                        if not isinstance(value, dict):
+                            raise TypeError("diagnostic record is not an object")
+                        decoded.append(value)
+                    except (ValueError, TypeError):
+                        parse_errors += 1
+                if parse_errors:
+                    issues.append({"code": "invalid_records", "file": name, "count": parse_errors})
+                health = None
+                if name.endswith("-health.json") and decoded:
+                    health = {key: decoded[0].get(key) for key in (
+                        "trace_id", "pid", "started_ns", "updated_at_ms", "written", "dropped",
+                        "write_errors", "context_drops", "main_thread_samples", "round_sample_errors",
+                        "worker_first_work_hooks", "generation_round_telemetry", "gpu_rounds")}
+                    if any(isinstance(health.get(key), (int, float)) and health[key] > 0
+                           for key in ("dropped", "write_errors", "context_drops", "round_sample_errors")):
+                        issues.append({"code": "recorder_reports_loss", "file": name})
+                    gpu = health.get("gpu_rounds")
+                    if isinstance(gpu, dict) and any(gpu.get(key, 0) for key in ("dropped", "errors", "quarantined")):
+                        issues.append({"code": "gpu_recorder_reports_loss", "file": name})
+                    if name == health_name and (health.get("worker_first_work_hooks") is not True
+                                               or health.get("generation_round_telemetry") is not True):
+                        issues.append({"code": "generation_diagnostics_unconfirmed", "file": name})
+                with tempfile.NamedTemporaryFile(dir=directory, delete=False) as output:
+                    temporary = Path(output.name)
+                    output.write(data)
+                temporary.replace(directory / name)
+                total += len(data)
+                copied.append({"file": name, "bytes": len(data), "source_bytes": size,
+                               "sha256": hashlib.sha256(data).hexdigest(), "records": len(records),
+                               "validated_records": len(decoded), "parse_errors": parse_errors,
+                               "incomplete_tail_bytes": incomplete_tail,
+                               "source_device": device, "source_inode": inode,
+                               **({"health": health} if health is not None else {})})
+            except (OSError, ValueError, IndexError) as error:
+                issues.append({"code": "copy_failed", "file": name, "errno": getattr(error, "errno", None)})
+        try:
+            after = inventory()
+            rotated = ({name: value[1:3] for name, value in before.items()}
+                       != {name: value[1:3] for name, value in after.items()})
+        except OSError:
+            rotated = True
+        manifest.update(files=copied, issues=issues, attempts=attempt + 1)
+        if not rotated:
+            break
+        manifest["rotation_retries"] += 1
+        if attempt == DIAGNOSTIC_ATTEMPTS - 1:
+            manifest["issues"].append({"code": "rotation_did_not_settle"})
+    # File retention and lifecycle agreement are different requirements. Even
+    # an explicit path must not qualify another process's otherwise healthy feed.
+    selected_health = next((item.get("health") for item in manifest["files"]
+                            if item["file"] == health_name), None)
+    if current_identity is not None:
+        observed_identity = ((selected_health.get("trace_id"), selected_health.get("pid"))
+                             if selected_health is not None else None)
+        verified = observed_identity == current_identity
+        manifest["recorder_identity_verified"] = verified
+        if not verified:
+            manifest["issues"].append({"code": "recorder_identity_missing" if observed_identity is None
+                                      else "recorder_identity_mismatch", "file": health_name})
+    else:
+        manifest["recorder_identity_verified"] = None
+    manifest.update(status="retained_with_gaps" if manifest["issues"] else "retained",
+                    finished_at_ns=time.time_ns())
+    write_private(directory / "manifest.json", manifest)
+    return {"status": manifest["status"], "manifest": str(directory / "manifest.json"),
+            "file_count": len(manifest["files"]), "issues": manifest["issues"]}
+
+
+def retain_request_diagnostics(args, directory):
+    """Optional archive failures remain visible and never replace request errors."""
+    try:
+        result = retain_diagnostics(args.round_log, directory, getattr(args, "cache_telemetry_prefix", None))
+        result["manifest"] = str(Path(result["manifest"]).relative_to(args.output))
+        return result
+    except Exception as error:  # noqa: BLE001 - Preserve an already-raised inference error even if diagnostics fail.
+        result = {"status": "retained_with_gaps", "manifest": None, "file_count": 0,
+                  "issues": [{"code": "archive_failed", "errno": getattr(error, "errno", None)}]}
+        try:
+            write_private(directory / "failure.json", result)
+        except Exception:  # noqa: BLE001 - Even failure-report I/O must not replace the original request error.
+            result["issues"].append({"code": "failure_manifest_unavailable"})
+        print(json.dumps({"diagnostic_archive_failed": True, "errno": getattr(error, "errno", None)}),
+              file=sys.stderr, flush=True)
+        return result
 
 
 def stable_worker_identity(receipt):
@@ -150,6 +380,8 @@ def failures(result, label, *, rounds=False):
         errors.append(f"{label}: checkpoint contract did not validate")
     if rounds and result["round_capture"]["status"] != "captured":
         errors.append(f"{label}: incomplete round capture")
+    if result.get("diagnostic_capture", {}).get("status") == "retained_with_gaps":
+        errors.append(f"{label}: diagnostic archive has explicit coverage gaps")
     return errors
 
 
@@ -195,6 +427,13 @@ def publish_views(root, state):
         report["status"] = ("complete_with_validation_failure" if report["validation_failures"]
                             else "complete") if done else "running"
         write_private(root / "public" / name, report)
+    # Replace any earlier focused histogram with this suite's same control
+    # observations, even while capture is incomplete. Never leave an older
+    # complete histogram looking current while new context rows are published.
+    write_private(root / "public/pi-round-histogram.json", contexts | {
+        "measurement_mode": "shared_suite_control_after",
+        "coding_context_result": "pi-coding-contexts.json",
+    })
 
 
 def check_worker(rpc, state):
@@ -226,9 +465,14 @@ def capture_context(args, opener, tokenizer, rpc, state, context, prefix, suffix
     continuation = None
     for arm in ARMS:
         print(json.dumps({"context": context, "arm": arm}), flush=True)
-        result, ids, _ = matched.capture_arm(
-            opener=opener, args=args, rpc=rpc, tokenizer=tokenizer, identity=identity,
-            prompt=prefix + suffix, suffix=suffix, arm=arm, root=directory / f"{context}-{arm}")
+        arm_root = directory / f"{context}-{arm}"
+        try:
+            result, ids, _ = matched.capture_arm(
+                opener=opener, args=args, rpc=rpc, tokenizer=tokenizer, identity=identity,
+                prompt=prefix + suffix, suffix=suffix, arm=arm, root=arm_root)
+        finally:
+            diagnostic = retain_request_diagnostics(args, arm_root / "diagnostics")
+        result["diagnostic_capture"] = diagnostic
         check_worker(rpc, state)
         result.update(capture_id=digest([attempt, arm]), measurement_mode=arm,
                       output_token_ids_sha256=digest(ids))
@@ -262,16 +506,23 @@ def continue_chain(args, opener, tokenizer, rpc, state, prefix, rendered):
             ids = load_ids(args.output, saved["continuation"], saved["result"])
         else:
             print(json.dumps({"context": "60K", "stage": stage}), flush=True)
-            result, ids, completion = chain._request(
-                opener=opener, args=args, identity=group["identity"], tokenizer=tokenizer,
-                prompt_tokens=prompt, suffix_tokens=suffix, stage=stage,
-                max_tokens=getattr(args, f"{stage}_max_tokens"), thinking=thinking)
+            diagnostic_root = args.output / "diagnostics" / "chain" / f"{stage}-{uuid.uuid4().hex}"
+            try:
+                result, ids, completion = chain._request(
+                    opener=opener, args=args, identity=group["identity"], tokenizer=tokenizer,
+                    prompt_tokens=prompt, suffix_tokens=suffix, stage=stage,
+                    max_tokens=getattr(args, f"{stage}_max_tokens"), thinking=thinking)
+            finally:
+                diagnostic = retain_request_diagnostics(args, diagnostic_root)
+            result["diagnostic_capture"] = diagnostic
             del completion
             check_worker(rpc, state)
             result.update(capture_id=digest([state["id"], group["result"]["capture_id"], stage]),
                           measurement_mode="unprofiled_chain", output_token_ids_sha256=digest(ids))
             state["chain"].append({"result": result, "prompt_sha256": digest(prompt),
-                "continuation": save_ids(args.output, result["capture_id"], ids)})
+                "continuation": save_ids(args.output, result["capture_id"], ids),
+                "diagnostic_artifacts": [receipt(args.output, path) for path in sorted(diagnostic_root.iterdir())]
+                                        if diagnostic_root.is_dir() else []})
             write_private(args.output / "checkpoint.json", state)
             publish_views(args.output, state)
         sequence = prompt + ids
@@ -316,6 +567,8 @@ def execute(args, opener, tokenizer, rpc):
                 raise ValueError("checkpoint result differs from its captured control")
         for saved in state["chain"]:
             load_ids(root, saved["continuation"], saved["result"])
+            for item in saved.get("diagnostic_artifacts", []):
+                verify_file(root, item)
     else:
         state = {"schema": "urn:coherence:shared-benchmark:v1", "id": uuid.uuid4().hex,
                  "contract": contract, "started_at": time.time(), "contexts": {}, "chain": []}
@@ -369,6 +622,8 @@ def parser():
     p.add_argument("--base-url", default="http://127.0.0.1:8081")
     p.add_argument("--head", choices=("global256", "global512"), default="global512")
     p.add_argument("--round-log", type=Path, default=Path("/dev/shm/qwen-stage-timing-rounds.jsonl"))
+    p.add_argument("--cache-telemetry-prefix", type=Path,
+                   help="Actual cache-job recorder status prefix, if it differs from the round writer")
     for name, default in (("warmup-rounds", 64), ("chunk-rounds", 128), ("profile-rounds", 1152),
                           ("model-context-tokens", 253792), ("coding-min-tokens", chain.CODING_MIN_TOKENS),
                           ("prose-code-min-tokens", 500), ("json-min-tokens", 1000),

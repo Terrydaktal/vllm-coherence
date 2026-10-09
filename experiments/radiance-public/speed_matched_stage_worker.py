@@ -9,14 +9,13 @@ import hashlib
 from pathlib import Path
 
 import torch
-from matched_stage_profile_worker import MatchedStageWorker
-from optimized_d7_worker import GraphObservation
+from matched_stage_profile_worker import MatchedStageWorker, TimingGraphObservation
 from speed_candidate_worker import SpeedCandidateWorker
 
 from qwen_r9700_lab.conformance_instrumentation import HookSet
 
 
-class FullGraphObservation(GraphObservation):
+class FullGraphObservation(TimingGraphObservation):
     def __init__(self, *args, **kwargs):
         self.target_depth = 0
         super().__init__(*args, **kwargs)

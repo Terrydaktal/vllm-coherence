@@ -625,27 +625,34 @@ The context benchmark now retains every content-free scheduler event for each ar
 | 200K | 1,715 | 1714 | 1714 | 1,714 | 1 | none | captured |
 
 
-The histogram below is generated from the complete per-round records of the [coding-context benchmark](benchmarks/results/pi-coding-contexts.json). Every measured `round_ms` value appears in exactly one bin; untimed events are reported separately. The shared suite uses this same predetermined clean control for the coding row and histogram; the stage residual matches only structurally admitted M8 cycles from both controls, while this histogram retains every measured round.
+The histogram below is generated from the complete per-round records of the [histogram-only rerun](benchmarks/results/pi-round-histogram.json). Every measured `round_ms` value appears in exactly one bin; untimed events are reported separately. This is a separate unprofiled capture. The coding and chained workload tables, compiled-stage timings and residual retain their original measurement captures.
 Half-millisecond display bins resolve the current dense clusters at 35–42 and 49–53 ms. These bins are recomputed from the original records; the captured bins, round counts and measurement identity are unchanged.
+
+2026-10-09 rerun after [profiler cleanup](experiments/radiance-public/matched_stage_profile_worker.py). Captured source: base `a16fa00` plus benchmark changes identified by exact file hashes in the artifact. The diagnostic filename-prefix repair was added after that source was frozen.
+
+Output tokens at 0K / 60K / 200K: 4,912 / 5,675 / 7,948. 0K stopped naturally below the requested 5,000-token minimum. Round coverage is complete; overall report status remains `complete_with_validation_failure`.
+
+The original per-arm diagnostic copies missed the cache-job feeds. Bounded supplements retained 7 files; the recorder reports 1 generic dropped record(s).
+CPU and HIP diagnostics match all 4,188 selected timed rounds, with no missing or invalid round records. The generic drop is separate from that complete round coverage. All 26 profiler cleanups took 103.33–168.97 ms at excluded trace boundaries, outside the measured controls. Full lifetime archive coverage is not claimed.
 
 | Round time | 0K arm | 60K arm | 200K arm |
 |---|---:|---:|---:|
 | `<35` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `35–35.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `35.5–36` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `36–36.5` | 113 (10.4%) | 0 (0.0%) | 0 (0.0%) |
-| `36.5–37` | 480 (44.0%) | 0 (0.0%) | 0 (0.0%) |
-| `37–37.5` | 481 (44.1%) | 0 (0.0%) | 0 (0.0%) |
+| `36–36.5` | 66 (6.0%) | 0 (0.0%) | 0 (0.0%) |
+| `36.5–37` | 450 (41.2%) | 0 (0.0%) | 0 (0.0%) |
+| `37–37.5` | 559 (51.2%) | 0 (0.0%) | 0 (0.0%) |
 | `37.5–38` | 13 (1.2%) | 0 (0.0%) | 0 (0.0%) |
-| `38–38.5` | 1 (0.1%) | 0 (0.0%) | 0 (0.0%) |
+| `38–38.5` | 2 (0.2%) | 0 (0.0%) | 0 (0.0%) |
 | `38.5–39` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `39–39.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `39.5–40` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `40–40.5` | 0 (0.0%) | 22 (1.6%) | 0 (0.0%) |
-| `40.5–41` | 0 (0.0%) | 1,310 (94.7%) | 0 (0.0%) |
-| `41–41.5` | 0 (0.0%) | 33 (2.4%) | 0 (0.0%) |
-| `41.5–42` | 0 (0.0%) | 14 (1.0%) | 0 (0.0%) |
-| `42–43` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| `40–40.5` | 0 (0.0%) | 3 (0.2%) | 0 (0.0%) |
+| `40.5–41` | 0 (0.0%) | 1,287 (93.1%) | 0 (0.0%) |
+| `41–41.5` | 0 (0.0%) | 75 (5.4%) | 0 (0.0%) |
+| `41.5–42` | 0 (0.0%) | 17 (1.2%) | 0 (0.0%) |
+| `42–43` | 1 (0.1%) | 0 (0.0%) | 0 (0.0%) |
 | `43–45` | 0 (0.0%) | 1 (0.1%) | 0 (0.0%) |
 | `45–46` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `46–47` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
@@ -653,11 +660,11 @@ Half-millisecond display bins resolve the current dense clusters at 35–42 and 
 | `48–48.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `48.5–49` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `49–49.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `49.5–50` | 0 (0.0%) | 0 (0.0%) | 61 (3.6%) |
-| `50–50.5` | 0 (0.0%) | 0 (0.0%) | 1,223 (71.4%) |
-| `50.5–51` | 1 (0.1%) | 0 (0.0%) | 406 (23.7%) |
-| `51–51.5` | 0 (0.0%) | 0 (0.0%) | 22 (1.3%) |
-| `51.5–52` | 0 (0.0%) | 0 (0.0%) | 1 (0.1%) |
+| `49.5–50` | 0 (0.0%) | 0 (0.0%) | 3 (0.2%) |
+| `50–50.5` | 0 (0.0%) | 0 (0.0%) | 1,072 (62.5%) |
+| `50.5–51` | 0 (0.0%) | 0 (0.0%) | 611 (35.6%) |
+| `51–51.5` | 0 (0.0%) | 0 (0.0%) | 19 (1.1%) |
+| `51.5–52` | 0 (0.0%) | 0 (0.0%) | 8 (0.5%) |
 | `52–52.5` | 0 (0.0%) | 0 (0.0%) | 1 (0.1%) |
 | `52.5–53` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `53–53.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
@@ -665,24 +672,26 @@ Half-millisecond display bins resolve the current dense clusters at 35–42 and 
 | `54–55` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `55–56` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `56–60` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `60–62.5` | 0 (0.0%) | 1 (0.1%) | 0 (0.0%) |
-| `62.5–63` | 1 (0.1%) | 0 (0.0%) | 0 (0.0%) |
+| `60–62.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
+| `62.5–63` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `63–63.5` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `63.5–64` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `64–65` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `65–70` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `70–100` | 0 (0.0%) | 1 (0.1%) | 0 (0.0%) |
+| `70–100` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `100–250` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `250–500` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `≥500` | 1 (0.1%) | 1 (0.1%) | 0 (0.0%) |
+| `≥500` | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | **Timed rounds** | **1,091** | **1,383** | **1,714** |
 | **Untimed events** | **1** | **1** | **1** |
-| **Mean / median** | **37.44 / 36.98 ms** | **41.32 / 40.77 ms** | **50.34 / 50.33 ms** |
+| **Mean / median** | **36.95 / 37.01 ms** | **40.81 / 40.80 ms** | **50.43 / 50.43 ms** |
 
 
 ### Known remaining symptoms and likely causes
 
-**Isolated round stalls remain.** The current complete coding feeds recorded 0K: 1/1,091 timed rounds above 100 ms, longest 591.203 ms; 60K: 1/1,383 timed rounds above 100 ms, longest 751.876 ms; 200K: 0/1,714 timed rounds above 100 ms. Their cause has not been localized; these numeric round records alone cannot distinguish a host pause from a GPU queue or cache delay. This run did not reproduce the sustained slow state. [Complete round records](benchmarks/results/pi-coding-contexts.json) and [matched controls](benchmarks/results/stage26-control-20261009.json).
+**The latest histogram did not reproduce the large stalls.** The separate unprofiled controls recorded 0K: 0/1,091 timed rounds at least 90 ms, longest 42.639 ms; 60K: 0/1,383 timed rounds at least 90 ms, longest 43.133 ms; 200K: 0/1,714 timed rounds at least 90 ms, longest 52.475 ms. This is bounded evidence, not a guarantee against future stalls. [Fresh complete round records](benchmarks/results/pi-round-histogram.json).
+
+**The earlier 591.203 ms and 751.876 ms pauses remain unattributed.** A CPU-only PyTorch check confirmed that stopped profiler cycles can retain native trace results until later garbage collection. The [benchmark cleanup](experiments/radiance-public/matched_stage_profile_worker.py) reclaims those cycles outside measured rounds. The original detailed feeds were not archived, so that mechanism cannot be assigned to either historical pause. [Original round records](benchmarks/results/pi-coding-contexts.json) and [matched controls](benchmarks/results/stage26-control-20261009.json).
 
 **Reasoning throughput could not be isolated.** The completions stream exposed no separate reasoning channel for prose_code, thinking. Those thinking-enabled requests are reported as observed prose; the remaining gap is in stream classification, not a demonstrated target-model arithmetic error.
 

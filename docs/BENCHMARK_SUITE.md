@@ -67,8 +67,11 @@ visible validation failures; they are not padded or retried to improve results.
 | `checkpoint.json` | Run identity, settings, artifact hashes and completed work |
 | `runs/<context>/report.json` | All four arms and their numeric telemetry |
 | `runs/<context>/<context>-<arm>/` | Existing worker round boundaries and trace chunks |
+| `runs/<context>/<context>-<arm>/diagnostics/` | Private raw round/cache-job/API feeds, recorder health and archive manifest, retained after each arm, including failed arms |
+| `diagnostics/chain/<stage>-<attempt>/` | The same diagnostic snapshot after each chained task, including failed requests |
 | `continuations/` | Private generated token IDs for resuming the 60K chain, mode 0600 |
 | `public/pi-coding-contexts.json` | Context rows and every captured round, including outliers |
+| `public/pi-round-histogram.json` | Histogram view of those same selected coding controls, with shared capture identity; no additional requests |
 | `public/pi-coding-json-compaction.json` | Chained workload rows; coding has the same capture ID as the context row |
 | `analysis.json` | Existing matched-stage reducer's stage timings and paired-control residual |
 | `abandoned/` | Preserved partial groups from interrupted attempts |
@@ -90,6 +93,11 @@ captures. Repeating offline analysis does not require another GPU run. Existing
 reviewed numeric reports; never publish `checkpoint.json`, continuations or raw
 private capture directories.
 
+Publish the coding and histogram views together. Each suite refresh replaces the
+histogram view, including while its status is `running`, so a previous focused
+histogram-only rerun cannot silently remain beside newer workload measurements.
+The renderer distinguishes a shared-suite histogram from a separate focused run.
+
 The packager authenticates the declared source commit against every recorded
 measurement and host-runtime source hash. When packaging from an exported tree,
 pass `--source-repository PATH_TO_GIT_CHECKOUT` so it can read that commit's Git
@@ -109,6 +117,46 @@ Controls retain ordinary production telemetry and one host boundary clock/record
 per decode round. They have no stage probes or added synchronization. Profiling
 can still perturb individual kernel timings; the paired controls expose observer
 effects, not a proof that those effects are zero.
+
+The matched timing workers now reclaim completed profiler cycles at each excluded
+trace-teardown boundary. After stopping and exporting a trace, the benchmark-only
+observer clears its profiler reference and performs cyclic garbage collection.
+This prevents unreachable PyTorch profiler objects and their native trace results
+from surviving into an unprofiled control. Cleanup duration and collected-object
+counts appear in each chunk's `observation.profile_cleanup`; they are not included
+in retained stage or control intervals. Collection is never added to control
+rounds, and the live worker and its GC settings are unchanged. A stop or export
+failure still aborts the arm rather than permitting a control to run after a
+failed teardown.
+
+Diagnostic snapshots copy the recorder's existing bounded files while the
+container is still available, outside timed requests. Raw request/round identities
+and monotonic fields remain available for correlation in the private archive;
+they are not added to public reports. The manifest records file hashes, recorder
+health and explicit gaps for missing feeds, malformed or incomplete records,
+recorder loss, exhausted bounds or unresolved rotation. It is a bounded snapshot,
+not a claim that all lifetime records survived. Copies are limited to 32 files,
+128 MiB total and 16 MiB per file, with three attempts to resolve rotation.
+
+The first October 9 capture predates these safeguards. Its 591.203 ms 0K and
+751.876 ms 60K intervals remain measured outliers with an unproved cause because
+their detailed temporary feeds were not archived. A CPU-only PyTorch check
+confirmed the profiler lifetime hazard; the histogram-only GPU rerun after the
+cleanup captured all 1,091 / 1,383 / 1,714 timed rounds at 0K / 60K / 200K with
+maxima of 42.639 / 43.133 / 52.475 ms and none at least 90 ms. This bounded result
+does not establish the cause of the earlier pauses or guarantee no future stall.
+Its [dedicated numeric artifact](../benchmarks/results/pi-round-histogram.json)
+identifies the captured source as base `a16fa00` plus benchmark changes by exact
+file hashes. The diagnostic filename-prefix repair was added after this source
+was frozen. Existing coding, chained workload and stage timing measurements are
+unchanged. The 0K natural
+completion remains below the requested 5,000-token minimum. Original per-arm
+diagnostic prefix gaps remain explicit; later bounded supplemental copies retain
+the correct feeds and match CPU/HIP records to all 4,188 selected timed rounds,
+with no missing or invalid selected records. One generic dropped-record count
+remains separate from that verified round coverage. All 26 profiler cleanup
+operations took 103.33–168.97 ms at excluded boundaries, outside the controls.
+Neither the bounded copies nor those joins claim full lifetime diagnostic coverage.
 
 CPU tests cover shared provenance, exact continuation, complete histograms,
 interruption recovery, invalidation and privacy boundaries. The September 25

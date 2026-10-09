@@ -35,7 +35,8 @@ def captured_report(values):
             "median_ms": statistics.median(values) if values else None,
         },
     }
-    return {"suite_capture_id": "test", "contexts": {
+    return {"suite_capture_id": "test", "measurement_mode": "histogram_only_after_profile",
+            "contexts": {
         context: {"round_capture": copy.deepcopy(capture)}
         for context in ("0K", "60K", "200K")
     }}
@@ -45,7 +46,7 @@ def render_report(report, tmp_path, monkeypatch):
     path = tmp_path / "rounds.json"
     path.write_text(json.dumps(report))
     original = path.read_bytes()
-    monkeypatch.setattr(renderer, "CODING_CONTEXT_RESULTS", path)
+    monkeypatch.setattr(renderer, "ROUND_HISTOGRAM_RESULTS", path)
     lines = renderer.render_round_histogram()
     assert path.read_bytes() == original
     return lines
@@ -80,7 +81,7 @@ def test_display_rebins_boundaries_and_includes_all_outliers(tmp_path, monkeypat
 def test_display_current_clusters_and_complete_counts():
     lines = renderer.render_round_histogram()
     bins = rendered_bins(lines)
-    report = json.loads(renderer.CODING_CONTEXT_RESULTS.read_text())
+    report = json.loads(renderer.round_histogram_result_path().read_text())
     for arm, context in enumerate(("0K", "60K", "200K")):
         capture = report["contexts"][context]["round_capture"]
         values = [row["round_ms"] for row in capture["records"]
@@ -92,6 +93,77 @@ def test_display_current_clusters_and_complete_counts():
             )
         assert sum(counts[arm] for counts in bins.values()) == len(values)
         assert bins["≥500"][arm] == sum(ms >= 500 for ms in values)
+
+
+def test_histogram_only_rerun_does_not_replace_workload_tables(tmp_path, monkeypatch):
+    coding_before = renderer.render_coding_context_benchmark()
+    coverage_before = renderer.render_round_capture_summary()
+    chained_before = renderer.render_chained_workload_results()
+    original_coding = renderer.CODING_CONTEXT_RESULTS.read_bytes()
+    report = captured_report([36.75, 41.0, 501])
+    lines = render_report(report, tmp_path, monkeypatch)
+
+    assert any("histogram-only rerun" in line for line in lines)
+    assert any("separate unprofiled capture" in line for line in lines)
+    assert rendered_bins(lines)["≥500"] == [1, 1, 1]
+    assert renderer.render_coding_context_benchmark() == coding_before
+    assert renderer.render_round_capture_summary() == coverage_before
+    assert renderer.render_chained_workload_results() == chained_before
+    assert renderer.CODING_CONTEXT_RESULTS.read_bytes() == original_coding
+
+
+def test_histogram_uses_previous_complete_capture_until_rerun_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(renderer, "ROUND_HISTOGRAM_RESULTS", tmp_path / "not-yet-captured.json")
+    assert renderer.round_histogram_result_path() == renderer.CODING_CONTEXT_RESULTS
+    assert any("coding-context benchmark" in line for line in renderer.render_round_histogram())
+
+
+def test_regular_suite_histogram_reports_shared_capture_provenance(tmp_path, monkeypatch):
+    report = captured_report([37, 751])
+    report["measurement_mode"] = "shared_suite_control_after"
+    report["coding_context_result"] = "pi-coding-contexts.json"
+    lines = render_report(report, tmp_path, monkeypatch)
+    text = "\n".join(lines)
+    assert "shared-suite coding controls" in text
+    assert "same predetermined clean control for the coding row and histogram" in text
+    assert "histogram-only rerun" not in text
+    assert "separate unprofiled capture" not in text
+    assert "retain their original measurement captures" not in text
+    symptoms = "\n".join(renderer.render_known_remaining_symptoms())
+    assert "Isolated round stalls remain" in symptoms
+    assert "current shared-suite coding controls" in symptoms
+    assert "did not reproduce the large stalls" not in symptoms
+    assert "591.203" not in symptoms
+
+
+def test_capture_provenance_remains_true_after_the_repair_is_committed():
+    lines = renderer.render_round_histogram()
+    text = "\n".join(lines)
+    report = json.loads(renderer.ROUND_HISTOGRAM_RESULTS.read_text())
+    assert f"Captured source: base `{report['source_base_commit'][:7]}`" in text
+    assert "exact file hashes" in text
+    assert "uncommitted" not in text
+    assert "filename-prefix repair was added after that source was frozen" in text
+    assert "experiments/radiance-public/matched_stage_profile_worker.py" in text
+    assert "0K stopped naturally below the requested 5,000-token minimum" in text
+    assert "CPU and HIP diagnostics match all 4,188 selected timed rounds" in text
+    assert "generic drop is separate from that complete round coverage" in text
+
+
+@pytest.mark.parametrize("damaged", ["invalid_json", "missing_context", "partial_capture"])
+def test_existing_rerun_never_silently_falls_back_to_old_measurements(
+    damaged, tmp_path, monkeypatch
+):
+    report = captured_report([37])
+    if damaged == "missing_context":
+        del report["contexts"]["200K"]
+    elif damaged == "partial_capture":
+        report["contexts"]["60K"]["round_capture"]["status"] = "partial"
+    path = tmp_path / "histogram.json"
+    path.write_text("{" if damaged == "invalid_json" else json.dumps(report))
+    monkeypatch.setattr(renderer, "ROUND_HISTOGRAM_RESULTS", path)
+    with pytest.raises(ValueError, match="complete 0K/60K/200K captures"):
+        renderer.render_round_histogram()
 
 
 @pytest.mark.parametrize("value", [True, "37", -0.001, math.nan, math.inf])

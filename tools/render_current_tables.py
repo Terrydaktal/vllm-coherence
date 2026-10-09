@@ -815,30 +815,64 @@ def render_coding_json_compaction_benchmark():
 def render_known_remaining_symptoms():
     current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
     head = json.loads((ROOT / current["head_candidate_result"]).read_text())["modes"]["global512"]
-    workload = json.loads(CODING_CONTEXT_RESULTS.read_text())
+    round_result = round_histogram_result_path()
+    workload = json.loads(round_result.read_text())
+    dedicated_capture = round_result == ROUND_HISTOGRAM_RESULTS
+    focused_capture = workload.get("measurement_mode") == "histogram_only_after_profile"
     pauses = []
+    pause_count = 0
     for context in ("0K", "60K", "200K"):
         records = workload["contexts"][context]["round_capture"]["records"]
         timed = [row["round_ms"] for row in records if row.get("round_ms") is not None]
-        slow = [ms for ms in timed if ms > 100]
+        slow = [ms for ms in timed if ms >= 90] if dedicated_capture else [ms for ms in timed if ms > 100]
+        pause_count += len(slow)
         pauses.append(
-            f"{context}: {len(slow)}/{len(timed):,} timed rounds above 100 ms"
-            + (f", longest {max(slow):,.3f} ms" if slow else "")
+            f"{context}: {len(slow)}/{len(timed):,} timed rounds "
+            + ("at least 90 ms" if dedicated_capture else "above 100 ms")
+            + (f", longest {max(timed):,.3f} ms" if dedicated_capture and timed else
+               f", longest {max(slow):,.3f} ms" if slow else "")
         )
     chained = json.loads(CHAINED_RESULTS.read_text())
     missing_reasoning = [
         row["stage"] for row in chained["stages"]
         if row.get("thinking_enabled") and not row.get("reasoning_channel_observed")
     ]
-    lines = [
-        "### Known remaining symptoms and likely causes", "",
-        "**Isolated round stalls remain.** The current complete coding feeds recorded "
-        + "; ".join(pauses) + ". Their cause has not been localized; these numeric round "
-        "records alone cannot distinguish a host pause from a GPU queue or cache delay. "
-        "This run did not reproduce the sustained slow state. "
-        "[Complete round records](benchmarks/results/pi-coding-contexts.json) and "
-        f"[matched controls]({current['matched_stage_control']}).", "",
-    ]
+    lines = ["### Known remaining symptoms and likely causes", ""]
+    if focused_capture:
+        lines += [
+            ("**The latest histogram recorded isolated round stalls.** " if pause_count else
+             "**The latest histogram did not reproduce the large stalls.** ") + "The separate "
+            "unprofiled controls recorded " + "; ".join(pauses)
+            + ". This is bounded evidence, not a guarantee against future stalls. "
+            "[Fresh complete round records](benchmarks/results/pi-round-histogram.json).", "",
+            "**The earlier 591.203 ms and 751.876 ms pauses remain unattributed.** "
+            "A CPU-only PyTorch check confirmed that stopped profiler cycles can retain native "
+            "trace results until later garbage collection. The "
+            "[benchmark cleanup](experiments/radiance-public/matched_stage_profile_worker.py) "
+            "reclaims those cycles outside measured rounds. The original detailed feeds were not "
+            "archived, so that mechanism cannot be assigned to either historical pause. "
+            "[Original round records](benchmarks/results/pi-coding-contexts.json) and "
+            f"[matched controls]({current['matched_stage_control']}).", "",
+        ]
+    elif dedicated_capture:
+        lines += [
+            ("**Isolated round stalls remain.** " if pause_count else
+             "**The latest histogram did not reproduce the large stalls.** ")
+            + "The current shared-suite coding controls recorded " + "; ".join(pauses)
+            + ". These same observations feed the coding rows and histogram. Numeric round "
+            "records alone cannot distinguish a host pause from a GPU queue or cache delay. "
+            "This is bounded evidence, not a guarantee against future stalls. "
+            "[Complete round records](benchmarks/results/pi-round-histogram.json).", "",
+        ]
+    else:
+        lines += [
+            "**Isolated round stalls remain.** The current complete coding feeds recorded "
+            + "; ".join(pauses) + ". Their cause has not been localized; these numeric round "
+            "records alone cannot distinguish a host pause from a GPU queue or cache delay. "
+            "This run did not reproduce the sustained slow state. "
+            "[Complete round records](benchmarks/results/pi-coding-contexts.json) and "
+            f"[matched controls]({current['matched_stage_control']}).", "",
+        ]
     if missing_reasoning:
         lines += [
             "**Reasoning throughput could not be isolated.** The completions stream exposed "
@@ -955,6 +989,16 @@ def render_attention_boundary_comparison():
 
 
 CODING_CONTEXT_RESULTS = ROOT / "benchmarks/results/pi-coding-contexts.json"
+ROUND_HISTOGRAM_RESULTS = ROOT / "benchmarks/results/pi-round-histogram.json"
+
+
+def round_histogram_result_path():
+    """A histogram-only rerun must not replace other captured benchmark metrics."""
+    return (
+        ROUND_HISTOGRAM_RESULTS
+        if ROUND_HISTOGRAM_RESULTS.is_file()
+        else CODING_CONTEXT_RESULTS
+    )
 
 
 def _coding_context_value(value, suffix=""):
@@ -1116,9 +1160,11 @@ def render_round_histogram():
     """Rebin complete captured rounds for display without changing the capture."""
 
     report = {}
-    if CODING_CONTEXT_RESULTS.is_file():
+    result_path = round_histogram_result_path()
+    dedicated_capture = result_path == ROUND_HISTOGRAM_RESULTS
+    if result_path.is_file():
         try:
-            candidate = json.loads(CODING_CONTEXT_RESULTS.read_text())
+            candidate = json.loads(result_path.read_text())
         except (OSError, json.JSONDecodeError):
             candidate = {}
         if isinstance(candidate, dict):
@@ -1137,6 +1183,8 @@ def render_round_histogram():
         and capture.get("status") == "captured"
         and isinstance(capture.get("histogram"), dict)
     }
+    if dedicated_capture and len(histograms) != 3:
+        raise ValueError("dedicated round histogram requires complete 0K/60K/200K captures")
     if len(histograms) == 3:
         context_order = ("0K", "60K", "200K")
         display_edges = (
@@ -1221,16 +1269,30 @@ def render_round_histogram():
                 return "— / — ms"
             return f"{statistics.mean(values):.2f} / {statistics.median(values):.2f} ms"
 
-        lines = [
-            "The histogram below is generated from the complete per-round records of the "
-            "[coding-context benchmark](benchmarks/results/pi-coding-contexts.json). Every measured "
+        try:
+            result_link = result_path.relative_to(ROOT).as_posix()
+        except ValueError:
+            result_link = result_path.name
+        focused_capture = report.get("measurement_mode") == "histogram_only_after_profile"
+        provenance = (
+            "[histogram-only rerun](" + result_link + "). Every measured "
+            "`round_ms` value appears in exactly one bin; untimed events are reported separately. "
+            "This is a separate unprofiled capture. The coding and chained workload tables, "
+            "compiled-stage timings and residual retain their original measurement captures."
+            if focused_capture else
+            ("[shared-suite coding controls](" if dedicated_capture else
+             "[coding-context benchmark](") + result_link + "). Every measured "
             "`round_ms` value appears in exactly one bin; untimed events are reported separately. "
             + ("The shared suite uses this same predetermined clean control for the coding row and "
-             "histogram; the stage residual matches only structurally admitted M8 cycles from both "
-             "controls, while this histogram retains every measured round."
-             if report.get("suite_capture_id") else
-             "The compiled-stage timing experiment has separate unprofiled control runs; their "
-             "pauses are discussed below and are not part of this histogram."),
+               "histogram; the stage residual matches only structurally admitted M8 cycles from both "
+               "controls, while this histogram retains every measured round."
+               if report.get("suite_capture_id") else
+               "The compiled-stage timing experiment has separate unprofiled control runs; their "
+               "pauses are discussed below and are not part of this histogram.")
+        )
+        lines = [
+            "The histogram below is generated from the complete per-round records of the "
+            + provenance,
             "Half-millisecond display bins resolve the current dense clusters at 35–42 and "
             "49–53 ms. These bins are recomputed from the original records; the captured "
             "bins, round counts and measurement identity are unchanged.",
@@ -1238,6 +1300,61 @@ def render_round_histogram():
             "| Round time | 0K arm | 60K arm | 200K arm |",
             "|---|---:|---:|---:|",
         ]
+        if focused_capture and report.get("source_base_commit"):
+            validation = report.get("status", "unknown")
+            outputs = " / ".join(
+                f"{contexts[context]['generated_tokens']:,}"
+                for context in context_order
+            )
+            short = [
+                context for context in context_order
+                if contexts[context].get("minimum_output_met") is False
+            ]
+            provenance_lines = [
+                f"{report.get('measurement_date', 'Date not recorded')} rerun after "
+                "[profiler cleanup](experiments/radiance-public/matched_stage_profile_worker.py). "
+                f"Captured source: base `{report['source_base_commit'][:7]}` plus benchmark "
+                "changes identified by exact file hashes in the artifact. The diagnostic "
+                "filename-prefix repair was added after that source was frozen.",
+                "",
+                "Output tokens at 0K / 60K / 200K: " + outputs + ". "
+                + (", ".join(short) + " stopped naturally below the requested "
+                   f"{report.get('coding_min_tokens', 5000):,}-token minimum. " if short else "")
+                + f"Round coverage is complete; overall report status remains `{validation}`.",
+            ]
+            supplement = report.get("diagnostic_supplement")
+            if isinstance(supplement, dict):
+                dropped = sum(
+                    row.get("health", {}).get("dropped", 0)
+                    for row in supplement.get("files", [])
+                )
+                provenance_lines += [
+                    "",
+                    "The original per-arm diagnostic copies missed the cache-job feeds. "
+                    f"Bounded supplements retained {supplement['file_count']} files; the recorder "
+                    f"reports {dropped} generic dropped record(s).",
+                ]
+            validation = report.get("diagnostic_validation")
+            if isinstance(validation, dict):
+                total = validation['selected_total_measured_rounds']
+                cleanup_times = [
+                    elapsed for context in validation['contexts'].values()
+                    for elapsed in context['profile_cleanup_ms']
+                ]
+                cleanup_count = sum(
+                    context['profile_cleanup_count']
+                    for context in validation['contexts'].values()
+                )
+                provenance_lines.append(
+                    f"CPU and HIP diagnostics match all {total:,} selected timed rounds, with no "
+                    "missing or invalid round records. The generic drop is separate from that "
+                    "complete round coverage. "
+                    f"All {cleanup_count} profiler cleanups took "
+                    f"{min(cleanup_times):.2f}–{max(cleanup_times):.2f} ms at excluded trace "
+                    "boundaries, outside the measured controls. Full lifetime archive coverage "
+                    "is not claimed."
+                )
+            lines[2:2] = ["", *provenance_lines]
         for index, (lower, upper) in enumerate(display_bins):
             label = (f"<{upper:g}" if lower == -math.inf else
                      f"≥{lower:g}" if upper == math.inf else f"{lower:g}–{upper:g}")
@@ -1659,7 +1776,6 @@ def render(data):
     detail = current_fine_detail(data)
     if detail:
         retained_cycles = detail["cycles"]
-    commit = measurement_marker(data)
     stage_profile = current_stage_profile(data)
     serving_overhead = data["serving_overhead"]
     if serving_overhead["status"] != "estimated_from_separate_runs":

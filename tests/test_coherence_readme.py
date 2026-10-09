@@ -241,8 +241,15 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "### Remaining symptoms and likely causes" not in readme
     assert "Status: pending fix" not in readme
     remaining = readme.split("### Known remaining symptoms and likely causes", 1)[1].split("\n## ", 1)[0]
-    assert "Isolated round stalls remain" in remaining
-    assert "Their cause has not been localized" in remaining
+    histogram_rerun = ROOT / "benchmarks/results/pi-round-histogram.json"
+    if histogram_rerun.is_file():
+        assert "The latest histogram did not reproduce the large stalls" in remaining
+        assert "pauses remain unattributed" in remaining
+        assert "cannot be assigned to either historical pause" in remaining
+        assert "benchmarks/results/pi-round-histogram.json" in remaining
+    else:
+        assert "Isolated round stalls remain" in remaining
+        assert "Their cause has not been localized" in remaining
     assert "The missing full-graph preparation hook is repaired" not in remaining
     assert "cold-prefill/continuation study demonstrated the arithmetic repair" not in remaining
     missing_reasoning = any(

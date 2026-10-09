@@ -45,7 +45,8 @@ def test_full_replay_scoped_once_and_piecewise_and_drafter_not_duplicated(monkey
 
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=SimpleNamespace(CUDAGraph=Graph)))
     monkeypatch.setitem(sys.modules, "optimized_d7_worker", SimpleNamespace(GraphObservation=Observer))
-    monkeypatch.setitem(sys.modules, "matched_stage_profile_worker", SimpleNamespace(MatchedStageWorker=Matched))
+    monkeypatch.setitem(sys.modules, "matched_stage_profile_worker", SimpleNamespace(
+        MatchedStageWorker=Matched, TimingGraphObservation=Observer))
     monkeypatch.setitem(sys.modules, "speed_candidate_worker", SimpleNamespace(SpeedCandidateWorker=Candidate))
     path = Path(__file__).parents[1] / "experiments/radiance-public/speed_matched_stage_worker.py"
     spec = importlib.util.spec_from_file_location("speed_matched_test", path)
