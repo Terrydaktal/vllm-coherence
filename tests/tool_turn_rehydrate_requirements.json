@@ -1,0 +1,11 @@
+{
+  "scope": "Archived tool-result writer and qwen_rehydrate_tool_turn",
+  "requirements": [
+    {"id":"REHYDRATE-ARCHIVE","contract":"Owned immutable live and historical payloads are verified against their digest before retrieval; corruption, unsafe paths and unexplained links fail.","tests":["tests/test_tool_turn_rehydrate.mjs","tests/test_tool_turn_rehydrate_sdk.mjs","tests/test_pi_tool_output_condense.py"]},
+    {"id":"REHYDRATE-SELECTION","contract":"Inclusive 1-based ranges and case-insensitive literal matches preserve matching anchors ahead of context within line and byte limits.","tests":["tests/test_tool_turn_rehydrate.mjs"]},
+    {"id":"REHYDRATE-BOUNDS","contract":"Digest-only preview stays within 1,536 bytes and 12 lines; explicit results stay within 32,768 bytes and 200 lines, with truthful clipping metadata and intact UTF-8.","tests":["tests/test_tool_turn_rehydrate.mjs","tests/test_tool_turn_rehydrate_sdk.mjs"]},
+    {"id":"REHYDRATE-SOURCE","contract":"Writer and reader agree on archive roots; backing Bash files require matching real truncation metadata and cannot replace unrelated inline results.","tests":["tests/test_pi_tool_output_condense.py"]},
+    {"id":"REHYDRATE-LIFECYCLE","contract":"Archives survive shutdown, deduplicate, recover known interrupted publication and remain untouched by cancellation or retrieval; rehydrated output is not recursively condensed.","tests":["tests/test_tool_turn_rehydrate.mjs","tests/test_tool_turn_rehydrate_sdk.mjs","tests/test_pi_tool_output_condense.py"]},
+    {"id":"REHYDRATE-SDK","contract":"Actual Pi registration, activation, model tool calls, schema validation and persistence work on the pinned SDK without network inference.","tests":["tests/test_tool_turn_rehydrate_sdk.mjs"]}
+  ]
+}

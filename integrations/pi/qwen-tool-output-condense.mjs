@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
     chmodSync,
     closeSync,
+    constants,
+    fstatSync,
     fsyncSync,
     linkSync,
     lstatSync,
@@ -9,11 +11,12 @@ import {
     openSync,
     readFileSync,
     readdirSync,
+    realpathSync,
     unlinkSync,
     writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 const TARGET_PROVIDER = "qwen-r9700";
 const MAX_CONTEXT_BYTES_ENV = "QWEN_PI_TOOL_RESULT_MAX_BYTES";
@@ -84,8 +87,11 @@ function configuredMaxBytes() {
 }
 
 function outputDirectory() {
-    const configured = process.env[OUTPUT_DIR_ENV];
-    return typeof configured === "string" && configured.startsWith("/") ? configured : DEFAULT_OUTPUT_DIR;
+    const configured = process.env[OUTPUT_DIR_ENV] ?? DEFAULT_OUTPUT_DIR;
+    if (typeof configured !== "string" || !isAbsolute(configured)) {
+        throw new Error(`${OUTPUT_DIR_ENV} must name an absolute archive root`);
+    }
+    return resolve(configured);
 }
 
 function ensureDirectory(path) {
@@ -95,9 +101,67 @@ function ensureDirectory(path) {
         !stat.isDirectory() ||
         stat.isSymbolicLink() ||
         (typeof process.getuid === "function" && stat.uid !== process.getuid()) ||
-        (stat.mode & 0o777) !== 0o700
+        (stat.mode & 0o777) !== 0o700 ||
+        realpathSync(path) !== path
     ) {
         throw new Error(`tool-result archive directory is not an owned mode-0700 directory: ${path}`);
+    }
+}
+
+function retainedBashText(event, inlineText) {
+    const path = event.details?.fullOutputPath;
+    const truncation = event.details?.truncation;
+    if (
+        event.toolName !== "bash" ||
+        truncation?.truncated !== true ||
+        typeof path !== "string" ||
+        !isAbsolute(path) ||
+        !Number.isSafeInteger(truncation.totalBytes) ||
+        !Number.isSafeInteger(truncation.outputBytes) ||
+        truncation.outputBytes < 0 ||
+        truncation.totalBytes <= truncation.outputBytes ||
+        typeof truncation.content !== "string" ||
+        Buffer.byteLength(truncation.content, "utf8") !== truncation.outputBytes ||
+        !inlineText.startsWith(truncation.content)
+    ) {
+        return inlineText;
+    }
+    let descriptor;
+    try {
+        const before = lstatSync(path);
+        if (
+            !before.isFile() ||
+            before.isSymbolicLink() ||
+            (typeof process.getuid === "function" && before.uid !== process.getuid()) ||
+            (before.mode & 0o002) !== 0 ||
+            realpathSync(path) !== path
+        ) {
+            return inlineText;
+        }
+        descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+        const opened = fstatSync(descriptor);
+        if (before.dev !== opened.dev || before.ino !== opened.ino) return inlineText;
+        // Pi measures decoded UTF-8 bytes and the visible tail. Match both
+        // before accepting another file as this tool's complete output.
+        const text = new TextDecoder().decode(readFileSync(descriptor));
+        const after = fstatSync(descriptor);
+        const current = lstatSync(path);
+        if (
+            before.dev !== current.dev ||
+            before.ino !== current.ino ||
+            before.size !== after.size ||
+            before.mtimeMs !== after.mtimeMs ||
+            before.ctimeMs !== after.ctimeMs ||
+            Buffer.byteLength(text, "utf8") !== truncation.totalBytes ||
+            !(text.endsWith(truncation.content) || text.endsWith("\n") && text.slice(0, -1).endsWith(truncation.content))
+        ) {
+            return inlineText;
+        }
+        return text;
+    } catch {
+        return inlineText;
+    } finally {
+        if (descriptor !== undefined) closeSync(descriptor);
     }
 }
 
@@ -231,7 +295,9 @@ function retainText(text) {
 function clampLine(line) {
     const source = String(line);
     const wasTrimmed = source.length > MAX_LINE_CHARACTERS;
-    const clean = cleanLine(wasTrimmed ? source.slice(0, MAX_LINE_CHARACTERS - 14) : source);
+    let end = MAX_LINE_CHARACTERS - 14;
+    if (source.charCodeAt(end - 1) >= 0xd800 && source.charCodeAt(end - 1) <= 0xdbff) end -= 1;
+    const clean = cleanLine(wasTrimmed ? source.slice(0, end) : source);
     return wasTrimmed ? `${clean}... [trimmed]` : clean;
 }
 
@@ -368,7 +434,19 @@ function fitEntries(title, entries, budget, fromEnd = false) {
     for (const entry of candidates) {
         const candidate = fromEnd ? [entry, ...chosen] : [...chosen, entry];
         const rendered = `${title}:\n${candidate.map((item) => `${item.line}: ${item.text}`).join("\n")}`;
-        if (encodedBytes(rendered) > budget) break;
+        if (encodedBytes(rendered) > budget) {
+            if (fromEnd && chosen.length === 0) {
+                const prefix = `${title}:\n${entry.line}: [trimmed; exact line in archive] `;
+                const available = budget - encodedBytes(prefix);
+                if (available > 0) {
+                    const data = Buffer.from(entry.text, "utf8");
+                    let start = Math.max(0, data.length - available);
+                    while (start < data.length && (data[start] & 0xc0) === 0x80) start += 1;
+                    return `${prefix}${data.subarray(start).toString("utf8")}`;
+                }
+            }
+            break;
+        }
         chosen.splice(0, chosen.length, ...candidate);
     }
     return chosen.length === 0 ? `${title}:\n(none)` : `${title}:\n${chosen.map((entry) => `${entry.line}: ${entry.text}`).join("\n")}`;
@@ -503,22 +581,7 @@ export default function qwenToolOutputCondense(pi) {
 
         try {
             const maxBytes = configuredMaxBytes();
-            const existingPath = event.details?.fullOutputPath;
-            let exactText = contentText;
-            if (typeof existingPath === "string" && existingPath.startsWith("/")) {
-                try {
-                    const stat = lstatSync(existingPath);
-                    if (
-                        stat.isFile() &&
-                        !stat.isSymbolicLink() &&
-                        (typeof process.getuid !== "function" || stat.uid === process.getuid())
-                    ) {
-                        exactText = readFileSync(existingPath, "utf8");
-                    }
-                } catch {
-                    // The inline text remains the exact available result.
-                }
-            }
+            const exactText = retainedBashText(event, contentText);
             const inspection = inspectText(exactText);
             if (inspection.bytes <= maxBytes) return undefined;
             const archive = retainText(exactText);

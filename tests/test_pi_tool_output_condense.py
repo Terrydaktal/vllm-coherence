@@ -276,8 +276,13 @@ const fromPiPath = await handlers.get("tool_result")({{
   toolName: "bash",
   toolCallId: "pi-path",
   input: {{ command: "retained-output" }},
-  content: [{{ type: "text", text: "truncated tail\\n\\nCommand exited with code 7" }}],
-  details: {{ fullOutputPath: piRetained }},
+  content: [{{ type: "text", text: "retained-2500\\n\\nCommand exited with code 7" }}],
+  details: {{ fullOutputPath: piRetained, truncation: {{
+    truncated: true,
+    totalBytes: Buffer.byteLength(original),
+    outputBytes: Buffer.byteLength("retained-2500\\n"),
+    content: "retained-2500\\n",
+  }} }},
   isError: true,
 }});
 const piSummary = fromPiPath.content[0].text;
@@ -432,3 +437,152 @@ console.log(JSON.stringify({{ bytes: inspection.bytes, elapsedMs }}));
     assert elapsed < 5
     measurement = json.loads(result.stdout)
     assert measurement["bytes"] > 2_000_000
+
+
+def test_archive_roots_and_retained_output_source_integrity(tmp_path: Path) -> None:
+    harness = f"""
+import assert from "node:assert/strict";
+import {{ existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync }} from "node:fs";
+import {{ join, resolve }} from "node:path";
+const {{ default: condense }} = await import({json.dumps(EXTENSION.as_uri())});
+const {{ default: rehydrate }} = await import({json.dumps(REHYDRATE.as_uri())});
+const root = {json.dumps(str(tmp_path))};
+const handlers = new Map();
+condense({{ on: (name, handler) => handlers.set(name, handler) }});
+let tool;
+rehydrate({{ registerTool: (definition) => {{ tool = definition; }} }});
+const inline = Array.from({{ length: 300 }}, (_, index) => `inline-${{index}} ${{"x".repeat(70)}}`).join("\\n");
+const event = (details, toolName = "fixture") => ({{ toolName, toolCallId: "synthetic", content: [{{ type: "text", text: inline }}], details, isError: false }});
+
+mkdirSync(join(root, "unused"), {{ mode: 0o700 }});
+process.env.QWEN_PI_TOOL_RESULT_DIR = join(root, "unused") + "/../normalized/";
+const normalized = await handlers.get("tool_result")(event({{}}));
+assert.ok(normalized, "an absolute noncanonical spelling is normalized");
+assert.ok(normalized.details.fullOutputPath.startsWith(resolve(process.env.QWEN_PI_TOOL_RESULT_DIR) + "/sha256/"));
+const retrieved = await tool.execute("synthetic", {{ sha256: normalized.details.qwenToolResultArchive.sha256, start_line: 1, end_line: 1 }});
+assert.ok(retrieved.content[0].text.includes("inline-0"), "the writer and reader agree on normalized roots");
+
+process.env.QWEN_PI_TOOL_RESULT_DIR = "relative-archive";
+assert.equal(await handlers.get("tool_result")(event({{}})), undefined, "relative configured roots fail explicitly");
+assert.equal(existsSync(join(process.env.XDG_STATE_HOME, "qwen-r9700", "pi-tool-results")), false, "an invalid configured root never publishes into the default directory");
+
+mkdirSync(join(root, "actual-parent"), {{ mode: 0o700 }});
+symlinkSync(join(root, "actual-parent"), join(root, "linked-parent"));
+process.env.QWEN_PI_TOOL_RESULT_DIR = join(root, "linked-parent", "archive");
+assert.equal(await handlers.get("tool_result")(event({{}})), undefined, "a symlink ancestor cannot publish an unusable archive");
+assert.equal(existsSync(join(root, "actual-parent", "archive", "sha256")), false);
+
+process.env.QWEN_PI_TOOL_RESULT_DIR = join(root, "safe-archive");
+const unrelatedPath = join(root, "unrelated-source");
+const unrelated = "SYNTHETIC_UNRELATED_SECRET\\n" + "unrelated ".repeat(2000);
+writeFileSync(unrelatedPath, unrelated, {{ mode: 0o600 }});
+for (const [toolName, truncation] of [["fixture", undefined], ["fixture", {{ truncated: true }}], ["bash", undefined], ["bash", {{ truncated: false }}]]) {{
+  const result = await handlers.get("tool_result")(event({{ fullOutputPath: unrelatedPath, truncation }}, toolName));
+  assert.equal(readFileSync(result.details.fullOutputPath, "utf8"), inline, "unrelated custom paths never replace inline tool evidence");
+}}
+writeFileSync(unrelatedPath, "tiny");
+const invalidMetadata = {{ truncated: true, totalBytes: Buffer.byteLength(inline) + 1000, outputBytes: Buffer.byteLength(inline), content: inline }};
+const tiny = await handlers.get("tool_result")(event({{ fullOutputPath: unrelatedPath, truncation: invalidMetadata }}, "bash"));
+assert.equal(readFileSync(tiny.details.fullOutputPath, "utf8"), inline, "a too-small retained file cannot bypass the inline size limit");
+assert.equal(readFileSync(unrelatedPath, "utf8"), "tiny", "source files are never changed");
+
+const different = "other ".repeat(5000);
+writeFileSync(unrelatedPath, different);
+const wrongTail = {{ truncated: true, totalBytes: Buffer.byteLength(different), outputBytes: Buffer.byteLength(inline), content: inline }};
+const mismatch = await handlers.get("tool_result")(event({{ fullOutputPath: unrelatedPath, truncation: wrongTail }}, "bash"));
+assert.equal(readFileSync(mismatch.details.fullOutputPath, "utf8"), inline, "matching declared length cannot substitute a different visible tail");
+"""
+    environment = dict(os.environ)
+    environment["XDG_STATE_HOME"] = str(tmp_path / "state")
+    environment["QWEN_PI_TOOL_TURN_ARCHIVE_ROOT"] = str(tmp_path / "absent-history")
+    result = subprocess.run(
+        ["node", "--input-type=module", "--eval", harness],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_supported_small_budgets_keep_unicode_final_line_bounded() -> None:
+    harness = f"""
+import assert from "node:assert/strict";
+import {{ buildCondensedSummary, inspectText }} from {json.dumps(EXTENSION.as_uri())};
+for (const ending of ["終".repeat(180), "a" + "🚀".repeat(180)]) {{
+  const text = "preamble\\n" + "q".repeat(9000) + "\\n" + ending;
+  const archive = {{ path: "/tmp/archive/sha256/aa/" + "a".repeat(64) + ".txt", sha256: "a".repeat(64) }};
+  const inspection = inspectText(text);
+  for (const budget of [1024, 2048, 4096]) {{
+    const summary = buildCondensedSummary({{ archive, inspection, status: "0", toolName: "bash" }}, budget);
+    assert.ok(Buffer.byteLength(summary) <= budget);
+    assert.match(summary.split("Tail (guaranteed):\\n")[1] ?? "", /(?:^|\\n)3:/, "the original final line remains located");
+    assert.ok(summary.includes(ending.includes("終") ? "終" : "🚀"), "some final-line evidence remains inline");
+    assert.ok(!summary.includes("�"), "clipping never splits a Unicode code point");
+    if (budget <= 2048) assert.ok(summary.includes("trimmed"), "omitted Unicode text is explicitly marked");
+  }}
+}}
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "--eval", harness],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_pinned_bash_retained_output_protocol(tmp_path: Path) -> None:
+    pi_root = Path(
+        os.environ.get(
+            "QWEN_TEST_PI_ROOT",
+            str(
+                Path.home()
+                / ".local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works"
+            ),
+        )
+    )
+    bash_module = pi_root / "pi-coding-agent/dist/core/tools/bash.js"
+    if not bash_module.is_file():
+        import pytest
+
+        pytest.skip("pinned Pi SDK is not installed")
+    harness = f"""
+import assert from "node:assert/strict";
+import {{ readFileSync, unlinkSync }} from "node:fs";
+import {{ createBashToolDefinition }} from {json.dumps(bash_module.as_uri())};
+import condense from {json.dumps(EXTENSION.as_uri())};
+const handlers = new Map();
+condense({{ on: (name, handler) => handlers.set(name, handler) }});
+for (const ending of ["", "\\n", "\\n\\n"]) {{
+  const original = Array.from({{ length: 3000 }}, (_, index) => `sdk-original-${{index}} ${{"x".repeat(40)}}`).join("\\n") + ending;
+  const bash = createBashToolDefinition({json.dumps(str(tmp_path))}, {{ operations: {{
+    async exec(_command, _cwd, {{ onData }}) {{ onData(Buffer.from(original)); return {{ exitCode: 0 }}; }},
+  }} }});
+  const result = await bash.execute("synthetic", {{ command: "synthetic output only" }}, new AbortController().signal);
+  const sourcePath = result.details.fullOutputPath;
+  try {{
+    assert.equal(result.details.truncation.truncated, true);
+    const event = {{ toolName: "bash", toolCallId: "synthetic", content: result.content, details: result.details, isError: false }};
+    const condensed = await handlers.get("tool_result")(event);
+    assert.equal(readFileSync(condensed.details.fullOutputPath, "utf8"), original, "actual Bash metadata recovers the complete output");
+    assert.equal(readFileSync(sourcePath, "utf8"), original, "original Pi retained output is unchanged");
+    const failed = await handlers.get("tool_result")({{ ...event, content: [{{ type: "text", text: result.content[0].text + "\\n\\nCommand exited with code 7" }}], isError: true }});
+    assert.ok(failed.content[0].text.includes("Exit status: 7"));
+    assert.equal(readFileSync(failed.details.fullOutputPath, "utf8"), original, "status wrappers do not alter authoritative stdout bytes");
+  }} finally {{ unlinkSync(sourcePath); }}
+}}
+"""
+    environment = dict(os.environ)
+    environment["QWEN_PI_TOOL_RESULT_DIR"] = str(tmp_path / "retained")
+    result = subprocess.run(
+        ["node", "--input-type=module", "--eval", harness],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
