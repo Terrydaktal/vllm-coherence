@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,56 @@ spec = importlib.util.spec_from_file_location(
 )
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+CONTINUATION_DEPLOYMENT_SCHEMA = "urn:coherence:token-continuation-deployment:v1"
+
+
+def _assert_continuation_smoke(receipt):
+    """A live continuation receipt needs real turns and committed journals."""
+    smoke = receipt["smoke"]
+    assert len(smoke) >= 2
+    for row in smoke:
+        assert row["status"] == 200 and row["streamed"] is True
+        assert row["finish_reason"] == "stop"
+        for field in ("prompt_tokens", "completion_tokens"):
+            assert type(row[field]) is int and row[field] > 0
+        assert type(row["cached_tokens"]) is int
+        assert 0 <= row["cached_tokens"] <= row["prompt_tokens"]
+        assert math.isfinite(row["first_content_ms"])
+        assert math.isfinite(row["elapsed_ms"])
+        assert 0 <= row["first_content_ms"] <= row["elapsed_ms"]
+        assert len(row["output_sha256"]) == 64
+        assert all(value in "0123456789abcdef" for value in row["output_sha256"])
+    assert smoke[1]["cached_tokens"] > 0
+    events = receipt["token_continuation_events"]
+    assert events and all(
+        type(count) is int and count >= 0 for count in events.values()
+    )
+    assert events.get("journal_saved", 0) >= 2
+    assert (
+        events.get("already_exact", 0)
+        + events.get("preserved_generated_tokens", 0)
+        + events.get("incremental_suffix_encoded", 0)
+        >= 1
+    )
+    if (
+        receipt.get("continuation_contract")
+        == "suffix-only-before-history-tokenization-v1"
+    ):
+        assert events.get("incremental_suffix_encoded", 0) >= 1
+        records = receipt.get("incremental_tokenization")
+        assert isinstance(records, list) and records
+        assert len(records) <= events["incremental_suffix_encoded"]
+        for row in records:
+            assert isinstance(row, dict)
+            assert row.get("reason") == "incremental_suffix_encoded"
+            for field in ("previous_tokens", "suffix_tokens", "admitted_tokens"):
+                assert type(row.get(field)) is int and row[field] > 0
+            assert row["previous_tokens"] >= smoke[0]["prompt_tokens"]
+            assert (
+                row["admitted_tokens"] == row["previous_tokens"] + row["suffix_tokens"]
+            )
+        assert records[-1]["admitted_tokens"] == smoke[1]["prompt_tokens"]
+    assert type(receipt["journal_files"]) is int and 1 <= receipt["journal_files"] <= 8
 
 
 @pytest.fixture
@@ -173,4 +224,179 @@ def test_deployment_receipt_matches_current_sources_and_qualification():
             == (snapshot["runtime"]["chat_storage"]["modules"]["radiance_memory.py"])
         )
     assert receipt["data_abi"] == snapshot["storage"]["data_abi"]
-    assert len(receipt["smoke"]) == 5
+    # Different repairs need different qualification workloads. The historical
+    # prefill repair used five calls; that count is not a serving invariant.
+    assert receipt["smoke"]
+    assert all(row["status"] == 200 for row in receipt["smoke"])
+    if receipt["schema"] == CONTINUATION_DEPLOYMENT_SCHEMA:
+        _assert_continuation_smoke(receipt)
+        assert receipt["model_arithmetic_changed"] is False
+        assert receipt["snapshot_data_abi_changed"] is False
+        for name in (
+            "radiance_token_continuation.py",
+            "radiance_token_continuation_runtime.py",
+        ):
+            expected = release.digest(ROOT / "src/qwen_r9700_lab" / name)
+            assert receipt["installed_source_hashes"]["qwen_" + name] == expected
+            assert snapshot["runtime"]["chat_storage"]["modules"][name] == expected
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing-turn",
+        "not-streamed",
+        "not-natural-stop",
+        "empty-output",
+        "uncached-followup",
+        "missing-journal",
+        "missing-continuation",
+        "missing-file",
+        "non-finite-latency",
+    ],
+)
+def test_continuation_receipt_rejects_missing_or_failed_evidence(fault):
+    smoke = [
+        {
+            "status": 200,
+            "streamed": True,
+            "finish_reason": "stop",
+            "prompt_tokens": 4096 + index * 10,
+            "completion_tokens": 10,
+            "cached_tokens": 4096 if index else 0,
+            "first_content_ms": 100.0,
+            "elapsed_ms": 200.0,
+            "output_sha256": "a" * 64,
+        }
+        for index in range(2)
+    ]
+    receipt = {
+        "smoke": smoke,
+        "journal_files": 1,
+        "token_continuation_events": {"journal_saved": 2, "already_exact": 1},
+    }
+    if fault == "missing-turn":
+        smoke.pop()
+    elif fault == "not-streamed":
+        smoke[1]["streamed"] = False
+    elif fault == "not-natural-stop":
+        smoke[1]["finish_reason"] = "length"
+    elif fault == "empty-output":
+        smoke[1]["completion_tokens"] = 0
+    elif fault == "uncached-followup":
+        smoke[1]["cached_tokens"] = 0
+    elif fault == "missing-journal":
+        receipt["token_continuation_events"]["journal_saved"] = 1
+    elif fault == "missing-continuation":
+        receipt["token_continuation_events"]["already_exact"] = 0
+    elif fault == "missing-file":
+        receipt["journal_files"] = 0
+    else:
+        smoke[1]["first_content_ms"] = float("nan")
+    with pytest.raises(AssertionError):
+        _assert_continuation_smoke(receipt)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing-event",
+        "zero-event",
+        "boolean-event",
+        "missing-records",
+        "empty-records",
+        "mapping-records",
+        "nonmapping-row",
+        "missing-reason",
+        "wrong-reason",
+        "missing-suffix",
+        "boolean-suffix",
+        "zero-suffix",
+        "negative-suffix",
+        "string-previous",
+        "negative-previous",
+        "boolean-admitted",
+        "wrong-sum",
+        "wrong-prompt-count",
+        "too-many-records",
+    ],
+)
+def test_suffix_only_receipt_rejects_missing_or_malformed_incremental_evidence(fault):
+    receipt = {
+        "continuation_contract": "suffix-only-before-history-tokenization-v1",
+        "smoke": [
+            {
+                "status": 200,
+                "streamed": True,
+                "finish_reason": "stop",
+                "prompt_tokens": 4096 + index * 10,
+                "completion_tokens": 10,
+                "cached_tokens": 4096 if index else 0,
+                "first_content_ms": 100.0,
+                "elapsed_ms": 200.0,
+                "output_sha256": "a" * 64,
+            }
+            for index in range(2)
+        ],
+        "journal_files": 1,
+        "token_continuation_events": {
+            "journal_saved": 2,
+            "already_exact": 1,
+            "incremental_suffix_encoded": 1,
+        },
+        "incremental_tokenization": [
+            {
+                "reason": "incremental_suffix_encoded",
+                "previous_tokens": 4100,
+                "suffix_tokens": 6,
+                "admitted_tokens": 4106,
+            }
+        ],
+    }
+    _assert_continuation_smoke(receipt)
+    events, records = (
+        receipt["token_continuation_events"],
+        receipt["incremental_tokenization"],
+    )
+    row = records[0]
+    if fault == "missing-event":
+        del events["incremental_suffix_encoded"]
+    elif fault == "zero-event":
+        events["incremental_suffix_encoded"] = 0
+    elif fault == "boolean-event":
+        events["incremental_suffix_encoded"] = True
+    elif fault == "missing-records":
+        del receipt["incremental_tokenization"]
+    elif fault == "empty-records":
+        records.clear()
+    elif fault == "mapping-records":
+        receipt["incremental_tokenization"] = row
+    elif fault == "nonmapping-row":
+        records[0] = None
+    elif fault == "missing-reason":
+        del row["reason"]
+    elif fault == "wrong-reason":
+        row["reason"] = "already_exact"
+    elif fault == "missing-suffix":
+        del row["suffix_tokens"]
+    elif fault == "boolean-suffix":
+        row["suffix_tokens"] = True
+    elif fault == "zero-suffix":
+        row["suffix_tokens"] = 0
+    elif fault == "negative-suffix":
+        row["suffix_tokens"] = -1
+    elif fault == "string-previous":
+        row["previous_tokens"] = "4100"
+    elif fault == "negative-previous":
+        row["previous_tokens"] = -1
+    elif fault == "boolean-admitted":
+        row["admitted_tokens"] = True
+    elif fault == "wrong-sum":
+        row["suffix_tokens"] = 5
+    elif fault == "wrong-prompt-count":
+        row["previous_tokens"] += 1
+        row["admitted_tokens"] += 1
+    else:
+        records.append(dict(row))
+    with pytest.raises(AssertionError):
+        _assert_continuation_smoke(receipt)

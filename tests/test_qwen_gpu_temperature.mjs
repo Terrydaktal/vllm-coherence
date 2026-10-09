@@ -53,6 +53,16 @@ test("Memory used/total GiB is shown after the fan without a repeated label and 
 	]) assert.throws(() => parseTemperatureSample(JSON.stringify({ ...sample, ...pair }), now), /invalid/);
 });
 
+test("temperature, fan and VRAM values stay compact without reserved blank columns", () => {
+	const sample = { junction_millicelsius: 91_000, edge_millicelsius: 41_000, fan_percent: 29,
+		vram_used_bytes: Math.round(31.8 * 1024 ** 3), vram_total_bytes: Math.round(31.9 * 1024 ** 3) };
+	const status = formatTemperatureStatus(sample);
+	assert.equal(status, "91°C · 41°C · 29% · 31.8 / 31.9 GiB");
+	assert.doesNotMatch(status, /\u00a0| {2}/);
+	assert.equal(formatTemperatureStatus({ ...sample, fan_percent: 9,
+		vram_used_bytes: Math.round(9.9 * 1024 ** 3) }), "91°C · 41°C · 9% · 9.9 / 31.9 GiB");
+});
+
 test("extension uses one tmpfs client heartbeat and clears it on shutdown", (t) => {
 	const root = mkdtempSync(join(tmpdir(), "qwen-gpu-temperature-extension-"));
 	const state = join(root, "state");

@@ -433,6 +433,14 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
     assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == [
+        # Text-render continuation routing preserves the exact numerical state.
+        "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
+        # Suffix-only encoding changes request construction, not saved GPU state.
+        "7fc9b5c6083ce353eaf12535bca550579607155cb7c930a961661e3cb1080cb1",
+        # Renderer executor callback repair preserves numerical/state semantics.
+        "ab9f9a025c2af425aef38fffbffe54e71d043e53444558bbdbecef0f86d2c7e5",
+        # Preserve exact state validation across the generated-token adapter update.
+        "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
         # Checkpoint page-cache residency changes do not alter model arithmetic.
         "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
         # Durable-file cache advice changes residency, not serialized state.
@@ -477,7 +485,7 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (
             REPO_ROOT / "src/qwen_r9700_lab"
-            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py", "radiance_request_timeline.py", "radiance_prefix_lineage.py", "radiance_prefix_runtime.py")
+            if name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py", "radiance_request_timeline.py", "radiance_prefix_lineage.py", "radiance_prefix_runtime.py", "radiance_token_continuation.py", "radiance_token_continuation_runtime.py")
             else base
         ) / name
         assert hashlib.sha256(source.read_bytes()).hexdigest() == expected

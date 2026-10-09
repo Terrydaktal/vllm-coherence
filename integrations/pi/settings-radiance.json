@@ -10,7 +10,9 @@
     "search",
     "fetch",
     "extract",
-    "qwen_rehydrate_tool_turn"
+    "qwen_rehydrate_tool_turn",
+    "session_search",
+    "qwen_plan"
   ],
   "httpIdleTimeoutMs": 0
 }

@@ -359,6 +359,7 @@ def serving_command(args, connection):
         "HIP_VISIBLE_DEVICES": "0",
         "HF_HUB_OFFLINE": "1",
         "QWEN_RADIANCE_CACHE_ABI": abi,
+        "QWEN_TOKEN_CONTINUATION_ROOT": f"/cache/token-continuation/{abi}",
         "VLLM_ROCM_USE_AITER": "1",
         "VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION": "1",
         **{

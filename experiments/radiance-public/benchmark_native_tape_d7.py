@@ -8,7 +8,7 @@ import benchmark_optimized_d7 as benchmark
 
 from qwen_r9700_lab.conformance_topk import require
 
-BASE_DRIVER_SHA256 = "f43594823dfe3a34be199059bf045232f7e397020889851b9b2d206a7875af71"
+BASE_DRIVER_SHA256 = "fabd47e16ba7a03629f2cdb7bca5d36113c5eeb5e83ae1f390c1625f39f701ab"
 BASE_CONFIG = benchmark.make_config
 
 

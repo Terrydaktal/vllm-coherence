@@ -131,6 +131,32 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 	let nextRequestFromToolsAt;
 	let activeSampling;
 	let lastSampling;
+	const requestContexts = globalThis[Symbol.for("qwen.radiance.request.context")] ??= new Map();
+	let contextSessionKey, measuredPromptTokens;
+	const contextController = { getContextTokens() {
+		// Prompt size is known before its KV state has finished prefilling. This
+		// display override ends when normal streamed usage can take over.
+		return startedAt !== 0 && finishedAt === 0 && firstDataAt === 0
+			? measuredPromptTokens : undefined;
+	} };
+	function clearRequestContext() {
+		if (requestContexts.get(contextSessionKey) === contextController) requestContexts.delete(contextSessionKey);
+		contextSessionKey = undefined;
+		measuredPromptTokens = undefined;
+	}
+	function bindRequestContext(ctx) {
+		contextSessionKey = ctx.sessionManager?.getSessionFile?.() ?? ctx.sessionManager?.getSessionId?.();
+		if (contextSessionKey !== undefined) requestContexts.set(contextSessionKey, contextController);
+	}
+	function observePromptContext(observation) {
+		const row = observation.available ? observation.requestPhase : undefined;
+		if (!requestTiming || firstDataAt !== 0 || !row || row.phase === "complete" ||
+			row.first_token_ms !== null || !Number.isSafeInteger(row.input_tokens) || row.input_tokens <= 0 ||
+			row.request_id === requestTiming.contextBaselineRequestId ||
+			row.request_id === requestTiming.ignoreRequestId) return;
+		measuredPromptTokens = row.input_tokens;
+		contextTokens = measuredPromptTokens;
+	}
 	const unsubscribe = scheduler.subscribe?.(() => render());
 
 	pi.registerCommand?.("qwen-timing", {
@@ -315,7 +341,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 
 	function firstTokenStatus(observation) {
 			const exact = requestPhaseStatus(observation);
-			if (exact) return `${exact.phase} · ${exact.detail}`;
+			if (exact) return `${observation.requestPhase.phase === "generate" ? "awaiting first model output" : exact.phase} · ${exact.detail}`;
 		const blocked = blockedStatus(observation, true);
 		if (blocked) return `${blocked.phase} · ${blocked.detail}`;
 		if (observation.awaitingNewRequest) {
@@ -494,11 +520,13 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		}
 		if (finishedAt !== 0) {
 			const waitingSince = toolsFinishedAt || finishedAt;
-			activeUi.setWorkingMessage(`Qwen ${toolsFinishedAt ? "tools finished" : "model response ended"} ` +
-				`\u2022 waiting for next step ${Math.max(0, Math.floor((now - waitingSince) / 1000))}s`);
+			activeUi.setWorkingMessage(toolsFinishedAt
+				? `Qwen preparing tool continuation \u2022 tools finished · ${Math.max(0, Math.floor((now - waitingSince) / 1000))}s`
+				: `Qwen model response ended \u2022 waiting for next step ${Math.max(0, Math.floor((now - waitingSince) / 1000))}s`);
 			return;
 		}
 		const schedulerState = schedulerObservation(now);
+		observePromptContext(schedulerState);
 		syncRateClock(schedulerState, now);
 		if (firstDataAt !== 0) {
 			const firstData = formatFirstData(firstDataAt - startedAt);
@@ -541,6 +569,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 
 	function begin(ctx) {
 		stopTimer();
+		clearRequestContext();
 		runningTools.clear();
 		rateSamples.length = 0;
 		schedulerRatePauseAt = 0;
@@ -582,6 +611,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 
 	function finish() {
 		stopTimer();
+		clearRequestContext();
 		runningTools.clear();
 		rateSamples.length = 0;
 		schedulerRatePauseAt = 0;
@@ -602,10 +632,12 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 	// Clear the last-response footer left by an earlier extension version and
 	// register this Pi window with the singleton scheduler telemetry stream.
 	pi.on("session_start", (_event, ctx) => {
+		finish();
 		ctx.ui?.setStatus?.(STATUS_KEY, undefined);
 		scheduler.start?.(ctx);
 	});
 	pi.on("session_switch", (_event, ctx) => {
+		finish();
 		ctx.ui?.setStatus?.(STATUS_KEY, undefined);
 		scheduler.start?.(ctx);
 	});
@@ -623,13 +655,17 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 			const ignoreRequestId = (requestTiming ?? lastTiming)?.backend?.request_id;
 			if (requestTiming) lastTiming = requestTiming;
 			// Install the exclusion before begin() performs its initial redraw.
-			requestTiming = { ignoreRequestId };
+			let contextBaselineRequestId;
+			try { contextBaselineRequestId = scheduler.read?.(Date.now())?.requestPhase?.request_id; }
+			catch { /* No measured prompt is available until a new phase row arrives. */ }
+			requestTiming = { ignoreRequestId, contextBaselineRequestId };
 			begin(ctx);
 			if (startedAt === 0) { requestTiming = undefined; return replacementPayload; }
+			bindRequestContext(ctx);
 			requestTiming.toolGapMs = nextRequestFromToolsAt === undefined ? undefined : startedAt - nextRequestFromToolsAt;
 			nextRequestFromToolsAt = undefined;
 		contextTokens = ctx.getContextUsage()?.tokens ?? contextTokens;
-		phase = "KV lookup/prefill";
+		phase = "finalizing and sending request";
 		render();
 		return replacementPayload;
 	});
@@ -688,6 +724,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		}
 		if (update.type === "done" || update.type === "error") {
 			finishedAt = monotonicNow();
+			clearRequestContext();
 			render();
 			return;
 		}
@@ -702,6 +739,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 
 	pi.on("message_end", (event) => {
 		if (startedAt === 0 || event.message?.role !== "assistant") return;
+		clearRequestContext();
 		const outputTokens = event.message?.usage?.output;
 		const reasoningTokens = event.message?.usage?.reasoning;
 		observeOutput(Number.isSafeInteger(outputTokens) && outputTokens >= 0 ? outputTokens : undefined,
@@ -725,9 +763,19 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		render();
 	});
 
-		pi.on("turn_end", () => finish());
+	pi.on("turn_end", (event) => {
+		// Next-turn context preparation follows this event. Keep its one-line
+		// wait visible until the provider request, cancellation or agent end.
+		if (startedAt !== 0 && toolsFinishedAt !== 0 &&
+			event.message?.stopReason === "toolUse" && event.toolResults?.length > 0) {
+			render();
+			return;
+		}
+		finish();
+	});
 	pi.on("agent_end", () => finish());
 	pi.on("agent_settled", () => finish());
+	pi.on("session_before_compact", () => finish());
 	pi.on("session_shutdown", () => {
 			finish();
 			unsubscribe?.();

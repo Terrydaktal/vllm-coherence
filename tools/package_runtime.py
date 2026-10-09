@@ -81,7 +81,7 @@ def package(source, output):
     patch_paths = ["experiments/radiance-public/" + name for name in PATCHES]
     patch_paths += [
         "src/qwen_r9700_lab/" + name
-        for name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_request_timeline.py", "radiance_prefix_lineage.py", "radiance_prefix_runtime.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py")
+        for name in ("radiance_cache.py", "radiance_memory.py", "radiance_cache_telemetry.py", "radiance_request_timeline.py", "radiance_prefix_lineage.py", "radiance_prefix_runtime.py", "radiance_token_continuation.py", "radiance_token_continuation_runtime.py", "radiance_pinned_memory.py", "radiance_kfd_trace.py")
     ]
     profile = json.loads(
         (ROOT / "experiments/radiance-public/runtime-radiance-1.0.16.json").read_text()

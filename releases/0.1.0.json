@@ -58,7 +58,9 @@
     "src/qwen_r9700_lab/radiance_cache_telemetry.py",
     "src/qwen_r9700_lab/radiance_pinned_memory.py",
     "src/qwen_r9700_lab/radiance_kfd_trace.py",
-    "src/qwen_r9700_lab/radiance_request_timeline.py"
+    "src/qwen_r9700_lab/radiance_request_timeline.py",
+    "src/qwen_r9700_lab/radiance_token_continuation.py",
+    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py"
   ],
   "integration_sha256": {
     "experiments/radiance-public/bootstrap_radiance_release.py": "e778eec05a516d46547973a1bddc22583f555bb32f45fea9a4d1d37750607ff5",
@@ -68,9 +70,9 @@
     "experiments/radiance-public/optimized_pi_release.py": "264d2acad78642f6bcb29220ee855105bf9d3f38633c8c0cae428c1c750f287d",
     "experiments/radiance-public/runtime-radiance-1.0.16.json": "a675da0db7c2c64a58762e90874eeab6a9319db8d34effa813f0e316d2203675",
     "experiments/radiance-public/patch_streaming_snapshot.py": "d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd",
-    "experiments/radiance-public/patch_chat_snapshot.py": "a07994f7f468302a3bcf6653f2c41d43a29a07e429d8593d4df93ce0e216974f",
+    "experiments/radiance-public/patch_chat_snapshot.py": "789b4010f125f691fc94fb63fdd8b8d9e8704e8cbf996059d1990569ed6a01e9",
     "experiments/radiance-public/radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
-    "experiments/radiance-public/radiance_fair_scheduler.py": "529774faf0b870e372124f44881105b4388e05dcb203901c3377a8d92d412842",
+    "experiments/radiance-public/radiance_fair_scheduler.py": "8090e2d4b3b6a83c10613dfbe68c55b2d14df6a19f432cc8b0db3f86a98e0b31",
     "experiments/radiance-public/radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
     "experiments/radiance-public/patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
     "experiments/radiance-public/patch_dflash_response_cache.py": "65b63fb943d42ae0e7661fee72abaf37d174c1eee3ce08cfe26b851f4a51b1b0",
@@ -105,12 +107,14 @@
     "experiments/radiance-public/stock_gdn_scan_kernel.py": "be8533624e435fe138237b06cecd12848773e88bf0b36e48a921a032111d887b",
     "experiments/radiance-public/gdn_extreme_decay_reference.hip": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
     "experiments/radiance-public/qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-    "src/qwen_r9700_lab/radiance_cache.py": "2d257eea10d40af6edc02734e2b6fa64678f3ded4ff1f4b564eef240a2695a22",
+    "src/qwen_r9700_lab/radiance_cache.py": "4a293241e6caeaf45791bb7cdb296e73f7f139e73c338aa9a9accde68d2667b5",
     "src/qwen_r9700_lab/radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
-    "src/qwen_r9700_lab/radiance_cache_telemetry.py": "f11dde07cc9e2a4d93aefff86a88c8ae7e48e09ac8d0455375700835b4037057",
+    "src/qwen_r9700_lab/radiance_cache_telemetry.py": "b91fb65bda48a6adce05725a43d4d90026cedcd300e7f958f7fa6a7540e39cc7",
     "src/qwen_r9700_lab/radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
     "src/qwen_r9700_lab/radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
-    "src/qwen_r9700_lab/radiance_request_timeline.py": "bff41600195bfa2c80bea1811b60f75741773e035615180b43f16890330efd4c"
+    "src/qwen_r9700_lab/radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
+    "src/qwen_r9700_lab/radiance_token_continuation.py": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
+    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a"
   },
   "support_files": {
     "support/libhsa-runtime64.so.1.21.0": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda"

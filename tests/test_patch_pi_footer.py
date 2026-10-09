@@ -28,7 +28,13 @@ def configure_fixture(api: dict[str, object], root: Path) -> tuple[Path, bytes]:
     separator_new = b"inline-cache-then-temperature-with-separators\n"
     separated = context_new + unified.replace(separator_old, separator_new)
     grouped = b"inline-cache-then-temperature-with-group-separators\n"
-    patched = separated.replace(separator_new, grouped)
+    grouped_footer = separated.replace(separator_new, grouped)
+    live_context_new = b"context-new-with-live-compaction\n"
+    compaction_footer = grouped_footer.replace(context_new, live_context_new)
+    prefill_context_new = b"context-new-with-live-compaction-and-prefill\n"
+    prefill_footer = compaction_footer.replace(live_context_new, prefill_context_new)
+    spaced_context_new = b"context-new-with-live-compaction-and-prefill-and-spacing\n"
+    patched = prefill_footer.replace(prefill_context_new, spaced_context_new)
     globals_ = api["run"].__globals__
     globals_.update(
         {
@@ -38,6 +44,9 @@ def configure_fixture(api: dict[str, object], root: Path) -> tuple[Path, bytes]:
             "WRAPPED_SHA256": hashlib.sha256(wrapped).hexdigest(),
             "UNIFIED_SHA256": hashlib.sha256(context_new + unified).hexdigest(),
             "SEPARATED_SHA256": hashlib.sha256(separated).hexdigest(),
+            "GROUPED_SHA256": hashlib.sha256(grouped_footer).hexdigest(),
+            "COMPACTION_SHA256": hashlib.sha256(compaction_footer).hexdigest(),
+            "PREFILL_SHA256": hashlib.sha256(prefill_footer).hexdigest(),
             "PATCHED_SHA256": hashlib.sha256(patched).hexdigest(),
             "CONTEXT_OLD": context_old,
             "CONTEXT_NEW": context_new,
@@ -45,6 +54,11 @@ def configure_fixture(api: dict[str, object], root: Path) -> tuple[Path, bytes]:
             "UNIFIED_REPLACEMENTS": ((transform_new, unified),),
             "SEPARATOR_REPLACEMENTS": ((separator_old, separator_new),),
             "GROUP_SEPARATOR_REPLACEMENTS": ((separator_new, grouped),),
+            "LIVE_CONTEXT_OLD": context_new,
+            "LIVE_CONTEXT_NEW": live_context_new,
+            "PREFILL_CONTEXT_OLD": live_context_new,
+            "PREFILL_CONTEXT_NEW": prefill_context_new,
+            "SPACING_REPLACEMENTS": ((prefill_context_new, spaced_context_new),),
         }
     )
     target = root / relative
@@ -65,6 +79,14 @@ def test_footer_patch_upgrades_base_and_legacy_states_idempotently(tmp_path: Pat
     api["run"](tmp_path, apply=True)
     assert target.read_bytes() == expected
     api["run"](tmp_path, apply=False)
+
+    target.write_bytes(b"context-new-with-live-compaction\none-continuous-footer\ninline-cache-then-temperature-with-group-separators\n")
+    api["run"](tmp_path, apply=True)
+    assert target.read_bytes() == expected
+
+    target.write_bytes(b"context-new-with-live-compaction-and-prefill\none-continuous-footer\ninline-cache-then-temperature-with-group-separators\n")
+    api["run"](tmp_path, apply=True)
+    assert target.read_bytes() == expected
     api["run"](tmp_path, apply=True)
 
     target.write_bytes(b"context-new\ntruncate-footer\n")
@@ -78,6 +100,11 @@ def test_footer_patch_upgrades_base_and_legacy_states_idempotently(tmp_path: Pat
     target.write_bytes(b"context-new\none-continuous-footer\ninline-cache-then-temperature-with-separators\n")
     api["run"](tmp_path, apply=True)
     assert target.read_bytes() == expected
+
+    target.write_bytes(b"context-new\none-continuous-footer\ninline-cache-then-temperature-with-group-separators\n")
+    api["run"](tmp_path, apply=True)
+    assert target.read_bytes() == expected
+    api["run"](tmp_path, apply=False)
 
 
 def test_footer_patch_rejects_unknown_runtime_bytes(tmp_path: Path) -> None:

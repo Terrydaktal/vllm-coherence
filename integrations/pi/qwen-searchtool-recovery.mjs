@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 
 export const SESSION_ID = "01a02132-9518-735b-805a-7b66a18c023d";
-export const PROJECT = "/home/lewis/tasks/searchtool";
+export const PROJECT = "/home/lewis/Dev/searchtool";
 export const CONTROL = "qwen-searchtool-recovery-v1";
 export const MAX_RECOVERIES = 2;
 export const RADIANCE_MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate";
@@ -11,7 +11,7 @@ export const AUTHORIZED_CHATS = new Map([
   ["01a02132-9518-735b-805a-7b66a18c023d", {
     name: "searchtool",
     label: "Searchtool",
-    project: "/home/lewis/tasks/searchtool",
+    project: PROJECT,
     statusKey: "searchtool-recovery",
   }],
   ["01a067d9-69cf-761f-8503-6554ccfd7703", {
@@ -67,7 +67,8 @@ export function getAuthorizedChat(ctx) {
   try {
     const cwd = realpathSync(ctx.cwd);
     const sessionCwd = realpathSync(ctx.sessionManager.getCwd());
-    if (cwd === chat.project && sessionCwd === chat.project) {
+    const project = realpathSync(chat.project);
+    if (cwd === project && sessionCwd === project) {
       return chat;
     }
   } catch {

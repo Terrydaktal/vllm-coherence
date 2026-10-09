@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import install, { recoveryKind, SESSION_ID, PROJECT, CONTROL, RADIANCE_MODEL } from "../integrations/pi/qwen-searchtool-recovery.mjs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import install, { recoveryKind, getAuthorizedChat, AUTHORIZED_CHATS, SESSION_ID, PROJECT, CONTROL, RADIANCE_MODEL } from "../integrations/pi/qwen-searchtool-recovery.mjs";
 
 const model = { provider: "qwen-r9700", api: "openai-completions", id: "fixture" };
 const answer = (text, extra = {}) => ({ role: "assistant", ...model, model: model.id,
@@ -17,6 +20,33 @@ function fixture(overrides = {}, entries = []) {
   emit("session_start");
   return { ctx, emit, messages, notices, statuses };
 }
+
+test("authorized recovery treats a legacy project alias and its new canonical directory equally", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "searchtool-recovery-migration-"));
+  const canonical = join(root, "Dev", "searchtool");
+  const legacy = join(root, "tasks", "searchtool");
+  const unrelated = join(root, "unrelated");
+  mkdirSync(canonical, { recursive: true });
+  mkdirSync(join(root, "tasks"));
+  mkdirSync(unrelated);
+  symlinkSync(canonical, legacy, "dir");
+  const sessionId = "synthetic-relocated-searchtool";
+  t.after(() => {
+    AUTHORIZED_CHATS.delete(sessionId);
+    rmSync(root, { recursive: true, force: true });
+  });
+  for (const project of [legacy, canonical]) {
+    const chat = { name: "searchtool", project };
+    AUTHORIZED_CHATS.set(sessionId, chat);
+    for (const cwd of [legacy, canonical]) for (const sessionCwd of [legacy, canonical]) {
+      const ctx = { model, cwd, sessionManager: { getSessionId: () => sessionId, getCwd: () => sessionCwd } };
+      assert.equal(getAuthorizedChat(ctx), chat);
+      assert.equal(getAuthorizedChat({ ...ctx, cwd: unrelated }), undefined);
+      assert.equal(getAuthorizedChat({ ...ctx, sessionManager: { ...ctx.sessionManager, getCwd: () => unrelated } }), undefined);
+    }
+  }
+  assert.equal(PROJECT, "/home/lewis/Dev/searchtool");
+});
 
 test("automatic follow-up preserves the stopped answer and never injects partial arguments", () => {
   const f = fixture();

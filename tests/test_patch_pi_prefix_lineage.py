@@ -20,8 +20,10 @@ def patched_runtime(tmp_path):
     target.parent.mkdir(parents=True)
     target.write_bytes(gzip.decompress(FIXTURE.read_bytes()))
     target.chmod(0o600)
-    prior = len(api["PATCHES"]) - len(api["LINEAGE_PATCHES"])
-    assert api["classify_chain"](target.read_bytes(), api["PATCHES"]) == prior
+    patches = tuple(patch for patch in api["PATCHES"] if patch.relative_path == RELATIVE)
+    api["run"].__globals__["PATCHES"] = patches
+    prior = patches.index(api["LINEAGE_PATCHES"][0])
+    assert api["classify_chain"](target.read_bytes(), patches) == prior
     api["run"](tmp_path, apply=True)
     return api, target
 

@@ -151,6 +151,8 @@ def launch(args, pi_args):
                         "find",
                         "ls",
                         "qwen_rehydrate_tool_turn",
+                        "session_search",
+                        "qwen_plan",
                     ],
                 },
             )
@@ -170,6 +172,8 @@ def launch(args, pi_args):
             "qwen-gpu-temperature.mjs",
             "qwen-tool-output-condense.mjs",
             "qwen-tool-turn-rehydrate.mjs",
+            "qwen-session-search.mjs",
+            "qwen-task-plan.ts",
             "qwen-radiance-compaction.ts",
             "qwen-radiance-cache.mjs",
         ]

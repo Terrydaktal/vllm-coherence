@@ -58,10 +58,10 @@ readonly PROGRAM=pi-remote-qwen-radiance
 readonly PI_VERSION=0.84.2
 readonly MODEL_ID=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
 readonly PI_MODEL="qwen-r9700/$MODEL_ID"
-readonly SNAPSHOT_ABI=b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9
+readonly SNAPSHOT_ABI=027853640d984856984c33c087c77fe189eb95dad40ec046be20f22d62020aa9
 readonly SNAPSHOT_DATA_ABI=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
 readonly SNAPSHOT_PATCH_SHA256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
-readonly REMOTE_LAUNCHER_SHA256=a4b2987c00f2e5143f01d90574ca3c0c1f08d35a56a4a33b461f91df23737de0
+readonly REMOTE_LAUNCHER_SHA256=f6c9776a79911e5b8de76fe5d3ce5cf9098c56e7a93f4d25ae4974ae4d75994f
 readonly IMAGE_ID=4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf
 readonly DEFAULT_REMOTE=lewis@ai
 readonly AUTO_LOCAL_PORT_FIRST=8012
@@ -443,10 +443,20 @@ readonly gpu_temperature_extension="$project_root/integrations/pi/qwen-gpu-tempe
 readonly gpu_temperature_helper="$project_root/scripts/qwen-radiance-gpu-temperature"
 readonly tool_output_extension="$project_root/integrations/pi/qwen-tool-output-condense.mjs"
 readonly rehydrate_extension="$project_root/integrations/pi/qwen-tool-turn-rehydrate.mjs"
+readonly session_search_extension="$project_root/integrations/pi/qwen-session-search.mjs"
+readonly session_search_worker="$project_root/integrations/pi/qwen-session-search-worker.mjs"
+readonly session_search_index="$project_root/integrations/pi/qwen-session-index.mjs"
 readonly searchtool_extension=${QWEN_PI_SEARCHTOOL_EXTENSION:-/home/lewis/tasks/searchtool/index.ts}
 readonly searchtool_recovery_extension="$project_root/integrations/pi/qwen-searchtool-recovery.mjs"
 readonly compaction_extension="$project_root/integrations/pi/qwen-radiance-compaction.ts"
 readonly compaction_core="$project_root/integrations/pi/qwen-radiance-compaction.mjs"
+readonly compaction_memory="$project_root/integrations/pi/qwen-compaction-memory.mjs"
+readonly compaction_workspace="$project_root/integrations/pi/qwen-compaction-workspace.mjs"
+readonly compaction_restoration="$project_root/integrations/pi/qwen-compaction-restoration.mjs"
+readonly compaction_files="$project_root/integrations/pi/qwen-compaction-files.mjs"
+readonly compaction_tasks="$project_root/integrations/pi/qwen-compaction-tasks.mjs"
+readonly task_plan_extension="$project_root/integrations/pi/qwen-task-plan.ts"
+readonly task_plan_core="$project_root/integrations/pi/qwen-task-plan.mjs"
 readonly backend_errors_module="$project_root/integrations/pi/qwen-radiance-errors.mjs"
 readonly backend_errors_probe="$project_root/src/qwen_r9700_lab/radiance_error_report.py"
 readonly compaction_progress="$project_root/integrations/pi/qwen-radiance-compaction-progress.mjs"
@@ -467,7 +477,7 @@ done
 	$(stat -c '%u:%h' -- "$scheduler_status_helper") == "$(id -u):1" ]] ||
 	die "scheduler status helper is missing or unsafe: $scheduler_status_helper"
 [[ -f $models_source && ! -L $models_source ]] || die 'Pi model configuration is missing or unsafe'
-for config_file in "$settings_source" "$operating_prompt" "$rehydrate_extension" "$scheduler_telemetry_module" "$cache_residency_module" "$cache_residency_probe"; do
+for config_file in "$settings_source" "$operating_prompt" "$rehydrate_extension" "$scheduler_telemetry_module" "$cache_residency_module" "$cache_residency_probe" "$session_search_extension" "$session_search_worker" "$session_search_index"; do
 	[[ -f $config_file && ! -L $config_file &&
 		$(stat -c '%u:%h' -- "$config_file") == "$(id -u):1" ]] ||
 		die "Pi configuration dependency is missing or unsafe: $config_file"
@@ -483,7 +493,7 @@ jq -e '.defaultTools | type == "array" and length > 0 and all(.[]; type == "stri
 [[ -f $searchtool_recovery_extension && ! -L $searchtool_recovery_extension &&
 	$(stat -c '%u:%h' -- "$searchtool_recovery_extension") == "$(id -u):1" ]] ||
 	die "recovery extension is missing or unsafe: $searchtool_recovery_extension"
-for compaction_file in "$compaction_extension" "$compaction_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe"; do
+for compaction_file in "$compaction_extension" "$compaction_core" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe"; do
 	[[ -f $compaction_file && ! -L $compaction_file &&
 		$(stat -c '%u:%h' -- "$compaction_file") == "$(id -u):1" ]] ||
 		die "prefix compaction dependency is missing or unsafe: $compaction_file"
@@ -767,8 +777,10 @@ jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$m
 # slow-to-normal round transition seen in the preserved diagnosis.  Warm a
 # content-free multi-token request before Pi opens; it is not attached to a
 # session and cannot alter a user's snapshot.  This also runs for
-# --reuse-existing: attaching to a restarted backend must not expose Pi to a
-# first-use compilation spike.  The request only populates the backend's
+# --reuse-existing after a backend/engine restart; a private receipt skips the
+# request on later attaches to the same live processes and configuration.
+# Health, model and authenticated-release checks still run on every attach.
+# The request only populates the backend's
 # compiled-kernel cache; it does not change model weights, chat state or
 # snapshot data.  Set QWEN_PI_SKIP_WARMUP=1 only for an explicit diagnostic
 # attach that accepts the risk of an inference-time JIT.
@@ -778,34 +790,153 @@ jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$m
 # container ID and use a fresh remote timestamp for each attempt so historical
 # JIT warnings cannot poison a later warmup or a replacement server pass it.
 if [[ ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then
-	jit_container_id=$(
-		ssh -T "$remote_host" /usr/bin/bash -s -- "$CONTAINER" <<'REMOTE_JIT_CONTAINER'
-set -euo pipefail
-podman inspect --format '{{.Id}}' "$1"
-REMOTE_JIT_CONTAINER
-	) || die 'Radiance startup warmup could not identify the remote backend container'
-	[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]] || die 'Radiance startup warmup received an invalid container identity'
 	warmup_payload=$(printf '%s' \
 		'{"model":"qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate","prompt":"Output exactly sixty-four short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":96,"temperature":1.0,"top_p":0.95,"top_k":40,"stream":false}')
-	for warmup_attempt in 1 2 3; do
-		jit_log_since=$(
-			ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" <<'REMOTE_JIT_BEGIN'
+	warmup_payload_sha=$(printf '%s' "$warmup_payload" | sha256sum | cut -d ' ' -f 1)
+	warmup_receipt() {
+		ssh -T "$remote_host" /usr/bin/python3 - "$CONTAINER" "$REMOTE_CACHE" \
+			"$SNAPSHOT_ABI" "$MODEL_ID" "$warmup_payload_sha" "$@" <<'REMOTE_WARMUP_RECEIPT'
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import stat
+import subprocess
+import sys
+
+container, cache, abi, model, payload, action, *expected = sys.argv[1:]
+policy = "pi-startup-warmup-v1"
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+def podman(*args):
+    return subprocess.check_output(["podman", *args], text=True, stderr=subprocess.DEVNULL, timeout=10)
+
+def process(pid):
+    fields = Path(f"/proc/{int(pid)}/stat").read_text().rpartition(")")[2].split()
+    if fields[0] in ("Z", "X"):
+        raise RuntimeError("backend process exited")
+    return [int(pid), int(fields[19])]
+
+def identity():
+    row, = json.loads(podman("inspect", container))
+    cid = row["Id"]
+    state = row["State"]
+    if not re.fullmatch(r"[0-9a-f]{64}", cid) or state["Running"] is not True or not state["StartedAt"]:
+        raise RuntimeError("backend is not running")
+    init = process(state["Pid"])
+    engines = []
+    for line in podman("top", cid, "hpid", "pid", "comm").splitlines()[1:]:
+        parts = line.split(maxsplit=2)
+        if len(parts) == 3 and parts[2].startswith(("VLLM::Engine", "VLLM::Worker")):
+            engines.append([parts[2], *process(parts[0])])
+    if not engines:
+        raise RuntimeError("cannot identify live backend engine")
+    config = row.get("Config", {})
+    key = {
+        "policy": policy, "model": model, "abi": abi, "payload": payload,
+        "boot": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+        "container": cid, "started": state["StartedAt"], "init": init,
+        "engines": sorted(engines), "image": row["Image"],
+        "path": row.get("Path"), "args": row.get("Args"),
+        "config": {k: config.get(k) for k in ("Cmd", "Entrypoint", "Env")},
+    }
+    return cid, digest(key)
+
+def private_file(info):
+    return stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600
+
+def run():
+    current = identity()
+    if identity() != current:
+        raise RuntimeError("backend identity changed during inspection")
+    directory = Path(cache) / "startup-warmup"
+    try:
+        directory.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise RuntimeError("unsafe startup warmup receipt directory")
+        filename = hashlib.sha256(container.encode()).hexdigest() + ".json"
+        if action == "check":
+            hit = False
+            try:
+                receipt_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+                with os.fdopen(receipt_fd, "rb") as handle:
+                    info = os.fstat(handle.fileno())
+                    if private_file(info) and info.st_size <= 4096:
+                        receipt = json.loads(handle.read(4097))
+                        hit = receipt == {"policy": policy, "fingerprint": current[1]}
+            except (OSError, ValueError, UnicodeError):
+                pass
+            print(*current, "hit" if hit else "miss")
+        elif action == "publish":
+            if expected != [current[1]]:
+                raise RuntimeError("backend changed during startup warmup")
+            temporary = filename + "." + secrets.token_hex(8) + ".tmp"
+            try:
+                receipt_fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+                with os.fdopen(receipt_fd, "w") as handle:
+                    json.dump({"policy": policy, "fingerprint": current[1]}, handle)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                if identity() != current:
+                    raise RuntimeError("backend changed before receipt publication")
+                os.replace(temporary, filename, src_dir_fd=fd, dst_dir_fd=fd)
+                print(*current, "hit")
+            finally:
+                try:
+                    os.unlink(temporary, dir_fd=fd)
+                except FileNotFoundError:
+                    pass
+        else:
+            raise RuntimeError("invalid startup warmup receipt action")
+    finally:
+        os.close(fd)
+
+try:
+    run()
+except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+    detail = str(error) if type(error) is RuntimeError else type(error).__name__
+    if isinstance(error, OSError) and error.errno is not None:
+        detail += f" (errno {error.errno})"
+    print(f"Radiance startup warmup identity/receipt check failed: {detail}", file=sys.stderr)
+    sys.exit(2)
+REMOTE_WARMUP_RECEIPT
+	}
+	warmup_identity=$(warmup_receipt check) || die 'Radiance startup warmup could not verify the remote backend identity'
+	read -r jit_container_id warmup_fingerprint warmup_cached <<<"$warmup_identity"
+	[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]] || die 'Radiance startup warmup received an invalid container identity'
+	[[ $warmup_fingerprint =~ ^[0-9a-f]{64}$ && $warmup_cached =~ ^(hit|miss)$ ]] ||
+		die 'Radiance startup warmup received an invalid receipt identity'
+	if [[ $warmup_cached == hit ]]; then
+		printf 'Radiance backend validated; startup warmup already complete for this engine\n' >&2
+	else
+		for warmup_attempt in 1 2 3; do
+			jit_log_since=$(
+				ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" <<'REMOTE_JIT_BEGIN'
 set -euo pipefail
 container=$1
 [[ $(podman inspect --format '{{.State.Running}}' "$container") == true ]] || exit 2
 podman logs --tail 0 "$container" >/dev/null 2>&1 || exit 2
 date -u +'%Y-%m-%dT%H:%M:%S.%NZ'
 REMOTE_JIT_BEGIN
-		) || die 'Radiance startup warmup could not read the remote backend log'
-		[[ $jit_log_since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$ ]] ||
-			die 'Radiance startup warmup received an invalid remote log timestamp'
-		curl --fail --silent --show-error --max-time 300 \
-			-H 'Content-Type: application/json' \
-			-H "X-Request-ID: pi-radiance-startup-warmup-$warmup_attempt" \
-			-d "$warmup_payload" \
-			"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
-			die 'Radiance startup warmup failed; refusing to start Pi on a cold or unhealthy backend'
-		if ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_CHECK'; then
+			) || die 'Radiance startup warmup could not read the remote backend log'
+			[[ $jit_log_since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$ ]] ||
+				die 'Radiance startup warmup received an invalid remote log timestamp'
+			curl --fail --silent --show-error --max-time 300 \
+				-H 'Content-Type: application/json' \
+				-H "X-Request-ID: pi-radiance-startup-warmup-$warmup_attempt" \
+				-d "$warmup_payload" \
+				"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
+				die 'Radiance startup warmup failed; refusing to start Pi on a cold or unhealthy backend'
+			if ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_CHECK'; then
 set -euo pipefail
 container=$1
 since=$2
@@ -819,31 +950,34 @@ for poll_attempt in {1..20}; do
 done
 exit 1
 REMOTE_JIT_CHECK
-			jit_status=0
-		else
-			jit_status=$?
-		fi
-		case $jit_status in
-		0)
-			if ((warmup_attempt < 3)); then
-				printf 'Radiance startup warmup compiled new inference shapes; repeating warmup (%s/3)\n' \
-					"$warmup_attempt" >&2
-				continue
+				jit_status=0
+			else
+				jit_status=$?
 			fi
-			ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_TAIL' >&2 || true
+			case $jit_status in
+			0)
+				if ((warmup_attempt < 3)); then
+					printf 'Radiance startup warmup compiled new inference shapes; repeating warmup (%s/3)\n' \
+						"$warmup_attempt" >&2
+					continue
+				fi
+				ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_TAIL' >&2 || true
 set -euo pipefail
 podman logs --since "$2" "$1" 2>&1 | grep -F 'JIT compilation during inference'
 REMOTE_JIT_TAIL
-			die 'Radiance startup warmup still observed inference-time Triton JIT after three attempts'
-			;;
-		1) break ;;
-		*) die 'Radiance startup warmup could not inspect the remote backend log' ;;
-		esac
-	done
-	if ((reuse_existing == 1)); then
-		printf 'reused Radiance backend validated; non-session startup warmup complete\n' >&2
-	else
-		printf 'Radiance startup warmup complete; launching Pi\n' >&2
+				die 'Radiance startup warmup still observed inference-time Triton JIT after three attempts'
+				;;
+			1) break ;;
+			*) die 'Radiance startup warmup could not inspect the remote backend log' ;;
+			esac
+		done
+		warmup_receipt publish "$warmup_fingerprint" >/dev/null ||
+			die 'Radiance backend changed during startup warmup; retry the launcher'
+		if ((reuse_existing == 1)); then
+			printf 'reused Radiance backend validated; non-session startup warmup complete\n' >&2
+		else
+			printf 'Radiance startup warmup complete; launching Pi\n' >&2
+		fi
 	fi
 fi
 
@@ -858,6 +992,8 @@ declare -a pi_options=(
 	--extension "$gpu_temperature_extension"
 	--extension "$tool_output_extension"
 	--extension "$rehydrate_extension"
+	--extension "$session_search_extension"
+	--extension "$task_plan_extension"
 	--extension "$searchtool_extension"
 	--extension "$compaction_extension"
 	--extension "$cache_extension"

@@ -732,6 +732,13 @@ def test_convolution_destination_backport_preserves_prior_precision_repair():
 
 def test_full_existing_chat_overlay_composes_with_candidate(tmp_path, monkeypatch):
     package = tree(tmp_path)
+    for relative, fixture in (
+        ("vllm/v1/engine/async_llm.py", "vllm_028_request_timeline_async_llm.py.gz"),
+        ("vllm/renderers/hf.py", "vllm_028_prefix_lineage_hf.py.gz"),
+    ):
+        target = package / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(gzip.decompress((ROOT / "tests/fixtures" / fixture).read_bytes()))
     scheduler = package / "vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py"
     monkeypatch.setenv("QWEN_SNAPSHOT_SCHEDULER", str(scheduler))
     monkeypatch.syspath_prepend(str(RELEASE))
@@ -763,5 +770,11 @@ def test_full_existing_chat_overlay_composes_with_candidate(tmp_path, monkeypatc
     )
     for path, text in sources.items():
         compile(text, str(path), "exec")
-    assert len(sources) == 12
+    assert len(sources) == 22
+    assert {
+        package / "vllm/v1/engine/async_llm.py",
+        package / "vllm/renderers/hf.py",
+        package / "qwen_radiance_token_continuation.py",
+        package / "qwen_radiance_token_continuation_runtime.py",
+    } <= sources.keys()
     assert "rollback_uncommitted" in (package / "vllm/v1/core/sched/scheduler.py").read_text()

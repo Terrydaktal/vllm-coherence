@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -10,6 +11,54 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts/pi-remote-qwen-radiance"
+
+
+def test_session_search_dependencies_are_owned_files_and_the_tool_is_loaded(tmp_path):
+    source = LAUNCHER.read_text()
+    definitions = "\n".join(
+        line for line in source.splitlines() if line.startswith("readonly session_search_")
+    )
+    assert definitions
+    start = source.index('for config_file in ')
+    end = source.index('\njq -e ', start)
+    validation = source[start:end]
+    names = set(re.findall(r'\$([a-z_]+)', validation)) - {"config_file"}
+    integration = tmp_path / "integrations/pi"
+    integration.mkdir(parents=True)
+    for name in ("qwen-session-search.mjs", "qwen-session-search-worker.mjs", "qwen-session-index.mjs"):
+        (integration / name).write_text("public synthetic module\n")
+    safe = tmp_path / "safe"
+    safe.write_text("public synthetic config\n")
+    variables = "\n".join(
+        f"{name}={shlex.quote(str(safe))}" for name in sorted(names)
+        if not name.startswith("session_search_")
+    )
+    setup = f"set -eu\nproject_root={shlex.quote(str(tmp_path))}\n{definitions}\n{variables}\n"
+    setup += 'die() { printf "%s\\n" "$*" >&2; exit 2; }\n'
+    accepted = subprocess.run(["bash", "-s"], input=setup + validation,
+                              capture_output=True, text=True, timeout=5, check=False)
+    assert accepted.returncode == 0, accepted.stderr
+    worker = integration / "qwen-session-search-worker.mjs"
+    worker.unlink()
+    worker.symlink_to(safe)
+    rejected = subprocess.run(["bash", "-s"], input=setup + validation,
+                              capture_output=True, text=True, timeout=5, check=False)
+    assert rejected.returncode == 2
+    assert "qwen-session-search-worker.mjs" in rejected.stderr
+    start = source.index("declare -a pi_options=(")
+    end = source.index("\n)", start) + 2
+    options = source[start:end]
+    variables = "\n".join(
+        f"{name}={shlex.quote(name)}" for name in sorted(set(re.findall(r'\$([a-z_]+)', options)))
+        if name != "session_search_extension"
+    )
+    command = setup + variables + "\n" + options + '\nprintf "%s\\n" "${pi_options[@]}"\n'
+    result = subprocess.run(["bash", "-s"], input=command,
+                            capture_output=True, text=True, timeout=5, check=True)
+    arguments = result.stdout.splitlines()
+    extension = str(integration / "qwen-session-search.mjs")
+    assert arguments.count(extension) == 1
+    assert arguments[arguments.index(extension) - 1] == "--extension"
 
 
 def digest(path):

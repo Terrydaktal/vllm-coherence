@@ -405,15 +405,17 @@
       "modules": {
         "radiance_cache.py": "4a293241e6caeaf45791bb7cdb296e73f7f139e73c338aa9a9accde68d2667b5",
         "radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
-        "radiance_cache_telemetry.py": "7c6d307df1eb68492e6c9b6b55203e5d2fa8c0bc6e50a28a928c5d2d6e5f3f28",
-        "radiance_request_timeline.py": "d5342e50f86e7296fa0a1dfc84c06921da591c5e2f4d9c69b172ed88c58a2a25",
-        "radiance_prefix_lineage.py": "c5bfcc3da9bcce531fe110b1423f6ca8f09797fcb652ef2704d3c5bea3d00c82",
+        "radiance_cache_telemetry.py": "b91fb65bda48a6adce05725a43d4d90026cedcd300e7f958f7fa6a7540e39cc7",
+        "radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
+        "radiance_prefix_lineage.py": "2f4b3d08e7051c766be584e78ab3b58215b3ba85bb04169560b5b37fe4058021",
         "radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936",
+        "radiance_token_continuation.py": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
+        "radiance_token_continuation_runtime.py": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
         "radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
         "radiance_fair_scheduler.py": "8090e2d4b3b6a83c10613dfbe68c55b2d14df6a19f432cc8b0db3f86a98e0b31",
-        "patch_chat_snapshot.py": "8111aa7c69591d4072ec5248ba87151ceb8e19e73325a1ae022c922908906ed2"
+        "patch_chat_snapshot.py": "789b4010f125f691fc94fb63fdd8b8d9e8704e8cbf996059d1990569ed6a01e9"
       }
     },
     "response_end_reuse": {
@@ -433,6 +435,10 @@
         "contract": "on-request allocator snapshot with include_traces=False; numeric segment/block sizes; best-effort fixed-root storage owners; no addresses, trace history or tensor values; separate private/default/unknown pools; bounded analysis and overwritten tmpfs output"
       },
       "compatible_runtime_abis": [
+        "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
+        "7fc9b5c6083ce353eaf12535bca550579607155cb7c930a961661e3cb1080cb1",
+        "ab9f9a025c2af425aef38fffbffe54e71d043e53444558bbdbecef0f86d2c7e5",
+        "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
         "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
         "463acc0e77210aca656099864cda189a06d320bb37f9f67fa5d9caebab881c6c",
         "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
@@ -517,6 +523,21 @@
       "retention": "Last completed response per exact cache salt; 8 chats; 32 MiB bounded process RAM",
       "privacy": "No text, token IDs or content fingerprints emitted; only comparison results and counts",
       "unsupported": "Explicit unavailable status; no cache or model behavior changes"
+    },
+    "token_continuation": {
+      "schema": "urn:coherence:generated-token-continuation:v1",
+      "modules": [
+        "radiance_token_continuation.py",
+        "radiance_token_continuation_runtime.py"
+      ],
+      "contract": "Unchanged chat turns preserve original generated token IDs; not bit-equivalent to full-history text re-encoding.",
+      "gate": "Exact message/output/configuration identity, authenticated full tokenizer backend/template, unchanged decoded prefix of the actual rendered text and full-prompt text equality; tokenize only the new suffix at the pinned special-token boundary. Normal cache state validation remains authoritative.",
+      "fallback": "Changed or unsupported inputs use full-history rendering/tokenization; existing canonical-prefix substitution remains guarded by exact canonical prefix and decoded full-prompt equality.",
+      "retention": "Latest private journal per cache salt; at most 8 chats and 32 MiB; 253792 IDs per chat; atomic 0600 files in a 0700 directory.",
+      "root": "/cache/token-continuation/<snapshot-data-abi>",
+      "unsupported": "Canonical rendering on edits, cancellation, concurrency, missing or corrupt journal, unsupported metadata or context limit.",
+      "processed_state": "Journal records emitted IDs, not an invented processed-token count; existing KV/GDN/conv/drafter endpoint checks decide reusable state.",
+      "privacy": "Raw IDs stay in private journal; telemetry emits fixed reasons and counts only."
     }
   },
   "serving": {

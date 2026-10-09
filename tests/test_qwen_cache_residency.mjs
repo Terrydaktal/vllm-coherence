@@ -69,7 +69,7 @@ test("missing, stale or incomplete telemetry never becomes a false cold-fill cla
 test("retained idle RAM coverage resolves Cold while an unverified disk backup remains unknown", () => {
   const value = sample({ gpu_tokens: 0, ram_tokens: 35_207, disk_tokens: null, disk_saved_tokens: null, input_tokens: null });
   assert.equal(formatCacheBreakdown(cacheBreakdown(value, chat, 35_207)),
-    "VRAM 0 · RAM 35,207 · Disk ? · Cold 0");
+    "VRAM 0 · RAM 35,207 · Disk ? · Cold \u00a0\u00a00");
   assert.deepEqual(cacheBreakdown({ ...value, live: false }, chat, 35_207),
     { gpu: null, ram: null, disk: null, cold: null, diskSaved: null });
 });
@@ -141,5 +141,5 @@ test("cache residency consumes the combined telemetry snapshot without another f
 	combined.cache = sample({ gpu_tokens: 60_000 });
 	combined.observed_at_ms = observed + 150;
 	writeFileSync(join(stateDirectory, "telemetry-v1.json"), JSON.stringify(combined), { mode: 0o600 });
-	assert.match(telemetry.readBreakdown(60_000, observed + 150), /VRAM 60,000 .*Cold 0$/);
+	assert.match(telemetry.readBreakdown(60_000, observed + 150), /VRAM 60,000 .*Cold \u00a0\u00a00$/);
 });

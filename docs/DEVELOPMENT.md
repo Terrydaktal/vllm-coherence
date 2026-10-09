@@ -33,6 +33,44 @@ are not loaded by that mode and do not prevent attaching to the deployed release
 Starting a backend also requires the local backend sources to match their release
 manifest. Both modes still authenticate the local ABI contract and Pi dependencies.
 
+Startup inference warmup is cached in the GPU host's private
+`$REMOTE_CACHE/startup-warmup/` directory. Subsequent launches skip the synthetic
+request and JIT-log polling when the live container, engine/worker process start
+identities, model, release ABI, configuration and warmup policy still match.
+Backend/worker restarts or configuration changes require another clean warmup;
+failed or explicitly skipped warmups never create a success receipt. Health,
+model identity and authenticated-release checks still run on every launch.
+
+For the current Qwen model, interrupted reasoning and prose remain in the next
+request and compaction input. The transcript still records the attempt as aborted.
+Unexecuted tool calls are removed from that request-only copy, with no invented
+tool results. Explicit `/context` exclusions and `/purge-thinking` still apply;
+failed requests and other models retain Pi's normal discard behavior.
+
+During Radiance compaction, **Esc cancels** and retains the original active
+conversation. **Alt+C finishes now** by stopping the current checkpoint stream and
+using the summary text already generated. It sends no replacement inference
+request. This explicit user cutoff may leave an incomplete summary; it does not
+claim that generation finished naturally. The progress display shows
+`Esc cancel · Alt+C finish now` while cutoff is available, and Esc remains available
+while saving. Repeated Alt+C presses send no additional requests. The normal
+snapshot flush, conversation commit and old-snapshot retirement ordering still
+applies; the original conversation remains authoritative until commit succeeds.
+
+Normal compaction now appends a bounded plan, source-linked continuity evidence,
+fresh Git state, relevant file contents and recorded task handles, and protects
+complete tool groups in its recent tail. Loaded project instructions remain in
+Pi's separate system prompt. It still makes one checkpoint inference request and preserves the existing
+provider prefix. `/context` and thinking exclusions are applied before memory
+extraction. Alt+C keeps its exact partial text, with memory stored only in metadata.
+See [COMPACTION_MEMORY.md](COMPACTION_MEMORY.md) for budgets, CPU/SDK checks,
+known limits and activation.
+
+The bundled [plan extension](PLAN_MODE.md) stores structured state in the selected
+session branch. `/plan` enters read-only planning; `/plan execute` resumes
+implementation. Normal execution can maintain a plan through `qwen_plan` without
+visible plan-file reads. Both host launchers and the Pi-opsec bundle load it.
+
 ## Development, verification and publication
 
 1. Edit Coherence directly. Run focused CPU tests here with

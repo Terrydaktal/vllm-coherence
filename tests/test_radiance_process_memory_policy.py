@@ -141,6 +141,10 @@ def test_binding_refresh_preserves_only_reviewed_compatible_predecessors(
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / relative).read_bytes())
     isolated_base = tmp_path / "experiments/radiance-public"
+    inherited_predecessor = "1" * 64
+    predecessors = manifest["runtime"]["memory_report"]["compatible_runtime_abis"]
+    assert inherited_predecessor not in predecessors
+    predecessors.append(inherited_predecessor)
     if change == "changed-data":
         profile_path = isolated_base / "runtime-radiance-1.0.16.json"
         profile = json.loads(profile_path.read_text())
@@ -150,9 +154,7 @@ def test_binding_refresh_preserves_only_reviewed_compatible_predecessors(
         manifest["runtime"]["memory_report"]["compatible_runtime_abis"].append(
             "invalid"
         )
-        (isolated_base / "snapshot-abi-chat-cache-v1.json").write_text(
-            json.dumps(manifest)
-        )
+    (isolated_base / "snapshot-abi-chat-cache-v1.json").write_text(json.dumps(manifest))
     completed = subprocess.run(
         [sys.executable, str(isolated_base / "update_chat_snapshot_bindings.py")],
         capture_output=True,
@@ -172,9 +174,11 @@ def test_binding_refresh_preserves_only_reviewed_compatible_predecessors(
     if change == "unchanged":
         assert result["storage"]["data_abi"] == manifest["storage"]["data_abi"]
         assert compatible == reviewed
+        assert inherited_predecessor in compatible
     else:
         assert result["storage"]["data_abi"] != manifest["storage"]["data_abi"]
-        assert not set(reviewed[3:]) & set(compatible)
+        assert inherited_predecessor not in compatible
+        assert set(compatible) <= set(reviewed) - {inherited_predecessor}
     for name in (
         "radiance_memory.py",
         "radiance_cache_telemetry.py",

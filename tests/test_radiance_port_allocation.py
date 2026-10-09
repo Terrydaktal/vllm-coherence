@@ -23,7 +23,10 @@ def _wait_for_ports(path: Path, count: int, processes: list[subprocess.Popen[str
             ports = [int(line) for line in path.read_text(encoding="utf-8").splitlines()]
             if len(ports) >= count:
                 return ports
-        failed = [process.returncode for process in processes if process.poll() is not None]
+        failed = [
+            (process.returncode, process.communicate())
+            for process in processes if process.poll() is not None
+        ]
         if failed:
             raise AssertionError(f"launcher exited before Pi started: {failed}")
         time.sleep(0.05)
@@ -99,6 +102,10 @@ if [[ -n $forward ]]; then
     exec python3 "$FAKE_RADIANCE_SERVER" "$port"
 fi
 remote_script=$(cat)
+if [[ $remote_script == *'policy = "pi-startup-warmup-v1"'* ]]; then
+    printf '%064d %064d hit\\n' 1 2
+    exit 0
+fi
 if [[ $remote_script == *"podman inspect --format '{{.Id}}'"* ]]; then
     printf '%064d\\n' 1
     exit 0

@@ -61,7 +61,9 @@ export function formatCacheBreakdown(value) {
   const number = value => count(value) ? value.toLocaleString("en-GB") : "?";
   // Disk displays the verified backup, which can overlap GPU/RAM coverage.
   // Restore-only disk coverage remains internal to the Cold calculation.
-  return `VRAM ${number(value?.gpu)} · RAM ${number(value?.ram)} · Disk ${number(value?.diskSaved)} · Cold ${number(value?.cold)}`;
+  // Nonbreaking padding survives Pi's status sanitization and stays attached to
+  // the count when the footer wraps. Reserve the common live 0–999 range.
+  return `VRAM ${number(value?.gpu)} · RAM ${number(value?.ram)} · Disk ${number(value?.diskSaved)} · Cold ${number(value?.cold).padStart(3, "\u00a0")}`;
 }
 
 export class CacheResidencyTelemetry extends SchedulerTelemetry {

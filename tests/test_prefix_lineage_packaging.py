@@ -10,7 +10,10 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_MODULES = {"radiance_prefix_lineage.py", "radiance_prefix_runtime.py"}
+BACKEND_MODULES = {
+    "radiance_prefix_lineage.py", "radiance_prefix_runtime.py",
+    "radiance_token_continuation.py", "radiance_token_continuation_runtime.py",
+}
 
 
 def test_runtime_export_binds_both_backend_prefix_modules(tmp_path, monkeypatch):
@@ -103,10 +106,11 @@ def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
         binary.parent.mkdir()
         binary.write_text("synthetic binary")
     calls = []
+    launches = []
     monkeypatch.setattr(
         pi.subprocess, "run", lambda command, **kwargs: calls.append(command)
     )
-    monkeypatch.setattr(pi.subprocess, "call", lambda command, **kwargs: 0)
+    monkeypatch.setattr(pi.subprocess, "call", lambda command, **kwargs: launches.append(command) or 0)
     monkeypatch.setattr(
         pi.urllib.request,
         "urlopen",
@@ -114,6 +118,12 @@ def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
     )
     args = SimpleNamespace(state=state, ssh=None, search_extension=None)
     assert pi.launch(args, ["--continue"]) == 0
+    extension = str(ROOT / "integrations/pi/qwen-session-search.mjs")
+    assert len(launches) == 1
+    assert launches[0].count(extension) == 1
+    assert launches[0][launches[0].index(extension) - 1] == "--extension"
+    settings = json.loads((state / "agents/8080/settings.json").read_text())
+    assert "session_search" in settings["defaultTools"]
     installers = [
         call for call in calls if Path(call[0]).name == "install-pi-coding-agent"
     ]

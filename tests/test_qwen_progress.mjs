@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import install from "../integrations/pi/qwen-progress.mjs";
+import { REQUEST_PHASE_LABELS } from "../integrations/pi/qwen-radiance-scheduler-telemetry.mjs";
 
 function fixture(t, schedulerOverride) {
   let now = 1000, tick, intervalMs, stopped = false;
@@ -93,7 +94,7 @@ test("a completed 717-token tool call becomes a tool timer without a pinned resp
   f.emit("tool_execution_end", { toolCallId: "one",
     get result() { assert.fail("progress must not inspect tool results"); } });
   f.advance(2000);
-  assert.match(f.working.at(-1), /tools finished.*waiting for next step 2s/);
+  assert.match(f.working.at(-1), /preparing tool continuation.*tools finished · 2s/);
   assert.equal(f.statuses.at(-1), undefined);
   f.emit("turn_end");
   assert.equal(f.working.at(-1), undefined);
@@ -136,7 +137,7 @@ test("usage-only buffered output establishes activity, and the next request star
   f.end(70);
   f.advance(20000);
   f.emit("before_provider_request", { payload: { stream: true } });
-  assert.match(f.working.at(-1), /KV lookup\/prefill.*0s/);
+  assert.match(f.working.at(-1), /finalizing and sending request.*0s/);
   assert.equal(f.statuses.at(-1), undefined);
   f.emit("after_provider_response");
   assert.match(f.working.at(-1), /scheduler telemetry unavailable.*backend wait unknown/);
@@ -531,4 +532,58 @@ test("new streamed output takes precedence over an unchanged queued sample", (t)
   f.update("text_delta", 1, "x");
   f.update("text_delta", 2, "x");
   assert.doesNotMatch(f.working.at(-1), /queued for GPU/);
+});
+
+test("single-line waits follow every backend stage before returning to generation", (t) => {
+  const row = { chat_id: "a".repeat(64), generation: "b".repeat(64), request_id: "c".repeat(64),
+    phase: "admission", blocker: null, input_tokens: 60096, computed_tokens: 60000,
+    cached_tokens: 60000, elapsed_ms: 100, phase_elapsed_ms: 100, first_token_ms: null,
+    timings_ms: {} };
+  const observation = { available: true, requestPhase: row, phaseObservedAt: Date.now() };
+  const f = fixture(t, { read: () => observation });
+  for (const [phase, label] of Object.entries(REQUEST_PHASE_LABELS)) {
+    if (phase === "complete") continue;
+    row.phase = phase;
+    f.advance(100);
+    assert.ok(f.working.at(-1).includes(phase === "generate" ? "awaiting first model output" : label.toLowerCase()), `${phase} has its own visible stage`);
+    assert.equal(f.working.at(-1).split("\n").length, 1);
+  }
+  row.phase = "prefill";
+  row.computed_tokens = 60048;
+  f.advance(100);
+  assert.match(f.working.at(-1), /48 \/ 96 uncached tok processed.*60,000 reused/);
+  f.update("text_delta", 1, "synthetic output");
+  assert.match(f.working.at(-1), /Qwen answer:/);
+  assert.equal(f.working.at(-1).split("\n").length, 1);
+});
+
+test("single-line tool continuation stays visible across asynchronous next-turn preparation", (t) => {
+  const f = fixture(t);
+  f.end(20);
+  f.emit("tool_execution_start", { toolCallId: "one", toolName: "read" });
+  f.advance(500);
+  assert.equal(f.working.at(-1).split("\n").length, 1);
+  f.emit("tool_execution_end", { toolCallId: "one" });
+  f.emit("turn_end", { message: { stopReason: "toolUse" }, toolResults: [{}] });
+  f.advance(3000);
+  assert.match(f.working.at(-1), /preparing tool continuation.*tools finished · 3s/);
+  assert.equal(f.working.at(-1).split("\n").length, 1);
+  f.emit("before_provider_request", { payload: { stream: true } });
+  assert.match(f.working.at(-1), /finalizing and sending request/);
+  assert.equal(f.working.at(-1).split("\n").length, 1);
+  f.emit("agent_end");
+  assert.equal(f.working.at(-1), undefined);
+});
+
+test("ordinary single-line waits yield to compaction and stop on session switches", (t) => {
+  const f = fixture(t);
+  f.emit("session_before_compact");
+  const compaction = "Radiance compaction: Prepare checkpoint\n   › Prepare checkpoint: 0.0s";
+  f.ctx.ui.setWorkingMessage(compaction);
+  f.advance(30000);
+  assert.equal(f.working.at(-1), compaction);
+  f.emit("before_provider_request", { payload: { stream: true } });
+  f.emit("session_switch");
+  f.advance(30000);
+  assert.equal(f.working.at(-1), undefined);
 });

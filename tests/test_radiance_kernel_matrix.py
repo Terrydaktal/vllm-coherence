@@ -42,10 +42,10 @@ def test_all_eight_combinations_and_separate_prefill_attention_override(matrix, 
     invocation = generated[generated.index("exec podman run "):]
     arguments = shlex.split(invocation.replace("\\\n", ""))
     compilation = next(arg for arg in arguments if arg.startswith("RADIANCE_COMPILATION_CONFIG="))
-    assert json.loads(compilation.split("=", 1)[1]) == {
-        "cudagraph_mode": "PIECEWISE",
-        "cudagraph_capture_sizes": [1, 2, 4, 8],
-    }
+    original_invocation = original[original.index("exec podman run "):]
+    original_arguments = shlex.split(original_invocation.replace("\\\n", ""))
+    source_compilation = original_arguments[original_arguments.index("--compilation-config") + 1]
+    assert json.loads(compilation.split("=", 1)[1]) == json.loads(source_compilation)
 
 
 def test_private_replay_mount_and_fixture_identity_validation(matrix, tmp_path, monkeypatch):

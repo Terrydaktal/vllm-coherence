@@ -25,7 +25,10 @@ LEGACY_SHA256 = "28658292670c745f2de62b0233c34679b2a21dad354c993a06cf9fc29ed152e
 WRAPPED_SHA256 = "24408575e076a7e8b6a1bd8f2d38c49fd99edfa76f367f45ac246bc7131ef4e4"
 UNIFIED_SHA256 = "2ce3d2fe5964648a117f75fb36a7e8fbf6c689bafd07cd7ab30cdfe0597f2534"
 SEPARATED_SHA256 = "17a3dbb5d8c02548fe71a14d65b130ce0acaa869751b8572341c5a11fe41b653"
-PATCHED_SHA256 = "25b98805e53bd4b0672beae5717a572c428fc0bc47ed56777167962dedd38a84"
+GROUPED_SHA256 = "25b98805e53bd4b0672beae5717a572c428fc0bc47ed56777167962dedd38a84"
+COMPACTION_SHA256 = "63abd2d76e3f5b69d0e910259debc95ff190023ed7c3e4e8b09634fc71312505"
+PREFILL_SHA256 = "22c4f86c6394631b3c95f59580cc9cd157f0987f4a358faa1d8d8d6d64464b88"
+PATCHED_SHA256 = "748c91eb687f47d848d907d92dfd04a28cfe6154df2c5d66ef8b403bb6deb390"
 PREVIOUS_PATCHED_SHA256 = "35ae96eed317a4245cccb6d33c14896c3b39cbca73bdf31c6f756b516264caf0"
 
 CONTEXT_OLD = b"""        const contextPercentDisplay = contextPercent === "?"
@@ -42,6 +45,67 @@ CONTEXT_NEW = b"""        // Show the full counter and limit with thousands sepa
         const contextPercentDisplay =
             `${contextCount} / ${contextLimit} (${percentDisplay}%)${autoIndicator}`;
 """
+
+LIVE_CONTEXT_OLD = b"""        const contextUsage = this.session.getContextUsage();
+"""
+LIVE_CONTEXT_NEW = b"""        // Compaction has its own stream, outside the ordinary assistant message.
+        // Its measured request usage is display-only and scoped to this session.
+        const sessionKey = this.session.sessionManager.getSessionFile?.() ??
+            this.session.sessionManager.getSessionId?.();
+        const compaction = globalThis[Symbol.for("qwen.radiance.compaction.progress")]?.get(sessionKey);
+        const compactionTokens = compaction?.getContextTokens?.();
+        const modelContextWindow = state.model?.contextWindow;
+        const contextUsage = Number.isSafeInteger(compactionTokens) && compactionTokens >= 0 &&
+            Number.isSafeInteger(modelContextWindow) && modelContextWindow > 0
+            ? { tokens: compactionTokens, contextWindow: modelContextWindow,
+                percent: compactionTokens / modelContextWindow * 100 }
+            : this.session.getContextUsage();
+"""
+
+PREFILL_CONTEXT_OLD = LIVE_CONTEXT_NEW
+PREFILL_CONTEXT_NEW = b"""        // Measured live request usage is display-only and scoped to this session.
+        // A prompt's size is known before its KV state has finished prefilling.
+        const sessionKey = this.session.sessionManager.getSessionFile?.() ??
+            this.session.sessionManager.getSessionId?.();
+        const compaction = globalThis[Symbol.for("qwen.radiance.compaction.progress")]?.get(sessionKey);
+        const compactionTokens = compaction?.getContextTokens?.();
+        const requestContext = globalThis[Symbol.for("qwen.radiance.request.context")]?.get(sessionKey);
+        const liveTokens = compactionTokens ?? requestContext?.getContextTokens?.();
+        const modelContextWindow = state.model?.contextWindow;
+        const contextUsage = Number.isSafeInteger(liveTokens) && liveTokens >= 0 &&
+            Number.isSafeInteger(modelContextWindow) && modelContextWindow > 0
+            ? { tokens: liveTokens, contextWindow: modelContextWindow,
+                percent: liveTokens / modelContextWindow * 100 }
+            : this.session.getContextUsage();
+"""
+
+SPACING_REPLACEMENTS = (
+    (
+        b"""function sanitizeStatusText(text) {
+    // Replace newlines, tabs, carriage returns with space, then collapse multiple spaces
+    return text
+        .replace(/[\\r\\n\\t]/g, " ")
+        .replace(/ +/g, " ")
+        .trim();
+}
+""",
+        b"""function sanitizeStatusText(text, preserveSpacing = false) {
+    // Controlled telemetry reserves numeric columns; retain their layout padding.
+    // Still flatten line controls, and keep normal status sanitization unchanged.
+    const cleaned = text.replace(/[\\r\\n\\t]/g, " ");
+    return preserveSpacing ? cleaned : cleaned.replace(/ +/g, " ").trim();
+}
+""",
+    ),
+    (
+        b'sanitizeStatusText(cacheResidencyStatus)',
+        b'sanitizeStatusText(cacheResidencyStatus, true)',
+    ),
+    (
+        b'sanitizeStatusText(gpuTemperatureStatus)',
+        b'sanitizeStatusText(gpuTemperatureStatus, true)',
+    ),
+)
 
 REPLACEMENTS = (
     (
@@ -307,12 +371,28 @@ def patched_bytes(data: bytes) -> bytes:
     digest = sha256(data)
     if digest == PATCHED_SHA256:
         return data
+    if digest == PREFILL_SHA256:
+        for old, new in SPACING_REPLACEMENTS:
+            data = replace_once(data, old, new)
+        if sha256(data) != PATCHED_SHA256:
+            raise PatchError("reserved spacing footer postimage hash differs from the pinned ABI")
+        return data
+    if digest == COMPACTION_SHA256:
+        data = replace_once(data, PREFILL_CONTEXT_OLD, PREFILL_CONTEXT_NEW)
+        if sha256(data) != PREFILL_SHA256:
+            raise PatchError("prefill context footer postimage hash differs from the pinned ABI")
+        return patched_bytes(data)
+    if digest == GROUPED_SHA256:
+        data = replace_once(data, LIVE_CONTEXT_OLD, LIVE_CONTEXT_NEW)
+        if sha256(data) != COMPACTION_SHA256:
+            raise PatchError("live compaction footer postimage hash differs from the pinned ABI")
+        return patched_bytes(data)
     if digest == SEPARATED_SHA256:
         for old, new in GROUP_SEPARATOR_REPLACEMENTS:
             data = replace_once(data, old, new)
-        if sha256(data) != PATCHED_SHA256:
+        if sha256(data) != GROUPED_SHA256:
             raise PatchError("grouped footer postimage hash differs from the pinned ABI")
-        return data
+        return patched_bytes(data)
     if digest == PREVIOUS_PATCHED_SHA256:
         for old, new in USAGE_ORDER_REPLACEMENTS:
             data = replace_once(data, old, new)
