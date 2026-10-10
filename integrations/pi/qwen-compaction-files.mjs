@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { lstat, open, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { legacyToolName, toolNamesMatch } from "./qwen-tool-names.mjs";
 
 // The caller supplies only the selected, context-filtered branch. This helper
 // never searches a transcript, scans a directory, executes a tool, or calls a
@@ -89,15 +90,16 @@ function referencesFromEntries(entries) {
       continue;
     }
     for (const call of group.calls) {
-      if (!["read", "edit", "write"].includes(call.name)) continue;
+      const tool = legacyToolName(call.name);
+      if (!["read", "edit", "write"].includes(tool)) continue;
       const { entry, index } = group.results.get(call.id), result = entry.message;
-      if (result.isError !== false || (result.toolName !== undefined && result.toolName !== call.name)) continue;
+      if (result.isError !== false || (result.toolName !== undefined && !toolNamesMatch(result.toolName, call.name))) continue;
       const args = call.arguments;
       if (!args || typeof args !== "object" || Array.isArray(args)) continue;
       const path = args.path ?? args.file_path;
       if (typeof path !== "string") continue;
       refs.push({ path, workdir: args.cwd ?? args.workdir, index,
-        provenance: { kind: `tool-${call.name}`, sourceIds: [group.owner.id, entry.id], toolCallId: call.id, ...readRange(args) } });
+        provenance: { kind: `tool-${tool}`, sourceIds: [group.owner.id, entry.id], toolCallId: call.id, ...readRange(args) } });
     }
   }
   return { refs, issues };

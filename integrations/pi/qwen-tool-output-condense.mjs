@@ -17,13 +17,14 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { canonicalToolName, toolNamesMatch } from "./qwen-tool-names.mjs";
 
 const TARGET_PROVIDER = "qwen-r9700";
 const MAX_CONTEXT_BYTES_ENV = "QWEN_PI_TOOL_RESULT_MAX_BYTES";
 const OUTPUT_DIR_ENV = "QWEN_PI_TOOL_RESULT_DIR";
 const FIXED_SLOT_RESUME_ENV = "QWEN_PI_FIXED_SLOT_RESUME";
 const LIVE_ARCHIVE_SCHEMA = "qwen-pi-live-tool-result-v1";
-const REHYDRATE_TOOL_NAME = "qwen_rehydrate_tool_turn";
+const REHYDRATE_TOOL_NAME = canonicalToolName("qwen_rehydrate_tool_turn");
 const DEFAULT_OUTPUT_DIR = join(
     process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
     "qwen-r9700",
@@ -53,10 +54,11 @@ const GUIDANCE_MARKER = "Qwen bounded tool-output discipline:";
 // returned to the model, so condensation never discards evidence.
 export const DEFAULT_MAX_CONTEXT_BYTES = 8 * 1024;
 export const TOOL_OUTPUT_GUIDANCE = `${GUIDANCE_MARKER}
-- Keep command output small at its source. Prefer rg with a narrow pattern and path, jq projections or selected keys, sed -n with a focused line range, and focused tests.
+- Keep command output small at its source. Prefer search_file_contents with a narrow path, literal: true for exact text, context: 0 and limit: 50. Use find_files for filename discovery, jq projections or selected keys, focused line ranges, and focused tests.
+- For advanced shell searches use rg -l -F when only filenames are needed, repeated -g flags to exclude irrelevant directories before scanning, and an explicit timeout. Piping recursive grep through grep -v and head bounds displayed results but does not prune traversal. Include relevant ignored build files explicitly when the task requires them.
 - Do not dump whole files, recursive trees, unbounded searches, complete logs, or full test suites when a targeted query answers the question.
 - For potentially large commands, obtain counts first and request bounded sections or matched diagnostic blocks.
-- Oversized tool results are retained as immutable SHA-256-addressed archives. Use qwen_rehydrate_tool_turn with a literal pattern or tight start_line/end_line range for exact follow-up evidence; a digest-only call returns only a small preview.`;
+- Oversized tool results are retained as immutable SHA-256-addressed archives. Use ${REHYDRATE_TOOL_NAME} with a literal pattern or tight start_line/end_line range for exact follow-up evidence; a digest-only call returns only a small preview.`;
 
 const UNBOUNDED_ROOT_FIND_PATTERN =
     /(?:^|[\s;&|()])(?:\/(?:usr\/)?bin\/)?find\s+\/(?=\s|$)/;
@@ -65,7 +67,7 @@ const UNBOUNDED_ROOT_FIND_REASON =
 
 export function isUnboundedRootFind(toolName, input) {
     return (
-        toolName === "bash" &&
+        toolNamesMatch(toolName, "bash") &&
         typeof input?.command === "string" &&
         UNBOUNDED_ROOT_FIND_PATTERN.test(input.command)
     );
@@ -112,7 +114,7 @@ function retainedBashText(event, inlineText) {
     const path = event.details?.fullOutputPath;
     const truncation = event.details?.truncation;
     if (
-        event.toolName !== "bash" ||
+        !toolNamesMatch(event.toolName, "bash") ||
         truncation?.truncated !== true ||
         typeof path !== "string" ||
         !isAbsolute(path) ||
@@ -416,7 +418,7 @@ function formatBytes(bytes) {
 }
 
 function statusFor(event, text) {
-    if (event.toolName !== "bash") return event.isError ? "error" : "success";
+    if (!toolNamesMatch(event.toolName, "bash")) return event.isError ? "error" : "success";
     const exited = text.match(/Command exited with code\s+(-?\d+)/i);
     if (exited) return exited[1];
     if (/Command (aborted|timed out)/i.test(text)) return "cancelled";
@@ -499,7 +501,7 @@ export function buildCondensedSummary(
         `Archive SHA-256: ${archive.sha256}`,
         `Content-addressed archive: ${archive.path}`,
         "Semantic summary: absent; the exact archive is authoritative.",
-        "Do not infer omitted content. Before depending on it, call qwen_rehydrate_tool_turn with this SHA-256 and a literal pattern or tight start_line/end_line range.",
+        `Do not infer omitted content. Before depending on it, call ${REHYDRATE_TOOL_NAME} with this SHA-256 and a literal pattern or tight start_line/end_line range.`,
     ].join("\n");
     const durationLine = `Duration: ${duration}`;
     const metadata =
@@ -575,7 +577,7 @@ export default function qwenToolOutputCondense(pi) {
         // archive. Re-condensing its output creates a second digest, obscures
         // the original archive identity, and can send the model into a
         // recursive rehydrate/condense loop.
-        if (event.toolName === REHYDRATE_TOOL_NAME) return undefined;
+        if (toolNamesMatch(event.toolName, REHYDRATE_TOOL_NAME)) return undefined;
         const contentText = textContent(event.content);
         if (contentText === undefined) return undefined;
 

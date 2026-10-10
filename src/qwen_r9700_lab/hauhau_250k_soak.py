@@ -56,19 +56,44 @@ FORBIDDEN_DIAGNOSTICS = (
     "operation aborted",
 )
 
+# Compare identities without changing authenticated historical plans or evidence.
+# Keep these aliases aligned with integrations/pi/qwen-tool-names.mjs.
+TOOL_NAME_ALIASES = {
+    "read": "read_file",
+    "bash": "run_shell_command",
+    "edit": "edit_file",
+    "write": "write_file",
+    "grep": "search_file_contents",
+    "find": "find_files",
+    "ls": "list_directory",
+    "search": "google_ai_search",
+    "fetch": "fetch_webpage",
+    "extract": "extract_webpage_snippets",
+    "qwen_rehydrate_tool_turn": "rehydrate_tool_result",
+    "session_search": "pi_session_search",
+    "qwen_plan": "manage_task_plan",
+}
+
+
+def _canonical_tool_name(name: Any) -> Any:
+    if name == "read_archived_tool_result":
+        return "rehydrate_tool_result"
+    return TOOL_NAME_ALIASES.get(name, name) if isinstance(name, str) else name
+
+
 # Fifteen complete transactions per phase yields 105 across the seven default
 # phases.  The two read results are deliberately made large and then rehydrated;
-# bash exercises one successful and one failed result; edit uses only the
+# shell commands exercise one successful and one failed result; edits use only the
 # disposable workspace.  These are minimum exact counts, not suggestions.
 DEFAULT_TOOL_REQUIREMENTS = (
     {"tool_name": "qwen_soak_probe", "successful": 1, "failed": 0},
-    {"tool_name": "read", "successful": 2, "failed": 0},
-    {"tool_name": "bash", "successful": 1, "failed": 1},
-    {"tool_name": "edit", "successful": 2, "failed": 0},
-    {"tool_name": "search", "successful": 2, "failed": 0},
-    {"tool_name": "fetch", "successful": 2, "failed": 0},
-    {"tool_name": "extract", "successful": 2, "failed": 0},
-    {"tool_name": "qwen_rehydrate_tool_turn", "successful": 2, "failed": 0},
+    {"tool_name": "read_file", "successful": 2, "failed": 0},
+    {"tool_name": "run_shell_command", "successful": 1, "failed": 1},
+    {"tool_name": "edit_file", "successful": 2, "failed": 0},
+    {"tool_name": "google_ai_search", "successful": 2, "failed": 0},
+    {"tool_name": "fetch_webpage", "successful": 2, "failed": 0},
+    {"tool_name": "extract_webpage_snippets", "successful": 2, "failed": 0},
+    {"tool_name": "rehydrate_tool_result", "successful": 2, "failed": 0},
 )
 REQUIRED_LIFECYCLE_SCENARIOS = (
     "interrupt-generation",
@@ -246,7 +271,7 @@ def _phase_prompt(
 ) -> str:
     sentinel = f"SOAK_FINAL_OK phase={phase} nonce={nonce} digest={digest}"
     requirement_text = ", ".join(
-        f"{item['tool_name']}={item['successful']} successful/{item['failed']} failed"
+        f"{_canonical_tool_name(item['tool_name'])}={item['successful']} successful/{item['failed']} failed"
         for item in requirements
     )
     return (
@@ -254,8 +279,8 @@ def _phase_prompt(
         f"Work only inside the disposable workspace `{workspace}` for file mutations. "
         "Complete every declared tool transaction exactly once, preserving structured calls and "
         f"results ({requirement_text}). Produce at least two independently archived tool results "
-        f"larger than {MIN_LARGE_RESULT_BYTES} bytes and use qwen_rehydrate_tool_turn on both "
-        "exact archive digests. The one planned bash failure is intentional and must not abort "
+        f"larger than {MIN_LARGE_RESULT_BYTES} bytes and use rehydrate_tool_result on both "
+        "exact archive digests. The one planned run_shell_command failure is intentional and must not abort "
         "the phase. "
         "Call qwen_soak_probe exactly once with "
         f'phase="{phase}", nonce="{nonce}", expectedDigest="{digest}". '
@@ -544,7 +569,7 @@ def validate_turn_document(document: Mapping[str, Any], phase: Mapping[str, Any]
     if set(start_by_id) != set(end_by_id):
         raise SoakError("tool transaction ledger contains an orphaned call or result")
     for call_id, start in start_by_id.items():
-        if end_by_id[call_id].get("toolName") != start.get("toolName"):
+        if _canonical_tool_name(end_by_id[call_id].get("toolName")) != _canonical_tool_name(start.get("toolName")):
             raise SoakError("tool transaction start/result names differ")
 
     requirements = phase.get("tool_requirements")
@@ -553,17 +578,17 @@ def validate_turn_document(document: Mapping[str, Any], phase: Mapping[str, Any]
         or _tool_requirement_total(requirements) != expected_total
     ):
         raise SoakError("phase tool requirements are incomplete")
-    expected_names = [item.get("tool_name") for item in requirements]
+    expected_names = [_canonical_tool_name(item.get("tool_name")) for item in requirements]
     if len(expected_names) != len(set(expected_names)):
         raise SoakError("phase tool requirements duplicate a tool name")
     for requirement in requirements:
-        tool_name = requirement["tool_name"]
-        matching = [event for event in ends if event.get("toolName") == tool_name]
+        tool_name = _canonical_tool_name(requirement["tool_name"])
+        matching = [event for event in ends if _canonical_tool_name(event.get("toolName")) == tool_name]
         successes = sum(event.get("isError") is False for event in matching)
         failures = sum(event.get("isError") is True for event in matching)
         if successes != requirement["successful"] or failures != requirement["failed"]:
             raise SoakError(f"tool outcome counts differ for {tool_name}")
-    if any(event.get("toolName") not in set(expected_names) for event in starts):
+    if any(_canonical_tool_name(event.get("toolName")) not in set(expected_names) for event in starts):
         raise SoakError("turn executed an undeclared tool")
 
     probe_starts = [event for event in starts if event.get("toolName") == "qwen_soak_probe"]
@@ -623,7 +648,10 @@ def validate_turn_document(document: Mapping[str, Any], phase: Mapping[str, Any]
         raise SoakError("assistant calls and executed tool transactions differ")
     for call_id, call in structured_by_id.items():
         start = start_by_id[call_id]
-        if call.get("name") != start.get("toolName") or call.get("arguments") != start.get("args"):
+        if (
+            _canonical_tool_name(call.get("name")) != _canonical_tool_name(start.get("toolName"))
+            or call.get("arguments") != start.get("args")
+        ):
             raise SoakError("assistant structured call differs from executed tool input")
 
     probes = [item for item in tool_calls if item.get("name") == "qwen_soak_probe"]
@@ -636,7 +664,7 @@ def validate_turn_document(document: Mapping[str, Any], phase: Mapping[str, Any]
     if not workspace.is_absolute():
         raise SoakError("phase has no absolute disposable workspace")
     for event in starts:
-        if event.get("toolName") != "edit":
+        if _canonical_tool_name(event.get("toolName")) != "edit_file":
             continue
         arguments = event.get("args")
         path_value = arguments.get("path") if isinstance(arguments, dict) else None
@@ -656,7 +684,7 @@ def validate_turn_document(document: Mapping[str, Any], phase: Mapping[str, Any]
     if not isinstance(minimum_archives, int) or len(archive_digests) < minimum_archives:
         raise SoakError("phase did not preserve enough authenticated large-result archives")
     rehydrate_starts = [
-        event for event in starts if event.get("toolName") == "qwen_rehydrate_tool_turn"
+        event for event in starts if _canonical_tool_name(event.get("toolName")) == "rehydrate_tool_result"
     ]
     rehydrated_digests = {
         event.get("args", {}).get("sha256")
@@ -994,8 +1022,10 @@ def _validate_plan_contract(plan: Mapping[str, Any]) -> None:
             raise SoakError("soak phase does not require two large archived results")
         if phase.get("minimum_rehydrated_results", 0) < 2:
             raise SoakError("soak phase does not require two rehydrated results")
-        names = {item["tool_name"] for item in requirements}
-        if names != {item["tool_name"] for item in DEFAULT_TOOL_REQUIREMENTS}:
+        names = {_canonical_tool_name(item["tool_name"]) for item in requirements}
+        if len(names) != len(requirements):
+            raise SoakError("phase tool requirements duplicate a tool name")
+        if names != {_canonical_tool_name(item["tool_name"]) for item in DEFAULT_TOOL_REQUIREMENTS}:
             raise SoakError("soak phase omits a required tool family")
     if total_transactions < MIN_TOTAL_TOOL_TRANSACTIONS:
         raise SoakError("soak plan contains fewer than 100 tool transactions")

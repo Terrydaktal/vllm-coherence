@@ -30,6 +30,31 @@ test("builtin bash prose cannot fabricate a process handle or status", () => {
   assert.doesNotMatch(report.text, /restart it now|PID 42/);
 });
 
+test("original and canonical shell names match historical calls without mutating entries", () => {
+  for (const callName of ["bash", "run_shell_command"]) {
+    for (const resultName of ["bash", "run_shell_command"]) {
+      const entries = [call("mixed-shell", callName), result("mixed-shell", { session_id: 17, status: "completed" }, { name: resultName })];
+      const original = structuredClone(entries);
+      for (const executionTools of [undefined, ["bash"], ["run_shell_command"]]) {
+        const report = captureCompactionTasks({ entries, executionTools });
+        assert.equal(report.records.length, 1, `${callName}/${resultName} is one known shell observation`);
+        assert.equal(report.records[0].kind, "execution-handle");
+        assert.equal(report.records[0].status, "completed");
+      }
+      assert.deepEqual(entries, original, "historical tool identities and contents remain authoritative");
+    }
+  }
+});
+
+test("renamed shell observations share the original executor handle namespace", () => {
+  const entries = [call("start", "bash"), result("start", { session_id: "task-a", status: "running" }),
+    call("finish", "run_shell_command", { session_id: "task-a" }), result("finish", { status: "completed" }, { name: "run_shell_command" })];
+  const report = captureCompactionTasks({ entries });
+  assert.equal(report.records.length, 1);
+  assert.equal(report.records[0].status, "completed");
+  assert.equal(report.records[0].supersedesEntryId, "result-start");
+});
+
 test("explicit structured handles remain historical and unverified after resume", () => {
   const report = captureCompactionTasks({ entries: [call("run"), result("run", {
     session_id: 17, pid: 42, status: "running", scope: "vm",

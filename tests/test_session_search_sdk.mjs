@@ -70,7 +70,8 @@ test("installed Pi searches compacted original JSONL, expands entries, and valid
     streamSimple: (_model, context) => {
       const turn = requests++;
       assert.ok(turn < 4, "the synthetic retrieval must terminate");
-      assert.ok(context.tools.some((tool) => tool.name === "session_search"), "search is exposed to the actual model request");
+      assert.ok(context.tools.some((tool) => tool.name === "pi_session_search"), "search is exposed to the actual model request");
+      assert.ok(!context.tools.some((tool) => tool.name === "session_search"), "the original alias stays unadvertised");
       let params;
       if (turn === 0) {
         assert.ok(!JSON.stringify(context.messages).includes("amber-pegasus-731"), "the original fact is not silently injected before retrieval");
@@ -92,11 +93,11 @@ test("installed Pi searches compacted original JSONL, expands entries, and valid
           params = { query: "amber", window: 4 };
         } else {
           assert.equal(result.isError, true);
-          assert.match(textOf(result), /Validation failed for tool "session_search"/);
+          assert.match(textOf(result), /Validation failed for tool "pi_session_search"/);
           assert.match(textOf(result), /window/);
         }
       }
-      const message = params ? { ...assistant(""), content: [{ type: "toolCall", id: `search-${turn}`, name: "session_search", arguments: params }],
+      const message = params ? { ...assistant(""), content: [{ type: "toolCall", id: `search-${turn}`, name: "pi_session_search", arguments: params }],
         stopReason: "toolUse" } : assistant("The original archived fact and its neighboring context were retrieved.");
       const stream = new AssistantMessageEventStream();
       queueMicrotask(() => {
@@ -111,8 +112,9 @@ test("installed Pi searches compacted original JSONL, expands entries, and valid
       parameters: { type: "object", properties: {}, additionalProperties: false }, execute: async () => { throw new Error("fixture tool must not run"); } }] });
   try {
     await session.bindExtensions({ uiContext: { notify() {}, setWidget() {}, setStatus() {}, setWorkingMessage() {} } });
-    assert.deepEqual(session.getActiveToolNames().sort(), ["fixture", "session_search"], "activation adds search while retaining explicit default tools");
-    const tool = session.agent.state.tools.find((candidate) => candidate.name === "session_search");
+    assert.deepEqual(session.getActiveToolNames().sort(), ["fixture", "pi_session_search"], "activation adds search while retaining explicit default tools");
+    assert.ok(!session.getAllTools().some((tool) => tool.name === "session_search"), "historical names are not registered tools");
+    const tool = session.agent.state.tools.find((candidate) => candidate.name === "pi_session_search");
     assert.ok(tool, "the SDK registers and wraps the production extension tool");
     assert.deepEqual(validateToolArguments(tool, { name: tool.name, arguments: { query: "amber", limit: 1 } }), { query: "amber", limit: 1 });
     assert.throws(() => validateToolArguments(tool, { name: tool.name, arguments: { query: "amber", limit: 11 } }), /Validation failed/);

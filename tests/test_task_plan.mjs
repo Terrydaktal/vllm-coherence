@@ -116,7 +116,7 @@ test("render and context respect every budget, include mode, relevant paths and 
     assert.ok(taskPlanContext(state, { maxChars }).length <= maxChars);
   }
   assert.match(renderTaskPlan(create()), /Relevant files: src\/synthetic.mjs/);
-  assert.match(renderTaskPlan(state), /qwen_plan show/);
+  assert.match(renderTaskPlan(state), /manage_task_plan show/);
   assert.match(taskPlanContext({ ...state, mode: "plan" }), /READ ONLY/);
 });
 
@@ -165,7 +165,7 @@ test("bash gate rejects shell interpretation, arbitrary programs and mutating/he
 
 function harness(entries = []) {
   const events = new Map(), commands = new Map(), tools = new Map(), notices = [], statuses = [];
-  let active = ["read", "edit", "unknown_mutation"];
+  let active = ["read", "edit", "unknown_mutation", "qwen_plan"];
   const ctx = { sessionManager: { getBranch: () => entries, buildContextEntries: () => entries },
     ui: { notify: (text) => notices.push(text), setStatus: (...args) => statuses.push(args) } };
   const pi = { registerTool: (tool) => tools.set(tool.name, tool), registerCommand: (name, command) => commands.set(name, command),
@@ -179,9 +179,10 @@ test("commands persist mode without inference; clear keeps mode; model cannot sw
   const h = harness([...branch]);
   const command = h.commands.get("plan").handler;
   h.events.get("session_start")({ reason: "startup" }, h.ctx);
-  assert.deepEqual(h.active(), ["read", "edit", "unknown_mutation", "qwen_plan"]);
+  assert.deepEqual(h.active(), ["read", "edit", "unknown_mutation", "manage_task_plan"]);
   await command("", h.ctx); assert.equal(taskPlanState(h.ctx).mode, "plan");
-  const tool = h.tools.get("qwen_plan");
+  const tool = h.tools.get("manage_task_plan");
+  assert.deepEqual([...h.tools.keys()], ["manage_task_plan"]);
   await tool.execute("plan-create", { action: "create", goal: "Synthetic", steps: [{ title: "Inspect" }] }, undefined, undefined, h.ctx);
   assert.ok(taskPlanState(h.ctx).plan);
   await command("clear", h.ctx); assert.equal(taskPlanState(h.ctx).plan, null); assert.equal(taskPlanState(h.ctx).mode, "plan");
@@ -196,16 +197,21 @@ test("commands persist mode without inference; clear keeps mode; model cannot sw
 
 test("plan mode blocks mutations and unknown tools, and permits only known reads and metadata", () => {
   const state = { ...create(), mode: "plan" };
-  for (const toolName of ["edit", "write", "unknown", "web_write", "exec", "qwen_evaluate"]) {
+  for (const toolName of ["edit", "edit_file", "write", "write_file", "unknown", "web_write", "exec", "qwen_evaluate"]) {
     assert.equal(planToolGate(state, { toolName, input: {} }).block, true, toolName);
   }
-  for (const toolName of ["read", "grep", "find", "ls", "session_search", "qwen_rehydrate_tool_turn", "qwen_plan"]) {
+  for (const toolName of ["read", "read_file", "grep", "search_file_contents", "find", "find_files", "ls", "list_directory",
+    "session_search", "pi_session_search", "qwen_rehydrate_tool_turn", "read_archived_tool_result", "rehydrate_tool_result", "qwen_plan", "manage_task_plan"]) {
     assert.equal(planToolGate(state, { toolName, input: {} }), undefined, toolName);
   }
   const event = { toolName: "bash", input: { command: "rg -n word ." } };
   assert.equal(planToolGate(state, event), undefined);
   assert.match(event.input.command, /\/usr\/bin\/rg/);
   assert.equal(planToolGate(state, { toolName: "bash", input: { command: "touch mutation" } }).block, true);
+  const renamedShell = { toolName: "run_shell_command", input: { command: "cat fixture" } };
+  assert.equal(planToolGate(state, renamedShell), undefined);
+  assert.match(renamedShell.input.command, /'\/usr\/bin\/cat'/);
+  assert.equal(planToolGate(state, { toolName: "run_shell_command", input: { command: "touch mutation" } }).block, true);
   assert.equal(planToolGate(create(), { toolName: "edit", input: {} }), undefined);
 });
 
@@ -225,6 +231,18 @@ test("plan tool provenance rejects custom replacements for read and bash", () =>
   }
   assert.equal(isTrustedPlanTool("session_search", { sourceInfo: { source: "sdk", path: "missing-session-search.mjs" } }), false);
   assert.equal(isTrustedPlanTool("qwen_plan", { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-task-plan.ts") } }), true);
+  for (const name of ["read_file", "search_file_contents", "find_files", "list_directory", "run_shell_command"]) {
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-tool-names.ts") } }), true);
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { source: "builtin", path: `<builtin:${name}>` } }), false);
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-task-plan.ts") } }), false);
+  }
+  for (const name of ["session_search", "pi_session_search"]) {
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-session-search.mjs") } }), true);
+  }
+  for (const name of ["qwen_rehydrate_tool_turn", "read_archived_tool_result", "rehydrate_tool_result"]) {
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-tool-turn-rehydrate.mjs") } }), true);
+  }
+  assert.equal(isTrustedPlanTool("manage_task_plan", { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-task-plan.ts") } }), true);
   const h = harness([...branch, entry({ ...create(), mode: "plan" })]);
   // An unavailable SDK registry fails closed, including a same-name custom read.
   assert.equal(h.events.get("tool_call")({ toolName: "read", input: { path: "fixture" } }, h.ctx).block, true);
@@ -257,8 +275,9 @@ test("unchanged plans are not duplicated, active tool results count, and compact
   const first = h.events.get("before_agent_start")({}, h.ctx).message;
   h.entries.push({ type: "custom_message", ...first });
   assert.equal(h.events.get("before_agent_start")({}, h.ctx), undefined);
-  const tool = h.tools.get("qwen_plan");
+  const tool = h.tools.get("manage_task_plan");
   const response = await tool.execute("plan-update", { action: "update", steps: [{ id: "s1", status: "blocked" }] }, undefined, undefined, h.ctx);
+  // Historical results still count without re-registering their retired executable name.
   h.entries.push({ type: "message", id: "plan-output-1", message: { role: "toolResult", toolName: "qwen_plan", ...response } });
   assert.equal(h.events.get("before_agent_start")({}, h.ctx), undefined);
   h.ctx.sessionManager.buildContextEntries = () => [{ type: "compaction", summary: "Synthetic summary" }];
@@ -269,6 +288,26 @@ test("unchanged plans are not duplicated, active tool results count, and compact
   assert.match(cleared.content, /No active task plan/);
   h.entries.push({ type: "custom_message", ...cleared });
   assert.equal(h.events.get("before_agent_start")({}, h.ctx), undefined);
+});
+
+test("both plan-result names suppress duplicate context and honor exclusions without rewriting history", async () => {
+  for (const toolName of ["qwen_plan", "manage_task_plan"]) {
+    const h = harness([...branch, entry(create())]);
+    const response = await h.tools.get("manage_task_plan").execute("plan-show", { action: "show" }, undefined, undefined, h.ctx);
+    // Simulate a saved historical result; retired names have no executable registration.
+    const recorded = { type: "message", id: `plan-output-${toolName}`, message: { role: "toolResult", toolName,
+      toolCallId: "plan-show", ...response } };
+    h.entries.push(recorded);
+    assert.equal(h.events.get("before_agent_start")({}, h.ctx), undefined, `${toolName} records count as current plan state`);
+    h.entries.push({ type: "custom", customType: CONTEXT_POLICY_ENTRY, data: { version: 1, preserveFutureThinking: false,
+      changes: [{ entryId: user.id, part: "message", excluded: true }] } });
+    const snapshot = structuredClone(recorded);
+    const filtered = h.events.get("context")({ messages: [recorded.message] }, h.ctx).messages[0];
+    assert.equal(filtered.toolName, toolName);
+    assert.equal(filtered.toolCallId, recorded.message.toolCallId);
+    assert.match(filtered.content[0].text, /manage_task_plan show/);
+    assert.deepEqual(recorded, snapshot, "saved historical tool-result names and content remain untouched");
+  }
 });
 
 const sdkRoot = process.env.QWEN_TEST_PI_ROOT ?? join(homedir(), ".local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works");

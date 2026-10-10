@@ -7,8 +7,10 @@ import { installRadianceCompaction } from "./qwen-radiance-compaction.mjs";
 import { installRadianceErrors } from "./qwen-radiance-errors.mjs";
 import { installThinkingPurge } from "./qwen-radiance-thinking.mjs";
 import { installContextPicker } from "./qwen-context.mjs";
+import { installToolListing } from "./qwen-tools.mjs";
 
 export default function radianceCompaction(pi) {
+  installToolListing(pi);
   installRadianceErrors(pi, { Text });
   installThinkingPurge(pi, { Text });
   installContextPicker(pi, { Text, matchesKey, truncateToWidth, convertToLlm, streamSimpleOpenAICompletions });

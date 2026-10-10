@@ -79,7 +79,7 @@ test("large persisted plans prioritize pending files and bound their receipt met
   assert.ok(preferred.every((ref) => ref.sourceIds.length === 0), "archived IDs are not passed as current-message provenance");
   assert.equal(report.preferredPathsTruncated, true);
   assert.equal(report.plan.entryId, "plan-snapshot");
-  assert.equal(report.plan.recovery, "qwen_plan show");
+  assert.equal(report.plan.recovery, "manage_task_plan show");
   assert.equal(report.plan.plan, undefined, "full canonical state remains in the session instead of every receipt");
   assert.ok(Buffer.byteLength(JSON.stringify(report)) < 50_000);
   assert.equal(state.plan.steps.length, 30);

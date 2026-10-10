@@ -171,7 +171,7 @@ function validateToolCalls(message, records, streamFault) {
 		if (!isDeepStrictEqual(parsed.value, block.arguments)) {
 			return "Pi's repaired tool arguments differed from the exact emitted JSON";
 		}
-		if (block.name === "bash") {
+        if (["bash", "run_shell_command"].includes(block.name)) {
 			const syntaxError = validateBashSyntax(parsed.value.command);
 			if (syntaxError !== undefined) return syntaxError;
 		}

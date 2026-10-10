@@ -35,7 +35,7 @@ test("pinned SDK loads plan extension, activates tool, enforces gates and preser
     compaction: { enabled: false }, retry: { enabled: false } }, { projectTrusted: true });
   const loader = new DefaultResourceLoader({ cwd: dir, agentDir: dir, settingsManager,
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-    additionalExtensionPaths: [resolve("integrations/pi/qwen-task-plan.ts")], systemPrompt: "Stable synthetic SDK prefix." });
+    additionalExtensionPaths: [resolve("integrations/pi/qwen-tool-names.ts"), resolve("integrations/pi/qwen-task-plan.ts")], systemPrompt: "Stable synthetic SDK prefix." });
   await loader.reload();
   assert.deepEqual(loader.getExtensions().errors, []);
   let mutations = 0;
@@ -51,9 +51,15 @@ test("pinned SDK loads plan extension, activates tool, enforces gates and preser
     return { session, manager };
   };
   const { session, manager } = await create();
-  assert.ok(session.getActiveToolNames().includes("qwen_plan"), "extension activates qwen_plan even when configured tools omit it");
+  assert.ok(session.getActiveToolNames().includes("manage_task_plan"), "extension activates manage_task_plan even when configured tools omit it");
+  assert.ok(!session.getActiveToolNames().includes("qwen_plan"), "the original plan alias stays inactive");
+  assert.ok(!session.getAllTools().some((tool) => tool.name === "qwen_plan"), "historical names are not registered tools");
+  for (const name of ["read_file", "run_shell_command"]) {
+    assert.ok(session.getActiveToolNames().includes(name));
+    assert.equal(session.getAllTools().find((tool) => tool.name === name).sourceInfo.path, resolve("integrations/pi/qwen-tool-names.ts"));
+  }
   const beforePrompt = session.systemPrompt;
-  assert.match(session.getAllTools().find((tool) => tool.name === "qwen_plan").description, /substantial multi-step tasks/);
+  assert.match(session.getAllTools().find((tool) => tool.name === "manage_task_plan").description, /substantial multi-step tasks/);
   await session.prompt("/plan on");
   assert.equal(replayTaskPlan(manager.getBranch()).mode, "plan");
   const tool = (name) => session.agent.state.tools.find((tool) => tool.name === name);
@@ -63,7 +69,7 @@ test("pinned SDK loads plan extension, activates tool, enforces gates and preser
     const decision = await session.agent.beforeToolCall({ toolCall: { id, name, arguments: params }, args: params });
     return decision?.block ? { content: [{ type: "text", text: decision.reason }], isError: true } : tool(name).execute(id, params);
   };
-  const response = await tool("qwen_plan").execute("plan-create", { action: "create", goal: "Verify synthetic integration",
+  const response = await tool("manage_task_plan").execute("plan-create", { action: "create", goal: "Verify synthetic integration",
     steps: [{ title: "Inspect fixture", status: "in_progress" }, { title: "Record evidence" }] });
   assert.match(response.content[0].text, /Verify synthetic integration/);
   assert.ok(manager.getBranch().some((entry) => entry.customType === TASK_PLAN_ENTRY));
@@ -74,12 +80,12 @@ test("pinned SDK loads plan extension, activates tool, enforces gates and preser
   assert.equal(hidden.messages[0].display, false);
   manager.appendCustomMessageEntry(TASK_PLAN_CONTEXT, hidden.messages[0].content, false, hidden.messages[0].details);
   assert.equal(await session.extensionRunner.emitBeforeAgentStart("Continue", undefined, beforePrompt, {}), undefined);
-  const readEvent = { type: "tool_call", toolCallId: "read-1", toolName: "read", input: { path: "fixture.txt" } };
+  const readEvent = { type: "tool_call", toolCallId: "read-1", toolName: "read_file", input: { path: "fixture.txt" } };
   assert.equal(await session.extensionRunner.emitToolCall(readEvent), undefined);
-  const bashEvent = { type: "tool_call", toolCallId: "bash-1", toolName: "bash", input: { command: "rg -n synthetic ." } };
+  const bashEvent = { type: "tool_call", toolCallId: "bash-1", toolName: "run_shell_command", input: { command: "rg -n synthetic ." } };
   assert.equal(await session.extensionRunner.emitToolCall(bashEvent), undefined);
   assert.match(bashEvent.input.command, /'\/usr\/bin\/rg' '--no-config'/);
-  for (const [toolName, input] of [["write", { path: "unwanted.txt", content: "mutation" }], ["unknown_mutation", {}], ["bash", { command: "touch unwanted.txt" }], ["bash", { command: "git status --short" }]]) {
+  for (const [toolName, input] of [["write", { path: "unwanted.txt", content: "mutation" }], ["write_file", { path: "unwanted.txt", content: "mutation" }], ["unknown_mutation", {}], ["bash", { command: "touch unwanted.txt" }], ["run_shell_command", { command: "touch unwanted.txt" }], ["run_shell_command", { command: "git status --short" }]]) {
     assert.equal((await session.extensionRunner.emitToolCall({ type: "tool_call", toolCallId: `blocked-${toolName}`, toolName, input })).block, true);
   }
   const blocked = await invoke("unknown_mutation", "blocked-mutate", {});
@@ -87,9 +93,9 @@ test("pinned SDK loads plan extension, activates tool, enforces gates and preser
   assert.equal(mutations, 0);
   const fixturePath = join(dir, "fixture.txt");
   await writeFile(fixturePath, "synthetic fixture\n");
-  const read = await invoke("read", "read-fixture", { path: fixturePath });
+  const read = await invoke("read_file", "read-fixture", { path: fixturePath });
   assert.match(read.content[0].text, /synthetic fixture/);
-  const blockedWrite = await invoke("write", "blocked-write", { path: fixturePath, content: "unwanted overwrite" });
+  const blockedWrite = await invoke("write_file", "blocked-write", { path: fixturePath, content: "unwanted overwrite" });
   assert.match(blockedWrite.content[0].text, /Read-only plan mode/);
   assert.equal(await readFile(fixturePath, "utf8"), "synthetic fixture\n");
   const shell = await session.extensionRunner.emitUserBash({ type: "user_bash", command: "touch unwanted.txt", excludeFromContext: false, cwd: dir });
@@ -103,11 +109,11 @@ test("pinned SDK loads plan extension, activates tool, enforces gates and preser
   assert.equal(replayTaskPlan(manager.getBranch()).mode, "execute");
   await invoke("unknown_mutation", "allowed-mutate", {});
   assert.equal(mutations, 1);
-  const collision = await create([mutating("read"), mutating("bash")]);
+  const collision = await create([mutating("read"), mutating("bash"), mutating("read_file"), mutating("run_shell_command")]);
   await collision.session.prompt("/plan on");
-  for (const toolName of ["read", "bash"]) {
+  for (const toolName of ["read", "bash", "read_file", "run_shell_command"]) {
     const gate = await collision.session.extensionRunner.emitToolCall({ type: "tool_call", toolCallId: "collision", toolName,
-      input: toolName === "bash" ? { command: "cat fixture.txt" } : { path: fixturePath } });
+      input: ["bash", "run_shell_command"].includes(toolName) ? { command: "cat fixture.txt" } : { path: fixturePath } });
     assert.equal(gate.block, true);
     assert.match(gate.reason, /unverified implementation/);
   }

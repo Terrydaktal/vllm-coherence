@@ -77,7 +77,7 @@ export async function captureContinuityRestoration({ ctx, entries, preparation, 
   if (text.length > maxChars) throw new Error("restoration exceeded its shared context budget");
   const planEntry = ctx.sessionManager.getBranch?.().filter((entry) => entry.type === "custom" && entry.customType === TASK_PLAN_ENTRY).at(-1);
   const planReport = { mode: plan.mode, hasPlan: Boolean(plan.plan), entryId: planEntry?.id ?? null,
-    stateDigest: sha(JSON.stringify(plan)), recovery: "qwen_plan show",
+    stateDigest: sha(JSON.stringify(plan)), recovery: "manage_task_plan show",
     pendingStepIds: (plan.plan?.steps ?? []).filter((step) => step.status !== "completed").map((step) => step.id),
     completedStepCount: (plan.plan?.steps ?? []).filter((step) => step.status === "completed").length };
   return { version: 1, text, digest: sha(text), maxChars, charCount: text.length,

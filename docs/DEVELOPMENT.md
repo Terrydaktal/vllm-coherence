@@ -68,7 +68,7 @@ known limits and activation.
 
 The bundled [plan extension](PLAN_MODE.md) stores structured state in the selected
 session branch. `/plan` enters read-only planning; `/plan execute` resumes
-implementation. Normal execution can maintain a plan through `qwen_plan` without
+implementation. Normal execution can maintain a plan through `manage_task_plan` without
 visible plan-file reads. Both host launchers and the Pi-opsec bundle load it.
 
 ## Development, verification and publication

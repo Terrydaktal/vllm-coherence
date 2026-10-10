@@ -72,9 +72,10 @@ test("installed Pi condenses a result and rehydrates live and historical archive
     streamSimple: (_model, context) => {
       const turn = requests++;
       assert.ok(turn < 7, "synthetic archive retrieval must terminate");
-      assert.ok(context.tools.some((tool) => tool.name === "qwen_rehydrate_tool_turn"), "the production tool is present in the model request");
+      assert.ok(context.tools.some((tool) => tool.name === "rehydrate_tool_result"), "the production tool is present in the model request");
+      assert.ok(!context.tools.some((tool) => tool.name === "qwen_rehydrate_tool_turn"), "the original alias stays unadvertised");
       assert.match(context.systemPrompt, /Qwen bounded tool-output discipline/);
-      let name = "qwen_rehydrate_tool_turn", params;
+      let name = "rehydrate_tool_result", params;
       if (turn === 0) { name = "fixture"; params = {}; }
       else {
         const result = context.messages.filter((message) => message.role === "toolResult").at(-1);
@@ -119,7 +120,7 @@ test("installed Pi condenses a result and rehydrates live and historical archive
           params = { pattern: "missing required digest" };
         } else {
           assert.equal(result.isError, true);
-          assert.match(text, /Validation failed for tool "qwen_rehydrate_tool_turn"/);
+          assert.match(text, /Validation failed for tool "rehydrate_tool_result"/);
           assert.match(text, /sha256/);
         }
       }
@@ -139,9 +140,12 @@ test("installed Pi condenses a result and rehydrates live and historical archive
       parameters: { type: "object", properties: {}, additionalProperties: false }, execute: async () => fixtureResult }] });
   try {
     await session.bindExtensions({ uiContext: { notify() {}, setWidget() {}, setStatus() {}, setWorkingMessage() {} } });
-    assert.ok(session.getAllTools().some((tool) => tool.name === "qwen_rehydrate_tool_turn"), "real SDK registers the extension");
-    assert.deepEqual(session.getActiveToolNames().sort(), ["fixture", "qwen_rehydrate_tool_turn"], "explicit defaultTools retains the fixture and activates the extension tool");
-    const tool = session.agent.state.tools.find((candidate) => candidate.name === "qwen_rehydrate_tool_turn");
+    assert.ok(session.getAllTools().some((tool) => tool.name === "rehydrate_tool_result"), "real SDK registers the extension");
+    for (const name of ["qwen_rehydrate_tool_turn", "read_archived_tool_result"]) {
+      assert.ok(!session.getAllTools().some((tool) => tool.name === name), "historical names are not registered tools");
+    }
+    assert.deepEqual(session.getActiveToolNames().sort(), ["fixture", "rehydrate_tool_result"], "explicit defaultTools retains the fixture and activates the extension tool");
+    const tool = session.agent.state.tools.find((candidate) => candidate.name === "rehydrate_tool_result");
     assert.deepEqual(validateToolArguments(tool, { name: tool.name, arguments: { sha256: originalDigest, max_lines: 2 } }), { sha256: originalDigest, max_lines: 2 });
     for (const params of [{}, { sha256: "invalid" }, { sha256: originalDigest, max_lines: 201 }, { sha256: originalDigest, unexpected: true }]) {
       assert.throws(() => validateToolArguments(tool, { name: tool.name, arguments: params }), /Validation failed/);

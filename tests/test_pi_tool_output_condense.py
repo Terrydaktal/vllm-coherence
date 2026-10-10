@@ -30,11 +30,12 @@ def test_launcher_loads_tool_output_condensation_extension() -> None:
     assert 'pi.on("tool_call"' in extension
     assert 'pi.on("tool_execution_start"' in extension
     assert 'pi.on("before_agent_start"' in extension
-    assert "rg with a narrow pattern" in extension
+    assert "search_file_contents with a narrow path" in extension
     assert "jq projections" in extension
-    assert "sed -n" in extension
+    assert "focused line ranges" in extension
+    assert "exclude irrelevant directories before scanning" in extension
     assert "literal pattern or tight start_line/end_line range" in extension
-    assert "event.toolName === REHYDRATE_TOOL_NAME" in extension
+    assert "toolNamesMatch(event.toolName, REHYDRATE_TOOL_NAME)" in extension
     assert "export const DEFAULT_MAX_CONTEXT_BYTES = 8 * 1024;" in extension
 
 
@@ -64,7 +65,7 @@ const handlers = new Map();
 condense({{ on(name, handler) {{ handlers.set(name, handler); }} }});
 let rehydrateDefinition;
 rehydrate({{ registerTool(value) {{ rehydrateDefinition = value; }} }});
-if (!rehydrateDefinition || rehydrateDefinition.name !== "qwen_rehydrate_tool_turn") {{
+if (!rehydrateDefinition || rehydrateDefinition.name !== "rehydrate_tool_result") {{
   process.exit(41);
 }}
 
@@ -79,6 +80,10 @@ if (!blockedRootFind?.block || !blockedRootFind.reason.includes("unbounded find 
   process.exit(42);
 }}
 if (await handlers.get("tool_call")({{
+  toolName: "run_shell_command",
+  input: {{ command: 'find / -name "pi-coding-agent"' }},
+}})?.block !== true) process.exit(59);
+if (await handlers.get("tool_call")({{
   toolName: "bash",
   input: {{ command: 'find /home/lewis/tasks -name "pi-coding-agent" -type d' }},
 }}) !== undefined) process.exit(43);
@@ -90,7 +95,8 @@ const prompt = await handlers.get("before_agent_start")({{
   systemPrompt: "base prompt",
 }}, ctx);
 if (!prompt.systemPrompt.includes("Qwen bounded tool-output discipline")) process.exit(9);
-if (!prompt.systemPrompt.includes("rg with a narrow pattern")) process.exit(10);
+if (!prompt.systemPrompt.includes("search_file_contents with a narrow path")) process.exit(10);
+if (!prompt.systemPrompt.includes("exclude irrelevant directories before scanning")) process.exit(60);
 const duplicate = await handlers.get("before_agent_start")({{
   systemPrompt: prompt.systemPrompt,
 }}, ctx);
@@ -205,15 +211,17 @@ if (Buffer.byteLength(targeted.content[0].text, "utf8") <= DEFAULT_MAX_CONTEXT_B
 if (!targeted.content[0].text.includes("Selection mode: explicit targeted retrieval")) {{
   process.exit(52);
 }}
-await handlers.get("tool_execution_start")({{ toolCallId: "rehydrated-targeted" }});
-if (await handlers.get("tool_result")({{
-  toolName: "qwen_rehydrate_tool_turn",
-  toolCallId: "rehydrated-targeted",
-  input: {{ sha256: retainedSha, start_line: 1, end_line: 180, max_lines: 180 }},
-  content: targeted.content,
-  details: targeted.details,
-  isError: false,
-}}) !== undefined) process.exit(53);
+for (const toolName of ["qwen_rehydrate_tool_turn", "read_archived_tool_result", "rehydrate_tool_result"]) {{
+  await handlers.get("tool_execution_start")({{ toolCallId: "rehydrated-targeted" }});
+  if (await handlers.get("tool_result")({{
+    toolName,
+    toolCallId: "rehydrated-targeted",
+    input: {{ sha256: retainedSha, start_line: 1, end_line: 180, max_lines: 180 }},
+    content: targeted.content,
+    details: targeted.details,
+    isError: false,
+  }}) !== undefined) process.exit(53);
+}}
 
 const secondaryArchiveFor = (text) => {{
   const digest = createHash("sha256").update(text).digest("hex");
@@ -565,13 +573,15 @@ for (const ending of ["", "\\n", "\\n\\n"]) {{
   const sourcePath = result.details.fullOutputPath;
   try {{
     assert.equal(result.details.truncation.truncated, true);
-    const event = {{ toolName: "bash", toolCallId: "synthetic", content: result.content, details: result.details, isError: false }};
-    const condensed = await handlers.get("tool_result")(event);
-    assert.equal(readFileSync(condensed.details.fullOutputPath, "utf8"), original, "actual Bash metadata recovers the complete output");
-    assert.equal(readFileSync(sourcePath, "utf8"), original, "original Pi retained output is unchanged");
-    const failed = await handlers.get("tool_result")({{ ...event, content: [{{ type: "text", text: result.content[0].text + "\\n\\nCommand exited with code 7" }}], isError: true }});
-    assert.ok(failed.content[0].text.includes("Exit status: 7"));
-    assert.equal(readFileSync(failed.details.fullOutputPath, "utf8"), original, "status wrappers do not alter authoritative stdout bytes");
+    for (const toolName of ["bash", "run_shell_command"]) {{
+      const event = {{ toolName, toolCallId: "synthetic", content: result.content, details: result.details, isError: false }};
+      const condensed = await handlers.get("tool_result")(event);
+      assert.equal(readFileSync(condensed.details.fullOutputPath, "utf8"), original, "actual Bash metadata recovers the complete output");
+      assert.equal(readFileSync(sourcePath, "utf8"), original, "original Pi retained output is unchanged");
+      const failed = await handlers.get("tool_result")({{ ...event, content: [{{ type: "text", text: result.content[0].text + "\\n\\nCommand exited with code 7" }}], isError: true }});
+      assert.ok(failed.content[0].text.includes("Exit status: 7"));
+      assert.equal(readFileSync(failed.details.fullOutputPath, "utf8"), original, "status wrappers do not alter authoritative stdout bytes");
+    }}
   }} finally {{ unlinkSync(sourcePath); }}
 }}
 """

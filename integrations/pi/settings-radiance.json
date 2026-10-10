@@ -1,18 +1,18 @@
 {
   "defaultTools": [
-    "read",
-    "bash",
-    "edit",
-    "write",
-    "grep",
-    "find",
-    "ls",
-    "search",
-    "fetch",
-    "extract",
-    "qwen_rehydrate_tool_turn",
-    "session_search",
-    "qwen_plan"
+    "read_file",
+    "run_shell_command",
+    "edit_file",
+    "write_file",
+    "search_file_contents",
+    "find_files",
+    "list_directory",
+    "google_ai_search",
+    "fetch_webpage",
+    "extract_webpage_snippets",
+    "rehydrate_tool_result",
+    "pi_session_search",
+    "manage_task_plan"
   ],
   "httpIdleTimeoutMs": 0
 }

@@ -1,5 +1,6 @@
 // Transcript metadata only: no filesystem, process enumeration, shell commands,
 // clock or model calls. The caller supplies the selected, allowed branch.
+import { canonicalToolName, legacyToolName, toolNamesMatch } from "./qwen-tool-names.mjs";
 export const COMPACTION_TASKS_CONTRACT = "qwen-compaction-task-reminders-v1";
 const scopes = new Set(["host", "vm", "unknown"]);
 const statuses = new Set(["running", "started", "in_progress", "pending", "completed", "complete", "exited", "finished", "cancelled", "canceled", "terminated", "aborted", "failed", "error"]);
@@ -101,9 +102,15 @@ export function captureCompactionTasks({ entries, maxChars = 4000, maxRecords = 
   limit(maxRecords, "task reminder record budget", 256);
   if (!scopes.has(scope) || typeof resumed !== "boolean") throw new Error("Invalid task execution scope or resume flag");
   if (!Array.isArray(executionTools) || executionTools.length > 32 || executionTools.some((name) => !validId(name))) throw new Error("Invalid known execution tool names");
-  const known = new Set(executionTools);
+  const known = new Set(executionTools.map(canonicalToolName));
   if (!executionNamespaces || typeof executionNamespaces !== "object" || Array.isArray(executionNamespaces) ||
-      Object.entries(executionNamespaces).some(([name, namespace]) => !known.has(name) || !validId(namespace))) throw new Error("Invalid execution handle namespaces");
+      Object.entries(executionNamespaces).some(([name, namespace]) => !known.has(canonicalToolName(name)) || !validId(namespace))) throw new Error("Invalid execution handle namespaces");
+  const namespaces = new Map();
+  for (const [name, namespace] of Object.entries(executionNamespaces)) {
+    const canonical = canonicalToolName(name);
+    if (namespaces.has(canonical) && namespaces.get(canonical) !== namespace) throw new Error("Conflicting execution handle namespaces");
+    namespaces.set(canonical, namespace);
+  }
   const pending = new Map(), handles = new Map(), seenCalls = new Set();
   let ignoredAbortedCalls = 0, unsupportedHandles = 0, orphanResults = 0, sequence = 0;
   for (const entry of entries) {
@@ -120,11 +127,11 @@ export function captureCompactionTasks({ entries, maxChars = 4000, maxRecords = 
     } else if (message.role === "toolResult") {
       const call = pending.get(message.toolCallId);
       // Do not let another tool's result clear this call's pending status.
-      if (call && message.toolName && message.toolName !== call.call.name) { unsupportedHandles++; continue; }
+      if (call && message.toolName && !toolNamesMatch(message.toolName, call.call.name)) { unsupportedHandles++; continue; }
       if (call) pending.delete(message.toolCallId);
       else orphanResults++;
       const tool = call?.call.name ?? message.toolName;
-      if (!known.has(tool)) continue;
+      if (!known.has(canonicalToolName(tool))) continue;
       const details = message.details;
       const resultHandle = handleFrom(details);
       const resultHasHandle = details && ["session_id", "sessionId", "pid", "process_id", "processId"].some((key) => details[key] !== undefined);
@@ -137,7 +144,7 @@ export function captureCompactionTasks({ entries, maxChars = 4000, maxRecords = 
         continue;
       }
       const recordScope = scopeFrom(details, scope);
-      const namespace = Object.hasOwn(executionNamespaces, tool) ? executionNamespaces[tool] : tool;
+      const namespace = namespaces.get(canonicalToolName(tool)) ?? legacyToolName(tool);
       const key = quoted([recordScope, handle.sessionId !== undefined ? ["session", namespace, String(handle.sessionId)] : ["pid", handle.pid]]);
       const prior = handles.get(key);
       handles.set(key, {

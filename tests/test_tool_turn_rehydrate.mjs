@@ -31,6 +31,19 @@ function fixture(t, body, historical = false) {
 
 const textOf = (result) => result.content[0].text;
 
+test("archive reader registers only the canonical name and normalizes previous active selections", async (t) => {
+  const f = fixture(t, "Synthetic archived evidence\n");
+  const tools = new Map(), handlers = new Map();
+  let active = ["fixture", "qwen_rehydrate_tool_turn", "read_archived_tool_result"];
+  rehydrate({ registerTool: (tool) => tools.set(tool.name, tool), on: (name, handler) => handlers.set(name, handler),
+    getActiveTools: () => active, setActiveTools: (names) => { active = names; } });
+  const canonical = tools.get("rehydrate_tool_result");
+  assert.deepEqual([...tools.keys()], ["rehydrate_tool_result"]);
+  assert.match(textOf(await canonical.execute("canonical", { sha256: f.digest })), /Synthetic archived evidence/);
+  handlers.get("session_start")(); handlers.get("session_start")();
+  assert.deepEqual(active, ["fixture", "rehydrate_tool_result"]);
+});
+
 test("a one-line literal budget returns the actual match rather than preceding context", async (t) => {
   const f = fixture(t, "before-1\nbefore-2\nbefore-3\nEXACT-NEEDLE\nafter-1\n");
   const result = await f.call({ pattern: "EXACT-NEEDLE", max_lines: 1 });

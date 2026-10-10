@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { canonicalToolName, toolNamesMatch } from "./qwen-tool-names.mjs";
+
+const LEGACY_TOOL_NAME = "qwen_plan";
+const TOOL_NAME = canonicalToolName(LEGACY_TOOL_NAME);
+const SESSION_SEARCH_TOOL_NAME = canonicalToolName("session_search");
+const REHYDRATE_TOOL_NAME = canonicalToolName("qwen_rehydrate_tool_turn");
 
 export const TASK_PLAN_ENTRY = "qwen-task-plan";
 export const TASK_PLAN_CONTEXT = "qwen-task-plan-context";
@@ -136,7 +142,7 @@ export function renderTaskPlan(state, { maxChars = DEFAULT_PLAN_CONTEXT_CHARS } 
     if (step.relevantFiles.length) lines.push(`  Files: ${step.relevantFiles.map(oneLine).join(", ")}`);
     for (const evidence of step.evidence) lines.push(`  Evidence (model cited): ${safeText(evidence.entryId)} ${oneLine(evidence.note)}`);
   };
-  if (!state.plan) lines.push("No active task plan. Use qwen_plan create for substantial work.");
+  if (!state.plan) lines.push(`No active task plan. Use ${TOOL_NAME} create for substantial work.`);
   else {
     const p = state.plan;
     const goal = `Goal: ${oneLine(p.goal)}${refs(p.goalSourceEntryIds)}`;
@@ -150,7 +156,7 @@ export function renderTaskPlan(state, { maxChars = DEFAULT_PLAN_CONTEXT_CHARS } 
   }
   const rendered = lines.join("\n");
   if (rendered.length <= budget) return rendered;
-  const footer = (count) => `\n[Plan excerpt truncated; ${count} step(s) omitted. qwen_plan show expands it; session_search recovers sources.]`;
+  const footer = (count) => `\n[Plan excerpt truncated; ${count} step(s) omitted. ${TOOL_NAME} show expands it; ${SESSION_SEARCH_TOOL_NAME} recovers sources.]`;
   const reserve = footer(MAX_STEPS).length;
   if (budget <= reserve) return "[Plan truncated]".slice(0, budget);
   const prefix = safeSlice(rendered, budget - reserve);
@@ -204,7 +210,7 @@ export const TASK_PLAN_PARAMETERS = { type: "object", additionalProperties: fals
 } };
 
 export function applyTaskPlanAction(state, params, branchEntries) {
-  keys(params, Object.keys(TASK_PLAN_PARAMETERS.properties), "qwen_plan parameters");
+  keys(params, Object.keys(TASK_PLAN_PARAMETERS.properties), `${TOOL_NAME} parameters`);
   if (!["create", "update", "revise", "show", "clear"].includes(params.action)) throw new Error("Invalid plan action");
   if (params.maxChars !== undefined && (!Number.isInteger(params.maxChars) || params.maxChars < 256 || params.maxChars > 12000)) throw new Error("maxChars must be an integer from 256 to 12000");
   if (["show", "clear"].includes(params.action)) {
@@ -344,30 +350,32 @@ export function validateReadOnlyBash(command) {
   } catch (error) { return { allowed: false, reason: error.message }; }
 }
 
-const READ_TOOLS = new Set(["read", "grep", "find", "ls", "session_search", "qwen_rehydrate_tool_turn", "qwen_plan"]);
+const READ_TOOLS = new Set(["read", "grep", "find", "ls", "session_search", "qwen_rehydrate_tool_turn", "qwen_plan"].map(canonicalToolName));
 const BUILTIN_READ_TOOLS = new Set(["read", "grep", "find", "ls", "bash"]);
 const extensionDirectory = dirname(fileURLToPath(import.meta.url));
 const TRUSTED_EXTENSIONS = {
-  session_search: ["qwen-session-search.mjs"],
-  qwen_rehydrate_tool_turn: ["qwen-tool-turn-rehydrate.mjs"],
-  qwen_plan: ["qwen-task-plan.mjs", "qwen-task-plan.ts"],
+  [SESSION_SEARCH_TOOL_NAME]: ["qwen-session-search.mjs"],
+  [REHYDRATE_TOOL_NAME]: ["qwen-tool-turn-rehydrate.mjs"],
+  [TOOL_NAME]: ["qwen-task-plan.mjs", "qwen-task-plan.ts"],
+  ...Object.fromEntries([...BUILTIN_READ_TOOLS].map((name) => [canonicalToolName(name), ["qwen-tool-names.ts"]])),
 };
 export function isTrustedPlanTool(name, info) {
   if (BUILTIN_READ_TOOLS.has(name)) return info?.sourceInfo?.source === "builtin" && info.sourceInfo.path === `<builtin:${name}>`;
-  if (!TRUSTED_EXTENSIONS[name] || typeof info?.sourceInfo?.path !== "string") return false;
+  const canonical = canonicalToolName(name);
+  if (!TRUSTED_EXTENSIONS[canonical] || typeof info?.sourceInfo?.path !== "string") return false;
   try {
     const source = realpathSync(info.sourceInfo.path);
-    return TRUSTED_EXTENSIONS[name].some((file) => source === realpathSync(join(extensionDirectory, file)));
+    return TRUSTED_EXTENSIONS[canonical].some((file) => source === realpathSync(join(extensionDirectory, file)));
   } catch { return false; }
 }
 const planDigest = (state, maxChars) => createHash("sha256").update(taskPlanContext(state, { maxChars })).digest("hex");
 export function planToolGate(state, event) {
   if (state.mode !== "plan") return undefined;
-  if (READ_TOOLS.has(event.toolName)) return undefined;
-  if (event.toolName === "bash") {
+  if (READ_TOOLS.has(canonicalToolName(event.toolName))) return undefined;
+  if (toolNamesMatch(event.toolName, "bash")) {
     const checked = validateReadOnlyBash(event.input?.command);
     if (checked.allowed) { event.input.command = checked.command; return undefined; }
-    return { block: true, reason: `Read-only plan mode: ${checked.reason}. Use read/grep/find/ls, or /plan execute to resume execution.` };
+    return { block: true, reason: `Read-only plan mode: ${checked.reason}. Use read_file/search_file_contents/find_files/list_directory, or /plan execute to resume execution.` };
   }
   return { block: true, reason: `Read-only plan mode blocks ${event.toolName}; only known read tools and plan metadata updates are allowed. /plan execute resumes execution.` };
 }
@@ -378,14 +386,14 @@ export function installTaskPlan(pi, { maxContextChars = process.env.QWEN_PI_PLAN
     const state = taskPlanState(ctx, { filter: false });
     ctx.ui?.setStatus?.("qwen-plan", state.mode === "plan" ? "plan: read only" : state.plan ? "task plan" : undefined);
   };
-  pi.registerTool({ name: "qwen_plan", label: "Persistent task plan",
+  const definition = { name: TOOL_NAME, label: "Persistent task plan",
     description: "For substantial multi-step tasks, create or revise a durable task plan before implementation and update it as progress/evidence/constraints change. Normal execution needs no mandatory approval; simple one-step work needs no plan. Create, update, revise, show or clear the current session branch's plan. create requires goal and steps; missing new step IDs are assigned. update patches existing steps by stable ID; revise replaces the ordered step list and may add/remove steps. Other supplied arrays replace that field. Completed status is model reported; cite existing selected-branch evidence entry IDs when available. show lists state and source IDs; maxChars expands its excerpt. clear removes the active plan, keeps mode and preserves history. Plan metadata changes are allowed in read-only plan mode; the tool never changes execution mode.",
     promptSnippet: "Track substantial tasks in a persistent goal and ordered steps with source-linked constraints and evidence",
     promptGuidelines: [
-      "For substantial tasks with multiple steps, create or revise qwen_plan before implementation, then update stable step IDs as work advances, evidence is obtained, or constraints change. Simple one-step tasks do not require a plan.",
+      `For substantial tasks with multiple steps, create or revise ${TOOL_NAME} before implementation, then update stable step IDs as work advances, evidence is obtained, or constraints change. Simple one-step tasks do not require a plan.`,
       "Maintain one in_progress step; preserve relevantFiles, user constraints and useful source entry IDs. Plan statuses and evidence notes are model-reported claims, never proof that checks passed.",
       "Normal execution proceeds without a mandatory approval flow. In explicitly enabled read-only plan mode, inspect and update plan metadata only; do not mutate files, run tests or call unknown tools. Only the user /plan off or /plan execute command resumes execution.",
-      "Recover exact source details with session_search or qwen_rehydrate_tool_turn; respect /context exclusions and current user instructions over old plan text.",
+      `Recover exact source details with ${SESSION_SEARCH_TOOL_NAME} or ${REHYDRATE_TOOL_NAME}; respect /context exclusions and current user instructions over old plan text.`,
     ], parameters: TASK_PLAN_PARAMETERS,
     async execute(_id, params, signal, _onUpdate, ctx) {
       if (signal?.aborted) throw new Error("Plan operation cancelled");
@@ -398,7 +406,8 @@ export function installTaskPlan(pi, { maxContextChars = process.env.QWEN_PI_PLAN
         details: { mode: next.mode, stepIds: visible.plan?.steps.map((step) => step.id) ?? [], modelReported: true,
           sourceEntryIds: allSourceIds(visible), planDigest: planDigest(visible, maxChars) } };
     },
-  });
+  };
+  pi.registerTool(definition);
   pi.registerCommand("plan", { description: "Toggle read-only planning; /plan [show|on|off|execute|clear]. clear keeps the current mode.",
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase();
@@ -412,13 +421,17 @@ export function installTaskPlan(pi, { maxContextChars = process.env.QWEN_PI_PLAN
         state.mode === "plan" ? "Read-only plan mode enabled. /plan execute resumes execution." : "Execution mode enabled.", "info");
     } });
   for (const event of ["session_start", "session_tree", "session_compact"]) pi.on(event, (_event, ctx) => {
-    if (event === "session_start") { const tools = pi.getActiveTools(); if (!tools.includes("qwen_plan")) pi.setActiveTools([...tools, "qwen_plan"]); }
+    if (event === "session_start") {
+      const active = pi.getActiveTools(), tools = active.filter((name) => name !== LEGACY_TOOL_NAME);
+      if (!tools.includes(TOOL_NAME)) tools.push(TOOL_NAME);
+      if (tools.length !== active.length || tools.some((name, index) => name !== active[index])) pi.setActiveTools(tools);
+    }
     updateStatus(ctx);
   });
   pi.on("tool_call", (event, ctx) => {
     try {
       const state = taskPlanState(ctx, { filter: false });
-      if (state.mode === "plan" && (READ_TOOLS.has(event.toolName) || event.toolName === "bash") &&
+      if (state.mode === "plan" && (READ_TOOLS.has(canonicalToolName(event.toolName)) || toolNamesMatch(event.toolName, "bash")) &&
           !isTrustedPlanTool(event.toolName, pi.getAllTools?.().find((tool) => tool.name === event.toolName))) {
         return { block: true, reason: `Read-only plan mode blocks unverified implementation of ${event.toolName}; a tool name alone does not establish read-only behavior.` };
       }
@@ -440,7 +453,7 @@ export function installTaskPlan(pi, { maxContextChars = process.env.QWEN_PI_PLAN
     const state = taskPlanState(ctx);
     const active = ctx.sessionManager.buildContextEntries?.() ?? [];
     const prior = active.findLast((entry) => entry.type === "custom_message" && entry.customType === TASK_PLAN_CONTEXT ||
-      entry.type === "message" && entry.message?.role === "toolResult" && entry.message.toolName === "qwen_plan");
+      entry.type === "message" && entry.message?.role === "toolResult" && toolNamesMatch(entry.message.toolName, TOOL_NAME));
     const details = prior?.type === "custom_message" ? prior.details : prior?.message?.details;
     const digest = planDigest(state, maxChars);
     if (details?.planDigest === digest || (!prior && !state.plan && state.mode === "execute")) return undefined;
@@ -456,9 +469,9 @@ export function installTaskPlan(pi, { maxContextChars = process.env.QWEN_PI_PLAN
     const messages = event.messages.flatMap((message) => {
       if (!(message.details?.sourceEntryIds ?? []).some((id) => excluded.has(id))) return [message];
       if (message.role === "custom" && message.customType === TASK_PLAN_CONTEXT) { changed = true; return []; }
-      if (message.role === "toolResult" && message.toolName === "qwen_plan") {
+      if (message.role === "toolResult" && toolNamesMatch(message.toolName, TOOL_NAME)) {
         changed = true;
-        return [{ ...message, content: [{ type: "text", text: "[Plan output withheld by /context; qwen_plan show displays permitted current state.]" }], details: { withheld: true } }];
+        return [{ ...message, content: [{ type: "text", text: `[Plan output withheld by /context; ${TOOL_NAME} show displays permitted current state.]` }], details: { withheld: true } }];
       }
       return [message];
     });

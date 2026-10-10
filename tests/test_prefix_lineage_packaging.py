@@ -123,7 +123,13 @@ def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
     assert launches[0].count(extension) == 1
     assert launches[0][launches[0].index(extension) - 1] == "--extension"
     settings = json.loads((state / "agents/8080/settings.json").read_text())
-    assert "session_search" in settings["defaultTools"]
+    assert "pi_session_search" in settings["defaultTools"]
+    assert "session_search" not in settings["defaultTools"]
+    names = str(ROOT / "integrations/pi/qwen-tool-names.ts")
+    assert launches[0].count(names) == 1
+    assert launches[0][launches[0].index(names) - 1] == "--extension"
+    assert launches[0].index(names) > launches[0].index(extension)
+    assert launches[0][launches[0].index("--exclude-tools") + 1] == "read,bash,edit,write,grep,find,ls"
     installers = [
         call for call in calls if Path(call[0]).name == "install-pi-coding-agent"
     ]

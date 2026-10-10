@@ -1,9 +1,14 @@
 # Archived tool-result retrieval
 
-`qwen_rehydrate_tool_turn` retrieves original text retained by the tool-output
-condensing extension. It is separate from `session_search`, which searches saved
+`rehydrate_tool_result` retrieves original text retained by the tool-output
+condensing extension. It is separate from `pi_session_search`, which searches saved
 conversation messages. Retrieval uses local CPU/file operations and no model or
 GPU inference.
+
+Saved history named `qwen_rehydrate_tool_turn` or `read_archived_tool_result` is
+normalized in outgoing model context. Those names are not registered tools;
+new calls use `rehydrate_tool_result`. Stored transcripts and archive bytes
+remain unchanged.
 
 ## Archive and source contract
 

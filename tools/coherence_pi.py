@@ -143,16 +143,16 @@ def launch(args, pi_args):
                 {
                     "httpIdleTimeoutMs": 0,
                     "defaultTools": [
-                        "read",
-                        "bash",
-                        "edit",
-                        "write",
-                        "grep",
-                        "find",
-                        "ls",
-                        "qwen_rehydrate_tool_turn",
-                        "session_search",
-                        "qwen_plan",
+                        "read_file",
+                        "run_shell_command",
+                        "edit_file",
+                        "write_file",
+                        "search_file_contents",
+                        "find_files",
+                        "list_directory",
+                        "rehydrate_tool_result",
+                        "pi_session_search",
+                        "manage_task_plan",
                     ],
                 },
             )
@@ -176,6 +176,7 @@ def launch(args, pi_args):
             "qwen-task-plan.ts",
             "qwen-radiance-compaction.ts",
             "qwen-radiance-cache.mjs",
+            "qwen-tool-names.ts",
         ]
         command = [
             str(binary),
@@ -187,6 +188,8 @@ def launch(args, pi_args):
             "--append-system-prompt",
             str(ROOT / "integrations/pi/qwen-radiance-operating-prompt.md"),
             "--no-extensions",
+            "--exclude-tools",
+            "read,bash,edit,write,grep,find,ls",
         ]
         for name in extensions:
             command += ["--extension", str(ROOT / "integrations/pi" / name)]

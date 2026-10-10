@@ -172,13 +172,13 @@ if (omitted.message[internalRetry] !== undefined) process.exit(31);
 def test_repaired_arguments_and_invalid_shell_syntax_are_rejected() -> None:
     result = run_harness(
         r"""
-for (const [ordinal, raw, command] of [
+for (const name of ["bash", "run_shell_command"]) for (const [ordinal, raw, command] of [
   [0, `{"command":"printf ok"}`, "printf changed"],
   [1, `{"command":"printf 'oops"}`, "printf 'oops"],
   [2, `{"command":"cat <<'EOF'\\nbody"}`, "cat <<'EOF'\nbody"],
 ]) {
   const handlers = instance();
-  const block = { type: "toolCall", id: `bash-${ordinal}`, name: "bash", arguments: { command } };
+  const block = { type: "toolCall", id: `${name}-${ordinal}`, name, arguments: { command } };
   await begin(handlers, block);
   await delta(handlers, block, raw);
   const rejected = await end(handlers, block);

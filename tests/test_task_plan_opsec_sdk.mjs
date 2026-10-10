@@ -7,6 +7,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { canonicalToolName } from "../integrations/pi/qwen-tool-names.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sdkRoot = process.env.QWEN_TEST_PI_ROOT ?? join(homedir(), ".local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works");
@@ -52,12 +53,12 @@ test("Opsec facade preserves builtin inspection provenance and plan mode never t
     compaction: { enabled: false }, retry: { enabled: false } }, { projectTrusted: true });
   const loader = new DefaultResourceLoader({ cwd: directory, agentDir: directory, settingsManager,
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-    additionalExtensionPaths: [extensionPath, join(root, "integrations/pi/qwen-task-plan.ts")],
+    additionalExtensionPaths: [extensionPath, join(root, "integrations/pi/qwen-tool-names.ts"), join(root, "integrations/pi/qwen-task-plan.ts")],
     systemPrompt: "Synthetic Opsec plan compatibility fixture." });
   await loader.reload();
   assert.deepEqual(loader.getExtensions().errors, []);
   assert.deepEqual([...loader.getExtensions().extensions.find((extension) => extension.path === extensionPath).tools.keys()].sort(),
-    ["extract", "fetch", "search"], "Opsec wraps web tools; it does not replace VM builtin file/shell tools");
+    ["extract", "fetch", "search"].map(canonicalToolName).sort(), "Opsec registers only canonical web tools");
   const makeSession = async (customTools = []) => {
     const manager = SessionManager.create(directory, join(directory, "sessions"));
     manager.appendMessage({ role: "user", content: "Inspect synthetic source without changing it", timestamp: 1 });
@@ -73,6 +74,10 @@ test("Opsec facade preserves builtin inspection provenance and plan mode never t
     const info = session.getAllTools().find((tool) => tool.name === name);
     assert.equal(info.sourceInfo.source, "builtin", name);
     assert.equal(info.sourceInfo.path, `<builtin:${name}>`);
+    const canonical = canonicalToolName(name);
+    assert.equal(session.getAllTools().find((tool) => tool.name === canonical).sourceInfo.path, join(root, "integrations/pi/qwen-tool-names.ts"));
+    assert.ok(session.getActiveToolNames().includes(canonical));
+    assert.ok(!session.getActiveToolNames().includes(name));
   }
   const fixture = join(directory, "fixture.txt");
   await writeFile(fixture, "synthetic opsec fixture\n");
@@ -82,16 +87,18 @@ test("Opsec facade preserves builtin inspection provenance and plan mode never t
     return session.agent.state.tools.find((tool) => tool.name === name).execute(`fixture-${name}`, args);
   };
   const textOf = (value) => value.content.filter((item) => item.type === "text").map((item) => item.text).join("\n");
-  assert.match(textOf(await invoke("read", { path: fixture })), /synthetic opsec fixture/);
-  assert.match(textOf(await invoke("ls", { path: directory })), /fixture\.txt/);
-  assert.match(textOf(await invoke("find", { pattern: "fixture.txt", path: directory })), /fixture\.txt/);
-  assert.match(textOf(await invoke("grep", { pattern: "synthetic opsec", path: fixture })), /synthetic opsec/);
-  assert.match(textOf(await invoke("bash", { command: "cat fixture.txt" })), /synthetic opsec fixture/);
+  assert.match(textOf(await invoke("read_file", { path: fixture })), /synthetic opsec fixture/);
+  assert.match(textOf(await invoke("list_directory", { path: directory })), /fixture\.txt/);
+  assert.match(textOf(await invoke("find_files", { pattern: "fixture.txt", path: directory })), /fixture\.txt/);
+  assert.match(textOf(await invoke("search_file_contents", { pattern: "synthetic opsec", path: fixture })), /synthetic opsec/);
+  assert.match(textOf(await invoke("run_shell_command", { command: "cat fixture.txt" })), /synthetic opsec fixture/);
   for (const [name, input] of [["write", { path: fixture, content: "mutated" }],
     ["search", { query: "synthetic" }], ["fetch", { url: "https://example.invalid" }],
     ["extract", { url: "https://example.invalid", query: "synthetic" }]]) {
-    const gate = await session.extensionRunner.emitToolCall({ type: "tool_call", toolCallId: `blocked-${name}`, toolName: name, input });
-    assert.equal(gate.block, true, `${name} remains blocked rather than creating a names-only exception`);
+    for (const toolName of [name, canonicalToolName(name)]) {
+      const gate = await session.extensionRunner.emitToolCall({ type: "tool_call", toolCallId: `blocked-${toolName}`, toolName, input });
+      assert.equal(gate.block, true, `${toolName} remains blocked in plan mode`);
+    }
   }
   let mutations = 0;
   const mutation = (name) => ({ name, label: name, description: "Synthetic unverified adapter", parameters: { type: "object", properties: {} },

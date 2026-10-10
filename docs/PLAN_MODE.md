@@ -1,6 +1,6 @@
 # Persistent plans and read-only planning
 
-Pi tracks substantial tasks through the `qwen_plan` tool. The saved plan contains
+Pi tracks substantial tasks through the `manage_task_plan` tool. The saved plan contains
 a goal, ordered steps with stable IDs, constraints, notes, relevant file paths
 and source/evidence entry IDs. Normal execution can create and update this plan
 while work proceeds; simple one-step work does not need a plan. Tracking a plan
@@ -18,11 +18,11 @@ Read-only planning is an explicit user-selected mode:
 
 The status line shows `plan: read only` in planning mode and `task plan` when
 ordinary execution has a saved plan. The model cannot change execution mode
-through `qwen_plan`; resuming execution requires the user command.
+through `manage_task_plan`; resuming execution requires the user command.
 
 ## Plan updates
 
-The model uses `qwen_plan` actions `create`, `update`, `revise`, `show` and `clear`.
+The model uses `manage_task_plan` actions `create`, `update`, `revise`, `show` and `clear`.
 `create` requires a goal and steps, and cannot overwrite an existing plan.
 `update` patches steps by their existing IDs. `revise` replaces the ordered step
 list and can add or remove steps. New steps receive monotonically allocated
@@ -48,8 +48,8 @@ step in progress and 30 steps total. For example, the model can create:
 New source links default to the latest user message. Explicit source and evidence
 IDs must exist on the selected session branch. Completion statuses and evidence
 notes are model-reported claims: an existing cited entry does not establish that
-the result is correct or that a check passed. Use `qwen_plan show` to expand a
-bounded excerpt and `session_search` to inspect its cited source entries.
+the result is correct or that a check passed. Use `manage_task_plan show` to expand a
+bounded excerpt and `pi_session_search` to inspect its cited source entries.
 
 ## Persistence and context
 
@@ -59,7 +59,7 @@ resume, compaction and branch navigation recover that branch's plan. Sibling
 plans are not imported, and a cleared plan is not resurrected from older entries.
 
 When needed, the extension adds a bounded hidden plan message to active context.
-An unchanged plan already represented by a hidden message or `qwen_plan` result
+An unchanged plan already represented by a hidden message or `manage_task_plan` result
 is not injected again. This uses session metadata without repeated visible file
 reads. The normal plan excerpt is 3,000 characters; set
 `QWEN_PI_PLAN_CONTEXT_MAX_CHARS` to adjust it, up to 12,000. In-progress, blocked
@@ -74,7 +74,7 @@ its system prompt, separate from plan records and compaction restoration.
 ## Read-only tools
 
 Read-only mode permits known implementations of read/search/list tools,
-`session_search`, `qwen_rehydrate_tool_turn` and `qwen_plan` metadata updates.
+`pi_session_search`, `rehydrate_tool_result` and `manage_task_plan` metadata updates.
 Tool provenance is checked; a custom tool with the same name does not gain
 permission automatically. File edits, writes, tests and unknown tools are blocked.
 

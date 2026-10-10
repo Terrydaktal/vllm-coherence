@@ -1,6 +1,6 @@
 # Original transcript search
 
-`session_search` gives the Pi agent access to original saved conversation text
+`pi_session_search` gives the Pi agent access to original saved conversation text
 after compaction. JSONL remains authoritative. The derived SQLite FTS5 database
 stores searchable words, their positions, document lengths, entry relationships
 and source offsets; it does not store another copy of the message bodies.

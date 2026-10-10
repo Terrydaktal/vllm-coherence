@@ -512,7 +512,7 @@ export default function qwenProgress(pi, { scheduler = createSchedulerTelemetry(
 		if (runningTools.size > 0) {
 			const tools = [...runningTools.values()];
 			const descriptions = tools.slice(0, 3).map((tool) =>
-				`${tool.name === "edit" ? "applying edit" : `running ${tool.name}`} ` +
+				`${["edit", "edit_file"].includes(tool.name) ? "applying edit" : `running ${tool.name}`} ` +
 				`${Math.max(0, Math.floor((now - tool.startedAt) / 1000))}s`);
 			if (tools.length > 3) descriptions.push(`+${tools.length - 3} more`);
 			activeUi.setWorkingMessage(`Qwen ${descriptions.join(", ")} \u2022 model output ended`);

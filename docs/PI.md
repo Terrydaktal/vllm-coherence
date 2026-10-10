@@ -33,6 +33,15 @@ nesting tmux. SSH authentication must already work noninteractively. Supply
 search integration, including one specific to a VM. Terminal keybindings remain
 the terminal owner's configuration.
 
+## Inspect loaded tools
+
+`/tools` lists the tools registered in the current Pi session, with their
+descriptions and enabled or disabled status. It reads the live registry each time,
+including tools from loaded extensions, so the list reflects the current session
+rather than a configured default. This command runs locally, sends no model
+request and does not change which tools are enabled. Normal Pi and Pi-opsec use
+the same command through the shared Coherence extension.
+
 ## Control the backend from Pi
 
 `/backend` and `/backend status` report whether the pinned backend is stopped,
@@ -338,7 +347,7 @@ settles, and does not end at each individual tool call or compaction.
 ## Tool-output archives and backend errors
 
 Oversized tool outputs get bounded context views after the full result is saved
-to an authenticated archive. `qwen_rehydrate_tool_turn` retrieves exact line ranges
+to an authenticated archive. `rehydrate_tool_result` retrieves exact line ranges
 or literal matches, preserving access to evidence without resending every large
 tool output on every request.
 
@@ -429,3 +438,45 @@ than bypassing checks.
 A new Coherence installation uses its own snapshot namespace. It does not
 automatically import another backend's KV files. State/arithmetic compatibility
 must be established before such a migration can reuse model state.
+
+## Tool names
+
+The model sees these descriptive names. `/tools` shows their current enabled
+status. Native file and shell tools delegate to the installed Pi implementations;
+the rename preserves their argument schemas and execution behavior.
+
+| Previous name | Current name |
+| --- | --- |
+| `read` | `read_file` |
+| `bash` | `run_shell_command` |
+| `edit` | `edit_file` |
+| `write` | `write_file` |
+| `grep` | `search_file_contents` |
+| `find` | `find_files` |
+| `ls` | `list_directory` |
+| `search` | `google_ai_search` |
+| `fetch` | `fetch_webpage` |
+| `extract` | `extract_webpage_snippets` |
+| `qwen_rehydrate_tool_turn` | `rehydrate_tool_result` |
+| `session_search` | `pi_session_search` |
+| `qwen_plan` | `manage_task_plan` |
+
+Previous names are retained only in the internal history mapping; they are not
+registered as tools. On startup, legacy active selections are translated to
+their current names without enabling inactive native tools. Historical tool
+identity metadata is translated only in outgoing model context, after context
+filtering; stored transcripts and archived
+bytes are unchanged. Plan permissions, compaction file restoration, shell-task
+reminders and archive recursion guards recognize both naming generations.
+Historical uses of `read_archived_tool_result` also map to
+`rehydrate_tool_result`; new calls use the current name.
+
+The file-search guidance starts with a narrow directory, `literal: true` for exact
+paths/symbols/errors, `context: 0` and `limit: 50`; surrounding context is a focused
+follow-up. The shell tool advertises builds, tests and shell operations rather
+than duplicating the native search tools. Searches needing matching filenames
+only, multiple traversal exclusions or ignored build files use shell `rg` with
+explicit scope and a timeout. Directory exclusions belong on the scanning
+command: filtering filenames afterward with `grep -v` does not avoid reading
+those files. These instructions improve tool selection without rewriting shell
+commands or changing the native search schemas and handlers.

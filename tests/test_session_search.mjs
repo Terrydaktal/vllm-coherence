@@ -106,17 +106,19 @@ test("tool rendering marks original data and keeps huge Unicode output bounded",
   assert.match(rendered, /truncated/);
 });
 
-test("Pi registers session_search, enables it additively and closes workers on shutdown", async (t) => {
+test("Pi registers only pi_session_search, normalizes previous selections and closes workers on shutdown", async (t) => {
   const f = await fixture(t), previous = process.env.QWEN_SESSION_SEARCH_DIR;
   process.env.QWEN_SESSION_SEARCH_DIR = join(f.root, "tool-index");
   t.after(() => { if (previous === undefined) delete process.env.QWEN_SESSION_SEARCH_DIR; else process.env.QWEN_SESSION_SEARCH_DIR = previous; });
-  let tool, active = ["read", "edit"];
+  let tool, active = ["read", "edit", "session_search"];
+  const tools = new Map();
   const handlers = new Map();
-  sessionSearch({ registerTool: (value) => { tool = value; }, on: (name, fn) => handlers.set(name, fn),
+  sessionSearch({ registerTool: (value) => { tool = value; tools.set(value.name, value); }, on: (name, fn) => handlers.set(name, fn),
     getActiveTools: () => active, setActiveTools: (value) => { active = value; } });
-  assert.equal(tool.name, "session_search");
+  assert.equal(tool.name, "pi_session_search");
+  assert.deepEqual([...tools.keys()], ["pi_session_search"]);
   handlers.get("session_start")(); handlers.get("session_start")();
-  assert.deepEqual(active, ["read", "edit", "session_search"]);
+  assert.deepEqual(active, ["read", "edit", "pi_session_search"]);
   const updates = [];
   const result = await tool.execute("synthetic-call", { query: "A=742", mode: "literal" }, new AbortController().signal,
     (update) => updates.push(update), { sessionManager: { getSessionFile: () => f.sessionFile, getLeafId: () => "current" } });

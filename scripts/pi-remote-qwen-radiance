@@ -435,6 +435,8 @@ readonly patch_source="$project_root/experiments/radiance-public/patch_streaming
 readonly install_script="$project_root/scripts/install-pi-coding-agent"
 readonly deploy_script="$project_root/scripts/deploy-pi-models-config"
 readonly progress_extension="$project_root/integrations/pi/qwen-progress.mjs"
+readonly tool_names_extension="$project_root/integrations/pi/qwen-tool-names.ts"
+readonly tool_names_module="$project_root/integrations/pi/qwen-tool-names.mjs"
 readonly scheduler_telemetry_module="$project_root/integrations/pi/qwen-radiance-scheduler-telemetry.mjs"
 readonly cache_residency_module="$project_root/integrations/pi/qwen-cache-residency.mjs"
 readonly cache_residency_probe="$project_root/src/qwen_r9700_lab/radiance_cache_residency.py"
@@ -458,6 +460,7 @@ readonly compaction_tasks="$project_root/integrations/pi/qwen-compaction-tasks.m
 readonly task_plan_extension="$project_root/integrations/pi/qwen-task-plan.ts"
 readonly task_plan_core="$project_root/integrations/pi/qwen-task-plan.mjs"
 readonly backend_errors_module="$project_root/integrations/pi/qwen-radiance-errors.mjs"
+readonly tools_command_module="$project_root/integrations/pi/qwen-tools.mjs"
 readonly backend_errors_probe="$project_root/src/qwen_r9700_lab/radiance_error_report.py"
 readonly compaction_progress="$project_root/integrations/pi/qwen-radiance-compaction-progress.mjs"
 readonly cache_extension="$project_root/integrations/pi/qwen-radiance-cache.mjs"
@@ -493,7 +496,7 @@ jq -e '.defaultTools | type == "array" and length > 0 and all(.[]; type == "stri
 [[ -f $searchtool_recovery_extension && ! -L $searchtool_recovery_extension &&
 	$(stat -c '%u:%h' -- "$searchtool_recovery_extension") == "$(id -u):1" ]] ||
 	die "recovery extension is missing or unsafe: $searchtool_recovery_extension"
-for compaction_file in "$compaction_extension" "$compaction_core" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe"; do
+for compaction_file in "$compaction_extension" "$compaction_core" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe" "$tools_command_module" "$tool_names_extension" "$tool_names_module"; do
 	[[ -f $compaction_file && ! -L $compaction_file &&
 		$(stat -c '%u:%h' -- "$compaction_file") == "$(id -u):1" ]] ||
 		die "prefix compaction dependency is missing or unsafe: $compaction_file"
@@ -988,6 +991,7 @@ declare -a pi_options=(
 	--no-context-files
 	--append-system-prompt "$operating_prompt"
 	--no-extensions
+	--exclude-tools 'read,bash,edit,write,grep,find,ls'
 	--extension "$progress_extension"
 	--extension "$gpu_temperature_extension"
 	--extension "$tool_output_extension"
@@ -998,6 +1002,7 @@ declare -a pi_options=(
 	--extension "$compaction_extension"
 	--extension "$cache_extension"
 	--extension "$searchtool_recovery_extension"
+	--extension "$tool_names_extension"
 )
 if [[ -t 0 && -t 1 ]]; then
 	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \

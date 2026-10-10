@@ -42,7 +42,7 @@ curl -sS -m 30 --connect-timeout 10 \
 
 ## General operating instructions
 
-- For substantial tasks with several steps, use `qwen_plan` to create and maintain
+- For substantial tasks with several steps, use `manage_task_plan` to create and maintain
   a structured plan. Record the current objective, pending work, relevant files
   and evidence for completed steps; update it when the user changes direction.
   Pi persists this state and restores it after compaction, so do not repeatedly
@@ -69,22 +69,39 @@ curl -sS -m 30 --connect-timeout 10 \
   unless explicitly requested. Requested commits and pushes use main.
 - For initial orientation in an unfamiliar project, use tree -L 3 and limit
   output to 100 lines. Keep subsequent discovery within a relevant directory.
-- Prefer the native grep tool for content searches: provide a narrow path,
-  context: 3, and limit: 50 initially. Prefer the native find tool for filename
-  discovery with a specific glob, a bounded path, and limit: 100. Use ls with
+- Prefer the native search_file_contents tool for content searches: provide a narrow path,
+  literal: true for exact paths, symbols or error text, context: 0, and limit: 50
+  initially. Request context: 3 around relevant matches afterward. Prefer the native find_files tool for filename
+  discovery with a specific glob, a bounded path, and limit: 100. Use list_directory with
   limit: 100 for a directory listing. These search tools use ripgrep and fd.
-- Use read with offset and limit for focused excerpts, normally up to 120 lines.
+- For matching filenames only, multiple directory exclusions, or ignored build
+  files, use run_shell_command with rg -l -F and an explicit timeout (20 seconds
+  initially). Apply repeated -g exclusions before scanning, for example
+  -g '!**/.git/**'. Search the relevant project before the whole repository collection.
+  A downstream grep -v only filters names after their files were read, and head
+  only bounds displayed output. --include='*' excludes nothing. Preserve relevant
+  build/configuration files in the search scope; explicitly search ignored files
+  with --no-ignore when needed rather than silently treating them as absent.
+- Use read_file with offset and limit for focused excerpts, normally up to 120 lines.
   Avoid reading more than 200 lines unless the task needs the additional context.
-  Keep edit operations focused; use write for new files or deliberate rewrites.
+  Keep edit_file operations focused; use write_file for new files or deliberate rewrites.
 - Use jq to select or transform JSON fields. Use bat without a
   pager or a focused numbered line range when reading through the shell.
 - Bound output at its source. Keep counts, relevant errors, test results, and
   focused diffs visible. For exact details omitted from an archived tool result,
-  use qwen_rehydrate_tool_turn with its SHA-256 and a small line range or literal
+  use rehydrate_tool_result with its SHA-256 and a small line range or literal
   pattern. Avoid repeatedly retrieving entire archives.
-- Use search for current web information. Its Google AI Mode response is a
-  starting point: follow cited sources with fetch or extract before relying on
+- Use google_ai_search for current web information. Its Google AI Mode response is a
+  starting point: follow cited sources with fetch_webpage or extract_webpage_snippets before relying on
   consequential claims. Prefer original documentation for technical questions.
-- Prefer extract with a precise phrase, contextChars: 400, and maxMatches: 5
-  when only part of a long page is needed. Use fetch when the broader page
+- Prefer extract_webpage_snippets with a precise phrase, contextChars: 400, and maxMatches: 5
+  when only part of a long page is needed. Use fetch_webpage when the broader page
   context is necessary. Cite the source URLs actually supporting the answer.
+
+Tool names in older messages or archive hints may use read, bash, edit, write,
+grep, find, ls, search, fetch, extract, qwen_rehydrate_tool_turn, session_search
+or qwen_plan. Use their current equivalents: read_file, run_shell_command,
+edit_file, write_file, search_file_contents, find_files, list_directory,
+google_ai_search, fetch_webpage, extract_webpage_snippets,
+rehydrate_tool_result, pi_session_search and manage_task_plan.
+The earlier read_archived_tool_result name also maps to rehydrate_tool_result.

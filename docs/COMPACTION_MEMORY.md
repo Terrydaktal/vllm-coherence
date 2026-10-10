@@ -56,7 +56,7 @@ GPU work.
    silently truncated content. Missing, changed, binary, inaccessible and unsafe
    files are reported. Credential/dotenv/key paths are references by default.
    There is no directory scan or automatic reopening of archived transcripts.
-8. **Historical recovery.** `session_search` retrieves original entries using the
+8. **Historical recovery.** `pi_session_search` retrieves original entries using the
    recorded IDs or keywords. Instructions tell the resumed model to retrieve
    missing evidence before repeating completed work, reversing a decision, or
    asserting an unverified historical result. See [SESSION_SEARCH.md](SESSION_SEARCH.md).

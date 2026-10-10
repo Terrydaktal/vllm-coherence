@@ -43,6 +43,20 @@ test("restores exact synthetic current bytes with digest and allowed tool proven
   assert.deepEqual(entries, before);
 });
 
+test("renamed file calls retain restoration priority and historical result compatibility", async (t) => {
+  const cwd = await fixture(t);
+  await writeFile(join(cwd, "renamed.txt"), "preserved implementation\n");
+  for (const [old, current] of [["read", "read_file"], ["edit", "edit_file"], ["write", "write_file"]]) {
+    const entries = [call("call", "tool", current, { path: "renamed.txt", offset: 1, limit: 1 }),
+      result("result", "tool", old)];
+    const before = structuredClone(entries);
+    const snapshot = await capture(cwd, entries);
+    assert.equal(snapshot.files[0].content, "preserved implementation\n");
+    assert.equal(snapshot.files[0].provenance[0].kind, `tool-${old}`);
+    assert.deepEqual(entries, before);
+  }
+});
+
 test("incomplete groups, errors, unknown tools, aborted calls and prose do not authorize reads", async (t) => {
   const cwd = await fixture(t);
   await writeFile(join(cwd, "hidden.txt"), "MUST_NOT_RESTORE");
