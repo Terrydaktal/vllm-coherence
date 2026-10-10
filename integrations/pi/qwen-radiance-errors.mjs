@@ -30,6 +30,10 @@ const LOOKUP_ISSUES = {
   probe_failed: "The backend diagnostic probe failed.",
 };
 
+const isHealthyManualLookup = (report) => report.latest === true && report.status === "unavailable" &&
+  !report.incident && report.backend?.ready === true && !report.lookup_issue &&
+  (!report.diagnosis || ["backend_ready", "cause_unknown"].includes(report.diagnosis.kind));
+
 export function lookupFailure({ since, until, latest = false }, reason, stage = "probe", error) {
   return { schema: SCHEMA, status: "lookup_failed", incident: null, since, until, latest,
     lookup_issue: reason, lookup_failure: { stage, reason,
@@ -107,9 +111,12 @@ export async function fetchBackendError({ since, until, latest = false, host = p
 
 export function diagnosticLines(report, expanded) {
   const incident = report.incident;
-  const summary = report.diagnosis?.summary ?? (incident ? `Backend traceback: ${incident.summary}` :
-    report.status === "lookup_failed" ? "Backend diagnostics could not be fetched" : "Backend diagnostics: no recorded traceback");
-  const recovery = report.diagnosis?.recovery;
+  const healthy = isHealthyManualLookup(report);
+  const lookupProblem = report.status === "lookup_failed" || Boolean(report.lookup_issue);
+  const summary = healthy ? "Backend is ready. No recorded backend error was found." :
+    report.diagnosis?.summary ?? (incident ? `Backend traceback: ${incident.summary}` :
+      lookupProblem ? "Backend diagnostics could not be fetched" : "Backend diagnostics: no recorded traceback");
+  const recovery = healthy ? "" : report.diagnosis?.recovery;
   if (!expanded) return [safeText(`${summary} (ctrl+o to expand)`), ...(recovery ? [safeText(recovery)] : [])];
   const lines = [summary];
   if (incident) {
@@ -117,7 +124,8 @@ export function diagnosticLines(report, expanded) {
     if (report.latest) lines.push("Latest recorded backend failure; it may predate the current request.");
     lines.push("", incident.traceback);
   } else {
-    lines.push(report.status === "lookup_failed" ? "The backend diagnostic lookup failed or timed out. Use /backend-error to retry." :
+    lines.push(lookupProblem ? "The backend diagnostic lookup failed or timed out. Use /backend-error to retry." :
+      healthy ? "No backend traceback was found in the retained journal from the last 24 hours." :
       (report.latest ? "No backend traceback was found in the backend journal from the last 24 hours." :
         "No backend traceback was recorded in this request's time window in the retained backend journal.") +
       " A clean stop or forced kill may leave no Python traceback.");
@@ -127,7 +135,7 @@ export function diagnosticLines(report, expanded) {
     report.backend.running ? "Backend process exists but is not ready." :
       report.backend.running === false ? "Backend container is no longer running." : "Backend is not ready; container state could not be confirmed.");
   if (report.backend?.running === false && report.backend.exit_code !== undefined && report.backend.exit_code !== null) lines.push(`Container exit code: ${report.backend.exit_code}${report.backend.oom_killed ? " · OOM killed" : ""}`);
-  if (report.captured_at) lines.push(`Backend checked: ${new Date(report.captured_at).toISOString()} (current status, separate from the failed request).`);
+  if (report.captured_at) lines.push(`Backend checked: ${new Date(report.captured_at).toISOString()} (${report.latest ? "current status" : "current status, separate from the failed request"}).`);
   if (report.host?.boot_started_at) lines.push(`Host boot: ${new Date(report.host.boot_started_at).toISOString()} · boot ${report.host.boot_id ?? "unknown"}`);
   for (const fs of report.host?.filesystems ?? []) if (Number.isFinite(fs.available_bytes)) {
     lines.push(`${fs.name === "cache" ? "Cache" : "System"} filesystem: ${(fs.available_bytes / 1024 ** 3).toFixed(2)} GiB available · ${fs.available_inodes} free inodes`);
@@ -165,7 +173,7 @@ export function installRadianceErrors(pi, { Text, probe = fetchBackendError, con
   let active = true, epoch = 0;
   const pending = [], shown = new Set();
   pi.registerEntryRenderer(BACKEND_ERROR_ENTRY, (entry, { expanded, outputPad = 1 }, theme) =>
-    new Text(theme.fg("error", diagnosticLines(entry.data, expanded).join("\n")), outputPad, 0));
+    new Text(theme.fg(isHealthyManualLookup(entry.data) ? "success" : "error", diagnosticLines(entry.data, expanded).join("\n")), outputPad, 0));
   pi.registerEntryRenderer(TRANSPORT_ERROR_ENTRY, (entry, { expanded, outputPad = 1 }, theme) =>
     new Text(theme.fg("error", connectionDiagnosticLines(entry.data, expanded).join("\n")), outputPad, 0));
 

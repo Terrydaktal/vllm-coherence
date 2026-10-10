@@ -330,3 +330,49 @@ def test_healthy_backend_is_current_status_and_not_an_explanation_of_the_past():
     )
     assert result["diagnosis"]["kind"] == "cause_unknown"
     assert "ready" in result["diagnosis"]["summary"]
+
+
+def test_manual_healthy_lookup_does_not_invent_an_interrupted_request():
+    result = report_for_window(
+        collected_failure(backend={"running": True, "ready": True}),
+        999000,
+        1001000,
+        latest=True,
+    )
+    assert result["incident"] is None
+    assert result["diagnosis"] == {
+        "kind": "backend_ready",
+        "summary": "Backend is ready. No recorded backend error was found.",
+        "recovery": "",
+    }
+
+
+def test_manual_healthy_lookup_keeps_missing_history_visible():
+    result = report_for_window(
+        collected_failure(
+            backend={"running": True, "ready": True},
+            lookup_issue="journal_timeout",
+        ),
+        999000,
+        1001000,
+        latest=True,
+    )
+    assert result["diagnosis"]["kind"] == "history_unavailable"
+    assert "could not be fully checked" in result["diagnosis"]["summary"]
+    assert "No recorded backend error" not in result["diagnosis"]["summary"]
+    assert "diagnostic lookup" in result["diagnosis"]["recovery"]
+
+
+def test_manual_lookup_keeps_a_real_historical_failure_when_backend_is_ready():
+    result = report_for_window(
+        collected_failure(
+            backend={"running": True, "ready": True},
+            incidents=parse_journal(b"\n".join(traceback())),
+        ),
+        1090000,
+        1100000,
+        latest=True,
+    )
+    assert result["incident"] is not None
+    assert result["diagnosis"]["kind"] == "backend_exception"
+    assert "synthetic failure" in result["diagnosis"]["summary"]

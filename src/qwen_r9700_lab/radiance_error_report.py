@@ -430,6 +430,18 @@ def diagnose(
             "recovery": "Use /backend status, then /backend start and retry.",
         }
     if backend.get("ready"):
+        if latest:
+            if collected.get("lookup_issue"):
+                return {
+                    "kind": "history_unavailable",
+                    "summary": "Backend is ready; error history could not be fully checked.",
+                    "recovery": "Use /backend-error to retry the diagnostic lookup.",
+                }
+            return {
+                "kind": "backend_ready",
+                "summary": "Backend is ready. No recorded backend error was found.",
+                "recovery": "",
+            }
         return {
             "kind": "cause_unknown",
             "summary": "Backend is ready now; the cause of the interrupted request is unconfirmed.",

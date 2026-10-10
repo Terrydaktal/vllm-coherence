@@ -82,6 +82,78 @@ test("an old or missing traceback is described honestly and current backend heal
   assert.doesNotMatch(text, /Traceback \(most recent/);
 });
 
+test("manual healthy backend lookup reports readiness without failure advice or error coloring", async () => {
+  const healthy = { schema: report.schema, status: "unavailable", incident: null, latest: true,
+    backend: { ready: true, running: true }, captured_at: 20000,
+    diagnosis: { kind: "backend_ready", summary: "Backend is ready. No recorded backend error was found.", recovery: "" } };
+  const f = fixture(async () => healthy);
+  await f.commands.get("backend-error").handler("", f.ctx);
+  assert.equal(f.entries.length, 1);
+  const colors = [], theme = { fg: (color, value) => { colors.push(color); return value; } };
+  const render = f.renderers.get(BACKEND_ERROR_ENTRY);
+  for (const expanded of [false, true]) {
+    const text = render(f.entries[0], { expanded }, theme).text;
+    assert.match(text, /Backend is ready\. No recorded backend error was found\./);
+    assert.doesNotMatch(text, /interrupted|failed request|retry|restart|relaunch|clean stop|forced kill/i);
+  }
+  assert.deepEqual(colors, ["success", "success"]);
+  assert.equal(f.probes[0].latest, true);
+});
+
+test("healthy manual lookup corrects an older generic interrupted-request diagnosis", async () => {
+  const legacy = { schema: report.schema, status: "unavailable", incident: null, latest: true,
+    backend: { ready: true }, captured_at: 20000,
+    diagnosis: { kind: "cause_unknown", summary: "Backend request was interrupted; cause unknown.",
+      recovery: "Retry your message or restart the backend." } };
+  const f = fixture(async () => legacy);
+  await f.commands.get("backend-error").handler("", f.ctx);
+  for (const expanded of [false, true]) {
+    const text = diagnosticLines(f.entries[0].data, expanded).join("\n");
+    assert.match(text, /Backend is ready\. No recorded backend error was found\./);
+    assert.doesNotMatch(text, /interrupted|failed request|retry|restart|relaunch|clean stop|forced kill/i);
+  }
+});
+
+test("automatic failures retain their diagnosis even when the backend is ready now", async () => {
+  const failed = { schema: report.schema, status: "unavailable", incident: null, latest: false,
+    backend: { ready: true }, captured_at: 20000,
+    diagnosis: { kind: "cause_unknown", summary: "Backend request was interrupted; cause unknown.",
+      recovery: "Retry your message." } };
+  const f = fixture(async () => failed);
+  f.emit("message_end", { message: message() });
+  await f.emit("turn_end");
+  const colors = [], theme = { fg: (color, value) => { colors.push(color); return value; } };
+  const text = f.renderers.get(BACKEND_ERROR_ENTRY)(f.entries[0], { expanded: true }, theme).text;
+  assert.match(text, /Backend request was interrupted/);
+  assert.match(text, /Retry your message/);
+  assert.doesNotMatch(text, /No recorded backend error was found/);
+  assert.deepEqual(colors, ["error"]);
+});
+
+test("manual lookup still shows historical errors after backend recovery", async () => {
+  const historical = { ...report, latest: true, backend: { ready: true, running: true } };
+  const f = fixture(async () => historical);
+  await f.commands.get("backend-error").handler("", f.ctx);
+  const colors = [], theme = { fg: (color, value) => { colors.push(color); return value; } };
+  const text = f.renderers.get(BACKEND_ERROR_ENTRY)(f.entries[0], { expanded: true }, theme).text;
+  assert.match(text, /Latest recorded backend failure/);
+  assert.match(text, /scheduler\.py/);
+  assert.match(text, /currently ready/);
+  assert.doesNotMatch(text, /No recorded backend error was found/);
+  assert.deepEqual(colors, ["error"]);
+});
+
+test("ready backend with failed manual journal lookup does not claim no errors", () => {
+  for (const status of ["unavailable", "lookup_failed"]) {
+    const unavailable = { schema: report.schema, status, incident: null, latest: true,
+      backend: { ready: true }, lookup_issue: "lookup_timeout" };
+    const text = diagnosticLines(unavailable, true).join("\n");
+    assert.match(text, /lookup failed or timed out/);
+    assert.match(text, /diagnostic lookup timed out/);
+    assert.doesNotMatch(text, /No recorded backend error was found|No backend traceback was found/);
+  }
+});
+
 test("late diagnostics cannot be appended to a switched or closed chat", async () => {
   for (const event of ["session_switch", "session_shutdown"]) {
     let resolve;
