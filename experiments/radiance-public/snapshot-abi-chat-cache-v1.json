@@ -403,9 +403,9 @@
       "format": "qwen-chat-cache-v1",
       "tier": "qwen_chat_fs",
       "modules": {
-        "radiance_cache.py": "4a293241e6caeaf45791bb7cdb296e73f7f139e73c338aa9a9accde68d2667b5",
+        "radiance_cache.py": "efe9c4c2dd62bf065f08eb276c6d19ce215b9f069b38b4ee7fd690c6ad9e2313",
         "radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
-        "radiance_cache_telemetry.py": "b91fb65bda48a6adce05725a43d4d90026cedcd300e7f958f7fa6a7540e39cc7",
+        "radiance_cache_telemetry.py": "3e8ba475c0e4996a1c214d08a154fe9b57af64dda0ceb17cbb2873901ee06121",
         "radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
         "radiance_prefix_lineage.py": "2f4b3d08e7051c766be584e78ab3b58215b3ba85bb04169560b5b37fe4058021",
         "radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936",
@@ -413,8 +413,8 @@
         "radiance_token_continuation_runtime.py": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
-        "radiance_chat_tier.py": "73467e3a0930aad906afb936627e3186a8fad83557a11bb9c99a2feabeaaf7c5",
-        "radiance_fair_scheduler.py": "8090e2d4b3b6a83c10613dfbe68c55b2d14df6a19f432cc8b0db3f86a98e0b31",
+        "radiance_chat_tier.py": "b5374b9e3f5ce1b7e272607946561d37f177fd8d4d4d53b2523fd032815231a0",
+        "radiance_fair_scheduler.py": "3e51431c60ad71ff871391fcf0689e9cd067a5f52b3c6f171892164ad71e1064",
         "patch_chat_snapshot.py": "789b4010f125f691fc94fb63fdd8b8d9e8704e8cbf996059d1990569ed6a01e9"
       }
     },

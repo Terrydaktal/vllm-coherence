@@ -587,3 +587,49 @@ test("ordinary single-line waits yield to compaction and stop on session switche
   f.advance(30000);
   assert.equal(f.working.at(-1), undefined);
 });
+
+test("ordinary cache waits show the actual parallel stages and GPU restore on one line", (t) => {
+  const wallNow = Date.now();
+  t.mock.method(Date, "now", () => wallNow);
+  const row = { chat_id: "a".repeat(64), generation: "b".repeat(64), request_id: "c".repeat(64),
+    phase: "cache_lookup", blocker: null, input_tokens: 10000, computed_tokens: 0,
+    cached_tokens: null, elapsed_ms: 2500, phase_elapsed_ms: 2400, first_token_ms: null,
+    timings_ms: { admission: 100 } };
+  const progress = row.cache_load_progress = { request_id: row.request_id, chat_id: row.chat_id,
+    generation: row.generation, job_id: 4, updated_at_ms: wallNow, status: "loading",
+    total_blocks: 4, completed_blocks: 2, total_bytes: 64 * 1024 ** 2, completed_bytes: 32 * 1024 ** 2,
+    workers: 4, elapsed_ms: 2400,
+    stage_ms: { disk_read: 2800, decompression: 1900, checksum: 600, restore_buffer_copy: 900 },
+    stage_wall_ms: { disk_read: 1400, decompression: 1200, checksum: 400, restore_buffer_copy: 600 },
+    active_stages: { disk_read: 2, decompression: 1, checksum: 1, restore_buffer_copy: 0 } };
+  const observation = { available: true, requestPhase: row, phaseObservedAt: wallNow };
+  const f = fixture(t, { read: () => observation });
+  assert.match(f.working.at(-1), /loading cached context from disk/);
+  assert.match(f.working.at(-1), /read \(2 active\) \+ decompress \(1 active\) \+ SHA-256 verify \(1 active\)/);
+  assert.match(f.working.at(-1), /2 \/ 4 blocks · 32\.0 MiB \/ 64\.0 MiB/);
+  assert.match(f.working.at(-1), /read 1\.4s · decompress 1\.2s · SHA-256 verify 0\.4s · RAM copy 0\.6s · stages overlap/);
+  assert.doesNotMatch(f.working.at(-1), /checking reusable context|6\.2s wall|\n/);
+
+  Object.assign(progress, { status: "complete", updated_at_ms: wallNow - 10_000,
+    completed_blocks: 4, completed_bytes: progress.total_bytes,
+    active_stages: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 0 } });
+  Object.assign(row, { phase: "cache_restore", phase_elapsed_ms: 1300 });
+  f.advance(100);
+  assert.match(f.working.at(-1), /loading cached context into gpu · 1\.3s GPU restore · cache load 2\.4s wall/);
+  assert.doesNotMatch(f.working.at(-1), /active/);
+
+  Object.assign(row, { phase: "prefill", phase_elapsed_ms: 800, cached_tokens: 8000, computed_tokens: 8500 });
+  row.timings_ms.cache_restore = 1800;
+  f.advance(100);
+  assert.match(f.working.at(-1), /500 \/ 2,000 uncached tok processed.*8,000 reused/);
+  assert.match(f.working.at(-1), /cache load 2\.4s wall.*GPU restore 1\.8s/);
+
+  Object.assign(row, { phase: "generate", phase_elapsed_ms: 100, computed_tokens: row.input_tokens });
+  f.advance(100);
+  assert.match(f.working.at(-1), /awaiting first model output · 0\.1s/);
+  assert.doesNotMatch(f.working.at(-1), /cache load|disk|decompress|SHA|RAM copy/);
+  f.update("text_delta", 1, "synthetic output");
+  assert.match(f.working.at(-1), /Qwen answer: 1 tok/);
+  assert.doesNotMatch(f.working.at(-1), /cache load|disk|decompress|SHA|RAM copy/);
+  assert.ok(f.working.filter((line) => typeof line === "string").every((line) => !line.includes("\n")));
+});

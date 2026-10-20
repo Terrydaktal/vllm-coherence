@@ -60,15 +60,21 @@ start = sys.argv.index('-u') + 2
 Path(os.environ['INTERVAL_LOG']).write_text(sys.argv[start])
 Path(os.environ['NAMESPACE_LOG']).write_text(sys.argv[start + 2])
 Path(os.environ['CONTAINER_LOG']).write_text(sys.argv[sys.argv.index('--container') + 1])
+assert '--detailed-phases' in sys.argv
 scheduler = {
     'pid': 1234, 'updated_at': time.time(), 'quantum_seconds': 30.0,
     'switches': 7, 'cached_chats': 2, 'max_cached_chats': 5,
     'requests': [{'chat_id': '0' * 64, 'generation': '0' * 64, 'state': 'paused',
                   'computed_tokens': 52635, 'input_tokens': 60000}],
 }
+phases = {'schema': 'urn:qwen-r9700:request-phases:v2', 'requests': [],
+          'recent': [{'last_round_ms': 43.7, 'acceptance_rate_3s': 0.61}]}
+detailed = {**phases, 'recent': [{**phases['recent'][0], 'cache_load_progress': {
+    'completed_blocks': 3, 'total_blocks': 159, 'status': 'loading'}}]}
 print(json.dumps(scheduler), 'null',
       json.dumps({'schema': 'urn:qwen-r9700:cache-residency:v1', 'chats': []}),
       json.dumps({'schema': 'urn:qwen-r9700:cache-residency:v2', 'chats': []}),
+      json.dumps(phases), json.dumps(detailed),
       sep='\t', flush=True)
 time.sleep(0.5)
 scheduler.update(updated_at=time.time(), switches=8, requests=[])
@@ -119,6 +125,10 @@ print(json.dumps(scheduler), 'null', sep='\t', flush=True)
     }
     assert combined["scheduler"]["requests"][0]["state"] == "paused"
     assert combined["worker"] is None
+    assert combined["phases"]["recent"] == [{"last_round_ms": 43.7, "acceptance_rate_3s": 0.61}]
+    details = json.loads((state / "request-phases-detailed.json").read_text(encoding="utf-8"))
+    assert details["recent"][0]["cache_load_progress"]["completed_blocks"] == 3
+    assert "cache_load_progress" not in combined["phases"]["recent"][0]
     assert combined["temperature"]["junction_millicelsius"] == 42_000
     assert combined["temperature"]["vram_used_bytes"] == 30_601_641_984
     assert combined["temperature"]["vram_total_bytes"] == 34_359_738_368

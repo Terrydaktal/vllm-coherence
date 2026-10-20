@@ -1,0 +1,39 @@
+{
+  "schema": "urn:coherence:synthetic-parallel-cache-load:v1",
+  "python": "3.12.3",
+  "block_count": 159,
+  "block_size": 27000832,
+  "raw_bytes": 4293132288,
+  "repetitions": 3,
+  "parallel_workers": 3,
+  "scope": "CPU synthetic lossless disk read + decompression + SHA + destination copy",
+  "page_cache_policy": "production per-payload POSIX_FADV_DONTNEED; alternating repeated reads",
+  "gpu_measured": false,
+  "file_bytes": 2146690641,
+  "samples_ms": {
+    "serial": [
+      4128.706379036885,
+      3630.6134699843824,
+      3613.2407520199195
+    ],
+    "parallel": [
+      1841.4198210230097,
+      1807.0365220191889,
+      1762.2991630341858
+    ]
+  },
+  "median_ms": {
+    "serial": 3630.6134699843824,
+    "parallel": 1807.0365220191889
+  },
+  "speedup": 2.009153343468411,
+  "exact_destination_checks": 954,
+  "fixture_removed": true,
+  "source_sha256": {
+    "telemetry": "1e20f7ea53c07ce1e3614a9c2875ca79a47c03138feac0b6f39e535640c217d7",
+    "cache": "efe9c4c2dd62bf065f08eb276c6d19ce215b9f069b38b4ee7fd690c6ad9e2313",
+    "benchmark": "217317250c9c589ad72789c4603e554b56a77fb1aec57bb345ee75d15b18c64a"
+  },
+  "host_cpu": "AMD Ryzen 9 5950X 16-Core Processor",
+  "storage": "AI host production snapshot NVMe filesystem; synthetic owned fixtures only"
+}

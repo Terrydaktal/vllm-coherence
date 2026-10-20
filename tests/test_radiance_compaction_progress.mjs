@@ -7,7 +7,7 @@ import { appendCompactionTiming, COMPACTION_TIMING_ENTRY, startCompactionProgres
 const currentChat = { chat_id: "a".repeat(64), generation: "b".repeat(64) };
 const otherChat = { chat_id: "c".repeat(64), generation: "d".repeat(64) };
 
-function fixture(t, { observationAt = () => ({ available: false, configured: false }) } = {}) {
+function fixture(t, { observationAt = () => ({ available: false, configured: false }), schedulerNow } = {}) {
   let clock = 0, tick, intervalMs, stopped = false, schedulerStopped = false;
   const widgets = [], statuses = [], messages = [], reports = [], notices = [], abort = new AbortController();
   const sessionFile = `/synthetic-${randomUUID()}.jsonl`;
@@ -22,7 +22,7 @@ function fixture(t, { observationAt = () => ({ available: false, configured: fal
     read: () => observationAt(clock),
   };
   const progress = startCompactionProgress(ctx, { signal: abort.signal, now: () => clock,
-    save: (report) => reports.push(report), scheduler,
+    save: (report) => reports.push(report), scheduler, ...(schedulerNow ? { schedulerNow: () => schedulerNow(clock) } : {}),
     schedule: (fn, ms) => { tick = fn; intervalMs = ms; return 1; }, unschedule: () => { stopped = true; } });
   t.after(async () => {
     await clearCompactionProgress(ctx);
@@ -224,7 +224,7 @@ test("context preparation separately times GPU queue, cache restore, prefill and
   f.advance(30000);
   f.advance(5000);
   assert.match(f.messages.at(-1), /GPU queue: 10.0s · another chat c{12} has the GPU and is prefilling 40,000 \/ 50,000 prompt tokens/);
-  assert.match(f.messages.at(-1), /Find and load cached context: 20.0s/);
+  assert.match(f.messages.at(-1), /Restore cached context into GPU: 20.0s/);
   assert.match(f.messages.at(-1), /Prompt prefill: 30.0s/);
   assert.match(f.messages.at(-1), /Await first checkpoint output: 5.0s/);
   assert.match(f.messages.at(-1), /1m 8s total/);
@@ -574,4 +574,131 @@ test("backend timings preserve cache steps that finish between spinner samples",
   assert.equal(report.waitPhases.queue.observed, false);
   assert.match(f.messages.at(-1), /Finish previous cache update: 0.2s/);
   assert.match(f.messages.at(-1), /Check reusable context: 0.0s/);
+});
+
+function cacheLoadObservation(wallNow, overrides = {}) {
+  const requestId = "e".repeat(64);
+  return { available: true, workerAvailable: true, activeChat: currentChat, phaseObservedAt: wallNow,
+    request: { ...currentChat, request_id: requestId, state: "queued", input_tokens: 1000, computed_tokens: 0 },
+    requestPhase: { ...currentChat, request_id: requestId, phase: "cache_lookup", phase_elapsed_ms: 4000,
+      input_tokens: 1000, computed_tokens: 0, cached_tokens: 900, timings_ms: {},
+      cache_load_progress: { ...currentChat, request_id: requestId, job_id: 1, status: "loading",
+        updated_at_ms: wallNow, elapsed_ms: 4000, total_blocks: 10, completed_blocks: 4,
+        total_bytes: 20 * 1024 ** 2, completed_bytes: 8 * 1024 ** 2, workers: 4,
+        stage_ms: { disk_read: 3000, decompression: 5000, checksum: 500, restore_buffer_copy: 500 },
+        stage_wall_ms: { disk_read: 2000, decompression: 3000, checksum: 400, restore_buffer_copy: 400 },
+        active_stages: { disk_read: 1, decompression: 2, checksum: 0, restore_buffer_copy: 1 }, ...overrides } } };
+}
+
+test("compaction separates concurrent disk load components from GPU restore wall time", (t) => {
+  const wallNow = Date.now(), observation = cacheLoadObservation(wallNow);
+  const f = fixture(t, { observationAt: () => observation, schedulerNow: (clock) => wallNow + clock });
+  f.progress.update({ phase: "wait" });
+  const message = f.messages.at(-1), report = f.progress.snapshot();
+  assert.match(message, /Load cached context from disk: 4.0s wall/);
+  assert.match(message, /Disk read:.*2.0s.*wall.*3.0s.*worker/);
+  assert.match(message, /Decompression:.*3.0s.*wall.*5.0s.*worker/);
+  assert.match(message, /SHA-256 verification:.*0.4s.*wall.*0.5s.*worker/);
+  assert.match(message, /RAM restore-buffer copy:.*0.4s.*wall.*0.5s.*worker/);
+  assert.match(message, /Restore cached context into GPU: not observed yet/);
+  assert.equal(report.waitPhases.restore.elapsedMs, 0, "CPU worker sums are never charged to GPU transfer");
+  assert.equal(report.cacheLoadProgress.elapsed_ms, 4000);
+  assert.equal(Object.values(report.cacheLoadProgress.stage_ms).reduce((sum, ms) => sum + ms, 0), 9000);
+  assert.equal(report.elapsedMs, 0, "parallel worker durations do not inflate local total time");
+  report.cacheLoadProgress.stage_ms.disk_read = 9999;
+  assert.equal(f.progress.snapshot().cacheLoadProgress.stage_ms.disk_read, 3000, "snapshots cannot mutate retained telemetry");
+});
+
+test("completed disk components remain visible through GPU restore, prefill, generation and saved diagnostics", async (t) => {
+  const wallNow = Date.now();
+  let observation = cacheLoadObservation(wallNow, { status: "complete", updated_at_ms: wallNow - 60000,
+    completed_blocks: 10, completed_bytes: 20 * 1024 ** 2,
+    active_stages: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 0 } });
+  observation.requestPhase.phase = "cache_restore";
+  observation.requestPhase.timings_ms = { cache_lookup: 4500, cache_restore: 1100 };
+  const f = fixture(t, { observationAt: () => observation, schedulerNow: (clock) => wallNow + clock });
+  f.progress.update({ phase: "wait" });
+  assert.match(f.messages.at(-1), /✓ Load cached context from disk: 4.0s wall/);
+  assert.match(f.messages.at(-1), /Restore cached context into GPU: 1.1s/);
+  observation = { ...observation, requestPhase: { ...observation.requestPhase, phase: "prefill",
+    timings_ms: { cache_lookup: 4500, cache_restore: 1100, prefill: 200 } } };
+  f.advance(100);
+  assert.match(f.messages.at(-1), /Disk read:.*3.0s.*worker/);
+  f.progress.update({ phase: "generate", outputTokens: 1 });
+  observation = { available: false, configured: true };
+  f.advance(100);
+  assert.match(f.messages.at(-1), /✓ Load cached context from disk: 4.0s wall/);
+  assert.match(f.messages.at(-1), /Decompression:.*5.0s.*worker/);
+  await f.progress.finish("failed");
+  assert.match(f.messages.at(-2), /✓ Load cached context from disk: 4.0s wall/);
+  assert.equal(f.reports[0].cacheLoadProgress.status, "complete");
+  assert.equal(f.reports[0].cacheLoadProgress.stage_wall_ms.decompression, 3000);
+  assert.equal(f.reports[0].waitPhases.restore.elapsedMs, 1100);
+});
+
+test("compaction rejects stale, cross-request and malformed disk component samples", (t) => {
+  const wallNow = Date.now();
+  const mutations = [
+    (progress) => { progress.updated_at_ms = wallNow - 6000; },
+    (progress) => { progress.request_id = "f".repeat(64); },
+    (progress) => { progress.chat_id = otherChat.chat_id; },
+    (progress) => { progress.generation = otherChat.generation; },
+    (progress) => { progress.stage_ms.disk_read = Infinity; },
+    (progress) => { progress.stage_wall_ms.disk_read = -1; },
+    (progress) => { progress.private_path = "PRIVATE FIXTURE PATH"; },
+  ];
+  for (const mutate of mutations) {
+    const observation = cacheLoadObservation(wallNow);
+    mutate(observation.requestPhase.cache_load_progress);
+    const f = fixture(t, { observationAt: () => observation, schedulerNow: () => wallNow });
+    f.progress.update({ phase: "wait" });
+    assert.equal(f.progress.snapshot().cacheLoadProgress, undefined);
+    assert.doesNotMatch(f.messages.at(-1), /Load cached context from disk|Disk read:|PRIVATE FIXTURE PATH/);
+  }
+});
+
+test("an expired loading sample retains recorded component values without claiming live work", (t) => {
+  const wallNow = Date.now(), observation = cacheLoadObservation(wallNow);
+  const f = fixture(t, { observationAt: () => observation, schedulerNow: (clock) => wallNow + clock });
+  f.progress.update({ phase: "wait" });
+  assert.match(f.messages.at(-1), /› Load cached context from disk: 4.0s wall/);
+  f.advance(6000);
+  assert.match(f.messages.at(-1), /· Load cached context from disk: 4.0s wall.* · last observed/);
+  assert.doesNotMatch(f.messages.at(-1).split("\n")[0], /Disk read|Decompression/);
+  assert.equal(f.progress.snapshot().cacheLoadProgress.elapsed_ms, 4000);
+});
+
+test("RAM-only compaction load names the main-thread copy without inventing disk work", (t) => {
+  const wallNow = 100000;
+  const observation = cacheLoadObservation(wallNow, { workers: 0, total_blocks: 2, completed_blocks: 1,
+    total_bytes: 8 * 1024 ** 2, completed_bytes: 4 * 1024 ** 2,
+    elapsed_ms: 1000, stage_ms: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 1000 },
+    stage_wall_ms: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 900 },
+    active_stages: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 1 } });
+  const f = fixture(t, { observationAt: () => observation, schedulerNow: (clock) => wallNow + clock });
+  f.progress.update({ phase: "wait" });
+  assert.match(f.messages.at(-1), /^Radiance compaction: copying cached context into RAM/);
+  assert.match(f.messages.at(-1), /› Copy cached context into RAM: 1.0s wall/);
+  assert.match(f.messages.at(-1), /1 \/ 2 blocks · 4.0 MiB \/ 8.0 MiB · 0 workers/);
+  assert.match(f.messages.at(-1), /RAM restore-buffer copy: 0.9s wall \(1.0s worker time\)/);
+  assert.doesNotMatch(f.messages.at(-1), /loading cached context from disk|Load cached context from disk:/);
+  assert.equal(f.progress.snapshot().cacheLoadProgress.workers, 0);
+  f.advance(6000);
+  assert.match(f.messages.at(-1), /Copy cached context into RAM: 1.0s wall.* · last observed/);
+  assert.doesNotMatch(f.messages.at(-1), /\(1 active\)/, "the same deterministic clock expires component and inline activity");
+});
+
+test("retained compaction components never become current work for a replacement request owner", (t) => {
+  const wallNow = 100000;
+  let observation = cacheLoadObservation(wallNow);
+  const f = fixture(t, { observationAt: () => observation, schedulerNow: (clock) => wallNow + clock });
+  f.progress.update({ phase: "wait" });
+  const original = f.progress.snapshot().cacheLoadProgress;
+  observation = cacheLoadObservation(wallNow + 100, { request_id: "f".repeat(64), elapsed_ms: 2000 });
+  observation.requestPhase.request_id = "f".repeat(64);
+  observation.request.request_id = "f".repeat(64);
+  f.advance(100);
+  assert.match(f.messages.at(-1), /· Load cached context from disk: 4.0s wall.* · last observed/);
+  assert.doesNotMatch(f.messages.at(-1), /› Load cached context from disk:/);
+  assert.deepEqual(f.progress.snapshot().cacheLoadProgress, original);
 });

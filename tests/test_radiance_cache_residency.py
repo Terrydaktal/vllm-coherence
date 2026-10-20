@@ -151,8 +151,9 @@ def test_malformed_purge_marker_remains_an_unknown_head(tmp_path, field, value):
     assert probe.disk_heads() == ({(CHAT, GEN): None}, True)
 
 
+@pytest.mark.parametrize("detailed", [False, True])
 def test_shared_feed_refreshes_memory_every_half_second_and_verifies_disk_once_a_second(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, detailed
 ):
     probe, scheduler, worker, tail, _ = fixture(tmp_path)
     request = {
@@ -205,10 +206,15 @@ def test_shared_feed_refreshes_memory_every_half_second_and_verifies_disk_once_a
         "StatusChanges",
         lambda: type("Changes", (), {"wait": staticmethod(sleep)})(),
     )
-    monkeypatch.setattr(residency_module.sys, "argv", ["probe", "0.5", str(tmp_path), ABI])
+    argv = ["probe", "0.5", str(tmp_path), ABI]
+    if detailed:
+        argv.append("--detailed-phases")
+    monkeypatch.setattr(residency_module.sys, "argv", argv)
     with pytest.raises(FinishedError):
         residency_module.main()
-    samples = [json.loads(line.split("\t")[3]) for line in capsys.readouterr().out.splitlines()]
+    lines = capsys.readouterr().out.splitlines()
+    assert all(len(line.split("\t")) == (6 if detailed else 5) for line in lines)
+    samples = [json.loads(line.split("\t")[3]) for line in lines]
     assert [value["observed_at_ms"] for value in samples] == [100000, 100500, 101000]
     assert [value["chats"][0]["gpu_tokens"] for value in samples] == [47000, 48000, 49000]
     assert [value["chats"][0]["disk_saved_tokens"] for value in samples] == [40000, 40000, 45000]
@@ -617,6 +623,20 @@ def test_public_phases_keep_round_counters_without_exporting_checkpoint_keys():
         assert public[section] == [{"last_round_ms": 43.7, "acceptance_rate_3s": 0.61}]
         assert "response_end_tokens" in source[section][0]
     assert public_request_phases(None) is None
+
+
+def test_public_progress_requires_opt_in_without_changing_legacy_round_metrics():
+    progress = {"completed_blocks": 3, "total_blocks": 159, "status": "loading"}
+    row = {"last_round_ms": 43.7, "acceptance_rate_3s": 0.61,
+           "cache_load_progress": progress, "response_end_tokens": 239001,
+           "local_response_end_tokens": 239000}
+    source = {"requests": [row], "recent": [dict(row)]}
+    legacy = public_request_phases(source)
+    detailed = public_request_phases(source, include_progress=True)
+    for section in ("requests", "recent"):
+        assert legacy[section] == [{"last_round_ms": 43.7, "acceptance_rate_3s": 0.61}]
+        assert detailed[section] == [{**legacy[section][0], "cache_load_progress": progress}]
+        assert source[section][0] == row
 
 
 def test_public_worker_keeps_residency_without_exporting_memory_policy():

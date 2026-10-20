@@ -27,6 +27,13 @@ const ENSURE_RETRY_MS = 10_000;
 const HEX_ID = /^[0-9a-f]{64}$/;
 const REQUEST_PHASE_SCHEMA_V1 = "urn:qwen-r9700:request-phases:v1";
 const REQUEST_PHASE_SCHEMA_V2 = "urn:qwen-r9700:request-phases:v2";
+const CACHE_LOAD_STAGES = [
+	["disk_read", "read", "Disk read"],
+	["decompression", "decompress", "Decompression"],
+	["checksum", "SHA-256 verify", "SHA-256 verification"],
+	["restore_buffer_copy", "RAM copy", "RAM restore-buffer copy"],
+];
+const CACHE_LOAD_STAGE_KEYS = CACHE_LOAD_STAGES.map(([key]) => key);
 // All Pi extensions share this short-lived immutable read. Nested payloads
 // retain their own timestamps, so a 100 ms consumer cadence never implies
 // that a 1 Hz hardware probe or 0.5 Hz cache probe became fresher.
@@ -61,7 +68,8 @@ export function parseRequestPhases(text, pid, now = Date.now()) {
 				...(Object.hasOwn(r, "last_acceptance_rate") ? ["last_acceptance_rate"] : []),
 				...(Object.hasOwn(r, "acceptance_rate_3s") ? ["acceptance_rate_3s"] : [])]
 			: [];
-		return hasExactKeys(r, [...baseKeys, ...generationKeys, "timings_ms"]) &&
+		const cacheLoadKeys = Object.hasOwn(r, "cache_load_progress") ? ["cache_load_progress"] : [];
+		return hasExactKeys(r, [...baseKeys, ...generationKeys, ...cacheLoadKeys, "timings_ms"]) &&
 			HEX_ID.test(r.chat_id) && HEX_ID.test(r.generation) && HEX_ID.test(r.request_id) &&
 			Object.hasOwn(REQUEST_PHASE_LABELS, r.phase) && (r.blocker === null || identity(r.blocker)) &&
 			validCount(r.input_tokens) && validCount(r.computed_tokens) && (r.cached_tokens === null || validCount(r.cached_tokens)) &&
@@ -85,7 +93,8 @@ export function parseRequestPhases(text, pid, now = Date.now()) {
 					))
 			)) &&
 			r.timings_ms !== null && typeof r.timings_ms === "object" && !Array.isArray(r.timings_ms) &&
-			Object.entries(r.timings_ms).every(([key, ms]) => Object.hasOwn(REQUEST_PHASE_LABELS, key) && milliseconds(ms));
+			Object.entries(r.timings_ms).every(([key, ms]) => Object.hasOwn(REQUEST_PHASE_LABELS, key) && milliseconds(ms)) &&
+			(!cacheLoadKeys.length || r.cache_load_progress === null || validCacheLoadProgress(r.cache_load_progress, r, now));
 	};
 	if (!hasExactKeys(value, ["schema", "pid", "updated_at", "requests", "recent"]) ||
 		(!phaseV2 && value.schema !== REQUEST_PHASE_SCHEMA_V1) ||
@@ -96,6 +105,65 @@ export function parseRequestPhases(text, pid, now = Date.now()) {
 		throw new Error("invalid or stale request phase telemetry");
 	}
 	return value;
+}
+
+function validCacheLoadProgress(progress, owner, now) {
+	const milliseconds = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER;
+	if (!hasExactKeys(progress, ["request_id", "chat_id", "generation", "updated_at_ms", "job_id",
+		"total_blocks", "completed_blocks", "total_bytes", "completed_bytes", "workers", "stage_ms",
+		"stage_wall_ms", "active_stages", "elapsed_ms", "status"]) ||
+		!HEX_ID.test(owner?.request_id) || !HEX_ID.test(owner?.chat_id) || !HEX_ID.test(owner?.generation) ||
+		progress.request_id !== owner.request_id || progress.chat_id !== owner.chat_id || progress.generation !== owner.generation ||
+		!milliseconds(progress.updated_at_ms) || progress.updated_at_ms - now > SAMPLE_STALE_MS ||
+		!validCount(progress.job_id) || !validCount(progress.total_blocks) || !validCount(progress.completed_blocks) ||
+		progress.completed_blocks > progress.total_blocks || !validCount(progress.total_bytes) ||
+		!validCount(progress.completed_bytes) || progress.completed_bytes > progress.total_bytes ||
+		!validCount(progress.workers) || progress.workers > 1024 || !milliseconds(progress.elapsed_ms) ||
+		!["loading", "complete", "failed"].includes(progress.status) ||
+		(progress.status === "loading" && now - progress.updated_at_ms > SAMPLE_STALE_MS) ||
+		!hasExactKeys(progress.stage_ms, CACHE_LOAD_STAGE_KEYS) ||
+		!hasExactKeys(progress.stage_wall_ms, CACHE_LOAD_STAGE_KEYS) ||
+		!hasExactKeys(progress.active_stages, CACHE_LOAD_STAGE_KEYS)) return false;
+	return CACHE_LOAD_STAGE_KEYS.every((key) => milliseconds(progress.stage_ms[key]) &&
+		milliseconds(progress.stage_wall_ms[key]) && validCount(progress.active_stages[key]) &&
+		progress.active_stages[key] <= 1024 &&
+		(progress.status === "loading" || progress.active_stages[key] === 0));
+}
+
+function cacheLoadStageSummary(progress) {
+	return CACHE_LOAD_STAGES.map(([key, label]) => `${label} ${(progress.stage_wall_ms[key] / 1000).toFixed(1)}s`).join(" · ") + " · stages overlap";
+}
+
+function cacheLoadBytes(bytes) {
+	if (bytes < 1024) return `${bytes} B`;
+	const units = [[1024 ** 3, "GiB"], [1024 ** 2, "MiB"], [1024, "KiB"]];
+	const [scale, unit] = units.find(([scale]) => bytes >= scale);
+	return `${(bytes / scale).toFixed(1)} ${unit}`;
+}
+
+export function cacheLoadStatus(observation, now = Date.now()) {
+	const row = observation?.requestPhase;
+	const value = row?.cache_load_progress;
+	if (observation?.available === false || !value || !validCacheLoadProgress(value, row, now) ||
+		(observation.phaseObservedAt !== undefined && (!Number.isFinite(observation.phaseObservedAt) ||
+			now - observation.phaseObservedAt > SAMPLE_STALE_MS || observation.phaseObservedAt - now > SAMPLE_STALE_MS)) ||
+		(observation.request && (observation.request.chat_id !== row.chat_id || observation.request.generation !== row.generation))) return undefined;
+	// Never expose the mutable source row to a renderer that retains recorded
+	// timings. These worker sums are independent of the overlapping wall times.
+	const progress = { ...value, stage_ms: { ...value.stage_ms }, stage_wall_ms: { ...value.stage_wall_ms }, active_stages: { ...value.active_stages } };
+	const counts = `${progress.completed_blocks.toLocaleString("en-US")} / ${progress.total_blocks.toLocaleString("en-US")} blocks`;
+	const bytes = `${cacheLoadBytes(progress.completed_bytes)} / ${cacheLoadBytes(progress.total_bytes)}`;
+	const wall = `${(progress.elapsed_ms / 1000).toFixed(1)}s wall`;
+	const active = CACHE_LOAD_STAGES.filter(([key]) => progress.active_stages[key] > 0)
+		.map(([key, label]) => `${label} (${progress.active_stages[key]} active)`).join(" + ");
+	const phase = progress.status === "loading" ? (progress.workers === 0
+		? "copying cached context into RAM" : "loading cached context from disk")
+		: progress.status === "complete" ? "cached context loaded into RAM" : "cached context load failed";
+	const detail = [wall, ...(active ? [active] : []), counts, bytes, `${progress.workers} workers`, cacheLoadStageSummary(progress)].join(" · ");
+	const lines = [`Cache load: ${wall} · ${counts} · ${bytes} · ${progress.workers} workers · stages overlap`,
+		...CACHE_LOAD_STAGES.map(([key, , label]) => `${label}: ${(progress.stage_wall_ms[key] / 1000).toFixed(1)}s wall (${(progress.stage_ms[key] / 1000).toFixed(1)}s worker time)`),
+	];
+	return { phase, detail, lines, progress };
 }
 
 export function formatGenerationStats(observation) {
@@ -113,10 +181,12 @@ export function formatGenerationStats(observation) {
 	return values.join(" \u2022 ");
 }
 
-export function requestPhaseStatus(observation) {
+export function requestPhaseStatus(observation, now = Date.now()) {
 	const row = observation?.requestPhase;
 	if (!row || row.phase === "complete") return undefined;
-	const seconds = Math.max(0, row.phase_elapsed_ms + (Date.now() - (observation.phaseObservedAt ?? Date.now()))) / 1000;
+	const seconds = Math.max(0, row.phase_elapsed_ms + (now - (observation.phaseObservedAt ?? now))) / 1000;
+	const load = cacheLoadStatus(observation, now);
+	if (row.phase === "cache_lookup" && load) return { phase: load.phase, detail: load.detail };
 	const blocker = row.blocker && (row.blocker.chat_id === row.chat_id
 		? "an earlier request in this chat" : `another chat ${row.blocker.chat_id.slice(0, 12)}`);
 	let detail = `${seconds.toFixed(1)}s`;
@@ -138,6 +208,13 @@ export function requestPhaseStatus(observation) {
 	} else if (row.phase === "prefill") {
 		detail += ` · ${Math.min(row.computed_tokens, row.input_tokens).toLocaleString("en-US")} / ` +
 			`${row.input_tokens.toLocaleString("en-US")} prompt tok prepared · cached split pending`;
+	}
+	if (load && row.phase !== "generate") {
+		if (row.phase === "cache_restore") detail = `${seconds.toFixed(1)}s GPU restore`;
+		detail += ` · cache load ${(load.progress.elapsed_ms / 1000).toFixed(1)}s wall · ${cacheLoadStageSummary(load.progress)}`;
+		if (row.phase !== "cache_restore" && typeof row.timings_ms?.cache_restore === "number") {
+			detail += ` · GPU restore ${(row.timings_ms.cache_restore / 1000).toFixed(1)}s`;
+		}
 	}
 	return { phase: REQUEST_PHASE_LABELS[row.phase].toLowerCase(), detail };
 }
@@ -383,14 +460,24 @@ export function toolGraceDescription(grace) {
 		: `confirming whether ${owner} finished with a tool call`;
 }
 
-function attachRequestPhases(observation, phases, chat) {
+function attachRequestPhases(observation, phases, chat, detailed) {
 	if (phases === undefined) return observation;
 	const matches = (row) => row.chat_id === chat.id && row.generation === chat.generation;
-	observation.requestPhase = phases.requests.find(matches);
+	const augment = (row) => {
+		if (!row || !detailed || Math.abs(detailed.updated_at - phases.updated_at) > 1) return row;
+		const sameRequest = (item) => item.request_id === row.request_id && item.chat_id === row.chat_id && item.generation === row.generation;
+		const extended = detailed.requests.find(sameRequest) ?? detailed.recent.find(sameRequest);
+		if (!extended?.cache_load_progress) return row;
+		// Legacy phases remain authoritative for counters, round/acceptance stats
+		// and current phase. A separately published detailed sample may lag one
+		// sampler tick and contributes only progress for the identical request.
+		return { ...row, cache_load_progress: extended.cache_load_progress };
+	};
+	observation.requestPhase = augment(phases.requests.find(matches));
 	const blocker = observation.requestPhase?.blocker;
 	observation.blockingRequestPhase = blocker && phases.requests.find((row) =>
 		row.chat_id === blocker.chat_id && row.generation === blocker.generation);
-	observation.lastRequestTiming = phases.recent.find(matches);
+	observation.lastRequestTiming = augment(phases.recent.find(matches));
 	observation.phaseObservedAt = phases.updated_at * 1000;
 	return observation;
 }
@@ -479,7 +566,7 @@ export class SchedulerTelemetry {
 				try {
 				this.watcher = watch(config.stateDirectory, { persistent: false }, (_event, name) => {
 						const fileName = String(name);
-						if (!["telemetry-v1.json", "request-phases.json", "scheduler-v2.json", "scheduler.json"].includes(fileName)) return;
+							if (!["telemetry-v1.json", "request-phases.json", "request-phases-detailed.json", "scheduler-v2.json", "scheduler.json"].includes(fileName)) return;
 						if (fileName === "telemetry-v1.json") {
 							combinedSnapshots.delete(join(config.stateDirectory, fileName));
 						}
@@ -537,7 +624,8 @@ export class SchedulerTelemetry {
 						phases = parseRequestPhases(JSON.stringify(combined.phases), scheduler.pid, now);
 					} catch { /* The scheduler sample remains useful without a phase row. */ }
 				}
-				this.cached = attachRequestPhases(schedulerStatusForChat(scheduler, this.chat), phases, this.chat);
+					this.cached = attachRequestPhases(schedulerStatusForChat(scheduler, this.chat), phases, this.chat,
+						this.readDetailedRequestPhases(scheduler.pid, now));
 				return this.cached;
 			} catch {
 				// Fall through to the individually authenticated legacy files.
@@ -555,7 +643,8 @@ export class SchedulerTelemetry {
 					validateSampleFile(path);
 					phases = parseRequestPhases(readFileSync(path, "utf8"), scheduler.pid, now);
 				} catch { /* Old backends have no detailed phase feed. */ }
-				this.cached = attachRequestPhases(schedulerStatusForChat(scheduler, this.chat), phases, this.chat);
+					this.cached = attachRequestPhases(schedulerStatusForChat(scheduler, this.chat), phases, this.chat,
+						this.readDetailedRequestPhases(scheduler.pid, now));
 				return this.cached;
 			} catch {
 				// A running old monitor has only scheduler.json; malformed or stale
@@ -567,7 +656,20 @@ export class SchedulerTelemetry {
 		return this.cached;
 	}
 
-	readCombinedSnapshot(now = Date.now()) {
+		readDetailedRequestPhases(pid, now) {
+			try {
+				const path = join(this.config.stateDirectory, "request-phases-detailed.json");
+				validateSampleFile(path);
+				const phases = parseRequestPhases(readFileSync(path, "utf8"), pid, now);
+				if (now - phases.updated_at * 1000 > SAMPLE_STALE_MS) return undefined;
+				return phases;
+			} catch {
+				// Preserve round/acceptance metrics when optional details are unavailable.
+				return undefined;
+			}
+		}
+
+		readCombinedSnapshot(now = Date.now()) {
 		if (!this.config) return undefined;
 		const path = join(this.config.stateDirectory, "telemetry-v1.json");
 		const previous = combinedSnapshots.get(path);

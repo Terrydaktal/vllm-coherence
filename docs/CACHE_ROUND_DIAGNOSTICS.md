@@ -58,6 +58,55 @@ one-second polling cadence and 100 ms elapsed display. Compaction retains its
 separate multiline step display. Cancellation and session changes clear status;
 ordinary progress yields to compaction rather than overwriting its panel.
 
+Disk cache restoration now reads and validates independent blocks concurrently,
+with at most four active readers and a 256 MiB per-load buffer budget. At most
+two load batches run concurrently, bounding their combined planned buffers to
+512 MiB. Large blocks can reduce the worker count; a single oversized block is
+the explicit minimum-buffer exception. The generation read lease remains held
+until all workers finish, including failure or cancellation. Each block retains
+its format, decompressed-length and SHA-256 checks; only verified bytes are copied
+into CPU cache slots, and a failed job cannot publish those slots as restored.
+The snapshot format, cache ABI and model arithmetic are unchanged.
+
+The request's `cache_load_progress` exposes completed/total blocks and bytes,
+reader count, active read/decompression/checksum/copy operations, restore wall
+time and each operation's time. Pi shows these actual operations instead of
+labelling the whole disk job as a reusable-context check. GPU restoration and
+prefill remain their separately measured phases. Progress snapshots are bounded
+and refreshed at most every 100 ms through a detailed phase feed, including
+when detailed JSONL recording is disabled. They contain only counts, timings
+and hashed request/chat/generation identities; no cache payload is sampled.
+Updated Pi readers watch `request-phases-detailed.json`; existing readers keep
+the original phase schema and round/acceptance values. Detailed rows only augment
+the same request, chat, generation and backend process selected by the original
+feed. Missing, stale or invalid details never replace the original telemetry.
+
+`stage_ms` accumulates worker durations; `stage_wall_ms` takes the union of each
+operation's intervals, including active workers. Both differ from `elapsed_ms`:
+reads, decompression and checksum work can overlap. Never add the stage times
+to claim total restoration time or subtract them to estimate runtime overhead.
+Completion counts advance after copying a verified block; pending work and a
+failed restore are not presented as successfully restored data. The VM relay
+translates progress timestamps into its own clock while retaining their age.
+
+The [159-block synthetic loader check](../benchmarks/results/parallel-cache-loader-20261012.json)
+on the AI host's Ryzen 5950X and snapshot NVMe decoded 4,293,132,288 bytes.
+Three alternating trials per mode measured a median 3,630.61 ms serial load and
+1,807.04 ms with three readers, a 2.01× speedup. All 954 destination-block
+SHA-256 comparisons passed. The fixture used half-random/half-repeated synthetic
+data and the production per-payload `POSIX_FADV_DONTNEED` policy, with alternating
+serial/parallel reads; page-cache residency was not independently controlled.
+This measures read, validation and CPU restoration, not first-output latency. It opens
+no private snapshot, does not run inference and removes its owned fixtures.
+
+The [deployment receipt](../benchmarks/results/parallel-cache-loader-deployment-20261012.json)
+binds the running loader, scheduler and recorder to their source hashes and
+records the installed Pi-opsec bundle, compatible telemetry transport and a
+short synthetic natural-stop request. Existing Pi processes retain their
+imported display modules: use `/quit` and relaunch the usual Pi command to load
+the detailed status line. The backend loader is already active independently
+of that frontend restart.
+
 ## Long first-output delays
 
 The first tiny request in the [process-policy deployment receipt](../benchmarks/results/process-wide-thp-deployment-20261007.json)

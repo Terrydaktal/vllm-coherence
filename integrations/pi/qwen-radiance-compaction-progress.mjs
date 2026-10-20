@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus, formatGenerationStats } from "./qwen-radiance-scheduler-telemetry.mjs";
+import { createSchedulerTelemetry, toolGraceDescription, requestPhaseStatus, formatGenerationStats,
+  cacheLoadStatus } from "./qwen-radiance-scheduler-telemetry.mjs";
 
 const STAGES = [
   ["prepare", "Prepare checkpoint"],
@@ -21,7 +22,7 @@ const WAIT_STAGES = [
   ["ram_allocation", "Allocate RAM for chat handover"],
   ["cache_update", "Finish previous cache update"],
   ["cache_lookup", "Check reusable context"],
-  ["restore", "Find and load cached context"],
+  ["restore", "Restore cached context into GPU"],
   ["prefill", "Prompt prefill"],
   ["first_token", "Await first checkpoint output"],
   ["unknown", "Unclassified backend wait"],
@@ -52,7 +53,7 @@ function sameIdentity(left, right) {
   return left?.chat_id === right?.chat_id && left?.generation === right?.generation;
 }
 
-export function classifyCompactionWait(observation) {
+export function classifyCompactionWait(observation, now = Date.now()) {
   if (!observation?.available) {
     return {
       id: "unknown",
@@ -62,7 +63,7 @@ export function classifyCompactionWait(observation) {
     };
   }
   const request = observation.request;
-  const exact = requestPhaseStatus(observation);
+  const exact = requestPhaseStatus(observation, now);
   if (exact) return {
     id: BACKEND_WAIT_PHASES[observation.requestPhase.phase] ?? "first_token",
     detail: `${exact.phase} · ${exact.detail}`,
@@ -189,6 +190,7 @@ export function startCompactionProgress(ctx, {
   const waitDetails = new Map();
   let phase = "prepare", phaseStarted = started, state = "running", lastRender = -Infinity, timer, saving, finishedAt;
   let activeWaitId, activeWaitStarted, schedulerStopped = false;
+  let cacheLoad;
   let transcriptAppended = false, durableCommit = false, reusedCheckpoint = false, finishRequested = false, forcedCheckpoint = false;
   let finishAvailable;
   const tokens = {};
@@ -220,7 +222,7 @@ export function startCompactionProgress(ctx, {
   function observeGeneration(at, outputAdvanced, observation) {
     if (state !== "running" || !["generate", "finalize"].includes(phase)) return;
     // A new stream delta wins over a scheduler sample awaiting its next refresh.
-    const activity = outputAdvanced ? undefined : classifyCompactionWait(observation);
+    const activity = outputAdvanced ? undefined : classifyCompactionWait(observation, schedulerNow());
     if (activity && ["queue", "handover"].includes(activity.id)) {
       ratePausedAt ??= at;
       generationWait = activity;
@@ -272,7 +274,8 @@ export function startCompactionProgress(ctx, {
 
   function observeWait(at, observation = readScheduler()) {
     if (state !== "running" || phase !== "wait") return;
-    const activity = classifyCompactionWait(observation);
+    observeCacheLoad(observation);
+    const activity = classifyCompactionWait(observation, schedulerNow());
     if (activity.id !== activeWaitId) {
       if (activeWaitId !== undefined && activeWaitStarted !== undefined) {
         waitPhases.get(activeWaitId).elapsedMs += at - activeWaitStarted;
@@ -293,6 +296,16 @@ export function startCompactionProgress(ctx, {
       }
       if (measured.has(activeWaitId)) activeWaitStarted = at;
     }
+  }
+
+  function observeCacheLoad(observation) {
+    const current = cacheLoadStatus(observation, schedulerNow());
+    if (current && cacheLoad && (!sameIdentity(current.progress, cacheLoad.progress) ||
+        current.progress.request_id !== cacheLoad.progress.request_id)) return undefined;
+    if (current) {
+      cacheLoad = { ...current, lines: [...current.lines], progress: structuredClone(current.progress) };
+    }
+    return current;
   }
 
   function closeWait(at) {
@@ -319,6 +332,7 @@ export function startCompactionProgress(ctx, {
         id === activeWaitId && activeWaitStarted !== undefined ? at - activeWaitStarted : 0)) }]));
     return { ...identity, state, phase, elapsedMs: Object.values(phaseTimings).reduce((sum, value) => sum + value.elapsedMs, 0),
       phases: phaseTimings, waitPhases: waitPhaseTimings, tokens: { ...tokens }, reusedCheckpoint,
+      ...(cacheLoad ? { cacheLoadProgress: structuredClone(cacheLoad.progress) } : {}),
       transcriptAppended, durableCommit, finishRequested, forcedCheckpoint,
       ...(typeof finishAvailable === "boolean" ? { finishAvailable } : {}),
       ...(finishReason ? { finishReason } : {}),
@@ -326,8 +340,23 @@ export function startCompactionProgress(ctx, {
       ...(removedBytes === undefined ? {} : { removedBytes }) };
   }
 
-  function pushWaitLines(lines, report) {
+  function pushCacheLoadLines(lines, liveCacheLoad) {
+    if (!cacheLoad) return;
+    const complete = cacheLoad.progress.status === "complete";
+    const failed = cacheLoad.progress.status === "failed";
+    const active = state === "running" && phase === "wait" && liveCacheLoad?.progress.status === "loading";
+    const marker = failed ? "!" : complete ? "✓" : active ? "›" : "·";
+    const [summary, ...components] = cacheLoad.lines;
+    const label = cacheLoad.progress.workers === 0
+      ? "Copy cached context into RAM:" : "Load cached context from disk:";
+    lines.push(`  ${marker} ${summary.replace(/^Cache load:/, label)}` +
+      (failed ? " · failed" : !complete && !active ? " · last observed" : ""));
+    for (const component of components) lines.push(`    ${component}`);
+  }
+
+  function pushWaitLines(lines, report, liveCacheLoad) {
     for (const [id, label] of WAIT_STAGES) {
+      if (id === "restore") pushCacheLoadLines(lines, liveCacheLoad);
       const timing = report.waitPhases[id];
       if (!ALWAYS_VISIBLE_WAIT_STAGES.has(id) && !timing.observed) continue;
       const current = state === "running" && phase === "wait" && id === activeWaitId && activeWaitStarted !== undefined;
@@ -354,10 +383,14 @@ export function startCompactionProgress(ctx, {
     if (!force && at - lastRender < TICK_MS) return;
     lastRender = at;
     observeWait(at, observation);
+    const liveCacheLoad = state === "running" && ["wait", "generate", "finalize"].includes(phase)
+      ? observeCacheLoad(observation) : undefined;
     const report = snapshot(at);
     const label = ["generate", "finalize"].includes(phase) && generationWait
       ? phase === "finalize" ? "Checkpoint finalization paused" : "Checkpoint generation paused" :
-      phase === "wait" && activeWaitId ? waitStageLabel(activeWaitId) : stageLabel(phase);
+      phase === "wait" && activeWaitId ?
+        activeWaitId === "cache_lookup" && liveCacheLoad?.progress.status === "loading"
+          ? liveCacheLoad.phase : waitStageLabel(activeWaitId) : stageLabel(phase);
     const outcome = state === "running" ? label : {
       complete: "Compacted", failed: `Failed at: ${label}`, cancelled: "Cancelled; transcript retained",
       cleanup_pending: "Compacted; snapshot cleanup pending", commit_unconfirmed: "Conversation commit unconfirmed",
@@ -369,7 +402,7 @@ export function startCompactionProgress(ctx, {
         const stage = report.phases[id];
         if (id === "finalize" && !finishRequested && ["pending", "skipped"].includes(stage.state)) continue;
         if (id === "wait" && !["pending", "skipped"].includes(stage.state)) {
-          pushWaitLines(lines, report);
+          pushWaitLines(lines, report, liveCacheLoad);
         } else {
           const name = stageLabel(id);
           lines.push(`  ${id === phase ? "›" : stage.state === "done" ? "✓" : "·"} ${name}: ` +
@@ -390,6 +423,7 @@ export function startCompactionProgress(ctx, {
         }
       }
       lines.push(completed.join(" · "));
+      pushCacheLoadLines(lines);
     }
     if (validCount(tokens.inputTokens)) {
       lines.push(validCount(tokens.cacheRead) ?

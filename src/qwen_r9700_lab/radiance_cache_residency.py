@@ -378,7 +378,7 @@ def public_worker_status(worker):
     }
 
 
-def public_request_phases(phases):
+def public_request_phases(phases, *, include_progress=False):
     """Keep internal checkpoint diagnostics out of the stable Pi v2 wire schema.
 
     Already-running Pi/VM readers validate exact keys. Backend-only additions
@@ -389,6 +389,8 @@ def public_request_phases(phases):
         return phases
     result = dict(phases)
     internal = {"response_end_tokens", "local_response_end_tokens"}
+    if not include_progress:
+        internal.add("cache_load_progress")
     for key in ("requests", "recent"):
         rows = phases.get(key)
         if isinstance(rows, list):
@@ -699,6 +701,7 @@ def main():
     global BACKEND_CONTAINER
     options = argparse.ArgumentParser(description=__doc__)
     options.add_argument("--once", action="store_true")
+    options.add_argument("--detailed-phases", action="store_true")
     options.add_argument("--container", default=BACKEND_CONTAINER)
     options = options.parse_args(sys.argv[4:])
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", options.container):
@@ -740,15 +743,19 @@ def main():
         tail = optional_json("/dev/shm/qwen-radiance-snapshot-tail.json")
         scheduler = observe_idle_scheduler(scheduler, tail)
         round_acceptance.read()
-        phases = restore_last_round_acceptance(public_request_phases(phases), round_acceptance)
+        detailed = restore_last_round_acceptance(public_request_phases(phases, include_progress=True), round_acceptance)
+        phases = public_request_phases(detailed)
         coverage = (
             probe.sample(scheduler, worker, tail, disk_inventory=disk_inventory,
                          completion_status=completion_status) if probe else None
         )
+        values = (scheduler, public_worker_status(worker), legacy_sample(coverage), coverage, phases)
+        if options.detailed_phases:
+            values += (detailed,)
         print(
             "\t".join(
                 json.dumps(value, separators=(",", ":"))
-                for value in (scheduler, public_worker_status(worker), legacy_sample(coverage), coverage, phases)
+                for value in values
             ),
             flush=True,
         )

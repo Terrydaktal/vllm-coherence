@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import functools
 import hashlib
@@ -24,6 +25,7 @@ from qwen_radiance_cache import (
     cache_telemetry,
     identity,
     private_control_directory,
+    read_parallelism,
     real_directory,
     retire_incompatible_snapshots,
 )
@@ -354,21 +356,31 @@ class ChatFileSystemTierManager(FileSystemTierManager):
 
     def _load(self, state, keys, offsets):
         view = self._primary_kv_view.cast("B")
+        if len(keys) != len(offsets):
+            raise ValueError("snapshot load key and offset counts differ")
         for offset in offsets:
             if offset < 0 or offset + self._block_size > len(view):
                 raise ValueError("snapshot load offset out of bounds")
         names = [object_key(key) for key in keys]
         ram = self._ram_blocks(state["store"], names)
         disk_names = [name for name in names if name not in ram]
-        disk = iter(state["store"].read_many(disk_names, self._block_size))
-        for name, offset in zip(names, offsets, strict=True):
-            data = ram.get(name)
-            if data is None:
-                data = next(disk)
-            # Verify before touching the destination. Corruption cannot expose
-            # a partly decoded recurrent state as a successful restored block.
-            with cache_telemetry.span("restore_buffer_copy", bytes=len(data), resources=True):
-                view[offset : offset + self._block_size] = data
+        workers = read_parallelism(self._block_size, len(disk_names))
+        with (
+            cache_telemetry.cache_load(
+                total_blocks=len(names), total_bytes=len(names) * self._block_size, workers=workers,
+            ) as progress,
+            contextlib.closing(state["store"].read_many(disk_names, self._block_size)) as disk,
+        ):
+            for name, offset in zip(names, offsets, strict=True):
+                data = ram.get(name)
+                if data is None:
+                    data = next(disk)
+                # Verify before touching the destination. Corruption cannot
+                # expose a partly decoded state as a successful restored job.
+                with cache_telemetry.span("restore_buffer_copy", bytes=len(data), resources=True):
+                    view[offset : offset + self._block_size] = data
+                if progress is not None:
+                    progress.block_completed(len(data))
 
     @synchronized
     def _submit(self, job, is_store):
@@ -388,14 +400,13 @@ class ChatFileSystemTierManager(FileSystemTierManager):
         task = functools.partial(
             operation, state, keys, [int(bid) * self._block_size for bid in job.block_ids]
         )
-        if cache_telemetry.trace_id() is not None:
-            context = cache_telemetry.request_context(
-                job.req_context.req_id, state["store"].chat, job.job_id,
-                is_store=is_store, size=len(keys) * self._block_size, block_count=len(keys),
-            )
-            queued = time.monotonic_ns()
-            task = functools.partial(cache_telemetry.task, task, context, queued)
-            cache_telemetry.emit("cpu_submit", **context)
+        context = cache_telemetry.request_context(
+            job.req_context.req_id, state["store"].chat, job.job_id,
+            is_store=is_store, size=len(keys) * self._block_size, block_count=len(keys),
+        )
+        queued = time.monotonic_ns()
+        task = functools.partial(cache_telemetry.task, task, context, queued)
+        cache_telemetry.emit("cpu_submit", **context)
         enqueue = self._pool.enqueue_store if is_store else self._pool.enqueue_load
         with cache_telemetry.span("cpu_enqueue", job_kind="filesystem", job_id=job.job_id):
             enqueue(job.job_id, 1, [task])

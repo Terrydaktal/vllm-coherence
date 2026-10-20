@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -8,6 +8,8 @@ import {
 	parseSchedulerSample,
 	parseCombinedTelemetry,
 	parseRequestPhases,
+	cacheLoadStatus,
+	formatGenerationStats,
 	requestPhaseStatus,
 	SchedulerTelemetry,
 	schedulerStatusForChat,
@@ -288,6 +290,13 @@ test("scheduler telemetry lazy-starts on a request and binds its content-free sa
 		generation: identity.generation,
 	};
 	writeFileSync(join(state, "scheduler-v2.json"), JSON.stringify(payload), { mode: 0o600 });
+	const detailedObservation = cacheLoadObservation(now);
+	Object.assign(detailedObservation.requestPhase, { chat_id: identity.id, generation: identity.generation });
+	Object.assign(detailedObservation.requestPhase.cache_load_progress, { chat_id: identity.id, generation: identity.generation });
+	const detailedPhases = phaseEnvelope(detailedObservation, now);
+	const legacyPhases = structuredClone(detailedPhases);
+	delete legacyPhases.requests[0].cache_load_progress;
+	writeFileSync(join(state, "request-phases.json"), JSON.stringify(legacyPhases), { mode: 0o600 });
 
 	const previous = {
 		state: process.env.QWEN_RADIANCE_GPU_TEMPERATURE_STATE,
@@ -329,7 +338,15 @@ test("scheduler telemetry lazy-starts on a request and binds its content-free sa
 		renameSync(stage, join(state, "scheduler-v2.json"));
 		await new Promise((resolve) => setTimeout(resolve, 30));
 		assert.ok(wakes > 0, "atomic replacement wakes the UI without a polling tick");
-		assert.equal(telemetry.read(now + 50).request.state, "running", "file event invalidates the half-second cache");
+			assert.equal(telemetry.read(now + 50).request.state, "running", "file event invalidates the half-second cache");
+			assert.equal(telemetry.read(now + 50).requestPhase.cache_load_progress, undefined);
+			const beforeDetailedWake = wakes;
+			writeFileSync(stage, JSON.stringify(detailedPhases), { mode: 0o600 });
+			renameSync(stage, join(state, "request-phases-detailed.json"));
+			await new Promise((resolve) => setTimeout(resolve, 30));
+			assert.ok(wakes > beforeDetailedWake, "a detailed-only replacement wakes the UI");
+			assert.equal(telemetry.read(now + 60).requestPhase.cache_load_progress.job_id, 7,
+				"detailed file events refresh progress within the cached scheduler interval");
 		unsubscribe();
 		telemetry.stop();
 		assert.equal(telemetry.watcher, undefined);
@@ -403,4 +420,273 @@ test("prefill progress advances through only the uncached suffix", () => {
   row.cached_tokens = null;
   row.computed_tokens = 2048;
   assert.match(requestPhaseStatus(sample).detail, /2,048 \/ 191,632 prompt tok prepared · cached split pending/);
+});
+
+function cacheLoadObservation(now) {
+	const row = { chat_id: chat.id, generation: chat.generation, request_id: "e".repeat(64),
+		phase: "cache_lookup", blocker: null, input_tokens: 10_000, computed_tokens: 0, cached_tokens: null,
+		elapsed_ms: 2500, phase_elapsed_ms: 2400, first_token_ms: null, timings_ms: { admission: 100 } };
+	row.cache_load_progress = {
+		request_id: row.request_id, chat_id: row.chat_id, generation: row.generation, updated_at_ms: now,
+		job_id: 7, total_blocks: 4, completed_blocks: 2, total_bytes: 64 * 1024 ** 2, completed_bytes: 32 * 1024 ** 2,
+		workers: 4, elapsed_ms: 2400, status: "loading",
+		stage_ms: { disk_read: 2800, decompression: 1900, checksum: 600, restore_buffer_copy: 900 },
+		stage_wall_ms: { disk_read: 1400, decompression: 1200, checksum: 400, restore_buffer_copy: 600 },
+		active_stages: { disk_read: 2, decompression: 1, checksum: 1, restore_buffer_copy: 0 },
+	};
+	return { requestPhase: row, phaseObservedAt: now };
+}
+
+function phaseEnvelope(observation, now) {
+	return { schema: "urn:qwen-r9700:request-phases:v1", pid: 1234,
+		updated_at: now / 1000, requests: [observation.requestPhase], recent: [] };
+}
+
+test("cache load status shows simultaneous stages and independent wall and worker timings", () => {
+	const now = 1_800_000_000_000;
+	const observation = cacheLoadObservation(now);
+	const parsed = parseRequestPhases(JSON.stringify(phaseEnvelope(observation, now)), 1234, now);
+	observation.requestPhase = parsed.requests[0];
+	const v2Envelope = phaseEnvelope(observation, now);
+	v2Envelope.schema = "urn:qwen-r9700:request-phases:v2";
+	v2Envelope.requests = [{ ...observation.requestPhase, last_round_ms: null, generation_rounds: 0,
+		draft_tokens: 0, accepted_tokens: 0, acceptance_rate: null, last_acceptance_rate: null, acceptance_rate_3s: null }];
+	assert.equal(parseRequestPhases(JSON.stringify(v2Envelope), 1234, now).requests[0].cache_load_progress.job_id, 7);
+	const load = cacheLoadStatus(observation, now);
+	assert.equal(load.phase, "loading cached context from disk");
+	assert.match(load.detail, /^2\.4s wall · read \(2 active\) \+ decompress \(1 active\) \+ SHA-256 verify \(1 active\)/);
+	assert.match(load.detail, /2 \/ 4 blocks · 32\.0 MiB \/ 64\.0 MiB · 4 workers/);
+	assert.match(load.detail, /read 1\.4s · decompress 1\.2s · SHA-256 verify 0\.4s · RAM copy 0\.6s · stages overlap/);
+	assert.deepEqual(load.lines.slice(1), [
+		"Disk read: 1.4s wall (2.8s worker time)",
+		"Decompression: 1.2s wall (1.9s worker time)",
+		"SHA-256 verification: 0.4s wall (0.6s worker time)",
+		"RAM restore-buffer copy: 0.6s wall (0.9s worker time)",
+	]);
+	const status = requestPhaseStatus(observation, now);
+	assert.deepEqual(status, { phase: load.phase, detail: load.detail });
+	assert.doesNotMatch(`${status.phase} · ${status.detail}`, /\n|6\.2s wall|3\.6s wall/);
+	load.progress.stage_ms.disk_read = 0;
+	load.progress.active_stages.disk_read = 0;
+	assert.equal(observation.requestPhase.cache_load_progress.stage_ms.disk_read, 2800);
+	assert.equal(observation.requestPhase.cache_load_progress.active_stages.disk_read, 2);
+});
+
+test("cache load telemetry rejects malformed, stale, future, and cross-request progress", () => {
+	const now = 1_800_000_000_000;
+	const source = cacheLoadObservation(now).requestPhase.cache_load_progress;
+	const invalid = [
+		{ ...source, request_id: "f".repeat(64) },
+		{ ...source, chat_id: otherChat },
+		{ ...source, generation: "d".repeat(64) },
+		{ ...source, updated_at_ms: now - 5001 },
+		{ ...source, updated_at_ms: now + 5001 },
+		{ ...source, job_id: "7" },
+		{ ...source, job_id: -1 },
+		{ ...source, completed_blocks: 5 },
+		{ ...source, completed_bytes: source.total_bytes + 1 },
+		{ ...source, total_bytes: Number.MAX_SAFE_INTEGER + 1 },
+		{ ...source, workers: 1025 },
+		{ ...source, elapsed_ms: -1 },
+		{ ...source, elapsed_ms: Number.MAX_SAFE_INTEGER + 1 },
+		{ ...source, status: "guessing" },
+		{ ...source, status: "complete" },
+		{ ...source, stage_ms: { ...source.stage_ms, prompt: "private" } },
+		{ ...source, stage_wall_ms: { ...source.stage_wall_ms, checksum: -1 } },
+		{ ...source, stage_wall_ms: [1400, 1200, 400, 600] },
+		{ ...source, active_stages: { ...source.active_stages, disk_read: 1025 } },
+		{ ...source, active_stages: { ...source.active_stages, checksum: 0.5 } },
+		{ ...source, private_prompt: "must not be accepted" },
+	];
+	for (const progress of invalid) {
+		const observation = cacheLoadObservation(now);
+		observation.requestPhase.cache_load_progress = progress;
+		assert.throws(() => parseRequestPhases(JSON.stringify(phaseEnvelope(observation, now)), 1234, now));
+		assert.equal(cacheLoadStatus(observation, now), undefined);
+		assert.equal(requestPhaseStatus(observation, now).phase, "checking reusable context");
+	}
+	const observation = cacheLoadObservation(now);
+	assert.equal(cacheLoadStatus({ ...observation, phaseObservedAt: now - 5001 }, now), undefined);
+	assert.equal(cacheLoadStatus({ ...observation, available: false }, now), undefined);
+	assert.equal(cacheLoadStatus({ ...observation, request: { chat_id: otherChat, generation: chat.generation } }, now), undefined);
+	assert.equal(cacheLoadStatus({ ...observation, requestPhase: undefined }, now), undefined);
+	assert.equal(cacheLoadStatus({ ...observation, lastRequestTiming: observation.requestPhase, requestPhase: undefined }, now), undefined);
+});
+
+test("completed cache load remains recorded during GPU restore and prefill while generation stays concise", () => {
+	const now = 1_800_000_000_000;
+	const observation = cacheLoadObservation(now);
+	const progress = observation.requestPhase.cache_load_progress;
+	progress.status = "complete";
+	progress.updated_at_ms = now - 60_000;
+	progress.completed_blocks = progress.total_blocks;
+	progress.completed_bytes = progress.total_bytes;
+	progress.active_stages = { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 0 };
+	observation.requestPhase.phase = "cache_restore";
+	observation.requestPhase.phase_elapsed_ms = 1300;
+	parseRequestPhases(JSON.stringify(phaseEnvelope(observation, now)), 1234, now);
+	assert.equal(cacheLoadStatus(observation, now).phase, "cached context loaded into RAM");
+	let status = requestPhaseStatus(observation, now);
+	assert.match(status.detail, /^1\.3s GPU restore · cache load 2\.4s wall/);
+	assert.match(status.detail, /SHA-256 verify 0\.4s · RAM copy 0\.6s/);
+	observation.requestPhase.phase = "prefill";
+	observation.requestPhase.timings_ms.cache_restore = 1800;
+	observation.requestPhase.cached_tokens = 8000;
+	observation.requestPhase.computed_tokens = 8500;
+	status = requestPhaseStatus(observation, now);
+	assert.match(status.detail, /500 \/ 2,000 uncached tok processed · 8,000 reused/);
+	assert.match(status.detail, /cache load 2\.4s wall.*GPU restore 1\.8s/);
+	assert.doesNotMatch(status.detail, /active|\n/);
+	observation.requestPhase.phase = "generate";
+	assert.deepEqual(requestPhaseStatus(observation, now), { phase: "generating model output", detail: "1.3s" });
+	observation.requestPhase.phase = "complete";
+	assert.equal(requestPhaseStatus(observation, now), undefined);
+	progress.status = "failed";
+	observation.requestPhase.phase = "cache_lookup";
+	assert.equal(cacheLoadStatus(observation, now).phase, "cached context load failed");
+});
+
+test("legacy request-phase samples may omit or null cache load progress", () => {
+	const now = 1_800_000_000_000;
+	for (const remove of [false, true]) {
+		const observation = cacheLoadObservation(now);
+		if (remove) delete observation.requestPhase.cache_load_progress;
+		else observation.requestPhase.cache_load_progress = null;
+		parseRequestPhases(JSON.stringify(phaseEnvelope(observation, now)), 1234, now);
+		assert.equal(cacheLoadStatus(observation, now), undefined);
+		assert.deepEqual(requestPhaseStatus(observation, now), { phase: "checking reusable context", detail: "2.4s" });
+	}
+});
+
+test("RAM-only restore reports the copy with no disk workers", () => {
+	const now = 1_800_000_000_000;
+	const observation = cacheLoadObservation(now);
+	const progress = observation.requestPhase.cache_load_progress;
+	Object.assign(progress, { workers: 0, total_blocks: 2, completed_blocks: 1,
+		total_bytes: 64 * 1024 ** 2, completed_bytes: 32 * 1024 ** 2,
+		stage_ms: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 900 },
+		stage_wall_ms: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 900 },
+		active_stages: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 1 } });
+	parseRequestPhases(JSON.stringify(phaseEnvelope(observation, now)), 1234, now);
+	const load = cacheLoadStatus(observation, now);
+	assert.equal(load.phase, "copying cached context into RAM");
+	assert.match(load.detail, /RAM copy \(1 active\).*0 workers/);
+	assert.match(load.detail, /1 \/ 2 blocks · 32\.0 MiB \/ 64\.0 MiB/);
+	assert.doesNotMatch(load.detail, /read \(\d active\)|decompress \(\d active\)/);
+});
+
+function separatePhaseFeeds(t, combinedFeed = true) {
+	const now = 1_800_000_000_000;
+	const root = mkdtempSync(join(tmpdir(), "qwen-detailed-phase-feed-"));
+	const state = join(root, "state");
+	mkdirSync(state, { mode: 0o700 });
+	const detailed = phaseEnvelope(cacheLoadObservation(now), now);
+	detailed.schema = "urn:qwen-r9700:request-phases:v2";
+	Object.assign(detailed.requests[0], { last_round_ms: 9, generation_rounds: 8, draft_tokens: 48, accepted_tokens: 24,
+		acceptance_rate: 0.5, last_acceptance_rate: 0.25, acceptance_rate_3s: 0.1 });
+	const legacy = structuredClone(detailed);
+	delete legacy.requests[0].cache_load_progress;
+	Object.assign(legacy.requests[0], { phase: "cache_restore", phase_elapsed_ms: 1300,
+		last_round_ms: 53.2, acceptance_rate_3s: 0.46 });
+	const combined = { schema: "urn:qwen-r9700:telemetry:v1", observed_at_ms: now,
+		scheduler: scheduler(now), worker: worker(now), phases: legacy, cache: null, temperature: null };
+	const writeLegacy = () => {
+		writeFileSync(join(state, "request-phases.json"), JSON.stringify(legacy), { mode: 0o600 });
+		if (combinedFeed) writeFileSync(join(state, "telemetry-v1.json"), JSON.stringify(combined), { mode: 0o600 });
+		else writeFileSync(join(state, "scheduler-v2.json"), JSON.stringify(sample(now)), { mode: 0o600 });
+	};
+	const writeDetailed = (value = detailed) => writeFileSync(join(state, "request-phases-detailed.json"), JSON.stringify(value), { mode: 0o600 });
+	writeLegacy();
+	writeDetailed();
+	const telemetry = new SchedulerTelemetry();
+	telemetry.config = { stateDirectory: state };
+	telemetry.chat = chat;
+	t.after(() => { telemetry.stop(); rmSync(root, { recursive: true, force: true }); });
+	return { now, state, detailed, legacy, combined, telemetry, writeLegacy, writeDetailed };
+}
+
+test("separate detailed phases add cache progress while preserving legacy round and acceptance metrics", (t) => {
+	for (const combinedFeed of [true, false]) {
+		const f = separatePhaseFeeds(t, combinedFeed);
+		const legacyText = readFileSync(join(f.state, "request-phases.json"), "utf8");
+		const observation = f.telemetry.read(f.now);
+		assert.equal(observation.requestPhase.phase, "cache_restore", "detailed lookup stage cannot replace newer legacy GPU stage");
+		assert.equal(observation.requestPhase.phase_elapsed_ms, 1300);
+		assert.equal(observation.requestPhase.last_round_ms, 53.2);
+		assert.equal(observation.requestPhase.acceptance_rate_3s, 0.46);
+		assert.equal(observation.requestPhase.cache_load_progress.job_id, 7);
+		assert.equal(formatGenerationStats(observation), "round 53.2 ms • acceptance 46.0%");
+		assert.match(requestPhaseStatus(observation, f.now).detail, /^1\.3s GPU restore · cache load 2\.4s wall/);
+		assert.equal(readFileSync(join(f.state, "request-phases.json"), "utf8"), legacyText);
+		assert.deepEqual(parseRequestPhases(legacyText, 1234, f.now), f.legacy);
+		assert.ok(f.legacy.requests.every((row) => !Object.hasOwn(row, "cache_load_progress")));
+		assert.ok(f.combined.phases.requests.every((row) => !Object.hasOwn(row, "cache_load_progress")));
+		f.detailed.updated_at -= 0.1;
+		f.writeDetailed();
+		assert.equal(f.telemetry.read(f.now + 101).requestPhase.cache_load_progress.job_id, 7,
+			"one sampler tick of detailed-feed lag is tolerated");
+		f.detailed.requests[0].cache_load_progress = null;
+		f.writeDetailed();
+		const withoutProgress = f.telemetry.read(f.now + 202);
+		assert.equal(withoutProgress.requestPhase.cache_load_progress, undefined);
+		assert.equal(formatGenerationStats(withoutProgress), "round 53.2 ms • acceptance 46.0%");
+	}
+});
+
+test("unavailable or rejected detailed feeds preserve legacy generation metrics", (t) => {
+	const mutations = [
+		(value) => { value.pid = 5678; },
+		(value, now) => { value.updated_at = (now - 6000) / 1000; },
+		(value, now) => { value.updated_at = (now - 1100) / 1000; },
+		(value, now) => { value.updated_at = (now + 6000) / 1000; },
+		(value) => { value.requests[0].request_id = "f".repeat(64); value.requests[0].cache_load_progress.request_id = "f".repeat(64); },
+		(value) => { value.requests[0].chat_id = otherChat; value.requests[0].cache_load_progress.chat_id = otherChat; },
+		(value) => { value.requests[0].generation = "d".repeat(64); value.requests[0].cache_load_progress.generation = "d".repeat(64); },
+		(value) => { value.requests[0].cache_load_progress.stage_ms.checksum = -1; },
+		(value) => { value.requests.push({ ...value.requests[0], private_prompt: "invalid unrelated detail row" }); },
+	];
+	for (const mutate of mutations) {
+		const f = separatePhaseFeeds(t);
+		mutate(f.detailed, f.now);
+		f.writeDetailed();
+		const observation = f.telemetry.read(f.now);
+		assert.equal(observation.requestPhase.cache_load_progress, undefined);
+		assert.equal(formatGenerationStats(observation), "round 53.2 ms • acceptance 46.0%");
+		assert.equal(observation.requestPhase.phase, "cache_restore");
+	}
+	for (const fault of ["missing", "malformed", "unsafe", "oversized", "symlink"]) {
+		const f = separatePhaseFeeds(t, false);
+		const path = join(f.state, "request-phases-detailed.json");
+		if (fault === "missing") rmSync(path);
+		if (fault === "malformed") writeFileSync(path, "{bad json");
+		if (fault === "unsafe") chmodSync(path, 0o666);
+		if (fault === "oversized") writeFileSync(path, " ".repeat(64 * 1024 + 1));
+		if (fault === "symlink") {
+			renameSync(path, join(f.state, "synthetic-detail.json"));
+			symlinkSync("synthetic-detail.json", path);
+		}
+		const observation = f.telemetry.read(f.now);
+		assert.equal(observation.requestPhase.cache_load_progress, undefined, fault);
+		assert.equal(formatGenerationStats(observation), "round 53.2 ms • acceptance 46.0%", fault);
+	}
+});
+
+test("detailed feed never supplies an unmatched active request and can augment identical recent timing", (t) => {
+	const f = separatePhaseFeeds(t);
+	f.legacy.recent = [{ ...f.legacy.requests[0], phase: "complete" }];
+	f.legacy.requests = [];
+	f.detailed.requests[0].cache_load_progress.status = "complete";
+	f.detailed.requests[0].cache_load_progress.updated_at_ms = f.now - 60_000;
+	f.detailed.requests[0].cache_load_progress.active_stages = { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 0 };
+	f.writeLegacy();
+	f.writeDetailed();
+	const observation = f.telemetry.read(f.now);
+	assert.equal(observation.requestPhase, undefined);
+	assert.equal(observation.lastRequestTiming.cache_load_progress.status, "complete");
+	assert.equal(formatGenerationStats(observation), "round 53.2 ms • acceptance 46.0%");
+	assert.equal(cacheLoadStatus(observation, f.now), undefined);
+	f.combined.phases = null;
+	f.writeLegacy();
+	f.telemetry.lastReadAt = 0;
+	assert.equal(f.telemetry.read(f.now + 101).requestPhase, undefined);
 });

@@ -42,6 +42,11 @@ _round = {}
 _gpu_origins = {}
 _runtime_hooks_installed = False
 _completion_baseline = None
+_cache_loads = {}
+_cache_loads_lock = threading.Lock()
+_CACHE_LOAD_STAGES = ("disk_read", "decompression", "checksum", "restore_buffer_copy")
+_CACHE_LOAD_INTERVAL_NS = 100_000_000
+_MAX_CACHE_LOADS = 64
 
 # No paths, exception messages, keys, token values, pointers or tensor contents.
 _IDENTITIES = {
@@ -1193,11 +1198,182 @@ def emit_at(stage, start_ns, end_ns, **values):
             _recorder.dropped += 1
 
 
+class CacheLoadProgress:
+    """Bounded per-request progress; never read cache contents or do file I/O.
+
+    stage_ms is accumulated worker time; stage_wall_ms is each stage's time
+    union. Different stages can overlap, so neither is an additive breakdown
+    of elapsed_ms. Only verified blocks copied into their destination count.
+    """
+
+    def __init__(self, context, *, total_blocks, total_bytes, workers):
+        self.identity = {name: context[name] for name in ("request_id", "chat_id", "generation", "job_id")}
+        self.total_blocks, self.total_bytes, self.workers = total_blocks, total_bytes, workers
+        self.started_ns = time.monotonic_ns()
+        self.finished_ns = None
+        self.completed_blocks = self.completed_bytes = 0
+        self.status = "loading"
+        self.lock = threading.Lock()
+        self.work_ns = dict.fromkeys(_CACHE_LOAD_STAGES, 0)
+        self.active = dict.fromkeys(_CACHE_LOAD_STAGES, 0)
+        self.completed_intervals = {stage: [] for stage in _CACHE_LOAD_STAGES}
+        self.active_starts = {stage: {} for stage in _CACHE_LOAD_STAGES}
+        self.started_counts = dict.fromkeys(_CACHE_LOAD_STAGES, 0)
+        # Each stage occurs at most once per restored block. Starts with the
+        # same measured timestamp require a multiset, not a set. These limits
+        # bound retained intervals and active starts even if a hook is misused.
+        self.stage_span_limit = max(0, total_blocks)
+        self.stage_active_limit = max(1, workers)
+        self.cached = None
+        self.sampled_ns = 0
+
+    def stage_started(self, stage, now):
+        if stage not in self.active:
+            return
+        with self.lock:
+            if self.started_counts[stage] >= self.stage_span_limit or self.active[stage] >= self.stage_active_limit:
+                raise ValueError("cache load stage exceeds its block or worker bound")
+            starts = self.active_starts[stage]
+            starts[now] = starts.get(now, 0) + 1
+            self.started_counts[stage] += 1
+            self.active[stage] += 1
+
+    @staticmethod
+    def _add_interval(intervals, start, end):
+        """Keep exact sorted, disjoint intervals, independent of callback order."""
+        if end <= start:
+            return
+        first = 0
+        while first < len(intervals) and intervals[first][1] < start:
+            first += 1
+        last = first
+        while last < len(intervals) and intervals[last][0] <= end:
+            start = min(start, intervals[last][0])
+            end = max(end, intervals[last][1])
+            last += 1
+        intervals[first:last] = [(start, end)]
+
+    def stage_finished(self, stage, start, end):
+        if stage not in self.active:
+            return
+        with self.lock:
+            starts = self.active_starts[stage]
+            remaining = starts.get(start, 0)
+            if not remaining:
+                raise ValueError("cache load stage completion has no matching start")
+            if remaining == 1:
+                del starts[start]
+            else:
+                starts[start] = remaining - 1
+            self.work_ns[stage] += max(0, end - start)
+            self.active[stage] -= 1
+            self._add_interval(self.completed_intervals[stage], start, end)
+
+    def _stage_wall_ns(self, stage, end):
+        # Called only under self.lock, at the existing 100ms snapshot rate.
+        # In-progress workers extend to the snapshot boundary; completed spans
+        # always use their actual timestamps, even if delivered out of order.
+        intervals = list(self.completed_intervals[stage])
+        for start in self.active_starts[stage]:
+            self._add_interval(intervals, start, end)
+        return sum(finish - start for start, finish in intervals)
+
+    def block_completed(self, size):
+        with self.lock:
+            self.completed_blocks += 1
+            self.completed_bytes += size
+
+    def finish(self, success):
+        with self.lock:
+            self.finished_ns = time.monotonic_ns()
+            complete = success and self.completed_blocks == self.total_blocks and self.completed_bytes == self.total_bytes
+            self.status = "complete" if complete else "failed"
+            self.cached = None
+
+    def snapshot(self):
+        with self.lock:
+            now = time.monotonic_ns()
+            if self.cached is not None and (self.finished_ns is not None or now - self.sampled_ns < _CACHE_LOAD_INTERVAL_NS):
+                return self.cached
+            end = now if self.finished_ns is None else self.finished_ns
+            self.cached = {
+                **self.identity,
+                "updated_at_ms": int(time.time() * 1000),
+                "total_blocks": self.total_blocks,
+                "completed_blocks": self.completed_blocks,
+                "total_bytes": self.total_bytes,
+                "completed_bytes": self.completed_bytes,
+                "workers": self.workers,
+                "stage_ms": {key: round(value / 1e6, 3) for key, value in self.work_ns.items()},
+                "stage_wall_ms": {
+                    key: round(self._stage_wall_ns(key, end) / 1e6, 3)
+                    for key in _CACHE_LOAD_STAGES
+                },
+                "active_stages": dict(self.active),
+                "elapsed_ms": round(max(0, end - self.started_ns) / 1e6, 3),
+                "status": self.status,
+            }
+            self.sampled_ns = now
+            return self.cached
+
+
+def capture_context():
+    """Carry the submitting job identity and progress into parallel workers."""
+    return (dict(getattr(_local, "context", {})), getattr(_local, "cache_load", None))
+
+
+def run_with_context(operation, captured):
+    prior = capture_context()
+    _local.context, _local.cache_load = captured
+    try:
+        return operation()
+    finally:
+        _local.context, _local.cache_load = prior
+
+
+@contextlib.contextmanager
+def cache_load(*, total_blocks, total_bytes, workers):
+    progress = None
+    context = getattr(_local, "context", {})
+    try:
+        if all(name in context for name in ("request_id", "chat_id", "generation", "job_id")):
+            progress = CacheLoadProgress(context, total_blocks=total_blocks, total_bytes=total_bytes, workers=workers)
+            with _cache_loads_lock:
+                if len(_cache_loads) >= _MAX_CACHE_LOADS:
+                    expired = next((key for key, value in _cache_loads.items() if value.finished_ns is not None), None)
+                    if expired is not None:
+                        _cache_loads.pop(expired)
+                if len(_cache_loads) < _MAX_CACHE_LOADS or context["request_id"] in _cache_loads:
+                    _cache_loads[context["request_id"]] = progress
+    except Exception:
+        progress = None
+    prior = getattr(_local, "cache_load", None)
+    _local.cache_load = progress
+    success = False
+    try:
+        yield progress
+        success = True
+    finally:
+        _local.cache_load = prior
+        if progress is not None:
+            progress.finish(success)
+
+
+def cache_load_progress(request_id):
+    try:
+        with _cache_loads_lock:
+            progress = _cache_loads.get(request_id)
+        return progress.snapshot() if progress is not None else None
+    except Exception:
+        return None
+
+
 class Span:
     def __init__(self, stage, values, minimum_ms=0, resources=False):
         self.recorder, self.stage = _recorder, stage
         self.values = {**getattr(_local, "context", {}), **values}
         self.minimum_ms, self.resources = minimum_ms, resources
+        self.progress = getattr(_local, "cache_load", None)
 
     def __enter__(self):
         try:
@@ -1206,8 +1382,11 @@ class Span:
             self.faults = (
                 resource.getrusage(resource.RUSAGE_THREAD) if self.resources else None
             )
+            if self.progress is not None:
+                self.progress.stage_started(self.stage, self.start)
         except Exception:
-            self.recorder.dropped += 1
+            if self.recorder is not None:
+                self.recorder.dropped += 1
             self.start = None
         return self
 
@@ -1216,7 +1395,9 @@ class Span:
             return False
         try:
             end = time.monotonic_ns()
-            if (end - self.start) / 1e6 >= self.minimum_ms:
+            if self.progress is not None:
+                self.progress.stage_finished(self.stage, self.start, end)
+            if self.recorder is not None and (end - self.start) / 1e6 >= self.minimum_ms:
                 faults = None
                 if self.faults is not None:
                     after = resource.getrusage(resource.RUSAGE_THREAD)
@@ -1233,7 +1414,8 @@ class Span:
                     faults=faults,
                 )
         except Exception:
-            self.recorder.dropped += 1
+            if self.recorder is not None:
+                self.recorder.dropped += 1
         return False
 
 
@@ -1243,7 +1425,7 @@ _NO_SPAN = contextlib.nullcontext()
 def span(stage, *, minimum_ms=0, resources=False, **values):
     return (
         Span(stage, values, minimum_ms, resources)
-        if _recorder is not None
+        if _recorder is not None or getattr(_local, "cache_load", None) is not None
         else _NO_SPAN
     )
 
@@ -1292,16 +1474,15 @@ def request_context(req_id, chat, job_id, *, is_store, size, block_count):
 
 def task(operation, context, queued_ns):
     """Capture the submitter context; do not attribute a parked chat to the active one."""
-    if _recorder is None:
-        return operation()
     prior = getattr(_local, "context", {})
     _local.context = context
     try:
         now = time.monotonic_ns()
-        try:
-            _recorder.emit("cpu_queue", queued_ns, now, context)
-        except Exception:
-            _recorder.dropped += 1
+        if _recorder is not None:
+            try:
+                _recorder.emit("cpu_queue", queued_ns, now, context)
+            except Exception:
+                _recorder.dropped += 1
         with span("cpu_job", resources=True):
             return operation()
     finally:

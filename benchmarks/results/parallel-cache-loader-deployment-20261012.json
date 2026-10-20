@@ -1,0 +1,78 @@
+{
+  "schema": "urn:coherence:parallel-cache-loader-deployment:v1",
+  "status": "PASS",
+  "observed_at": "2026-10-11T23:33:43.524683+00:00",
+  "runtime_abi": "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6",
+  "authenticated_manifest_abi": "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6",
+  "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+  "worker": "speed_candidate_worker.SpeedCandidateWorker",
+  "installed_source_hashes": {
+    "qwen_radiance_cache.py": "efe9c4c2dd62bf065f08eb276c6d19ce215b9f069b38b4ee7fd690c6ad9e2313",
+    "qwen_radiance_cache_telemetry.py": "3e8ba475c0e4996a1c214d08a154fe9b57af64dda0ceb17cbb2873901ee06121",
+    "qwen_radiance_chat_tier.py": "b5374b9e3f5ce1b7e272607946561d37f177fd8d4d4d53b2523fd032815231a0",
+    "qwen_radiance_fair_scheduler.py": "3e51431c60ad71ff871391fcf0689e9cd067a5f52b3c6f171892164ad71e1064",
+    "qwen_radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
+    "qwen_radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "qwen_radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71",
+    "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc"
+  },
+  "worker_processes": [
+    {
+      "pid": 1,
+      "name": "vllm",
+      "THP_enabled": "0"
+    },
+    {
+      "pid": 946,
+      "name": "VLLM::EngineCor",
+      "THP_enabled": "0"
+    }
+  ],
+  "health_status": 200,
+  "qualification_manifest_sha256": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
+  "smoke_status": "PASS",
+  "smoke": [
+    {
+      "status": 200,
+      "streamed": true,
+      "natural_stop": true,
+      "prompt_tokens": 32,
+      "completion_tokens": 14,
+      "finish_reason": "stop",
+      "first_content_ms": 2180.585,
+      "elapsed_ms": 2253.003,
+      "output_sha256": "bbd953431fcca97bc0473cdc088d56ed5f2b2b07671b06121713e24511cbd667"
+    }
+  ],
+  "vm_transport": {
+    "release": "244e785706945ff6a52d",
+    "manifest_sha256": "244e785706945ff6a52d9bfb26cb71ecdde36c253ca7e48ccef8436b4ec9917f",
+    "module_hashes": {
+      "integrations/pi/qwen-radiance-scheduler-telemetry.mjs": "6197b63de21254a4e806fae0fe577f828595170007dc2eb9d9992b47151650e1",
+      "integrations/pi/qwen-radiance-compaction-progress.mjs": "07e659a5901ab8bb0f9f4f8065f410d65860f23ae64775442df91d7041741704",
+      "scripts/radiance-telemetry.py": "96da78fc8225e864ac3ac98df76fa87dd6ceac9c76f52da9003c152b8dc359de"
+    },
+    "requests": [
+      {
+        "detailed_requested": false,
+        "http_status": 200,
+        "detailed_delivered": false,
+        "legacy_progress_keys": 0
+      },
+      {
+        "detailed_requested": true,
+        "http_status": 200,
+        "detailed_delivered": true,
+        "legacy_progress_keys": 0
+      }
+    ]
+  },
+  "cpu_checks_passed": 435,
+  "opsec_checks_passed": 44,
+  "installed_pi_checks_passed": 94,
+  "model_arithmetic_changed": false,
+  "snapshot_data_abi_changed": false,
+  "measurements": "benchmarks/results/parallel-cache-loader-20261012.json",
+  "previous_deployment": "benchmarks/results/token-continuation-deployment-20261008.json",
+  "scope": "Bounded parallel disk restoration and numeric progress only. Actual installed backend module hashes, immutable Pi bundle and both negotiated telemetry contracts verified. A short public synthetic request completed with a natural stop; it is a startup smoke, not a throughput or full-chat disk-restore benchmark. The separate 159-block CPU loader measurement retains its capture-time source hashes; later changes only correct progress interval accounting and add benchmark CLI options. No private transcript or snapshot was read. Model arithmetic, compiled GPU kernels, snapshot data format and prior numerical qualification are unchanged."
+}

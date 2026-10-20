@@ -97,7 +97,7 @@ read_temperature_sample() {
 }
 
 write_sample() {
-	local scheduler=$1 worker=$2 coverage=${3:-null} coverage_v2=${4:-null} phases=${5:-null}
+	local scheduler=$1 worker=$2 coverage=${3:-null} coverage_v2=${4:-null} phases=${5:-null} detailed=${6:-null}
 	local temperature observed stage legacy_stage telemetry_stage telemetry_signature separator
 	((${#scheduler} >= 2 && ${#scheduler} <= 32767)) || return 1
 	[[ $scheduler == \{*\} && $scheduler != *$'\n'* && $scheduler != *$'\r'* && $scheduler != *$'\t'* ]] || return 1
@@ -113,6 +113,10 @@ write_sample() {
 	if [[ $phases != "${last_phases-}" ]]; then
 		write_coverage "$phases" request-phases.json || return 1
 		last_phases=$phases
+	fi
+	if [[ $detailed != "${last_detailed-}" ]]; then
+		write_coverage "$detailed" request-phases-detailed.json || return 1
+		last_detailed=$detailed
 	fi
 	if [[ $coverage != "${last_coverage-}" ]]; then
 		write_coverage "$coverage" cache-residency.json || return 1
@@ -162,8 +166,8 @@ probe_command() {
 }
 
 run_monitor() {
-	local lock_details scheduler worker coverage coverage_v2 phases probe_source cache_root container
-	local last_scheduler='' last_worker='' last_coverage='' last_coverage_v2='' last_phases='' last_telemetry_signature=''
+	local lock_details scheduler worker coverage coverage_v2 phases detailed probe_source cache_root container
+	local last_scheduler='' last_worker='' last_coverage='' last_coverage_v2='' last_phases='' last_detailed='' last_telemetry_signature=''
 	probe_source="${self%/*}/../src/qwen_r9700_lab/radiance_cache_residency.py"
 	[[ -f $probe_source && ! -L $probe_source ]] || die 'cache residency probe source is missing or unsafe'
 	cache_root=${QWEN_RADIANCE_CACHE_ROOT:-/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1}
@@ -184,12 +188,12 @@ run_monitor() {
 	flock -n "$monitor_lock_fd" || exit 0
 	have_active_client || exit 0
 
-	while IFS=$'\t' read -r scheduler worker coverage coverage_v2 phases; do
-		write_sample "$scheduler" "$worker" "$coverage" "$coverage_v2" "$phases" || true
+	while IFS=$'\t' read -r scheduler worker coverage coverage_v2 phases detailed; do
+		write_sample "$scheduler" "$worker" "$coverage" "$coverage_v2" "$phases" "$detailed" || true
 		have_active_client || break
 	done < <(
 		probe_command /usr/bin/python3 -u - \
-			"$SAMPLE_INTERVAL_SECONDS" "$cache_root" auto --container "$container" <"$probe_source"
+			"$SAMPLE_INTERVAL_SECONDS" "$cache_root" auto --container "$container" --detailed-phases <"$probe_source"
 	)
 }
 

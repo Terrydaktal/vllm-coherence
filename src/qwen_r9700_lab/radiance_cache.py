@@ -23,6 +23,8 @@ import tempfile
 import threading
 import time
 import uuid
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -64,6 +66,14 @@ except ModuleNotFoundError as error:
                 def emit(*args, **kwargs):
                     return None
 
+                @staticmethod
+                def capture_context():
+                    return None
+
+                @staticmethod
+                def run_with_context(operation, captured):
+                    return operation()
+
             cache_telemetry = _HostCacheTelemetry()
 
 DEFAULT_ROOT = "/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1"
@@ -77,6 +87,13 @@ CONTROL_DIRECTORY = Path("/dev/shm/qwen-radiance-snapshot-control-v1")
 CONTROL_SCHEMA = "urn:qwen-r9700:radiance-snapshot-control:v1"
 CONTROL_FILE = re.compile(r"([0-9a-f]{32})\.(request|response)\.json\Z")
 _WRITE_LOCKS = tuple(threading.Lock() for _ in range(64))
+READ_WORKERS = 4
+READ_INFLIGHT_BYTES = 256 * 1024**2
+_READ_SLOTS = threading.BoundedSemaphore(READ_WORKERS)
+# Completed ahead-of-order futures also own decoded buffers. Bound whole
+# batches rather than individual futures: reserving buffers out of order can
+# deadlock a consumer waiting for its first result while later results own them.
+_READ_BATCH_SLOTS = threading.BoundedSemaphore(2)
 RETIREMENT_SCHEMA = "urn:coherence:snapshot-retirements:v1"
 TEST_CHAT_TITLES = {"Synthetic release smoke", "Synthetic relay probe"}
 
@@ -87,6 +104,20 @@ class RetiredGenerationError(ValueError):
 
 class SnapshotIntegrityError(ValueError):
     """Stored bytes fail their own encoding or checksum, independently of the ABI."""
+
+
+def read_parallelism(expected_size, count, *, workers=READ_WORKERS,
+                     max_inflight_bytes=READ_INFLIGHT_BYTES):
+    """Bound encoded, sliced and decoded buffers without retaining a full head."""
+    if not isinstance(expected_size, int) or expected_size < 1:
+        raise ValueError("snapshot block size must be positive")
+    if not isinstance(workers, int) or isinstance(workers, bool) or not 1 <= workers <= READ_WORKERS:
+        raise ValueError("snapshot read workers must be between 1 and 4")
+    if not isinstance(max_inflight_bytes, int) or max_inflight_bytes < 1:
+        raise ValueError("snapshot read byte budget must be positive")
+    # A single block is the unavoidable minimum even if larger than the budget.
+    slots = max(1, min(max_inflight_bytes, READ_INFLIGHT_BYTES) // (3 * expected_size + HEADER.size))
+    return min(workers, slots, count)
 
 
 def identity(value: dict) -> dict:
@@ -515,8 +546,19 @@ class ChatStore:
         with contextlib.closing(self.read_many([key], expected_size)) as blocks:
             return next(blocks)
 
-    def read_many(self, keys: list[str], expected_size: int):
-        with self.lock():
+    def read_many(self, keys: list[str], expected_size: int, *, workers=READ_WORKERS,
+                  max_inflight_bytes=READ_INFLIGHT_BYTES):
+        """Decode independent blocks ahead, yielding in the caller's order.
+
+        The generation lease remains held until every worker has joined, including
+        early iterator close and faults. A private pool avoids waiting on the same
+        vLLM CPU pool that is already executing this load job. Slots bound each
+        iterator's buffers, and the shared semaphore caps active readers globally.
+        """
+        width = read_parallelism(expected_size, len(keys), workers=workers,
+                                 max_inflight_bytes=max_inflight_bytes)
+        captured = cache_telemetry.capture_context()
+        with _READ_BATCH_SLOTS, self.lock():
             if not self.current():
                 raise ValueError("snapshot generation was retired")
             counts = {
@@ -527,8 +569,12 @@ class ChatStore:
                 "invalidated_blocks": 0,
                 "invalidated_file_bytes": 0,
             }
-            try:
-                for key in keys:
+            counts_mutex = threading.Lock()
+
+            def read_one(key):
+                # Acquire inside workers, never while enqueueing or yielding:
+                # concurrent loaders cannot exhaust slots and wait on each other.
+                with _READ_SLOTS:
                     path = self.path(key)
                     # Exclude a simultaneous repair of this immutable key. A
                     # reader must not remove a newer valid replacement after
@@ -537,9 +583,21 @@ class ChatStore:
                         _WRITE_LOCKS[hash(str(path)) % len(_WRITE_LOCKS)], "block_read_lock"
                     ):
                         with cache_telemetry.span("disk_read"), path.open("rb") as stream:
-                            encoded = stream.read()
+                            encoded_size = os.fstat(stream.fileno()).st_size
+                            # encode_block never produces more than raw + header.
+                            # A damaged object cannot force unbounded allocation.
+                            encoded = stream.read(expected_size + HEADER.size + 1)
                             _release_payload_page_cache(stream.fileno(), len(encoded))
                         try:
+                            if len(encoded) > expected_size + HEADER.size:
+                                # An ABI mismatch is not evidence of corruption;
+                                # never remove a valid block for a smaller runtime.
+                                magic, size, _ = HEADER.unpack_from(encoded)
+                                if magic not in {COMPRESSED, RAW}:
+                                    raise SnapshotIntegrityError("unknown snapshot encoding")
+                                if size != expected_size:
+                                    raise ValueError("snapshot block size differs from the runtime")
+                                raise SnapshotIntegrityError("snapshot encoded block exceeds its raw size")
                             data = decode_block(encoded, expected_size)
                         except SnapshotIntegrityError:
                             # A confirmed corrupt object is not a usable disk
@@ -547,17 +605,53 @@ class ChatStore:
                             # it; preserve valid files on ABI or I/O errors.
                             path.unlink()
                             sync_directory(path.parent)
-                            counts["invalidated_blocks"] += 1
-                            counts["invalidated_file_bytes"] += len(encoded)
+                            with counts_mutex:
+                                counts["invalidated_blocks"] += 1
+                                counts["invalidated_file_bytes"] += encoded_size
                             raise
-                    counts["read_file_bytes"] += len(encoded)
-                    counts["read_raw_bytes"] += len(data)
-                    counts["read_blocks"] += 1
-                    yield data
+                    with counts_mutex:
+                        counts["read_file_bytes"] += len(encoded)
+                        counts["read_raw_bytes"] += len(data)
+                        counts["read_blocks"] += 1
+                    return data
+
+            pending = deque()
+            executor = None
+            try:
+                if width <= 1:
+                    for key in keys:
+                        yield read_one(key)
+                else:
+                    executor = ThreadPoolExecutor(max_workers=width, thread_name_prefix="snapshot-read")
+                    remaining = iter(keys)
+
+                    def enqueue():
+                        key = next(remaining, None)
+                        if key is not None:
+                            pending.append(executor.submit(
+                                cache_telemetry.run_with_context,
+                                lambda: read_one(key), captured))
+
+                    for _ in range(width):
+                        enqueue()
+                    while pending:
+                        future = pending.popleft()
+                        data = future.result()
+                        # Drop the future's result reference before resubmission.
+                        del future
+                        yield data
+                        del data
+                        enqueue()
             except Exception:
                 counts["read_failures"] += 1
                 raise
             finally:
+                for future in pending:
+                    future.cancel()
+                if executor is not None:
+                    # Never release the generation lease while a worker can
+                    # still inspect or invalidate a generation's object files.
+                    executor.shutdown(wait=True, cancel_futures=True)
                 self._record_io(counts)
 
     @staticmethod

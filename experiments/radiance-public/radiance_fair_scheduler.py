@@ -393,7 +393,7 @@ class RequestPhases:
         elapsed = max(0, (now - value["since"]) * 1000)
         timings = {key: round(ms, 3) for key, ms in value["timings_ms"].items()}
         timings[value["phase"]] = round(timings.get(value["phase"], 0) + elapsed, 3)
-        return {
+        row = {
             **{
                 key: value[key]
                 for key in ("chat_id", "generation", "request_id", "phase", "blocker")
@@ -422,6 +422,10 @@ class RequestPhases:
             ),
             "timings_ms": timings,
         }
+        progress = cache_telemetry.cache_load_progress(value["request_id"])
+        if progress is not None and all(progress.get(key) == value[key] for key in ("chat_id", "generation")):
+            row["cache_load_progress"] = progress
+        return row
 
     def capture_stop(self, request):
         value = self.live.get(request.request_id)
@@ -1956,6 +1960,7 @@ class FairScheduler(Scheduler):
                 row["draft_tokens"],
                 row["accepted_tokens"],
                 row["acceptance_rate"],
+                (row.get("cache_load_progress") or {}).get("updated_at_ms"),
             )
             for row in rows
         )
