@@ -442,8 +442,9 @@ must be established before such a migration can reuse model state.
 ## Tool names
 
 The model sees these descriptive names. `/tools` shows their current enabled
-status. Native file and shell tools delegate to the installed Pi implementations;
-the rename preserves their argument schemas and execution behavior.
+status. Native file and shell tools delegate to the installed Pi implementations.
+The content-search tool adds `files_only`; the shell tool adds scoped `grep` and
+`find` adapters. Other native argument schemas remain unchanged.
 
 | Previous name | Current name |
 | --- | --- |
@@ -473,10 +474,39 @@ Historical uses of `read_archived_tool_result` also map to
 
 The file-search guidance starts with a narrow directory, `literal: true` for exact
 paths/symbols/errors, `context: 0` and `limit: 50`; surrounding context is a focused
-follow-up. The shell tool advertises builds, tests and shell operations rather
-than duplicating the native search tools. Searches needing matching filenames
-only, multiple traversal exclusions or ignored build files use shell `rg` with
-explicit scope and a timeout. Directory exclusions belong on the scanning
-command: filtering filenames afterward with `grep -v` does not avoid reading
-those files. These instructions improve tool selection without rewriting shell
-commands or changing the native search schemas and handlers.
+follow-up. Set `files_only: true` to return each matching filename once, with
+the same hidden-file, ignore, glob, literal and case behavior as ordinary native
+content searches. `limit` counts files in this mode (default 100, maximum 1,000);
+output is bounded to 50KB and the search has a 20-second deadline. `context` is
+ignored. No matches remain distinct from search errors, timeout and cancellation.
+
+The shell tool advertises builds, tests and shell operations. Multiple traversal
+exclusions or ignored build files use explicit shell `rg`, with narrow scope and
+a timeout. Directory exclusions belong on the scanning command: filtering
+filenames afterward with `grep -v` does not avoid reading those files.
+
+Model-issued Bash commands for `qwen-r9700` receive private `grep` and `find`
+functions. Their built Rust engines perform qualified searches inside one native
+process without Node, rg or fd startup. GNU remains the behavior contract:
+unsupported options, actions, descriptors or other incompatible semantics retain
+native GNU execution. If Rust was not built, grep can use its retained C
+adapter or GNU and find uses GNU. These are finite qualified classes, not a claim
+that every command is faster on every filesystem.
+
+The functions are not exported: child scripts, other model providers, user `!`
+commands, explicit `/usr/bin/grep/find` and `command grep/find` retain system
+tools. Pipelines, loops and Bash subshells receive the adapters; other shell
+languages receive no hook. No global executable, alias or PATH is replaced.
+
+The standalone [grep2rg](https://github.com/Terrydaktal/grep2rg) and
+[find2fd](https://github.com/Terrydaktal/find2fd) repositories own the engines and
+full qualification suites. Coherence pins their runtime source and attribution
+under `integrations/pi/search-wrappers`, composes their actual hooks in
+`qwen-shell-search-wrappers.mjs`, and adds combined Pi/SDK checks. There is no
+second Coherence-specific grep engine to maintain.
+
+See [Pi filesystem search](SEARCH_WRAPPERS.md) for source pinning, Rust builds,
+provider scope, compatibility fallbacks, explicit historical C/JS experiments,
+verification commands and measurement boundaries. Existing Pi processes need a
+quit/relaunch to load updated extensions; the inference backend does not need
+restarting for these changes.

@@ -1,0 +1,80 @@
+{
+  "name": "grep2rg",
+  "version": "0.1.0",
+  "description": "GNU grep-compatible searches with an integrated Rust engine and guarded GNU fallback.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Terrydaktal",
+    "email": "9lewis9@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Terrydaktal/grep2rg.git"
+  },
+  "homepage": "https://github.com/Terrydaktal/grep2rg#readme",
+  "bugs": {
+    "url": "https://github.com/Terrydaktal/grep2rg/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./src/grep-wrapper.mjs",
+  "exports": {
+    ".": "./src/grep-wrapper.mjs"
+  },
+  "bin": {
+    "grep2rg": "bin/grep2rg",
+    "grep2rg-shell-prefix": "bin/grep2rg-shell-prefix.mjs"
+  },
+  "files": [
+    "src/",
+    "bin/grep2rg",
+    "bin/grep2rg.mjs",
+    "bin/grep2rg-shell-prefix.mjs",
+    "pi/",
+    "docs/",
+    "tests/",
+    "tools/",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "native/",
+    "rust/"
+  ],
+  "scripts": {
+    "test": "npm run test:rust && npm run test:integration && node tools/verify.mjs",
+    "test:core": "npm run test:rust && npm run test:integration && node tools/verify.mjs --core",
+    "test:deep": "npm run test:rust && npm run test:integration && node tools/verify.mjs --deep",
+    "prepare": "node tools/build-rust.mjs --optional && node tools/build-native.mjs --optional",
+    "postinstall": "node tools/build-rust.mjs --optional && node tools/build-native.mjs --optional",
+    "build:native": "node tools/build-native.mjs",
+    "build:rust": "node tools/build-rust.mjs",
+    "test:rust": "npm run test:rust:unit && npm run test:rust:oracle",
+    "benchmark:rust": "node tools/benchmark-rust-engine.mjs",
+    "test:rust:unit": "cargo test --locked --manifest-path rust/Cargo.toml --bin grep2rg-rust",
+    "test:rust:oracle": "npm run build:rust && GREP2RG_RUST_BINARY=\"$PWD/rust/target/release/grep2rg-rust\" cargo test --release --locked --manifest-path rust/Cargo.toml --target-dir rust/target/oracle-tests --features release-oracle --test gnu_oracle -- --nocapture",
+    "test:integration": "npm run build:rust && node --test tests/test_rust_integration.mjs tests/test_benchmark_processes.mjs tests/test_verification_evidence.mjs",
+    "verify:rust": "node tools/verify-rust-artifact.mjs"
+  },
+  "keywords": [
+    "grep",
+    "ripgrep",
+    "compatibility",
+    "bash",
+    "pi-package"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.2"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "pi": {
+    "extensions": [
+      "./pi/grep2rg.ts"
+    ]
+  }
+}

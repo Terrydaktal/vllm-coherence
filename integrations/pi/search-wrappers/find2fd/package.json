@@ -1,0 +1,74 @@
+{
+  "name": "find2fd",
+  "version": "0.1.0",
+  "description": "Accelerate qualified GNU find searches with a native Rust traversal engine while preserving GNU fallback.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Terrydaktal",
+    "email": "9lewis9@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Terrydaktal/find2fd.git"
+  },
+  "homepage": "https://github.com/Terrydaktal/find2fd#readme",
+  "bugs": {
+    "url": "https://github.com/Terrydaktal/find2fd/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./src/find-wrapper.mjs",
+  "exports": {
+    ".": "./src/find-wrapper.mjs"
+  },
+  "bin": {
+    "find2fd": "bin/find2fd",
+    "find2fd-shell-prefix": "bin/find2fd-shell-prefix.mjs"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "pi/",
+    "docs/",
+    "tests/",
+    "tools/",
+    "rust/",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "npm run test:rust && npm run test:integration && node tools/verify.mjs",
+    "test:core": "npm run test:rust && npm run test:integration && node tools/verify.mjs --core",
+    "test:deep": "npm run test:rust && npm run test:integration && node tools/verify.mjs --deep",
+    "build:rust": "node tools/build-rust.mjs",
+    "test:rust": "npm run test:rust:unit && npm run test:rust:oracle",
+    "verify:rust": "node tools/verify-rust-artifact.mjs",
+    "postinstall": "node tools/build-rust.mjs --optional",
+    "test:rust:unit": "cargo test --locked --manifest-path rust/Cargo.toml --bin find2fd-rust",
+    "test:rust:oracle": "npm run build:rust && FIND2FD_RUST_BINARY=\"$PWD/rust/target/release/find2fd-rust\" cargo test --release --locked --manifest-path rust/Cargo.toml --target-dir rust/target/oracle-tests --features release-oracle --test gnu_oracle -- --nocapture",
+    "test:integration": "npm run build:rust && node --test tests/test_find_rust_routing.mjs tests/test_benchmark_processes.mjs tests/test_verification_evidence.mjs"
+  },
+  "keywords": [
+    "find",
+    "fd",
+    "compatibility",
+    "bash",
+    "pi-package"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.2"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "pi": {
+    "extensions": [
+      "./pi/find2fd.ts"
+    ]
+  }
+}

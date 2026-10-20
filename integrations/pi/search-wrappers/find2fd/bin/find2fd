@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+# Disable before any native or Node startup. The exact experimental opt-in
+# retains the older JS/fd compatibility engine; unset uses the Rust release.
+if [[ ${FIND2FD_ACCELERATION-} == off || ${FIND2FD_ACCELERATION-} == 0 || (${FIND2FD_EXPERIMENTAL_FD+x} && ${FIND2FD_EXPERIMENTAL_FD-} != 1) ]]; then
+	exec -a find find "$@"
+fi
+
+# Runtime initialization can fill closed standard descriptors with /dev/null.
+# Delegate before either Rust or Node so GNU sees the original descriptor state.
+if [[ ! -e /proc/"$BASHPID"/fd/0 || ! -e /proc/"$BASHPID"/fd/1 || ! -e /proc/"$BASHPID"/fd/2 ]]; then
+	exec find "$@"
+fi
+
+_find2fd_script=$(readlink -f -- "${BASH_SOURCE[0]}") || exit 1
+if [[ ${FIND2FD_EXPERIMENTAL_FD-} != 1 ]]; then
+	_find2fd_rust=${FIND2FD_RUST_BINARY:-${_find2fd_script%/*}/../rust/target/release/find2fd-rust}
+	if [[ -f ${_find2fd_rust} && -x ${_find2fd_rust} ]]; then
+		exec "${_find2fd_rust}" "$@"
+	fi
+	# A source-only install remains correct until its release is built.
+	exec -a find find "$@"
+fi
+
+# Preserve invalid UTF-8 argv bytes before Node can decode them. Valid Unicode
+# is eligible for the GNU predicate broker after fd discovery.
+if ! (
+	LC_ALL=C
+	_find2fd_nonascii=$'[^\001-\177]'
+	for _find2fd_arg; do
+		if [[ $_find2fd_arg =~ $_find2fd_nonascii ]]; then
+			command node --input-type=module -e 'import {isUtf8} from "node:buffer";import {readFileSync} from "node:fs";try{process.exit(isUtf8(readFileSync("/proc/self/cmdline"))?0:1)}catch{process.exit(1)}' -- "$@"
+			exit $?
+		fi
+	done
+); then
+	exec find "$@"
+fi
+
+# Preserve caller descriptors before Node/libuv changes close-on-exec flags.
+_find2fd_fds=
+_find2fd_fdinfo_dir=/proc/$BASHPID/fdinfo
+for _find2fd_info in "${_find2fd_fdinfo_dir}"/[0-9]*; do
+	_find2fd_fd=${_find2fd_info##*/}
+	[[ ${_find2fd_fd} =~ ^[0-9]+$ && ${_find2fd_fd} -ge 3 ]] || continue
+	_find2fd_flags=
+	while read -r _find2fd_key _find2fd_value; do
+		if [[ ${_find2fd_key} == flags: ]]; then
+			_find2fd_flags=${_find2fd_value}
+			break
+		fi
+	done 2>/dev/null <"${_find2fd_info}"
+	if [[ ${_find2fd_flags} =~ ^[0-7]+$ ]] && (((8#${_find2fd_flags} & 8#2000000) == 0)); then
+		_find2fd_fds+=${_find2fd_fds:+,}${_find2fd_fd}
+	fi
+done
+export _FIND2FD_CALLER_FDS=${_find2fd_fds}
+exec node "${_find2fd_script%/*}/find2fd.mjs" "$@"

@@ -1,0 +1,29 @@
+[package]
+name = "find2fd-rust"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+autotests = false
+license = "Apache-2.0"
+authors = ["Terrydaktal <9lewis9@gmail.com>"]
+description = "GNU find-compatible bounded filename discovery with ordered fd-style Rust traversal"
+
+[dependencies]
+libc = "0.2"
+rayon = "1.11"
+serde_json = "1.0"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[features]
+release-oracle = []
+
+[[test]]
+name = "gnu_oracle"
+path = "tests/gnu_oracle.rs"
+harness = false
+required-features = ["release-oracle"]

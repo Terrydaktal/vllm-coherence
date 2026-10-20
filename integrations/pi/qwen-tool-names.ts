@@ -1,19 +1,28 @@
 import {
   createReadToolDefinition, createBashToolDefinition, createEditToolDefinition,
   createWriteToolDefinition, createGrepToolDefinition, createFindToolDefinition,
-  createLsToolDefinition, SettingsManager, type ExtensionAPI,
+  createLsToolDefinition, getAgentDir, SettingsManager, type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { activateCanonicalTools, canonicalToolName, canonicalizeToolMessages } from "./qwen-tool-names.mjs";
+import { withSearchWrappers } from "./qwen-shell-search-wrappers.mjs";
+import { withFilesOnlySearch } from "./qwen-files-only-search.mjs";
 
 const namedGuidance = (text: string) => text.replace(/\b(read|bash|edit|write|grep|find|ls)\b/g, canonicalToolName);
+const filenameSearch = (definition, cwd: string) => {
+  const managedRg = join(getAgentDir(), "bin", process.platform === "win32" ? "rg.exe" : "rg");
+  return withFilesOnlySearch(definition, { cwd, rgPath: existsSync(managedRg) ? managedRg : "rg" });
+};
 const searchGuidelines = [
   "Use search_file_contents for repository text searches. Start with a relevant path, literal: true for exact paths/symbols/errors, context: 0 and limit: 50; request context around the relevant matches afterward.",
   "Use find_files for filename discovery. Narrow the directory and glob before widening a search to a whole repository collection.",
-  "For matching filenames only, multiple exclusions, or ignored build files, use run_shell_command with rg -l -F, traversal exclusions using repeated -g flags, and an explicit timeout (20 seconds initially). The native search tool has one glob filter and no files-only or include-ignored option.",
+  "For matching filenames only, use search_file_contents with files_only: true. For multiple exclusions or ignored build files, use run_shell_command with rg -l -F, traversal exclusions using repeated -g flags, and an explicit timeout (20 seconds initially). The native search tool has one glob filter and no include-ignored option.",
   "Exclude irrelevant directories before scanning. A downstream grep -v filters results after the files were read; head bounds displayed output, not the cost of finding it. --include='*' excludes nothing. Search relevant build files explicitly when needed.",
 ];
 const shellGuidelines = [
   "Use run_shell_command for builds, tests, version control and other shell operations. Prefer search_file_contents, find_files and list_directory for ordinary repository inspection.",
+  "Shell grep and find use the qualified native Rust engines when built; unsupported searches retain GNU behavior. Prefer search_file_contents and find_files for repository inspection, or explicit rg/fd when GNU compatibility is unnecessary.",
   ...searchGuidelines.slice(2),
 ];
 
@@ -23,7 +32,8 @@ export default function namedTools(pi: ExtensionAPI) {
   const factories = [createReadToolDefinition, createBashToolDefinition, createEditToolDefinition,
     createWriteToolDefinition, createGrepToolDefinition, createFindToolDefinition, createLsToolDefinition];
   for (const createDefinition of factories) {
-    const definition = createDefinition(process.cwd());
+    const original = createDefinition(process.cwd());
+    const definition = original.name === "grep" ? filenameSearch(original, process.cwd()) : original;
     const guidelines = definition.name === "grep" ? searchGuidelines : definition.name === "bash" ? shellGuidelines : [];
     pi.registerTool({
       ...definition,
@@ -39,8 +49,12 @@ export default function namedTools(pi: ExtensionAPI) {
         const settings = ["read", "bash"].includes(definition.name)
           ? SettingsManager.create(ctx.cwd, process.env.PI_CODING_AGENT_DIR, { projectTrusted: ctx.isProjectTrusted() }) : undefined;
         const options = definition.name === "read" ? { autoResizeImages: settings!.getImageAutoResize() }
-          : definition.name === "bash" ? { commandPrefix: settings!.getShellCommandPrefix(), shellPath: settings!.getShellPath() } : undefined;
-        return createDefinition(ctx.cwd, options).execute(id, params, signal, onUpdate, ctx);
+          : definition.name === "bash" ? { commandPrefix: settings!.getShellCommandPrefix(), shellPath: settings!.getShellPath(),
+              spawnHook: ctx.model?.provider === "qwen-r9700"
+                ? (context) => withSearchWrappers(context, settings!.getShellPath()) : undefined } : undefined;
+        const native = createDefinition(ctx.cwd, options);
+        const delegate = definition.name === "grep" ? filenameSearch(native, ctx.cwd) : native;
+        return delegate.execute(id, params, signal, onUpdate, ctx);
       },
     });
   }

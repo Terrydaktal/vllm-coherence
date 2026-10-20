@@ -1,0 +1,61 @@
+{
+  "schema": "coherence-search-wrapper-source-v1",
+  "policy": "Exact runtime source snapshot; hashes include uncommitted changes.",
+  "packages": {
+    "grep2rg": {
+      "version": "0.1.0",
+      "repository": "git+https://github.com/Terrydaktal/grep2rg.git",
+      "base_commit": "d0ddfed1400f79350a4ea36d0bf948ccdf609847",
+      "files": {
+        "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "NOTICE": "d67dd185ae15610ef1eb7e11216c3ac8f91057edec5a8676a3812a885116f34d",
+        "bin/grep2rg": "f0ea7ad7438d7fd4a06cd4a968c275c83bf935ed0b88f00cfee535297481d3d7",
+        "bin/grep2rg-shell-prefix.mjs": "a7a77f98eb27cf461116553032018175a190c0c108f6624b59c77cf6ced95c23",
+        "bin/grep2rg.mjs": "e9137711934ec93500258f71900df639de5627864ae1efb9313b18c6128f0376",
+        "native/grep2rg.c": "150e0526453a508974bfbefcd9c93f96832de18392643c9dfb02328d325ea31e",
+        "package.json": "9779a12b57894f7d2f4dc9ea316debe667cfdc06403567027cfa17602b82ee2e",
+        "rust/Cargo.lock": "7d9c110224107e4a3361e04fed206aedce96056da7b4ceab274bae111ef0edf2",
+        "rust/Cargo.toml": "65928462651ef0fc196ce4e25574a2a03d7ec8233e7ffe84bf15dcb9653b1420",
+        "rust/src/main.rs": "7af962c8c74d92c4f680f8753bbdde1ed09e332debdb95d1a871cfd640974e2e",
+        "rust/src/tests.rs": "9b21b760627037926acd684db9a9cda9128018566d4a835a33be4e7c1fe48882",
+        "src/grep-descriptors.mjs": "ec10e6c7be02fa1dc568690d435d5feefbb1e4a1d483e56770cac90704080d53",
+        "src/grep-files.mjs": "f1fe1c250f31b0714f72d66ca825cb6ebe9ab85840da266b435003f5e500d7e8",
+        "src/grep-options.mjs": "d5dfd85b6a5afb2888d8ff5ede3b57d015a1f023f4b9ef1df12a0ca0b8a3aafd",
+        "src/grep-output.mjs": "b612ce55a24dac95d313cc54422945c1385728ab5b37b5e933c4bc42003e2d75",
+        "src/grep-posix-spans.mjs": "379eae7e002dc51e0ce3d2f806b7a0cef5b9afb31b888873904abf1db7d7db97",
+        "src/grep-runtime.mjs": "0a9cd20f95924b22034f5219818b5fa25884f53c90f8af8800c51301b8675795",
+        "src/grep-stdin.mjs": "9580feef2493a16ffd520a7b62705d893c26f6c4a13124560466a964387e8e56",
+        "src/grep-unicode.mjs": "37f6f0bd08b40d13b837052327a7989930cea9547a98e0d3722bd2cbd4642a30",
+        "src/grep-wrapper.mjs": "68e39fcd2c1c2dcb7b0833177c9ab7f8d3e1c0cec21b900871a2e7a36f2e51a3",
+        "tools/build-native.mjs": "859c38df2499a6d3e408e0dbb223daf174c800f7299547e3a0f56116935cb754",
+        "tools/build-rust.mjs": "b26b57e6db626ec35d5d9de9d4a8e022a102f02fc5235a3029e8f73b3ad6add1"
+      }
+    },
+    "find2fd": {
+      "version": "0.1.0",
+      "repository": "git+https://github.com/Terrydaktal/find2fd.git",
+      "base_commit": "14b245ec40ecbf0ef034242b72344d1ea55e477b",
+      "files": {
+        "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "NOTICE": "56bc9655c6fbefe3b7193553d3c6a4305ff4765c55a101b6a106cadeaaabb046",
+        "bin/find2fd": "8aba4ce2efbd1b7600d9ac94ed81c5cc529fed9ba65fe144ff097690354776ef",
+        "bin/find2fd-shell-prefix.mjs": "42610de727a3f49a5f2bf10c87b821d0a101dfa12d64f889ff9a565d0e74f58c",
+        "bin/find2fd.mjs": "5295f12e0816ccc493fdb1d2f56c7f42515dcd2cddbbb9091315060f64dd98a9",
+        "package.json": "7d8707e45252b5646f5d5dd43737d0146091cdce1d484c1c3c1c6feb60f2731c",
+        "rust/Cargo.lock": "0939785ea8b0bca804092481d9332cc239df508ae9d0229744a2e0578f2a2ccb",
+        "rust/Cargo.toml": "5815b758754a68da466a22d5e48d9e74c2238701ac61cd120a45d4bb05a0cde4",
+        "rust/src/main.rs": "b106420b84837f6e1b07628cc9622d45c0800d3ded77715f205096f4eaa34d20",
+        "rust/src/tests.rs": "423b160c074158eb31f0ffd68a96436d6877fc8d8d3e9f4be442d0d6dc4f2694",
+        "src/find-auto.sh": "dc5a817baa0e70f173ba4cc01984a09ce3f735b964b03bd082c99b330d798ba1",
+        "src/find-descriptors.mjs": "98abb8a06198882ead1bde0417e6bf500866e68015d53fc7f7ad8e19e32b89d2",
+        "src/find-evaluate.mjs": "f651088cdd502aaf7b2849573784fef99eb87e5ffd78d779d12626b5cf1761cb",
+        "src/find-incremental.mjs": "b856907e8211fa0e997bf6ec892bc98dc2ed61ba9139712a2a11cfdf0e927aa8",
+        "src/find-options.mjs": "ce0541da53edc7384769aac3d7efa5bbcd44440d3bc624a71c20f920d3313806",
+        "src/find-order.mjs": "82a06b06a6dc43f0311acf188eea1e0799639ab90dba7b71c3b8bb4381268ef6",
+        "src/find-runtime.mjs": "2363f275c4dee36dd19fbc1faa1ca5fc09f106b37d24d4453e76d8c3ebd38739",
+        "src/find-wrapper.mjs": "ce7992369897003a29228e47e3444bddce89d291e7a554ffbc3a996a485cc634",
+        "tools/build-rust.mjs": "4522c4cb77b24f80d0b64874ff5250b684831a3760e8e7f46be35caaa39e0bc9"
+      }
+    }
+  }
+}

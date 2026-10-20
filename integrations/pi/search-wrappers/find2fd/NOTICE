@@ -1,0 +1,17 @@
+find2fd
+Copyright 2026 Terrydaktal
+
+This package contains a new GNU find compatibility implementation and
+verification work by Terrydaktal, licensed under the Apache License,
+Version 2.0.
+
+Its package structure and scoped shell/Pi integration follow the original
+work developed for grep2rg:
+https://github.com/Terrydaktal/grep2rg
+
+The find compatibility core is not a port of a pre-existing find wrapper.
+No implementation code from GNU find, fd or another upstream find wrapper
+is included in this package.
+
+GNU find, fd and the optional Pi SDK are separately provided dependencies
+and retain their respective licenses. This notice does not relicense them.

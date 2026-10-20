@@ -1,0 +1,18 @@
+grep2rg
+Copyright 2026 Terrydaktal
+
+This package contains original GNU grep compatibility code and verification
+work developed by Terrydaktal in vllm-coherence and extracted as a standalone
+package:
+https://github.com/Terrydaktal/vllm-coherence
+
+The Coherence-authored original additions are licensed under the Apache
+License, Version 2.0. Extraction provenance and source identities are retained
+in docs/extraction-provenance.json and tests/port_source_manifest.json.
+
+GNU grep, ripgrep and the optional Pi SDK are separately provided dependencies
+and retain their respective licenses. This notice does not relicense them.
+
+The related greprip project was considered during development:
+https://github.com/kaofelix/greprip
+No greprip implementation code was copied into this package.

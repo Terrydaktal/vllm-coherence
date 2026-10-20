@@ -1,0 +1,30 @@
+[package]
+name = "grep2rg-rust"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[features]
+release-oracle = []
+
+[[test]]
+name = "gnu_oracle"
+path = "tests/gnu_oracle.rs"
+harness = false
+required-features = ["release-oracle"]
+
+[dependencies]
+aho-corasick = "1.1"
+libc = "0.2"
+memchr = "2.7"
+memmap2 = "0.9"
+rayon = "1.11"
+regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "perf", "meta", "nfa", "dfa", "hybrid"] }
+serde_json = "1.0"
+tempfile = "3.23"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"

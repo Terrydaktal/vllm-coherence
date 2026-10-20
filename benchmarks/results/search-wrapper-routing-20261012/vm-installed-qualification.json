@@ -1,0 +1,55 @@
+{
+  "release": "caaeff2101e397326c89",
+  "extensions": [
+    "qwen-progress.mjs",
+    "qwen-gpu-temperature.mjs",
+    "qwen-tool-output-condense.mjs",
+    "qwen-tool-turn-rehydrate.mjs",
+    "qwen-opsec-web-tools.mjs",
+    "qwen-radiance-compaction.ts",
+    "qwen-radiance-cache.mjs",
+    "qwen-searchtool-recovery.mjs",
+    "qwen-session-search.mjs",
+    "qwen-task-plan.ts",
+    "qwen-tool-names.ts"
+  ],
+  "activeTools": [
+    "read_file",
+    "run_shell_command",
+    "edit_file",
+    "write_file",
+    "search_file_contents",
+    "find_files",
+    "list_directory",
+    "google_ai_search",
+    "fetch_webpage",
+    "extract_webpage_snippets",
+    "rehydrate_tool_result",
+    "pi_session_search",
+    "manage_task_plan"
+  ],
+  "filenamesOnly": true,
+  "measuredSearchDispatchDefault": true,
+  "experimentalScopedGrepAdapter": true,
+  "experimentalGrepOptIn": "GREP2RG_EXPERIMENTAL_RG=1",
+  "gnuGrepCompatibility": true,
+  "gnuGrepFallback": true,
+  "inferenceRequests": 0,
+  "searchTools": 1,
+  "sessionSearchTools": 1,
+  "backendCommands": 1,
+  "contextFiles": 0,
+  "promptSha256": "51454858e451daead99c6e4dd43ea59d18a36437cb896033d5e857a72d2d48ad",
+  "contextWindow": 253792,
+  "responseLimit": 253792,
+  "httpIdleTimeoutMs": 0,
+  "source_manifest_sha256": "3b51ddaf04703c5d45fafd44385ec9a884817ccb3074a4a8876757b98e193a5a",
+  "native_helper_sha256": "272648fcf72143270dab1ef5a07152232569c57261a57467b367618b3078fe5e",
+  "build_receipt": {
+    "grep2rg": {
+      "native_acceleration_built": true,
+      "native_sha256": "272648fcf72143270dab1ef5a07152232569c57261a57467b367618b3078fe5e",
+      "build_source_sha256": "859c38df2499a6d3e408e0dbb223daf174c800f7299547e3a0f56116935cb754"
+    }
+  }
+}

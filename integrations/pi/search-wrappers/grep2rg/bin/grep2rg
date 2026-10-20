@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+# Prefer the integrated Rust search engine. The historical C dispatcher and
+# GNU retain compatibility when Rust was not built; JavaScript is opt-in.
+if [[ ${GREP2RG_EXPERIMENTAL_RG-} != 1 ]]; then
+	# Rust's startup may reopen closed standard descriptors. Delegate before that
+	# initialization so GNU retains the caller's original EBADF behavior.
+	if [[ ${GREP2RG_ACCELERATION-} == gnu || ! -e /proc/"$BASHPID"/fd/0 || ! -e /proc/"$BASHPID"/fd/1 || ! -e /proc/"$BASHPID"/fd/2 ]]; then
+		exec -a grep grep "$@"
+	fi
+	_grep2rg_script=$(readlink -f -- "${BASH_SOURCE[0]}") || exec -a grep grep "$@"
+	if [[ ${GREP2RG_ENGINE-} != c && -x ${_grep2rg_script%/*}/../rust/target/release/grep2rg-rust ]]; then
+		exec "${_grep2rg_script%/*}/../rust/target/release/grep2rg-rust" "$@"
+	fi
+	if [[ -x ${_grep2rg_script%/*}/grep2rg-native ]]; then
+		exec "${_grep2rg_script%/*}/grep2rg-native" "$@"
+	fi
+	exec -a grep grep "$@"
+fi
+
+# Node fills closed standard descriptors with /dev/null; GNU must see them closed.
+if [[ ! -e /proc/"$BASHPID"/fd/0 || ! -e /proc/"$BASHPID"/fd/1 || ! -e /proc/"$BASHPID"/fd/2 ]]; then
+	exec grep "$@"
+fi
+
+# Node argv cannot preserve invalid UTF-8 bytes. Keep those arguments in Bash;
+# valid Unicode can proceed to matcher qualification without being rewritten.
+if ! (
+	LC_ALL=C
+	_grep2rg_nonascii=$'[^\001-\177]'
+	for _grep2rg_arg; do
+		if [[ $_grep2rg_arg =~ $_grep2rg_nonascii ]]; then
+			command node --input-type=module -e 'import {isUtf8} from "node:buffer";import {readFileSync} from "node:fs";try{process.exit(isUtf8(readFileSync("/proc/self/cmdline"))?0:1)}catch{process.exit(1)}' -- "$@"
+			exit $?
+		fi
+	done
+); then
+	exec grep "$@"
+fi
+
+# npm and user launchers may create multiple symlinks in directories with spaces.
+_grep2rg_script=$(readlink -f -- "${BASH_SOURCE[0]}") || exit 2
+# Preserve caller descriptors before Node/libuv changes close-on-exec flags.
+_grep2rg_fds=
+_grep2rg_fdinfo_dir=/proc/$BASHPID/fdinfo
+for _grep2rg_info in "${_grep2rg_fdinfo_dir}"/[0-9]*; do
+	_grep2rg_fd=${_grep2rg_info##*/}
+	[[ ${_grep2rg_fd} =~ ^[0-9]+$ && ${_grep2rg_fd} -ge 3 ]] || continue
+	_grep2rg_flags=
+	while read -r _grep2rg_key _grep2rg_value; do
+		if [[ ${_grep2rg_key} == flags: ]]; then
+			_grep2rg_flags=${_grep2rg_value}
+			break
+		fi
+	done 2>/dev/null <"${_grep2rg_info}"
+	if [[ ${_grep2rg_flags} =~ ^[0-7]+$ ]] && (((8#${_grep2rg_flags} & 8#2000000) == 0)); then
+		_grep2rg_fds+=${_grep2rg_fds:+,}${_grep2rg_fd}
+	fi
+done
+export _GREP2RG_CALLER_FDS=${_grep2rg_fds}
+exec node "${_grep2rg_script%/*}/grep2rg.mjs" "$@"

@@ -7,6 +7,43 @@ on:
 permissions:
   contents: read
 jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QWEN_TEST_PI_ROOT: ${{ github.workspace }}/artifacts/pi-search-sdk/node_modules/@earendil-works
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - name: Install independent GNU oracles and launcher dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y grep findutils ripgrep fd-find strace build-essential
+      - name: Install the pinned Pi schema SDK for offline tests
+        run: |
+          npm install --prefix artifacts/pi-search-sdk --no-package-lock --ignore-scripts @earendil-works/pi-coding-agent@0.84.2
+          test -f "$QWEN_TEST_PI_ROOT/pi-coding-agent/dist/core/tools/grep.js"
+      - name: Build both shipping Rust engines and the explicit legacy C adapter
+        run: |
+          cargo build --release --locked --manifest-path integrations/pi/search-wrappers/grep2rg/rust/Cargo.toml
+          cargo build --release --locked --manifest-path integrations/pi/search-wrappers/find2fd/rust/Cargo.toml
+          node integrations/pi/search-wrappers/grep2rg/tools/build-native.mjs
+      - name: Verify Rust units, combined Pi dispatch and bounded filename searches
+        run: |
+          cargo test --locked --manifest-path integrations/pi/search-wrappers/grep2rg/rust/Cargo.toml --bin grep2rg-rust
+          cargo test --locked --manifest-path integrations/pi/search-wrappers/find2fd/rust/Cargo.toml --bin find2fd-rust
+          mkdir -p artifacts
+          node --test --test-reporter=tap tests/test_shell_search_wrappers.mjs tests/test_files_only_search.mjs > artifacts/search-tests.tap 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pi-search-verification
+          path: artifacts/search-tests.tap
+          if-no-files-found: warn
+          retention-days: 7
   cpu:
     runs-on: ubuntu-latest
     timeout-minutes: 30

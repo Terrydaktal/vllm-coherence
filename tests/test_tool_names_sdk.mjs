@@ -48,13 +48,13 @@ test("installed Pi exposes canonical tools and preserves native execution and hi
     shellCommandPrefix: "export SDK_PREFIX_MARKER=from-persisted-settings", shellPath: "/usr/bin/bash",
     compaction: { enabled: false }, retry: { enabled: false } }));
   const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
-  const model = { id: "synthetic-canonical-tools", name: "Synthetic canonical tools", provider: "fixture", api: "openai-completions",
+  const model = { id: "synthetic-canonical-tools", name: "Synthetic canonical tools", provider: "qwen-r9700", api: "openai-completions",
     baseUrl: "http://fixture.invalid/v1", reasoning: false, input: ["text"], contextWindow: 32768, maxTokens: 8192,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
   const modelRuntime = { getModel: () => model, getAvailableSnapshot: () => [model], hasConfiguredAuth: () => true,
     isUsingOAuth: () => false, getAuth: async () => ({ auth: { apiKey: "fixture" }, env: {} }),
     streamSimple: () => { inferenceRequests++; throw new Error("Inference forbidden in canonical-tool fixture"); } };
-  const namingPath = join(root, "integrations/pi/qwen-tool-names.ts");
+  const namingPath = join(process.env.COHERENCE_SEARCH_TEST_ROOT ?? root, "integrations/pi/qwen-tool-names.ts");
   const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager,
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
     additionalExtensionPaths: [join(root, "integrations/pi/qwen-radiance-compaction.ts"),
@@ -80,7 +80,7 @@ test("installed Pi exposes canonical tools and preserves native execution and hi
     return current.execute(`synthetic-${name}`, params, signal);
   };
 
-  await t.test("all 13 canonical tools are active with original schemas, and native tools use session cwd/settings", async () => {
+  await t.test("all 13 canonical tools are active with native schemas plus files_only, and use session cwd/settings", async () => {
     assert.deepEqual(session.getActiveToolNames().sort(), Object.values(TOOL_NAME_ALIASES).sort());
     const registry = new Map(session.getAllTools().map((info) => [info.name, info]));
     assert.match(registry.get("search_file_contents").description, /literal: true.*context: 0.*limit: 50/);
@@ -100,14 +100,19 @@ test("installed Pi exposes canonical tools and preserves native execution and hi
       nativeTools.createFindToolDefinition, nativeTools.createLsToolDefinition];
     for (const factory of factories) {
       const original = factory(cwd);
-      assert.deepEqual(registry.get(TOOL_NAME_ALIASES[original.name]).parameters, original.parameters,
-        `${original.name} delegate preserves the SDK parameter schema`);
+      const parameters = registry.get(TOOL_NAME_ALIASES[original.name]).parameters;
+      if (original.name === "grep") {
+        const { files_only, ...properties } = parameters.properties;
+        assert.equal(files_only.type, "boolean");
+        assert.deepEqual({ ...parameters, properties }, { ...original.parameters }, "search preserves native arguments and adds only files_only");
+      } else assert.deepEqual(parameters, original.parameters, `${original.name} delegate preserves the SDK parameter schema`);
     }
     assert.notEqual(process.cwd(), cwd);
     await invoke("write_file", { path: "fixtures/input.txt", content: "alpha\nbeta\n" });
     await invoke("edit_file", { path: "fixtures/input.txt", edits: [{ oldText: "beta", newText: "gamma" }] });
     assert.match(textOf(await invoke("read_file", { path: "fixtures/input.txt" })), /alpha\ngamma/);
     assert.match(textOf(await invoke("search_file_contents", { path: "fixtures", pattern: "gamma" })), /input\.txt.*gamma/);
+    assert.equal(textOf(await invoke("search_file_contents", { path: "fixtures", pattern: "gamma", files_only: true })), "input.txt");
     assert.match(textOf(await invoke("find_files", { path: "fixtures", pattern: "*.txt" })), /input\.txt/);
     assert.match(textOf(await invoke("list_directory", { path: "fixtures" })), /input\.txt/);
     const command = 'printf "%s\\n" "$SDK_PREFIX_MARKER"; pwd; cat fixtures/input.txt';
@@ -121,6 +126,21 @@ test("installed Pi exposes canonical tools and preserves native execution and hi
     assert.equal(JSON.parse(await readFile(join(agentDir, "settings.json"), "utf8")).shellCommandPrefix,
       "export SDK_PREFIX_MARKER=updated-persisted-settings");
     assert.match(textOf(await invoke("run_shell_command", { command: 'printf "%s" "$SDK_PREFIX_MARKER"' })), /updated-persisted-settings/);
+    const shellSearch = textOf(await invoke("run_shell_command", { command: "grep -l -F gamma fixtures/input.txt", timeout: 20 }));
+    assert.equal(shellSearch.trim(), "fixtures/input.txt");
+    assert.equal(textOf(await invoke("run_shell_command", { command: "type -t grep; type -t find" })).trim(),
+      "function\nfunction", "default Qwen model shell receives both measured adapters");
+    assert.equal(textOf(await invoke("run_shell_command", {
+      command: "bash --noprofile --norc -c 'type -t grep; type -t find'",
+    })).trim(), "file\nfile", "child scripts still use ordinary system commands");
+    session.agent.state.model = { ...model, provider: "other-synthetic-provider" };
+    try {
+      assert.equal(textOf(await invoke("run_shell_command", { command: "type -t grep; type -t find" })).trim(),
+        "file\nfile", "other model providers keep their native commands");
+    } finally { session.agent.state.model = model; }
+    const filter = textOf(await invoke("run_shell_command", { command: "printf 'abc123\\nabc\\n' | grep -E '[0-9]+'" }));
+    assert.equal(filter.trim(), "abc123");
+    assert.match(textOf(await invoke("run_shell_command", { command: "grep -r -E 'gamma|alpha' fixtures", timeout: 20 })), /gamma/);
   });
 
   await t.test("canonical write/edit delegates share native SDK serialization and queued cancellation", async () => {
@@ -148,6 +168,48 @@ test("installed Pi exposes canonical tools and preserves native execution and hi
     assert.equal(await readFile(path, "utf8"), "native final\n", "native and renamed calls preserve one ordered file-mutation queue");
     await assert.rejects(invoke("edit_file", { path: "shared-queue.txt", edits: [{ oldText: "native final", newText: "cancelled edit" }] }, controller.signal), /aborted/i);
     assert.equal(await readFile(path, "utf8"), "native final\n", "aborted delegates leave the file intact");
+  });
+
+  await t.test("shell adapter retains SDK streaming, cancellation and timeout for its rg child", async () => {
+    const inheritedExperiment = process.env.GREP2RG_EXPERIMENTAL_RG;
+    process.env.GREP2RG_EXPERIMENTAL_RG = "1";
+    const bin = join(cwd, "test-bin"), pidPath = join(cwd, "synthetic-rg.pid");
+    await mkdir(bin);
+    await writeFile(join(bin, "rg"), '#!/usr/bin/env bash\nprintf "%s\\n" "$$" > "$SDK_RG_PID_FILE"\nprintf "synthetic rg ready\\n"\nsleep 30 &\nwait "$!"\n', { mode: 0o700 });
+    // Use the real wrapper and SDK process group with a harmless slow rg stand-in.
+    const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+    settingsManager.setShellCommandPrefix(`export PATH=${quote(bin)}:"$PATH"\nexport SDK_RG_PID_FILE=${quote(pidPath)}`);
+    await settingsManager.flush();
+    const command = "grep -l -F gamma fixtures/input.txt";
+    const gone = async (pid) => {
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline) {
+        try { process.kill(pid, 0); }
+        catch (error) { if (error.code === "ESRCH") return; throw error; }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.fail(`synthetic rg child ${pid} survived SDK termination`);
+    };
+    try {
+      const controller = new AbortController();
+      let ready;
+      const started = new Promise((resolve) => { ready = resolve; });
+      const execution = tool("run_shell_command").execute("synthetic-grep-cancel", { command, timeout: 5 }, controller.signal,
+        (update) => { if (textOf(update).includes("synthetic rg ready")) ready(); });
+      const rejected = assert.rejects(execution, /synthetic rg ready[\s\S]*Command aborted/);
+      await Promise.race([started, execution]);
+      const pid = Number((await readFile(pidPath, "utf8")).trim());
+      controller.abort();
+      await rejected;
+      await gone(pid);
+      await assert.rejects(invoke("run_shell_command", { command, timeout: 0.3 }), /Command timed out/);
+      await gone(Number((await readFile(pidPath, "utf8")).trim()));
+    } finally {
+      if (inheritedExperiment === undefined) delete process.env.GREP2RG_EXPERIMENTAL_RG;
+      else process.env.GREP2RG_EXPERIMENTAL_RG = inheritedExperiment;
+      settingsManager.setShellCommandPrefix("export SDK_PREFIX_MARKER=updated-persisted-settings");
+      await settingsManager.flush();
+    }
   });
 
   await t.test("context selection runs before historical names normalize, leaving stored JSONL unchanged", async () => {

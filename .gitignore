@@ -38,6 +38,9 @@ node_modules/
 *.gguf
 private/
 artifacts/
+integrations/pi/search-wrappers/grep2rg/bin/grep2rg-native
+integrations/pi/search-wrappers/grep2rg/bin/grep2rg-native.build-*
+integrations/pi/search-wrappers/*/rust/target/
 sessions/
 .pi/
 # Derived transcript search databases contain private words and source metadata.

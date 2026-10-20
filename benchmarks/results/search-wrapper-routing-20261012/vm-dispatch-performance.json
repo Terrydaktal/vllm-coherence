@@ -1,0 +1,234 @@
+{
+  "schema": "coherence-search-dispatch-speed-v1",
+  "captured_at": "2026-10-12T00:34:32.935Z",
+  "scope": "Actual combined Pi Bash hook on owned warm-cache fixtures; shell, dispatch, preparation, output included; seven alternating pairs, one warmup.",
+  "platform": "linux",
+  "arch": "x64",
+  "logical_cpus": 32,
+  "versions": {
+    "grep": "grep (GNU grep) 3.11",
+    "find": "find (GNU findutils) 4.10.0",
+    "rg": "ripgrep 14.1.1",
+    "fd": "fdfind 10.2.0"
+  },
+  "source_manifest_sha256": "3b51ddaf04703c5d45fafd44385ec9a884817ccb3074a4a8876757b98e193a5a",
+  "cases": [
+    {
+      "id": "large-literal-counts",
+      "median_ms": {
+        "gnu": 34.328106,
+        "automatic": 11.428268
+      },
+      "samples_ms": {
+        "gnu": [
+          35.167318,
+          32.35914,
+          34.328106,
+          36.987382,
+          36.467205,
+          31.143064,
+          30.526506
+        ],
+        "automatic": [
+          11.357588,
+          10.52536,
+          15.181818,
+          11.644217,
+          11.302554,
+          11.431061,
+          11.428268
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 5522,
+      "stdout_sha256": "f3f9dbab2c7d52d35e834a0aa6a2e7923fbb3ce7ece418e4e8ab69b946842172",
+      "status": 0
+    },
+    {
+      "id": "large-sparse-literal-lines",
+      "median_ms": {
+        "gnu": 45.487625,
+        "automatic": 11.125716
+      },
+      "samples_ms": {
+        "gnu": [
+          44.652043,
+          46.564577,
+          45.487625,
+          43.810316,
+          48.678533,
+          43.222253,
+          45.737097
+        ],
+        "automatic": [
+          10.53821,
+          10.66169,
+          12.15769,
+          13.026516,
+          11.125716,
+          9.749284,
+          11.903189
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 7826,
+      "stdout_sha256": "955c7541e150357aafee5e986b931198c05d21572463a50a203adfaf0ebc1729",
+      "status": 0
+    },
+    {
+      "id": "long-record-counts",
+      "median_ms": {
+        "gnu": 9.938135,
+        "automatic": 11.938948
+      },
+      "samples_ms": {
+        "gnu": [
+          10.189284,
+          10.667557,
+          9.938135,
+          9.583899,
+          9.660725,
+          12.664458,
+          8.934096
+        ],
+        "automatic": [
+          10.540167,
+          10.81143,
+          12.348497,
+          12.24597,
+          11.417093,
+          11.938948,
+          13.171785
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 6546,
+      "stdout_sha256": "5d031c6a3f85a0eb20046a06a19b281f0b915ae7b82342cff5b2e65328ce9016",
+      "status": 0
+    },
+    {
+      "id": "long-record-matching-lines",
+      "median_ms": {
+        "gnu": 10.475912,
+        "automatic": 11.887544
+      },
+      "samples_ms": {
+        "gnu": [
+          10.475912,
+          10.721753,
+          9.246985,
+          9.238325,
+          8.504153,
+          14.006809,
+          10.750529
+        ],
+        "automatic": [
+          11.887544,
+          13.171507,
+          10.463062,
+          11.527163,
+          10.468928,
+          14.560231,
+          13.433551
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 8082,
+      "stdout_sha256": "6b65e27e9fb50af9f91135a06dbeb93ccd33f14239b945341d1bca2ce8ab830d",
+      "status": 0
+    },
+    {
+      "id": "small-literal-lines",
+      "median_ms": {
+        "gnu": 2.317333,
+        "automatic": 4.286299
+      },
+      "samples_ms": {
+        "gnu": [
+          2.786667,
+          2.755937,
+          2.604801,
+          2.209499,
+          2.038807,
+          2.317333,
+          2.163124
+        ],
+        "automatic": [
+          4.286299,
+          4.842515,
+          3.698236,
+          7.107607,
+          4.123988,
+          3.510781,
+          4.405308
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 8,
+      "stdout_sha256": "8ee7f52fbe12c6c5f4f2f3f2863ff36055d9c968f09624985a0101603a54f6a7",
+      "status": 0
+    },
+    {
+      "id": "large-sparse-filenames",
+      "median_ms": {
+        "gnu": 310.798998,
+        "automatic": 184.79276
+      },
+      "samples_ms": {
+        "gnu": [
+          308.397297,
+          310.798998,
+          316.143253,
+          266.675234,
+          299.524101,
+          386.001293,
+          328.587292
+        ],
+        "automatic": [
+          179.884036,
+          184.79276,
+          157.165227,
+          171.210587,
+          193.501408,
+          224.127368,
+          191.950094
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 155,
+      "stdout_sha256": "3bc1df8c43af14a443095a74b321aa2d7a7f118033f866e5fce2db7a6ac1cf8d",
+      "status": 0
+    },
+    {
+      "id": "small-filenames",
+      "median_ms": {
+        "gnu": 3.00513,
+        "automatic": 6.403328
+      },
+      "samples_ms": {
+        "gnu": [
+          2.953448,
+          3.042286,
+          3.830096,
+          3.033906,
+          2.81181,
+          2.6048,
+          3.00513
+        ],
+        "automatic": [
+          6.403328,
+          7.442008,
+          6.35835,
+          6.700572,
+          5.885664,
+          6.178439,
+          7.407366
+        ]
+      },
+      "exact_gnu_comparisons": 15,
+      "stdout_bytes": 18,
+      "stdout_sha256": "47db1fb7963419a7ee9ac9853a1ab20597be1ee3cbadbb994d425c3f4b2c1d10",
+      "status": 0
+    }
+  ]
+}

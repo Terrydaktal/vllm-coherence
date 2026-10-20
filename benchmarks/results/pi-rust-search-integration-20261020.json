@@ -1,0 +1,109 @@
+{
+  "schema": "coherence-pi-rust-search-integration-v1",
+  "captured_at": "2026-10-20T20:58:19.006714+00:00",
+  "scope": "Focused offline Pi integration of the pinned standalone Rust search engines and files_only extension. Owned synthetic fixtures; no inference, Google query, private transcript, live installation or backend change. This is not a new speed benchmark or a rerun of the full standalone engine campaigns.",
+  "outcome": "passed",
+  "upstream": {
+    "grep2rg": {
+      "base_commit": "d0ddfed1400f79350a4ea36d0bf948ccdf609847",
+      "runtime_file_count": 22
+    },
+    "find2fd": {
+      "base_commit": "14b245ec40ecbf0ef034242b72344d1ea55e477b",
+      "runtime_file_count": 19
+    }
+  },
+  "source_manifest_sha256": "06c0d7e0c8a11e98fd3efcd5d4fda90a7a5a4b7a019a01c6495060fc24b530c4",
+  "source_sha256": {
+    "integrations/pi/qwen-tool-names.ts": "ecf8c712cce74d95a48c6f96c9c0af304a1827cd17225f44fd0e3890b2f48548",
+    "integrations/pi/qwen-tool-names.mjs": "961006939942ff0b3491f833c9a9331f7248c496e2dad0beee55c6bcbd063271",
+    "integrations/pi/qwen-files-only-search.mjs": "c75a0283ce0060de2852b668d2ffef16acfb853f996f9644379ce5c121120480",
+    "integrations/pi/qwen-shell-search-wrappers.mjs": "ac48725e447d744da284b9f0221fc3f78d28d7c09e268e203c82d102decb6c95",
+    "tests/test_files_only_search.mjs": "72003267ba21e27b6b1b0cffe7ad52bd594fe2a8fc94cbb76537544d908d9a32",
+    "tests/test_shell_search_wrappers.mjs": "39b8d764312d8f6b633648d0e492233cd196da1c3dfe929740da743abf070c80",
+    "tests/test_tool_names_sdk.mjs": "172483df4bb2e130f85bd4cb12803a02439c112e67cd09963e1453854d21ad92",
+    "tools/sync_search_wrappers.py": "5aab0ea45938325cfb63637fe58c8e9ca975f0252ae1963f174e4cadde4dc9b0"
+  },
+  "builds": {
+    "grep2rg": {
+      "profile": "release, locked dependencies, isolated Cargo target",
+      "binary_sha256": "ba29fa3da5ef84be2e6a7e5bfb418745dd3151ccab73369bf40085f96c303bc9"
+    },
+    "find2fd": {
+      "profile": "release, locked dependencies, isolated Cargo target",
+      "binary_sha256": "f5b95362c769bf69eb3caa92f6fc6111eac301f30d4d00a62739fd6a09ebbff8"
+    }
+  },
+  "production_binaries": {
+    "unchanged": true,
+    "sha256": {
+      "integrations/pi/search-wrappers/grep2rg/rust/target/release/grep2rg-rust": "73b7b41b4fd299e9e605161a234f80dc71cab71588fbd6776e3ad0b78d8a64ed",
+      "integrations/pi/search-wrappers/find2fd/rust/target/release/find2fd-rust": "f5b95362c769bf69eb3caa92f6fc6111eac301f30d4d00a62739fd6a09ebbff8"
+    }
+  },
+  "versions": {
+    "node": "v26.4.0",
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "cargo": "cargo 1.90.0 (840b83a10 2025-07-30)",
+    "GNU_grep": "grep (GNU grep) 3.12-modified",
+    "GNU_find": "find (GNU findutils) 4.11.0-modified"
+  },
+  "checks": {
+    "grep_rust_units": {
+      "outcome": "passed",
+      "profile": "debug unit tests",
+      "passed": 12,
+      "failed": 0,
+      "ignored": 0,
+      "log_sha256": "57eedcbcb73b52d0afb32fc31b8cb2886e129e1d5123cae8748559e0af257b92"
+    },
+    "find_rust_units": {
+      "outcome": "passed",
+      "profile": "debug unit tests",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0,
+      "log_sha256": "0d5b1a1bc656a2b5e81b9fbd2460dfe541f1b00513866cbb41505ef7ae20c9a8"
+    },
+    "combined_hooks_files_only_and_schema": {
+      "outcome": "passed",
+      "counts": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log_sha256": "3c2bb0af3d3afae1f3931cdc0393348a2328bc9ffb356638b729bdbb358d70a9"
+    },
+    "installed_pi_sdk": {
+      "outcome": "passed",
+      "counts": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log_sha256": "d29d6f97906a94d02cfb4ae58dc46b1b36d2b11377c6eb4355516a55839298d1"
+    },
+    "pinned_source_check": {
+      "outcome": "passed",
+      "runtime_files_including_manifest": 42
+    },
+    "missing_rust_negative_control": {
+      "outcome": "rejected_as_expected",
+      "exit_code": 1,
+      "log_sha256": "d76fa007e7b9dbec5270f51832309a4714b03bc13486f594522e2bdf09512776",
+      "contract": "Combined-hook qualification must fail when both Rust builds are absent, even if C/GNU can return matching output."
+    }
+  },
+  "limits": [
+    "Finite synthetic checks do not prove every GNU invocation or universal acceleration.",
+    "The installed Pi SDK was exercised offline with Searchtool loaded; no browser or model request was made.",
+    "GitHub Actions was updated but not executed in this local qualification.",
+    "Historical October 12 dispatch captures measure earlier C/Node/rg/fd routes, not this Rust runtime."
+  ]
+}
