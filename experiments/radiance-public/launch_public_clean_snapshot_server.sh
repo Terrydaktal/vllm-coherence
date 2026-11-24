@@ -200,6 +200,8 @@ readonly startup_id
 # Allow EngineCore to drain and publish pending snapshot tails before the
 # container runtime's independent kill deadline. vLLM defaults to immediate abort.
 # An approved bounded KFD capture is opt-in and starts at the first real decode.
+# AITER_ROOT_DIR does not select its native-extension cache. Persist the actual
+# JIT directory by runtime ABI and GPU architecture across disposable containers.
 exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=host --network=host \
 	--stop-timeout 90 \
 	--device /dev/kfd --device /dev/dri --group-add keep-groups \
@@ -221,7 +223,7 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	-e TORCHINDUCTOR_CACHE_DIR="/cache/runtime/${abi_id}/inductor" \
 	-e TRITON_CACHE_DIR="/cache/runtime/${abi_id}/triton" \
 	-e QWEN_OPTIMIZED_STARTUP_RECEIPT="/cache/runtime/${abi_id}/optimized-startup-${startup_id}.json" \
-	-e AITER_ROOT_DIR=/cache/runtime-1.0.16/aiter -e TRITON_CACHE_AUTOTUNING=1 \
+	-e AITER_JIT_DIR="/cache/runtime/${abi_id}/aiter-gfx1201" -e TRITON_CACHE_AUTOTUNING=1 \
 	"${release_environment[@]}" \
 	-v /home/lewis/.cache/huggingface:/root/.cache/huggingface:ro \
 	-v /home/lewis/models-radiance:/models:ro \

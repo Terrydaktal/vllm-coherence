@@ -8,6 +8,7 @@ import importlib.util
 import json
 import logging
 import os
+import shlex
 import subprocess
 import sys
 from enum import Enum
@@ -522,6 +523,57 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     assert "600:$(id -u):1" in launcher_text
     assert "for _ in {1..100}" in launcher_text
     assert "sleep 0.1" in launcher_text
+
+
+@pytest.mark.parametrize("runtime_abi", ["a" * 64, "b" * 64])
+def test_container_start_preserves_native_caches_by_runtime_identity(tmp_path, runtime_abi):
+    launcher = PATCH_SCRIPT.with_name("launch_public_clean_snapshot_server.sh").read_text()
+    command = launcher[launcher.index("exec podman run --rm ") :]
+    podman = tmp_path / "podman"
+    podman.write_text(
+        f"#!{sys.executable}\nimport json, sys\nprint(json.dumps(sys.argv[1:]))\n"
+    )
+    podman.chmod(0o700)
+    variables = {
+        "abi_id": runtime_abi,
+        "data_abi": "d" * 64,
+        "container_name": "synthetic-startup",
+        "startup_id": "synthetic-lifetime",
+        "cache_root": str(tmp_path / "persistent cache"),
+        "launcher_root": "/release",
+        "optimized_root": "/optimized",
+        "speed_root": "/speed",
+        "rocr_library": "/overlay/libhsa.so",
+        "image": "pinned-image",
+        "model_id": "synthetic-model",
+        "port": "8080",
+        "fair_config": "{}",
+        "kv_transfer_config": "{}",
+        "speculative_config": "{}",
+    }
+    script = "set -eu\n" + "\n".join(
+        f"{key}={shlex.quote(value)}" for key, value in variables.items()
+    )
+    result = subprocess.run(
+        ["bash", "-c", script + "\nrelease_environment=()\n" + command],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+        env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"},
+    )
+    args = json.loads(result.stdout)
+    environment = dict(
+        args[i + 1].split("=", 1) for i, arg in enumerate(args) if arg == "-e"
+    )
+    assert environment["AITER_JIT_DIR"] == f"/cache/runtime/{runtime_abi}/aiter-gfx1201"
+    assert "AITER_ROOT_DIR" not in environment
+    assert environment["VLLM_CACHE_ROOT"] == f"/cache/runtime/{runtime_abi}/vllm"
+    assert environment["TORCHINDUCTOR_CACHE_DIR"] == f"/cache/runtime/{runtime_abi}/inductor"
+    assert environment["TRITON_CACHE_DIR"] == f"/cache/runtime/{runtime_abi}/triton"
+    mounts = [args[i + 1] for i, arg in enumerate(args) if arg == "-v"]
+    assert f"{variables['cache_root']}:/cache" in mounts
+    assert "--rm" in args
 
 
 def test_snapshot_states_survive_both_mamba_release_paths_without_accumulating():

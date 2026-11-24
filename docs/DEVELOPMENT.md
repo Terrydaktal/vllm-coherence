@@ -41,6 +41,18 @@ Backend/worker restarts or configuration changes require another clean warmup;
 failed or explicitly skipped warmups never create a success receipt. Health,
 model identity and authenticated-release checks still run on every launch.
 
+Backend restarts also preserve AITER native extensions through `AITER_JIT_DIR`
+under `/cache/runtime/<runtime-ABI>/aiter-gfx1201`. `AITER_ROOT_DIR` does not
+select this cache in the pinned AITER version. Keeping its compiled core inside
+the disposable container previously caused a 19.7-second rebuild during a
+130.5-second startup. The startup-only launcher change retains the runtime/data
+ABIs and the existing vLLM, Inductor and Triton caches. A new ABI or GPU
+architecture uses a separate AITER cache; its first start must populate it.
+On 16 November, two restarts measured 103.9 and 101.8 seconds to backend
+readiness, with no AITER rebuild and the existing AOT cache reused. The first
+used an unchanged extension copied from the running release; the second reused
+it after container removal. These timings exclude Pi's separate inference warmup.
+
 For the current Qwen model, interrupted reasoning and prose remain in the next
 request and compaction input. The transcript still records the attempt as aborted.
 Unexecuted tool calls are removed from that request-only copy, with no invented
