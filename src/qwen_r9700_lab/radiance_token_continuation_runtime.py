@@ -662,6 +662,165 @@ def full_choices(state, choices):
     return None
 
 
+async def prepare_compaction(serving, request, instruction, context_window):
+    """Prepare a checkpoint using the same authenticated token history as chat.
+
+    This is CPU-only preparation. It neither submits a model request nor commits
+    or replaces the journal. In particular, cancellation of the preceding turn
+    leaves its earlier completed journal available for an unchanged prefix.
+    """
+    try:
+        import qwen_radiance_request_timeline as timeline
+    except ModuleNotFoundError as error:
+        if error.name != "qwen_radiance_request_timeline":
+            raise
+        from qwen_r9700_lab import radiance_request_timeline as timeline
+
+    if (
+        not isinstance(instruction, str)
+        or not instruction
+        or len(instruction.encode()) > 262_144
+        or any(control in instruction for control in ("<|think", "<|im_"))
+        or type(context_window) is not int
+        or not 1 <= context_window <= 262_144
+    ):
+        raise ValueError("invalid compaction preparation parameters")
+    tokenizer = serving.renderer.tokenizer
+    if tokenizer is None:
+        raise ValueError("compaction tokenizer is unavailable")
+    capacity = min(context_window, serving.model_config.max_model_len)
+    history_messages = request.messages
+    if not isinstance(history_messages, list) or not history_messages:
+        raise ValueError("compaction history is empty")
+    continuation_request = request.model_copy(
+        update={
+            "messages": [*history_messages, {"role": "user", "content": instruction}],
+            "stream": True,
+            "add_generation_prompt": True,
+            "add_special_tokens": False,
+        }
+    )
+    history_request = continuation_request.model_copy(
+        update={
+            "messages": history_messages,
+            "add_generation_prompt": False,
+        }
+    )
+    chat = _get(_get(request, "kv_transfer_params") or {}, "qwen_chat") or {}
+    identities = {
+        name: value
+        for name, value in (
+            ("chat_id", _get(chat, "id")),
+            ("generation", _get(chat, "generation")),
+        )
+        if isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    }
+    state = {"identities": identities, "observed": set()}
+    context_token = timeline._request.set(state)
+    turn = None
+    try:
+        timeline.prefix_begin(
+            continuation_request,
+            tokenizer,
+            serving._effective_chat_template_kwargs(continuation_request),
+        )
+        turn = state.get("token_continuation")
+        if turn is None:
+            raise ValueError("compaction continuation contract is unavailable")
+        previous = turn["ledger"].get_record(turn["identity"])
+
+        async def render(render_request):
+            # The two renderings share a lease and its immutable base version,
+            # but each has its own verified suffix and admission checks.
+            for name in (
+                "incremental_prompt",
+                "incremental_suffix",
+                "incremental_previous",
+            ):
+                turn.pop(name, None)
+            result = await serving.render_chat_request(render_request)
+            if not isinstance(result, tuple) or len(result) != 2:
+                raise ValueError("compaction prompt rendering failed")
+            if not turn.get("template_supported"):
+                raise ValueError("compaction template is not authenticated")
+            admitted = timeline.prefix_rendered(serving, result[1])
+            if not isinstance(admitted, list) or len(admitted) != 1:
+                raise ValueError("compaction needs one text prompt")
+            ids = serving._extract_prompt_components(admitted[0]).token_ids
+            if (
+                not isinstance(ids, list)
+                or not ids
+                or len(ids) > capacity
+                or any(
+                    type(value) is not int or not 0 <= value < 2**31 for value in ids
+                )
+            ):
+                raise ValueError("invalid compaction prompt tokens")
+            return ids
+
+        history = await render(history_request)
+        continuation = await render(continuation_request)
+        if len(history) > len(continuation) or history != continuation[: len(history)]:
+            raise ValueError("checkpoint instructions changed the historical prompt")
+
+        open_header = tokenizer.encode(
+            "<|im_start|>assistant\n<think>\n", add_special_tokens=False
+        )
+        closed_header = tokenizer.encode(
+            "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+            add_special_tokens=False,
+        )
+        if not open_header or not closed_header:
+            raise ValueError("compaction generation boundary is unavailable")
+        if continuation[-len(closed_header) :] == closed_header:
+            prompt = continuation
+        elif continuation[-len(open_header) :] == open_header:
+            prompt = continuation[: -len(open_header)] + closed_header
+        else:
+            raise ValueError("unrecognized compaction generation boundary")
+        if len(prompt) > capacity:
+            raise ValueError("compaction prompt exceeds the model context")
+        reason = state.get("token_continuation_reason", "canonical_fallback")
+        preserved = 0
+        if (
+            previous is not None
+            and reason
+            in {
+                "incremental_suffix_encoded",
+                "already_exact",
+                "preserved_generated_tokens",
+            }
+            and list(previous.tokens) == prompt[: len(previous.tokens)]
+        ):
+            preserved = len(previous.tokens)
+            reason = "generated_prefix_preserved"
+        _report(
+            state,
+            "compaction_prefix_prepared",
+            previous_tokens=preserved,
+            historical_tokens=len(history),
+            admitted_tokens=len(prompt),
+            preparation_reason=reason,
+        )
+        return {
+            "contract": "radiance-compaction-prefix-v1",
+            "prompt": prompt,
+            "historical_tokens": len(history),
+            "continuation": {
+                "reason": reason,
+                "preserved_tokens": preserved,
+                # Computing this counter must not re-encode retained history.
+                "canonical_tokens": None if preserved else len(history),
+            },
+        }
+    finally:
+        if turn is not None:
+            turn["ledger"].abort(turn["lease"])
+        timeline._request.reset(context_token)
+
+
 def finish(state, complete):
     turn = (state or {}).pop("token_continuation", None)
     if turn is None:

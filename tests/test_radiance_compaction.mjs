@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeSummaryThinking, checkpointOutputBudget, summaryInstruction, validateSummary, readCompletion, compactFromPayload,
   fileOperations, readReceipt, CONTRACT, MODEL, installRadianceCompaction, writeReceipt, MAX_COMPACTION_RECEIPT_BYTES,
-  compactionReceiptKey, compactionRetryIdentities, postJson } from "../integrations/pi/qwen-radiance-compaction.mjs";
+  compactionReceiptKey, compactionRetryIdentities, postJson, prepareSummaryPrompt } from "../integrations/pi/qwen-radiance-compaction.mjs";
 import { getCompactionProgress } from "../integrations/pi/qwen-radiance-compaction-progress.mjs";
 
 const headings = ["Goal", "Current Authoritative State", "Constraints & Invariants", "Progress", "Measurements & Evidence",
@@ -161,7 +161,8 @@ test("actual Hyptheses typo and harmless heading formatting normalize without ch
   assert.throws(() => validateSummary(`${falseFenceEnd}\nEND`, "stop", "END"), /missing required section/);
 });
 
-function fixture({ expectedLimit = 253786, completionTokens = 350 } = {}) {
+function fixture({ expectedLimit = 253786, completionTokens = 350,
+  preparedPrompt = [1, 2, 3, 4, 6, 7], historicalTokens = 2, canonicalTokens = historicalTokens, matchIdentity = true } = {}) {
   const preparation = { firstKeptEntryId: "kept", tokensBefore: 60000, isSplitTurn: true,
     settings: { reserveTokens: 16384 }, fileOps: { read: new Set(["a", "b"]), written: new Set(["a"]), edited: new Set(["c"]) } };
   const payload = { model: "fixture", messages: [{ role: "user", content: "preserve exact fact A=742" }],
@@ -173,31 +174,81 @@ function fixture({ expectedLimit = 253786, completionTokens = 350 } = {}) {
   let marker, badFinish = false;
   async function fetcher(url, options) {
     const body = JSON.parse(options.body); requests.push({ url, body });
-    if (url.endsWith("/tokenize")) {
-      let tokens;
-      if (body.prompt) tokens = body.prompt.includes("</think>") ? [4, 6, 7] : [4, 5];
-      else if (body.add_generation_prompt) {
-        marker = body.messages.at(-1).content.match(/COMPACTION_SUMMARY_COMPLETE/)[0];
-        assert.deepEqual(body.tools, payload.tools);
-        assert.deepEqual(body.chat_template_kwargs, payload.chat_template_kwargs);
-        assert.deepEqual(body.messages.slice(0, -1), payload.messages);
-        tokens = [1, 2, 3, 4, 5];
-      } else tokens = [1, 2];
-      return Response.json({ tokens });
+    if (url.endsWith("/qwen/prepare-compaction")) {
+      marker = body.instruction.match(/COMPACTION_SUMMARY_COMPLETE/)[0];
+      assert.deepEqual(body.tools, payload.tools);
+      assert.deepEqual(body.chat_template_kwargs, payload.chat_template_kwargs);
+      assert.deepEqual(body.messages, payload.messages);
+      if (matchIdentity) {
+        assert.equal(body.cache_salt, payload.cache_salt);
+        assert.deepEqual(body.kv_transfer_params, payload.kv_transfer_params);
+      }
+      assert.equal(body.context_window, model.contextWindow);
+      return Response.json({ contract: "radiance-compaction-prefix-v1", prompt: preparedPrompt, historical_tokens: historicalTokens,
+        continuation: { reason: "generated_prefix_preserved", preserved_tokens: historicalTokens, canonical_tokens: canonicalTokens } });
     }
     assert.equal(url, "http://fixture/v1/completions");
-    assert.deepEqual(body.prompt, [1, 2, 3, 4, 6, 7]);
+    assert.deepEqual(body.prompt, preparedPrompt);
     assert.equal(body.max_tokens, expectedLimit);
     assert.equal(body.return_token_ids, undefined);
     assert.equal(body.stop, undefined);
     assert.equal(body.kv_transfer_params.qwen_snapshot_force_flush, true);
     assert.ok(body.kv_transfer_params.qwen_chat);
     return sse([choice(`${summary}\n${marker}`, badFinish ? "length" : "stop"),
-      { usage: { prompt_tokens: 6, completion_tokens: completionTokens, prompt_tokens_details: { cached_tokens: 2 } } }, "[DONE]"]);
+      { usage: { prompt_tokens: preparedPrompt.length, completion_tokens: completionTokens, prompt_tokens_details: { cached_tokens: 2 } } }, "[DONE]"]);
   }
   return { input: { payload, preparation, model, policy: "policy", signal: signal(), headers: {}, fetcher,
     sourceIdentity: { sessionFile: "session-a", leaf: "leaf-a" } }, requests, truncate: () => { badFinish = true; } };
 }
+
+test("snapshot compaction submits the exact generated-token prefix rather than re-encoding historical text", async () => {
+  // The tokenizer can encode the same text as [80] or the generated [20, 21].
+  // The server's authenticated journal owns that choice; the client must retain
+  // it even though the historical token count differs from canonical encoding.
+  const raw = [1, 2, 20, 21, 99, 3, 4, 6, 7];
+  const f = fixture({ preparedPrompt: raw, historicalTokens: 5, canonicalTokens: 4, expectedLimit: 253783 });
+  const result = await compactFromPayload(f.input);
+  assert.deepEqual(f.requests.map((request) => request.url), ["http://fixture/qwen/prepare-compaction", "http://fixture/v1/completions"]);
+  assert.deepEqual(f.requests[1].body.prompt, raw);
+  assert.equal(result.tokensBefore, 5);
+  assert.equal(result.details.historicalTokens, 5);
+  assert.deepEqual(result.details.prefixPreparation, { contract: "radiance-compaction-prefix-v1",
+    reason: "generated_prefix_preserved", preservedTokens: 5, canonicalTokens: 4 });
+});
+
+test("snapshot prefix preparation never falls back to full historical retokenization on an endpoint failure", async () => {
+  const f = fixture(), calls = [];
+  await assert.rejects(compactFromPayload({ ...f.input, fetcher: async (url) => {
+    calls.push(url); return new Response("not found", { status: 404 });
+  } }), /HTTP 404/);
+  assert.deepEqual(calls, ["http://fixture/qwen/prepare-compaction"]);
+});
+
+test("incremental prefix preparation need not re-encode the historical text merely to count canonical tokens", async () => {
+  const f = fixture({ canonicalTokens: null });
+  const result = await compactFromPayload(f.input);
+  assert.equal(result.details.prefixPreparation.canonicalTokens, null);
+});
+
+test("invalid authenticated prefix metadata blocks checkpoint generation", async (t) => {
+  const valid = { contract: "radiance-compaction-prefix-v1", prompt: [1, 2, 3], historical_tokens: 2,
+    continuation: { reason: "generated_prefix_preserved", preserved_tokens: 2, canonical_tokens: 2 } };
+  for (const change of [
+    { contract: "wrong" }, { prompt: [1, -1] }, { historical_tokens: 4 }, { historical_tokens: 1.5 },
+    { continuation: { ...valid.continuation, preserved_tokens: 3 } },
+    { continuation: { ...valid.continuation, canonical_tokens: -1 } },
+    { continuation: { ...valid.continuation, reason: "private arbitrary text" } },
+  ]) await t.test(JSON.stringify(change), async () => {
+    const f = fixture(); let calls = 0;
+    await assert.rejects(prepareSummaryPrompt({ ...f.input, instruction: "synthetic instruction", fetcher: async (url) => {
+      assert.ok(url.endsWith("/qwen/prepare-compaction")); calls++;
+      return Response.json({ ...valid, ...change });
+    } }), /invalid/);
+    assert.equal(calls, 1);
+  });
+  const f = fixture(); delete f.input.payload.kv_transfer_params;
+  await assert.rejects(prepareSummaryPrompt({ ...f.input, instruction: "synthetic", fetcher: () => assert.fail("invalid identity cannot submit") }), /identity is incomplete/);
+});
 
 test("one summary covers split turns, retains tools and exact file tracking", async () => {
   const { input, requests } = fixture();
@@ -292,7 +343,7 @@ test("completed receipt survives a new invocation; another session/leaf cannot r
   assert.equal(second.requests.length, 0);
   const third = fixture();
   await compactFromPayload({ ...third.input, receiptDirectory, sourceIdentity: { sessionFile: "session-b", leaf: "leaf-a" } });
-  assert.equal(third.requests.length, 5);
+  assert.equal(third.requests.length, 2);
 });
 
 test("failed completion and HTTP failures do not write usable receipts", async () => {
@@ -301,7 +352,7 @@ test("failed completion and HTTP failures do not write usable receipts", async (
   await assert.rejects(compactFromPayload({ ...broken.input, receiptDirectory }), /incomplete/);
   const retry = fixture();
   await compactFromPayload({ ...retry.input, receiptDirectory });
-  assert.equal(retry.requests.length, 5);
+  assert.equal(retry.requests.length, 2);
   const down = fixture();
   await assert.rejects(compactFromPayload({ ...down.input, fetcher: async () => new Response("down", { status: 503 }) }), /HTTP 503/);
   const corrupted = join(receiptDirectory, "corrupted.json");
@@ -326,14 +377,14 @@ test("legacy completed failure is reused with zero generation and the original a
   const example = fixture();
   const saved = await saveLegacyFailure(example.input, receiptDirectory);
   const result = await compactFromPayload({ ...example.input, receiptDirectory, fetcher: (url, options) => {
-    assert.ok(url.endsWith("/tokenize"), "a saved completed summary must never regenerate");
+    assert.ok(url.endsWith("/qwen/prepare-compaction"), "a saved completed summary must never regenerate");
     return example.input.fetcher(url, options);
   } });
   assert.equal(result.details.recoveredCompletedSummary, true);
   assert.equal(result.details.summaryRequests, 0);
   assert.equal(result.details.recoveredReceiptKey, saved.key);
   assert.ok(result.summary.startsWith(summary));
-  assert.equal(example.requests.length, 4);
+  assert.equal(example.requests.length, 1);
   assert.deepEqual(await readFile(join(receiptDirectory, `${saved.key}.failed.json`)), saved.bytes);
   const retry = fixture();
   const prior = await compactFromPayload({ ...retry.input, receiptDirectory, fetcher: () => assert.fail("published recovery must be network-free") });
@@ -351,7 +402,7 @@ test("the incident's bullet-marker failure recovers its completed checkpoint wit
   });
   const phases = [];
   const result = await compactFromPayload({ ...example.input, receiptDirectory, progress: (value) => phases.push(value), fetcher: (url, options) => {
-    assert.ok(url.endsWith("/tokenize"), "recovering a completed checkpoint cannot generate again");
+    assert.ok(url.endsWith("/qwen/prepare-compaction"), "recovering a completed checkpoint cannot generate again");
     return example.input.fetcher(url, options);
   } });
   assert.equal(result.details.summaryRequests, 0);
@@ -431,7 +482,7 @@ test("Pi hook commits through Pi only; capture cannot hit network and errors can
     if (originalAbi === undefined) delete process.env.QWEN_RADIANCE_CACHE_ABI;
     else process.env.QWEN_RADIANCE_CACHE_ABI = originalAbi;
   });
-  const good = fixture();
+  const good = fixture({ matchIdentity: false });
   t.mock.method(globalThis, "fetch", good.input.fetcher);
   const handlers = new Map(), notices = [], messages = [], active = ["read"];
   const pi = { on: (name, handler) => handlers.set(name, handler), getActiveTools: () => active,

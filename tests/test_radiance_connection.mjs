@@ -541,16 +541,12 @@ test("a backend stop during compaction preparation prevents the generation reque
       requests.push({ url: String(url), body: options.body });
       if (String(url).endsWith("/health")) return new Response("ok");
       if (String(url).endsWith("/models")) return Response.json({ data: [{ id: MODEL }] });
-      assert.equal(String(url), "http://127.0.0.1:8012/tokenize");
-      const body = JSON.parse(options.body);
-      if (body.prompt) return Response.json({ tokens: body.prompt.includes("</think>") ? [4, 6, 7] : [4, 5] });
-      if (body.add_generation_prompt) {
-        await write({ state: "offline", failure_kind: "backend_stopped" });
-        return Response.json({ tokens: [1, 2, 3, 4, 5] });
-      }
-      return Response.json({ tokens: [1, 2] });
+      assert.equal(String(url), "http://127.0.0.1:8012/qwen/prepare-compaction");
+      await write({ state: "offline", failure_kind: "backend_stopped" });
+      return Response.json({ contract: "radiance-compaction-prefix-v1", prompt: [1, 2, 3], historical_tokens: 2,
+        continuation: { reason: "generated_prefix_preserved", preserved_tokens: 2, canonical_tokens: 2 } });
     } }), /Backend offline/);
-  assert.equal(requests.filter((request) => request.body !== undefined).length, 4);
+  assert.equal(requests.filter((request) => request.body !== undefined).length, 1);
   assert.ok(!requests.some((request) => request.url.endsWith("/completions")));
 });
 

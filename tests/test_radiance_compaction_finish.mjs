@@ -50,14 +50,15 @@ function fixture({ originalComplete = false, originalResponse = {}, streamRespon
   const fetcher = async (url, options) => {
     const body = JSON.parse(options.body);
     requests.push({ url, body, signal: options.signal });
-    if (url.endsWith("/tokenize")) {
-      if (body.prompt) return Response.json({ tokens: body.prompt.includes("</think>") ? [4, 6, 7] : [4, 5] });
-      if (!body.add_generation_prompt) return Response.json({ tokens: [1, 2] });
-      assert.deepEqual(body.messages.slice(0, -1), payload.messages, "canonical history remains unchanged");
+    if (url.endsWith("/qwen/prepare-compaction")) {
+      assert.deepEqual(body.messages, payload.messages, "source history remains unchanged");
       assert.deepEqual(body.tools, payload.tools);
       assert.deepEqual(body.chat_template_kwargs, payload.chat_template_kwargs);
-      instructions.push(body.messages.at(-1).content);
-      return Response.json({ tokens: [1, 2, 3, 4, 5] });
+      assert.equal(body.cache_salt, payload.cache_salt);
+      assert.deepEqual(body.kv_transfer_params, payload.kv_transfer_params);
+      instructions.push(body.instruction);
+      return Response.json({ contract: "radiance-compaction-prefix-v1", prompt: [1, 2, 3, 4, 6, 7], historical_tokens: 2,
+        continuation: { reason: "generated_prefix_preserved", preserved_tokens: 2, canonical_tokens: 2 } });
     }
     assert.equal(url, "http://fixture.invalid/v1/completions");
     assert.deepEqual(body.prompt.slice(0, 2), [1, 2], "canonical history remains an exact prefix");
@@ -119,7 +120,7 @@ test("Alt+C cuts the current checkpoint exactly and issues no replacement reques
   const before = structuredClone(f.input.payload), updates = [];
   const result = await cutOnText(f, { receiptDirectory: directory, progress: (update) => updates.push(update) });
   assert.equal(f.generations().length, 1);
-  assert.equal(f.requests.length, 5, "four original tokenizer calls and one original completion only");
+  assert.equal(f.requests.length, 2, "one authenticated prefix preparation and one original completion only");
   assert.equal(f.instructions.length, 1);
   assert.equal(f.generations()[0].signal.aborted, true);
   assert.equal(f.input.signal.aborted, false, "Alt+C must not cancel the compaction transaction");

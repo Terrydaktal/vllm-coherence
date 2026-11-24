@@ -77,7 +77,7 @@
       "qualified-speed-release.json": "558ea34b3f83b388fa0b37de4788e772b5f00663b4e87747bc26f4bc89949b76",
       "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
       "runtime-radiance-1.0.16.json": "a675da0db7c2c64a58762e90874eeab6a9319db8d34effa813f0e316d2203675",
-      "radiance_request_guard.py": "04557cc3d8bad4dc1e45c4accaf3df1267745043eaff81eed03a344ed4c0eca5",
+      "radiance_request_guard.py": "f6cae439345513c517d4b2c4967321a7f8710136883d2d8b931e8e3b05242ee6",
       "patch_verify_head_memory.py": "368c9f59d7afa8149bdf6365b9178c03ebf96dd0ff78340464bab0c71e03de48",
       "patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
       "patch_dflash_response_cache.py": "65b63fb943d42ae0e7661fee72abaf37d174c1eee3ce08cfe26b851f4a51b1b0",
@@ -410,7 +410,7 @@
         "radiance_prefix_lineage.py": "2f4b3d08e7051c766be584e78ab3b58215b3ba85bb04169560b5b37fe4058021",
         "radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936",
         "radiance_token_continuation.py": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
-        "radiance_token_continuation_runtime.py": "0a4871795f88ecfc4e514a12692c227d995e929d73be144123c61e5ba8926d1a",
+        "radiance_token_continuation_runtime.py": "c6b7181a98b17ce2e9fb58d829fd379cac9b35a66ca6fb1905e1a22f81a040e0",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
         "radiance_chat_tier.py": "b5374b9e3f5ce1b7e272607946561d37f177fd8d4d4d53b2523fd032815231a0",
@@ -453,7 +453,8 @@
         "404e7eb3c7c3c6ed105c9860c8502c4cee5928057713aa3f97f4da13b55fed7a",
         "a1630fae05ab4f9dd6ca6a7dcdfa55c1feaf9d36fdbb9bbb16229709c099f6b4",
         "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
-        "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede"
+        "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede",
+        "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6"
       ]
     },
     "buffered_tool_usage": {

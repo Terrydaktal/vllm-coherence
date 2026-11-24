@@ -753,6 +753,170 @@ def test_reports_never_include_raw_content_or_token_values(setup_runtime, monkey
         )
 
 
+class CompactionRequest(SimpleNamespace):
+    def model_copy(self, *, update):
+        return CompactionRequest(**{**vars(self), **update})
+
+class CompactionTokenizer(SuffixOnlyTokenizer):
+    def apply_chat_template(
+        self, *, conversation, tools, chat_template, tokenize, **kwargs
+    ):
+        assert tokenize is False
+        assert chat_template == TEMPLATE
+        text = ""
+        for index, message in enumerate(conversation):
+            if index == 0:
+                text += "P" if message["content"] == "first" else "EDITED"
+            elif message["role"] == "assistant":
+                text += message["content"] + "<|im_end|>\n"
+            else:
+                text += message["content"]
+        if kwargs.get("add_generation_prompt"):
+            text += "<|im_start|>assistant\n<think>\n"
+        return text
+
+class CompactionServing(Serving):
+    def __init__(self, tokenizer):
+        self.renderer = SimpleNamespace(tokenizer=tokenizer)
+        self.model_config = SimpleNamespace(max_model_len=4096)
+
+    def _effective_chat_template_kwargs(self, _request):
+        return config()["template_kwargs"]
+
+    async def render_chat_request(self, req):
+        from qwen_r9700_lab import radiance_request_timeline as timeline
+
+        tokenizer = self.renderer.tokenizer
+        kwargs = {
+            **self._effective_chat_template_kwargs(req),
+            "add_generation_prompt": req.add_generation_prompt,
+        }
+        timeline.prefix_render_params(req.messages, kwargs)
+        continuation = kwargs.pop("_coherence_token_encode", None)
+        template = timeline.prefix_template(TEMPLATE, kwargs)
+        ids = timeline.prefix_tokenize(
+            tokenizer,
+            req.messages,
+            req.tools,
+            template,
+            kwargs,
+            False,
+            False,
+            continuation=continuation,
+        )
+        if ids is None:
+            text = tokenizer.apply_chat_template(
+                conversation=req.messages,
+                tools=req.tools,
+                chat_template=template,
+                tokenize=False,
+                **kwargs,
+            )
+            ids = tokenizer.encode(text, add_special_tokens=False)
+        return req.messages, inputs(ids)
+
+def compaction_setup():
+    tokenizer = CompactionTokenizer()
+    configuration = config()
+    configuration["tokenizer_class"] = type(tokenizer).__qualname__
+    complete_first(tokenizer, configuration=configuration)
+    tokenizer.encoded_texts.clear()
+    tokenizer.reject_history_encoding = True
+    req = CompactionRequest(
+        **vars(
+            request(
+                [
+                    {"role": "user", "content": "first"},
+                    {"role": "assistant", "content": "xy"},
+                ]
+            )
+        )
+    )
+    return tokenizer, req
+
+def test_compaction_preserves_generated_history_instead_of_reencoding(setup_runtime):
+    ledger, _ = setup_runtime
+    tokenizer, req = compaction_setup()
+    result = asyncio.run(
+        runtime.prepare_compaction(
+            CompactionServing(tokenizer), req, "checkpoint", 4096
+        )
+    )
+    assert result["contract"] == "radiance-compaction-prefix-v1"
+    assert result["prompt"][:3] == PROMPT + GENERATED
+    assert result["historical_tokens"] == 4  # raw P + xy + boundary + newline
+    assert result["continuation"] == {
+        "reason": "generated_prefix_preserved",
+        "preserved_tokens": 3,
+        "canonical_tokens": None,
+    }
+    assert all("P" not in text for text in tokenizer.encoded_texts)
+    assert not ledger._active
+
+@pytest.mark.parametrize("changed", ["user", "assistant"])
+def test_compaction_changed_messages_fall_back_without_forcing_old_tokens(
+    setup_runtime, changed
+):
+    ledger, _ = setup_runtime
+    tokenizer, req = compaction_setup()
+    tokenizer.reject_history_encoding = False
+    req.messages[0 if changed == "user" else 1]["content"] = "edited"
+    result = asyncio.run(
+        runtime.prepare_compaction(
+            CompactionServing(tokenizer), req, "checkpoint", 4096
+        )
+    )
+    assert result["continuation"]["preserved_tokens"] == 0
+    assert result["continuation"]["canonical_tokens"] == result["historical_tokens"]
+    assert result["prompt"][:3] != PROMPT + GENERATED
+    assert not ledger._active
+
+def test_compaction_keeps_prior_completed_prefix_when_latest_tail_was_aborted(
+    setup_runtime,
+):
+    ledger, _ = setup_runtime
+    tokenizer, req = compaction_setup()
+    # A cancelled later request does not replace the completed journal. Its
+    # partial text may be retained, but is encoded only after that exact prefix.
+    req.messages += [
+        {"role": "user", "content": "next"},
+        {"role": "assistant", "content": "partial answer"},
+    ]
+    result = asyncio.run(
+        runtime.prepare_compaction(
+            CompactionServing(tokenizer), req, "checkpoint", 4096
+        )
+    )
+    assert result["prompt"][:3] == PROMPT + GENERATED
+    assert result["continuation"]["preserved_tokens"] == 3
+    assert result["historical_tokens"] > 4
+    assert not ledger._active
+
+def test_compaction_refuses_instruction_that_rewrites_historical_template(
+    setup_runtime,
+):
+    ledger, _ = setup_runtime
+    tokenizer, req = compaction_setup()
+    tokenizer.reject_history_encoding = False
+    render = tokenizer.apply_chat_template
+
+    def changed_render(**kwargs):
+        text = render(**kwargs)
+        return (
+            text.replace("P", "EDITED", 1)
+            if kwargs.get("add_generation_prompt")
+            else text
+        )
+
+    tokenizer.apply_chat_template = changed_render
+    with pytest.raises(ValueError, match="changed the historical prompt"):
+        asyncio.run(
+            runtime.prepare_compaction(
+                CompactionServing(tokenizer), req, "checkpoint", 4096
+            )
+        )
+    assert not ledger._active
+
 @pytest.mark.parametrize("second_template", [TEMPLATE, "unrecognized template"])
 def test_actual_timeline_pipeline_preserves_history_across_executor_without_recorder(
     setup_runtime, monkeypatch, second_template

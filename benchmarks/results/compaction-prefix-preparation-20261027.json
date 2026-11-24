@@ -1,0 +1,95 @@
+{
+  "schema": "urn:coherence:compaction-prefix-qualification:v1",
+  "recorded_at_utc": "2026-10-27T15:31:18Z",
+  "status": "qualified-and-installed",
+  "scope": "Checkpoint prompt construction and cache reuse; unchanged model arithmetic and snapshot data format. No private transcript or token payload was inspected.",
+  "incident": {
+    "endpoint_tokens": 237036,
+    "rejection_reason": "prompt_does_not_extend_endpoint",
+    "input_tokens": 235369,
+    "cached_tokens": 0,
+    "prefill_ms": 261358.602
+  },
+  "incident_limit": "The raw-completion incident did not retain the first differing token or a full prefix-construction comparison; no claim identifies its exact private changed bytes.",
+  "cpu_tokenizer_qualification": {
+    "candidate_runtime_sha256": "c6b7181a98b17ce2e9fb58d829fd379cac9b35a66ca6fb1905e1a22f81a040e0",
+    "sdk_fixture_sha256": "45cfb77152b58e6368234e6aab379566d231368dda7c318b187f4f9a87998beb",
+    "driver_sha256": "65432b61c1cf0cf486bc7d0d2422538b4d6ce694376834ec78c4a9855a1615c6",
+    "qualified": {
+      "passed": true,
+      "fixture": "installed-pi-sdk-and-pinned-qwen-tokenizer",
+      "model_inference_requests": 0,
+      "gpu_operations": 0,
+      "private_journals_read": false,
+      "raw_prefix_tokens": 47,
+      "historical_tokens": 48,
+      "canonical_historical_tokens": 44,
+      "prepared_tokens": 67,
+      "continuation": {
+        "reason": "generated_prefix_preserved",
+        "preserved_tokens": 47,
+        "canonical_tokens": null
+      },
+      "modified_history": {
+        "reason": "history_changed",
+        "preserved_tokens": 0,
+        "canonical_tokens": 48
+      },
+      "decoded_prompt_exact": true,
+      "journal_unchanged": true
+    },
+    "installed_runtime_sha256": "c6b7181a98b17ce2e9fb58d829fd379cac9b35a66ca6fb1905e1a22f81a040e0"
+  },
+  "native_streaming_chat_to_checkpoint": {
+    "scope": "owned synthetic requests only; no private chats read",
+    "first_prompt_tokens": 3040,
+    "first_output_tokens": 2,
+    "first_finish_reason": "stop",
+    "first_request_ms": 1371.042,
+    "preparation_ms": 392.378,
+    "preparation_contract": "radiance-compaction-prefix-v1",
+    "continuation": {
+      "reason": "generated_prefix_preserved",
+      "preserved_tokens": 3042,
+      "canonical_tokens": null
+    },
+    "historical_tokens": 3043,
+    "checkpoint_prompt_tokens": 3064,
+    "checkpoint_cached_tokens": 3042,
+    "checkpoint_uncached_tokens": 22,
+    "checkpoint_request_ms": 77.511,
+    "passed": true
+  },
+  "vm_relay": {
+    "passed": true,
+    "contract": "radiance-compaction-prefix-v1",
+    "prompt_tokens": 70,
+    "historical_tokens": 53,
+    "scope": "VM relay CPU-only preparation; no inference or private chat"
+  },
+  "checks": {
+    "coherence_python_passed": 294,
+    "pi_node_passed": 181,
+    "opsec_existing_python_passed": 53,
+    "opsec_new_boundary_passed": 7
+  },
+  "release": {
+    "previous_runtime_abi": "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6",
+    "runtime_abi": "68c6d626b6f2891f26dc394b20fff70c8ea80cd6885e2352d3c3cf37134fec40",
+    "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+    "server_launcher_sha256": "d99858abbe4d8deae9397ed99b92a21c387e389cd348479275af043a471cbb59",
+    "updated_modules": {
+      "radiance_token_continuation_runtime.py": "c6b7181a98b17ce2e9fb58d829fd379cac9b35a66ca6fb1905e1a22f81a040e0",
+      "radiance_request_guard.py": "f6cae439345513c517d4b2c4967321a7f8710136883d2d8b931e8e3b05242ee6"
+    },
+    "model_arithmetic_changed": false
+  },
+  "pi_opsec_release": "7807a02c61e852d869be",
+  "client_activation": "Existing Pi processes retain imported extensions; /quit and normal relaunch/resume loads the repair.",
+  "source_sha256": {
+    "integrations/pi/qwen-radiance-compaction.mjs": "8d138c5b71499154eb5bc55b248c92411f02bbcc322794e743a36dde109d99b2",
+    "integrations/pi/qwen-task-plan.mjs": "28d9e48cbad4842ab69c3aa999024e52fe007482576c9fabc581900bd0ae6867",
+    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py": "c6b7181a98b17ce2e9fb58d829fd379cac9b35a66ca6fb1905e1a22f81a040e0",
+    "experiments/radiance-public/radiance_request_guard.py": "f6cae439345513c517d4b2c4967321a7f8710136883d2d8b931e8e3b05242ee6"
+  }
+}

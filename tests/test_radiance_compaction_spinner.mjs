@@ -89,7 +89,7 @@ test("native manual and automatic compaction spinners update in place and disapp
         const rendered = mode.statusContainer.render(100).map(stripAnsi);
         assert.match(rendered.join("\n"), /GPU queue: 1m 5s/);
         assert.match(rendered.join("\n"), /another chat c{12} has the GPU and is generating/);
-        assert.match(rendered.join("\n"), /Find and load cached context: not observed yet/);
+        assert.match(rendered.join("\n"), /Restore cached context into GPU: not observed yet/);
         assert.match(rendered.join("\n"), /Input: 239,265 tok/);
         assert.ok(rendered.every((line) => visibleWidth(line) <= 100), "multiline spinner respects terminal width");
         progress.update({ phase: "generate", outputTokens: 3922, cacheRead: 235664 });

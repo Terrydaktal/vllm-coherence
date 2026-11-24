@@ -12,6 +12,8 @@ import {
 import { appendCompactionTiming, startCompactionProgress, getCompactionProgress, clearCompactionProgress } from "./qwen-radiance-compaction-progress.mjs";
 import { BACKEND_ERROR_ENTRY, backendErrorMessage, reportBackendFailure } from "./qwen-radiance-errors.mjs";
 import { preserveFutureThinking } from "./qwen-radiance-thinking.mjs";
+import { canonicalizeToolMessages } from "./qwen-tool-names.mjs";
+import { filterTaskPlanMessages } from "./qwen-task-plan.mjs";
 import { filteredRequestContext, contextPolicy, effectiveExclusions } from "./qwen-context-policy.mjs";
 import { buildContinuityPacket, selectProtectedTail } from "./qwen-compaction-memory.mjs";
 import { workspaceMemoryText } from "./qwen-compaction-workspace.mjs";
@@ -178,6 +180,13 @@ export function prepareContinuity(event, ctx) {
     policy: "source-linked working state + atomic recent tail + on-demand transcript recovery" };
 }
 
+export function compactionRequestMessages(messages, ctx) {
+  // Apply the ordinary request projections before provider conversion. In
+  // particular, legacy tool names cannot silently return during compaction.
+  // Match selected-entry identities before producing request-only copies.
+  return canonicalizeToolMessages(filterTaskPlanMessages(filteredRequestContext(messages, ctx), ctx));
+}
+
 export function assertTokens(tokens) {
   if (!Array.isArray(tokens) || !tokens.length || !tokens.every((t) => Number.isSafeInteger(t) && t >= 0)) {
     throw new Error("tokenizer returned an invalid token vector");
@@ -212,6 +221,48 @@ export function closeSummaryThinking(history, continuation, openHeader, closedHe
     throw new Error(`checkpoint needs ${prompt.length + maxTokens} tokens, context limit is ${capacity}; original transcript retained`);
   }
   return prompt;
+}
+
+// Snapshot-backed chats use the server's authenticated generated-token history.
+// Re-encoding the same historical text with /tokenize can change its token IDs
+// and invalidate an otherwise reusable KV/recurrent prefix.
+export async function prepareSummaryPrompt({ payload, model, instruction, headers, signal, fetcher = fetch }) {
+  const baseUrl = model.baseUrl.replace(/\/+$/, "");
+  if (!baseUrl.endsWith("/v1")) throw new Error("Radiance base URL must end in /v1");
+  const cacheIdentity = payload.cache_salt || payload.kv_transfer_params?.qwen_chat;
+  if (cacheIdentity) {
+    if (typeof payload.cache_salt !== "string" || !payload.cache_salt || !payload.kv_transfer_params?.qwen_chat) {
+      throw new Error("compaction cache identity is incomplete; original transcript retained");
+    }
+    const prepared = await (await postJson(`${baseUrl.slice(0, -3)}/qwen/prepare-compaction`, {
+      model: payload.model, messages: payload.messages, tools: payload.tools,
+      chat_template_kwargs: payload.chat_template_kwargs, cache_salt: payload.cache_salt,
+      kv_transfer_params: payload.kv_transfer_params, instruction, context_window: model.contextWindow,
+    }, headers, signal, fetcher)).json();
+    const prompt = assertTokens(prepared.prompt);
+    const historyTokens = prepared.historical_tokens, continuation = prepared.continuation;
+    if (prepared.contract !== "radiance-compaction-prefix-v1" ||
+      !Number.isSafeInteger(historyTokens) || historyTokens < 0 || historyTokens > prompt.length ||
+      !continuation || typeof continuation.reason !== "string" || !/^[a-z][a-z0-9_]{0,79}$/.test(continuation.reason) ||
+      !Number.isSafeInteger(continuation.preserved_tokens) || continuation.preserved_tokens < 0 || continuation.preserved_tokens > historyTokens ||
+      (continuation.canonical_tokens !== null && (!Number.isSafeInteger(continuation.canonical_tokens) || continuation.canonical_tokens < 0))) {
+      throw new Error("invalid authenticated compaction prefix; original transcript retained");
+    }
+    return { prompt, historyTokens, prefixPreparation: { contract: prepared.contract,
+      reason: continuation.reason, preservedTokens: continuation.preserved_tokens, canonicalTokens: continuation.canonical_tokens } };
+  }
+  // No snapshot/session identity means there is no generated-token journal to
+  // authenticate. Keep the canonical, prefix-checked path for that mode only.
+  const chat = { model: payload.model, messages: payload.messages, tools: payload.tools,
+    chat_template_kwargs: payload.chat_template_kwargs, add_special_tokens: false };
+  const tokenize = async (body) => assertTokens((await (await postJson(`${baseUrl.slice(0, -3)}/tokenize`, body, headers, signal, fetcher)).json()).tokens);
+  const [history, continuation, openHeader, closedHeader] = await Promise.all([
+    tokenize({ ...chat, add_generation_prompt: false }),
+    tokenize({ ...chat, messages: [...chat.messages, { role: "user", content: instruction }], add_generation_prompt: true }),
+    tokenize({ model: payload.model, prompt: OPEN, add_special_tokens: false }),
+    tokenize({ model: payload.model, prompt: CLOSED, add_special_tokens: false }),
+  ]);
+  return { prompt: closeSummaryThinking(history, continuation, openHeader, closedHeader, model.contextWindow, 0), historyTokens: history.length };
 }
 
 export function validateSummary(text, finishReason, marker) {
@@ -473,19 +524,9 @@ export async function compactFromPayload({ payload, preparation, policy, customI
   }
   const baseUrl = model.baseUrl.replace(/\/+$/, "");
   if (!baseUrl.endsWith("/v1")) throw new Error("Radiance base URL must end in /v1");
-  const tokenizerUrl = `${baseUrl.slice(0, -3)}/tokenize`;
-  const chat = { model: payload.model, messages: payload.messages, tools: payload.tools,
-    chat_template_kwargs: payload.chat_template_kwargs, add_special_tokens: false };
   const instruction = summaryInstruction(policy, marker, customInstructions, continuity);
-  const tokenize = async (body) => assertTokens((await (await postJson(tokenizerUrl, body, headers, signal, fetcher)).json()).tokens);
   progress({ phase: "tokenize" });
-  const [history, continuation, openHeader, closedHeader] = await Promise.all([
-    tokenize({ ...chat, add_generation_prompt: false }),
-    tokenize({ ...chat, messages: [...chat.messages, { role: "user", content: instruction }], add_generation_prompt: true }),
-    tokenize({ model: payload.model, prompt: OPEN, add_special_tokens: false }),
-    tokenize({ model: payload.model, prompt: CLOSED, add_special_tokens: false }),
-  ]);
-  const prompt = closeSummaryThinking(history, continuation, openHeader, closedHeader, model.contextWindow, 0);
+  const { prompt, historyTokens, prefixPreparation } = await prepareSummaryPrompt({ payload, model, instruction, headers, signal, fetcher });
   const maxTokens = checkpointOutputBudget({ promptTokens: prompt.length, contextWindow: model.contextWindow });
   let partial = { text: "" };
   let completion, forcedCheckpoint = false;
@@ -575,9 +616,10 @@ export async function compactFromPayload({ payload, preparation, policy, customI
     // Pi's preparation estimate can still reflect the last answer's usage after
     // /context or thinking exclusions. This tokenizer sees the selected payload;
     // its history excludes the checkpoint instruction and generation suffix.
-    tokensBefore: history.length, usage,
+    tokensBefore: historyTokens, usage,
     details: { readFiles: ops.readFiles, modifiedFiles: ops.modifiedFiles, contract: CONTRACT,
-      sourceIdentity, promptSha256: hash(prompt), historicalTokens: history.length, prefixVerified: true,
+      sourceIdentity, promptSha256: hash(prompt), historicalTokens: historyTokens, prefixVerified: true,
+      ...(prefixPreparation ? { prefixPreparation } : {}),
       preparedTokensBefore: preparation.tokensBefore, tokensBeforeSource: "selected_history_tokenization",
       summaryRequests: recovered ? 0 : 1, splitTurn: preparation.isSplitTurn, elapsedMs: Math.round(performance.now() - started),
       ...(continuity?.enabled ? { continuity: { ...continuity, appendedToSummary: !forcedCheckpoint } } : {}),
@@ -680,7 +722,7 @@ export function installRadianceCompaction(pi, {
       if (tools.some((tool) => !tool)) throw new Error("active tool schema missing during compaction");
       let payload;
       const captured = await streamSimpleOpenAICompletions(model, {
-        systemPrompt: ctx.getSystemPrompt(), messages: convertToLlm(filteredRequestContext(ctx.sessionManager.buildSessionContext().messages, ctx)), tools,
+        systemPrompt: ctx.getSystemPrompt(), messages: convertToLlm(compactionRequestMessages(ctx.sessionManager.buildSessionContext().messages, ctx)), tools,
       }, { ...auth, reasoning: pi.getThinkingLevel(), maxTokens: 1, signal: event.signal,
         onPayload: (value) => { payload = value; throw new Error(CAPTURE); },
         fetch: () => { throw new Error("unexpected provider network call during compaction payload capture"); },

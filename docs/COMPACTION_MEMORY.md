@@ -89,6 +89,49 @@ receipts use their saved historical count without rewriting the receipt.
 When reopening older Radiance compactions, Pi's display also uses that recorded
 historical count when valid. The original JSONL entry remains unchanged.
 
+## Checkpoint prompt reuse
+
+Snapshot-backed compaction prepares its prompt through the authenticated
+`POST /qwen/prepare-compaction` endpoint. It uses the normal chat renderer and
+the same generated-token journal as ordinary replies. The selected history
+receives the same context exclusions, plan filtering and tool-name migration
+before provider conversion. Only the checkpoint instruction and its closed
+thinking header are appended to that history.
+
+Previously, compaction separately re-tokenized all history through `/tokenize`.
+Decoding generated IDs to text and encoding that text again can produce different
+IDs, even when the text is identical. Bypassing the normal continuation path
+could therefore invalidate the whole KV/recurrent prefix. The new preparation
+preserves authenticated historical IDs when the history, output, configuration
+and rendered text still match. Changes to old messages remain real cache misses;
+the endpoint never treats different token sequences as interchangeable model
+state. A cancelled answer does not become a completed journal entry, but an
+earlier valid completed prefix can still be reused.
+
+Preparation performs no inference, GPU wait or journal commit. The normal cache
+checks still determine how much prepared state is reusable. Its receipt records
+the preparation reason and the number of preserved IDs; that count is not a
+claim that all of those tokens are resident in the GPU. A missing endpoint or
+invalid preparation stops compaction with the original transcript retained,
+instead of silently falling back to a full-history prefill. Chats without a
+snapshot identity retain their prefix-checked canonical tokenization path.
+
+The serving process must load the updated preparation endpoint, and Pi must
+load the updated extension. The snapshot data format and model arithmetic are
+unchanged.
+
+The [27 October qualification](../benchmarks/results/compaction-prefix-preparation-20261027.json)
+checks the actual installed Pi SDK and pinned Qwen tokenizer with two different
+token encodings of the same text. The unchanged generated prefix survives;
+editing an earlier message rejects that reuse. A native streaming-chat check
+then reused 3,042 of a 3,064-token checkpoint prompt, processing only the 22-token
+suffix in a 77.5 ms one-output-token request. This is a small cache-reuse check,
+not a full-length summary-generation benchmark. The recorded 235,369-token
+incident had reused zero tokens and spent 261 seconds prefilling. Its first
+changed token was not retained, so the capture does not identify which private
+history transformation first broke that prefix. The VM relay and installed
+Pi-opsec bundle also passed preparation and SDK checks.
+
 ## Automatic compaction during generation
 
 The Qwen/Radiance harness watches fresh provider usage while an answer is

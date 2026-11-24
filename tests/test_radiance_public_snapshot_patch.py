@@ -481,6 +481,9 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         # Completing the generated authentication metadata leaves the already
         # deployed process-policy code and snapshot numerical contract unchanged.
         "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede",
+        # Checkpoint preparation shares the ordinary authenticated token journal;
+        # it does not change arithmetic or the existing serialized snapshot data.
+        "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6",
     ]
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (

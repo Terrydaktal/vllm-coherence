@@ -35,7 +35,8 @@ const partialEntries = (entries) => entries.filter((entry) => entry.type === "me
 
 async function fixture(t, { enabled = true, provider = "qwen-r9700", contextWindow = 253792, reserveTokens = 8192,
   compactor = "success", historicalUsage = 200, priorCheckpoint = false, honorAbort = true,
-  includeDraft = true, expectedStop = "aborted", partialText = PROSE, partialThinking = THINKING, beforeCheckpoint = async () => {}, realProvider = false } = {}) {
+  includeDraft = true, expectedStop = "aborted", partialText = PROSE, partialThinking = THINKING, beforeCheckpoint = async () => {}, realProvider = false,
+  systemPromptExtension = false } = {}) {
   const { createAgentSession } = await mod("pi-coding-agent/dist/core/sdk.js");
   const { SettingsManager } = await mod("pi-coding-agent/dist/core/settings-manager.js");
   const { SessionManager } = await mod("pi-coding-agent/dist/core/session-manager.js");
@@ -62,7 +63,8 @@ async function fixture(t, { enabled = true, provider = "qwen-r9700", contextWind
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled, reserveTokens, keepRecentTokens: 1500 }, retry: { enabled: false } }, { projectTrusted: true });
   const resourceLoader = new DefaultResourceLoader({ cwd: directory, agentDir: directory, settingsManager,
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-    additionalExtensionPaths: [resolve("integrations/pi/qwen-radiance-compaction.ts"), ...(realProvider ? [resolve("integrations/pi/qwen-progress.mjs")] : [])],
+    additionalExtensionPaths: [resolve("integrations/pi/qwen-radiance-compaction.ts"), ...(realProvider ? [resolve("integrations/pi/qwen-progress.mjs")] : []),
+      ...(systemPromptExtension ? [resolve("integrations/pi/qwen-tool-output-condense.mjs")] : [])],
     systemPrompt: "Synthetic streaming-compaction fixture." });
   await resourceLoader.reload();
   assert.deepEqual(resourceLoader.getExtensions().errors, []);
@@ -231,6 +233,24 @@ test("streaming 240K usage saves the exact interrupted attempt before one checkp
   const interrupted = partialEntries(reopened.getEntries())[0].message;
   assert.equal(interrupted.stopReason, "aborted");
   assert.match(interrupted.errorMessage, /interrupt|compact/i, "transcript status distinguishes an interrupted attempt from completed output");
+});
+
+test("automatic stream interruption retains the effective extension-modified system prompt through checkpoint preparation", options, async (t) => {
+  const f = await fixture(t, { systemPromptExtension: true });
+  f.start();
+  const first = await f.first();
+  assert.match(first.context.systemPrompt, /Qwen bounded tool-output discipline/);
+  first.update("usage_update", f.partial(usage(230000, 2000, 8000)));
+  await until(() => first.signal.aborted, "automatic interruption");
+  await until(() => f.controls.length === 2, "checkpoint and continuation");
+  const history = f.tokenizationBodies.find((body) => body.messages && !body.add_generation_prompt);
+  const continuation = f.tokenizationBodies.find((body) => body.messages && body.add_generation_prompt);
+  assert.equal(history.messages[0].content, first.context.systemPrompt);
+  assert.equal(continuation.messages[0].content, first.context.systemPrompt);
+  assert.equal(f.controls[1].context.systemPrompt, first.context.systemPrompt);
+  assert.equal(f.summaries(), 1);
+  f.controls[1].finish("stop", f.assistant([{ type: "text", text: "Synthetic interrupted task complete." }], usage(100, 100)));
+  await f.settle();
 });
 
 test("the reserve guard interrupts below 240K using prompt, cache-read, cache-write and output accounting", options, async (t) => {

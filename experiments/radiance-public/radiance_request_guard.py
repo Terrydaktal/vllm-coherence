@@ -9,6 +9,8 @@ from starlette.responses import JSONResponse
 
 
 async def require_snapshot_abi(request, call_next):
+    if request.method == "POST" and request.url.path == "/qwen/prepare-compaction":
+        return await prepare_compaction_control(request)
     if request.method == "POST" and request.url.path == "/qwen-radiance/priority":
         return await priority_control(request)
     if request.method == "POST" and request.url.path in (
@@ -39,6 +41,97 @@ async def require_snapshot_abi(request, call_next):
                         },
                     )
     return await call_next(request)
+
+
+async def prepare_compaction_control(request):
+    """CPU-only checkpoint preparation with the configured API authentication.
+
+    User middleware runs outside vLLM's authentication middleware, and this
+    control path is outside /v1. Therefore authentication must happen here too,
+    before accepting a body or opening a generated-token journal.
+    """
+    try:
+        for middleware in request.app.user_middleware:
+            if middleware.cls.__name__ == "AuthenticationMiddleware":
+                verifier = middleware.cls(app=None, **middleware.kwargs)
+                if not verifier.verify_token(request.headers):
+                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 8 * 1024 * 1024:
+                raise ValueError("compaction preparation request too large")
+        import json
+
+        value = json.loads(raw)
+        allowed = {
+            "model",
+            "messages",
+            "tools",
+            "chat_template_kwargs",
+            "cache_salt",
+            "kv_transfer_params",
+            "instruction",
+            "context_window",
+        }
+        if not isinstance(value, dict) or set(value) - allowed:
+            raise ValueError("invalid compaction preparation request")
+        params = value.get("kv_transfer_params")
+        if not isinstance(params, dict) or not isinstance(
+            params.get("qwen_chat"), dict
+        ):
+            raise TypeError("compaction cache identity is missing")
+        expected = os.environ.get("QWEN_RADIANCE_CACHE_ABI")
+        if not expected or params.get("qwen_snapshot_abi") != expected:
+            return JSONResponse(
+                {"error": "compaction snapshot ABI differs"}, status_code=409
+            )
+        try:
+            from qwen_radiance_cache import cache_salt
+        except ModuleNotFoundError as error:
+            if error.name != "qwen_radiance_cache":
+                raise
+            from qwen_r9700_lab.radiance_cache import cache_salt
+        if value.get("cache_salt") != cache_salt(params["qwen_chat"]):
+            raise ValueError("compaction cache salt differs")
+        instruction = value.pop("instruction")
+        capacity = value.pop("context_window")
+        from vllm.entrypoints.openai.chat_completion.protocol import (
+            ChatCompletionRequest,
+        )
+
+        chat_request = ChatCompletionRequest.model_validate(
+            {
+                **value,
+                "stream": True,
+                "add_special_tokens": False,
+            }
+        )
+    except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+        return JSONResponse(
+            {"error": "invalid compaction preparation request"}, status_code=400
+        )
+    try:
+        try:
+            from qwen_radiance_token_continuation_runtime import prepare_compaction
+        except ModuleNotFoundError as error:
+            if error.name != "qwen_radiance_token_continuation_runtime":
+                raise
+            from qwen_r9700_lab.radiance_token_continuation_runtime import (
+                prepare_compaction,
+            )
+        result = await prepare_compaction(
+            request.app.state.openai_serving_chat, chat_request, instruction, capacity
+        )
+    except ValueError:
+        return JSONResponse(
+            {"error": "checkpoint prefix could not be prepared safely"}, status_code=409
+        )
+    except Exception:  # noqa: BLE001 - keep private rendering errors out of HTTP responses.
+        return JSONResponse(
+            {"error": "compaction preparation is unavailable"}, status_code=503
+        )
+    return JSONResponse(result)
 
 
 async def priority_control(request):

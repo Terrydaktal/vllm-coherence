@@ -120,6 +120,24 @@ export function taskPlanState(ctx, { filter = true } = {}) {
   const state = replayTaskPlan(branch);
   return filter ? filterTaskPlanForContext(state, excludedForContext(ctx, branch)) : state;
 }
+
+export function filterTaskPlanMessages(messages, ctx) {
+  const branch = ctx.sessionManager.getBranch(), excluded = excludedForContext(ctx, branch);
+  if (!excluded.size) return messages;
+  // The same projection is required for ordinary requests and checkpoint
+  // preparation; excluded source facts must not return through saved plan data.
+  let changed = false;
+  const filtered = messages.flatMap((message) => {
+    if (!(message.details?.sourceEntryIds ?? []).some((id) => excluded.has(id))) return [message];
+    if (message.role === "custom" && message.customType === TASK_PLAN_CONTEXT) { changed = true; return []; }
+    if (message.role === "toolResult" && toolNamesMatch(message.toolName, TOOL_NAME)) {
+      changed = true;
+      return [{ ...message, content: [{ type: "text", text: `[Plan output withheld by /context; ${TOOL_NAME} show displays permitted current state.]` }], details: { withheld: true } }];
+    }
+    return [message];
+  });
+  return changed ? filtered : messages;
+}
 function contextBudget(value) {
   const parsed = Number(value ?? DEFAULT_PLAN_CONTEXT_CHARS);
   return Number.isFinite(parsed) ? Math.max(0, Math.min(12000, Math.floor(parsed))) : DEFAULT_PLAN_CONTEXT_CHARS;
@@ -461,21 +479,8 @@ export function installTaskPlan(pi, { maxContextChars = process.env.QWEN_PI_PLAN
       details: { version: TASK_PLAN_VERSION, sourceEntryIds: allSourceIds(state), planDigest: digest } } };
   });
   pi.on("context", (event, ctx) => {
-    const branch = ctx.sessionManager.getBranch(), excluded = excludedForContext(ctx, branch);
-    if (!excluded.size) return undefined;
-    // Only explicit source exclusion changes old plan messages; normal updates
-    // append context and tool results without rewriting the cached history.
-    let changed = false;
-    const messages = event.messages.flatMap((message) => {
-      if (!(message.details?.sourceEntryIds ?? []).some((id) => excluded.has(id))) return [message];
-      if (message.role === "custom" && message.customType === TASK_PLAN_CONTEXT) { changed = true; return []; }
-      if (message.role === "toolResult" && toolNamesMatch(message.toolName, TOOL_NAME)) {
-        changed = true;
-        return [{ ...message, content: [{ type: "text", text: `[Plan output withheld by /context; ${TOOL_NAME} show displays permitted current state.]` }], details: { withheld: true } }];
-      }
-      return [message];
-    });
-    return changed ? { messages } : undefined;
+    const messages = filterTaskPlanMessages(event.messages, ctx);
+    return messages === event.messages ? undefined : { messages };
   });
 }
 
