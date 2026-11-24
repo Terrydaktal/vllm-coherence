@@ -170,6 +170,9 @@ manifest["runtime"]["response_end_reuse"] = {
         "copy accepted GDN/conv state to a canonical endpoint. Exclude an emitted-but-unprocessed "
         "token and decline an overwritten early-stop state. Persist domain-separated endpoint "
         "keys with complete-prefix dependencies; retain the prior disk head until verification. "
+        "Retain at most one earlier reused complete endpoint for a changed response tail, "
+        "bounded to cache-group count plus two exclusive pool pages; verify its complete "
+        "prefix and release optional pins before admission or under pressure. "
         "Unchanged physical layout, quantization and numerical kernels."
     ),
 }
@@ -194,6 +197,10 @@ manifest["runtime"]["memory_report"] = {
         ),
     },
     "compatible_runtime_abis": [
+        # Same numerical/data contract; the predecessor uses strict rendered
+        # text equality. Permit existing sessions during the tool-roundtrip
+        # repair's graceful restart, without claiming it has the new repair.
+        "68c6d626b6f2891f26dc394b20fff70c8ea80cd6885e2352d3c3cf37134fec40",
         # Correct the production text-render boundary; no numerical/state change.
         "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
         # Same numerical state and compiled kernels; moves authenticated token
@@ -326,8 +333,8 @@ manifest["runtime"]["token_continuation"] = {
         "radiance_token_continuation_runtime.py",
     ],
     "contract": "Unchanged chat turns preserve original generated token IDs; not bit-equivalent to full-history text re-encoding.",
-    "gate": "Exact message/output/configuration identity, authenticated full tokenizer backend/template, unchanged decoded prefix of the actual rendered text and full-prompt text equality; tokenize only the new suffix at the pinned special-token boundary. Normal cache state validation remains authoritative.",
-    "fallback": "Changed or unsupported inputs use full-history rendering/tokenization; existing canonical-prefix substitution remains guarded by exact canonical prefix and decoded full-prompt equality.",
+    "gate": "Exact history/configuration identity and authenticated tokenizer/template; tool arguments may differ only in strict JSON serialization. Exact generated-prefix replay additionally binds the completed assistant's structured fields to its raw output and verifies the journaled canonical-prefix fingerprint against the actual current render, including context-dependent template changes. Tokenize only the verified new suffix at the pinned special-token boundary. Normal processed-state validation remains authoritative.",
+    "fallback": "Changed or unsupported inputs use full-history rendering/tokenization; older journals without the canonical-prefix witness retain the strict rendered-text equality path. Missing, malformed or ambiguous tool/output correspondence never authorizes raw-prefix replay.",
     "retention": "Latest private journal per cache salt; at most 8 chats and 32 MiB; 253792 IDs per chat; atomic 0600 files in a 0700 directory.",
     "root": "/cache/token-continuation/<snapshot-data-abi>",
     "unsupported": "Canonical rendering on edits, cancellation, concurrency, missing or corrupt journal, unsupported metadata or context limit.",

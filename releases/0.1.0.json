@@ -76,7 +76,7 @@
     "experiments/radiance-public/radiance_request_guard.py": "f6cae439345513c517d4b2c4967321a7f8710136883d2d8b931e8e3b05242ee6",
     "experiments/radiance-public/patch_dflash_sampling_rng.py": "06f7579dd1ca1a36f910256dd4304f9d7ae7fe16b49aeb756668b5cd856786a6",
     "experiments/radiance-public/patch_dflash_response_cache.py": "65b63fb943d42ae0e7661fee72abaf37d174c1eee3ce08cfe26b851f4a51b1b0",
-    "experiments/radiance-public/radiance_response_end.py": "a109a4d8d70356206a86cfe24a1db3e415df753d1907c4dc5f51db7ca31aed9a",
+    "experiments/radiance-public/radiance_response_end.py": "8b344d6ca09004f7e5ee0caa34fc7d91458c1c86be35e56643423b83e781320e",
     "experiments/radiance-public/radiance_response_offload.py": "78e72e64c24f9445e04233b3a2c77ce4f0bfa98fe7cef298ec614cd4c1bd8c71",
     "experiments/radiance-public/patch_draft_head_initialization.py": "b414d8477256e5b294460fb60e6aa1f70e5fee636c0bf0b4d4faa835992cd3a5",
     "experiments/radiance-public/patch_gdn_initial_prefill.py": "08ee2400af3d35703d9ae9bef931d863c7cbf4009d479a5ce3346fbaae64c86a",
@@ -109,12 +109,12 @@
     "experiments/radiance-public/qwen-fixed-v22.3.jinja": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
     "src/qwen_r9700_lab/radiance_cache.py": "efe9c4c2dd62bf065f08eb276c6d19ce215b9f069b38b4ee7fd690c6ad9e2313",
     "src/qwen_r9700_lab/radiance_memory.py": "d0a9bf9f6be58b1b6ca0df38897d190d84b70d2a35eb4d8e25549cd170cdef03",
-    "src/qwen_r9700_lab/radiance_cache_telemetry.py": "3e8ba475c0e4996a1c214d08a154fe9b57af64dda0ceb17cbb2873901ee06121",
+    "src/qwen_r9700_lab/radiance_cache_telemetry.py": "ac37310daff0703e15407165557257b087e9b44cc4734dcbf31f67eac6e87ec0",
     "src/qwen_r9700_lab/radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
     "src/qwen_r9700_lab/radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
     "src/qwen_r9700_lab/radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
-    "src/qwen_r9700_lab/radiance_token_continuation.py": "8d3464db112c89fa9f948d5c4542c70defe4f67ac3fece7a3f9a8cff38b262b7",
-    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py": "c6b7181a98b17ce2e9fb58d829fd379cac9b35a66ca6fb1905e1a22f81a040e0"
+    "src/qwen_r9700_lab/radiance_token_continuation.py": "9b8ba79af0ec9dd6f979b6e93591977b1eeabb9b22c2e735270e3565733b2b72",
+    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py": "88e4e0c76938f36e68d90072b210aa62de3ec1bb49d4f65e5e54df19615a9d76"
   },
   "support_files": {
     "support/libhsa-runtime64.so.1.21.0": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda"

@@ -1,7 +1,9 @@
 """Exact processed-response checkpoints for the synchronous DFlash chat banks.
 
-No kernel arithmetic changes. One immutable endpoint per bank pins attention
-blocks and a canonical recurrent/convolution state. The ordinary partial-hit
+No kernel arithmetic changes. Each bank retains its latest immutable endpoint
+and, between requests, one previous response boundary. A changed generated tail
+can reuse that earlier exact state instead of losing the entire recurrent
+prefix. Admission keeps only its selected endpoint. The ordinary partial-hit
 copy-on-write path gives a successor private writable tails. Prefix identity
 uses the existing salted hash chain plus exact token IDs in the partial block;
 those IDs stay in memory and are never put in telemetry.
@@ -41,6 +43,7 @@ DECISION_REASONS = frozenset(
         "pending_dependencies",
         "no_endpoint_tier",
         "matching_endpoint",
+        "matching_earlier_endpoint",
         "normal_prefix_lookup",
         "unspecified",
     }
@@ -180,6 +183,7 @@ class ResponseEndCache:
     def __init__(self, manager):
         self.manager = manager
         self.entry = None
+        self.previous_entry = None
         self.pending = []
         self.copy_pins = []
         self.captured = 0
@@ -189,6 +193,12 @@ class ResponseEndCache:
         if self.entry is not None:
             self.manager.block_pool.free_blocks(self.entry["pins"])
             self.entry = None
+        self._discard_previous()
+
+    def _discard_previous(self):
+        if self.previous_entry is not None:
+            self.manager.block_pool.free_blocks(self.previous_entry["pins"])
+            self.previous_entry = None
 
     def remember(self, request, step):
         from vllm.v1.kv_cache_interface import (
@@ -295,13 +305,34 @@ class ResponseEndCache:
         # frame. Keep copy destinations alive independently until that frame
         # completes, just like its source blocks.
         pool.touch(fresh)
-        self.clear()
+        # remember() runs only after a completed response, never per decode
+        # round. Keep its pre-answer endpoint until the next admission checks
+        # which complete prefix actually survived rendering/token continuation.
+        # Shared prefix blocks acquire no new ownership here; each endpoint
+        # retains its existing pins and private canonical recurrent state.
+        previous = self.entry
+        self._discard_previous()
         self.entry = {
             "tokens": count,
             "identity": token_identity,
             "blocks": tuple(result),
             "pins": [*inherited.values(), *fresh],
         }
+        # Retain only the checkpoint this request actually reused. An unrelated
+        # edited/cold prompt could have an entirely different full KV prefix.
+        # Bound exclusive old pages independently of shared prefix length: one
+        # page per group plus at most two sliding-window edge pages. This is
+        # optional block-pool ownership, never a new GPU or RAM allocation.
+        current_pages = {b.block_id for b in self.entry["pins"]}
+        if (
+            previous is not None
+            and getattr(request, "_qwen_response_end_lease", None) is previous
+            and sum(b.block_id not in current_pages for b in previous["pins"])
+            <= len(managers) + 2
+        ):
+            self.previous_entry = previous
+        elif previous is not None:
+            pool.free_blocks(previous["pins"])
         request.qwen_response_end = {
             "tokens": count,
             "block_ids": [blocks[-1].block_id for blocks in result],
@@ -311,10 +342,7 @@ class ResponseEndCache:
         self.captured += 1
         return True
 
-    def lookup(self, request):
-        request.qwen_response_end_local = 0
-        request._qwen_response_end_lease = None
-        entry = self.entry
+    def _rejection_reason(self, request, entry):
         reason = None
         if entry is None:
             reason = "no_endpoint"
@@ -340,6 +368,13 @@ class ResponseEndCache:
                 reason = "prefix_hash_changed"
             elif actual[2] != entry["identity"][2]:
                 reason = "partial_prefix_changed"
+        return reason
+
+    def lookup(self, request):
+        request.qwen_response_end_local = 0
+        request._qwen_response_end_lease = None
+        entry = self.entry
+        reason = self._rejection_reason(request, entry)
         record_response_end_decision(
             request,
             "gpu_endpoint",
@@ -349,7 +384,30 @@ class ResponseEndCache:
             hash_size=self.manager.block_pool.hash_block_size,
         )
         if reason:
-            return None
+            previous = self.previous_entry
+            if previous is None or self._rejection_reason(request, previous):
+                return None
+            # Preserve the existing allocator/pressure contract: the selected
+            # lease is always .entry. A rejected newer boundary is not useful to
+            # this continuation and must not consume its admission capacity.
+            self.previous_entry = None
+            self.entry = previous
+            if entry is not None:
+                self.manager.block_pool.free_blocks(entry["pins"])
+            entry = previous
+            record_response_end_decision(
+                request,
+                "gpu_endpoint",
+                "hit",
+                "matching_earlier_endpoint",
+                endpoint_tokens=entry["tokens"],
+                hash_size=self.manager.block_pool.hash_block_size,
+            )
+        else:
+            # Once the newer prefix is verified, an older response boundary is
+            # optional. Release it before allocation, retaining the original
+            # single-endpoint admission and cancellation behavior.
+            self._discard_previous()
         self.hits += 1
         request.qwen_response_end_local = entry["tokens"]
         request._qwen_response_end_lease = entry

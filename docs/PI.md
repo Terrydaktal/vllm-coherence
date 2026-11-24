@@ -366,6 +366,27 @@ runtime identity. The backend reuses compatible GPU state, restores parked RAM
 state or loads compressed disk state before computing the missing suffix. An
 incompatible snapshot cannot substitute for fresh computation.
 
+Tool continuations preserve the generated assistant prefix rather than rebuilding
+it with different tool-call spacing. Reuse verifies the old messages, model,
+tokenizer, template and configuration, then checks a private canonical-prefix
+witness and the actual streamed assistant/tool fields. JSON serialization alone
+may differ; argument values and string contents must remain unchanged. The
+current full render must still extend that same canonical prefix, so a new
+instruction that changes historical thinking or template controls cannot silently
+reuse the previous prefix. Repeated tool turns retain the entire authenticated
+generated prefix. Unsupported or ambiguous cases keep the normal rendering path.
+The shared template and snapshot data layout are unchanged.
+
+When an answer replaces a reused GPU endpoint, the backend may retain that one
+earlier complete endpoint until the next admission. If the latest tail no longer
+matches, it can select the earlier boundary after validating the full prefix and
+all cache groups. This preserves an actual GDN/convolution checkpoint rather than
+attempting to rewind recurrent state. Retention uses existing pool pages, is
+limited to one earlier boundary with at most the number of cache groups plus two
+exclusive pages, and yields to allocation pressure. Numeric decisions record
+`matching_earlier_endpoint` when that fallback succeeds. It is optional; a missing
+or incompatible earlier checkpoint still requires normal prefix lookup.
+
 Immutable full-attention blocks are written once and reused. The changing tail
 stays in GPU/system RAM and normally flushes after roughly 8,192 new tokens, or
 before RAM eviction, clean shutdown, successful compaction or an explicit flush.

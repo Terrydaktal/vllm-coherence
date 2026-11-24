@@ -71,6 +71,53 @@ def test_incremental_continuation_decisions_survive_real_telemetry_sink(recorder
         assert "text" not in row and "token_ids" not in row
 
 
+def test_earlier_endpoint_fallback_is_recorded_without_cached_contents(recorder):
+    telemetry.emit_at(
+        "response_end_lookup",
+        1,
+        2,
+        reason="matching_earlier_endpoint",
+        cache_source="gpu_endpoint",
+        outcome="hit",
+        endpoint_tokens=139280,
+        input_tokens=141346,
+        token_ids=[1, 2, 3],
+        canonical_prefix_sha256="private fingerprint",
+    )
+    (event,) = rows(recorder)
+    assert event["reason"] == "matching_earlier_endpoint"
+    assert event["endpoint_tokens"] == 139280
+    assert event["input_tokens"] - event["endpoint_tokens"] == 2066
+    assert "token_ids" not in event and "canonical_prefix_sha256" not in event
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "rendered_assistant_prefix_preserved",
+        "canonical_history_changed",
+        "raw_assistant_correspondence_unverified",
+        "canonical_render_unavailable",
+    ],
+)
+def test_assistant_roundtrip_decisions_keep_only_public_counts(recorder, reason):
+    telemetry.emit_at(
+        "token_continuation",
+        1,
+        2,
+        reason=reason,
+        previous_tokens=139760,
+        suffix_tokens=1586,
+        admitted_tokens=141346,
+        canonical_prefix_sha256="private fingerprint",
+        text="private assistant text",
+    )
+    (event,) = rows(recorder)
+    assert event["reason"] == reason
+    assert event["admitted_tokens"] == event["previous_tokens"] + event["suffix_tokens"]
+    assert "text" not in event and "canonical_prefix_sha256" not in event
+
+
 def test_main_thread_interval_covers_time_outside_forward(recorder, monkeypatch):
     samples = deque(
         [(1_000_000, 0.01, 0.005, 10, 2, 3, 4), (6_000_000, 0.013, 0.007, 13, 4, 6, 5)]

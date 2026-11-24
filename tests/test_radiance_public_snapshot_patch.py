@@ -434,6 +434,8 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
     assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == [
+        # Tool-turn replay repairs retain the predecessor's numerical/data ABI.
+        "68c6d626b6f2891f26dc394b20fff70c8ea80cd6885e2352d3c3cf37134fec40",
         # Text-render continuation routing preserves the exact numerical state.
         "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
         # Suffix-only encoding changes request construction, not saved GPU state.

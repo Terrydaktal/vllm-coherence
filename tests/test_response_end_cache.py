@@ -671,6 +671,162 @@ def test_terminal_successor_does_not_release_its_new_checkpoint(monkeypatch):
     assert c.entry is replacement
 
 
+def consecutive_response_endpoints(monkeypatch):
+    """Two complete answers with different canonical recurrent/tail pages."""
+    c, old, step, pool, groups = fake_cache(monkeypatch)
+    assert c.remember(old, step)
+    first = c.entry
+    c.take_copies()
+    c.copies_complete()
+    newer = SimpleNamespace(**vars(old))
+    newer.request_id = "second-answer"
+    newer.all_token_ids = list(range(27))
+    newer.block_hashes = [b"first", b"second", b"third"]
+    newer.num_tokens = 27
+    newer.num_prompt_tokens = 27
+    newer.num_computed_tokens = 26
+    newer.num_output_tokens = 13
+    assert c.lookup(newer)[1] == 14
+    for group in groups:
+        group.req_to_blocks[newer.request_id] = pool.get_new_blocks(10)
+    assert c.remember(
+        newer, {"start": 20, "scheduled": 8, "draft": 7, "generated": 6}
+    )
+    assert c.previous_entry is first
+    assert c.entry["tokens"] == 26
+    return c, newer, first, pool, groups
+
+
+@pytest.mark.parametrize("changed", [18, 25])
+def test_changed_generated_tail_reuses_complete_pre_answer_state(
+    monkeypatch, caplog, changed
+):
+    c, newer, earlier, _, _ = consecutive_response_endpoints(monkeypatch)
+    rejected = c.entry
+    next_request = SimpleNamespace(**vars(newer))
+    next_request.all_token_ids = [*newer.all_token_ids, 99]
+    next_request.num_tokens += 1
+    next_request.block_hashes = list(newer.block_hashes)
+    next_request.all_token_ids[changed] = 999
+    if changed < 24:
+        next_request.block_hashes[changed // 8] = b"changed-answer-prefix"
+    before = {b.block_id: b.ref_cnt for b in rejected["pins"]}
+    with caplog.at_level(logging.INFO, logger="vllm.qwen_response_end"):
+        hit = c.lookup(next_request)
+    assert hit[1] == 14
+    assert hit[0] == earlier["blocks"]
+    assert hit[0][1][-1] is earlier["blocks"][1][-1]
+    assert hit[0][1][-1] is not rejected["blocks"][1][-1]
+    assert c.entry is earlier and c.previous_entry is None
+    assert next_request._qwen_response_end_lease is c.entry
+    assert next_request.qwen_response_end_local == 14
+    assert decision_records(caplog)[-1]["reason"] == "matching_earlier_endpoint"
+    assert all(b.ref_cnt == before[b.block_id] - 1 for b in rejected["pins"])
+    # The rejected destination is still pinned until its queued canonical copy
+    # finishes; promoting a fallback cannot recycle a pending copy destination.
+    destination = rejected["blocks"][1][-1]
+    assert destination in c.copy_pins and destination.ref_cnt == 1
+    c.take_copies()
+    c.copies_complete()
+    assert destination.ref_cnt == 0
+
+
+def test_current_endpoint_hit_releases_older_state_before_admission(monkeypatch):
+    c, newer, earlier, _, _ = consecutive_response_endpoints(monkeypatch)
+    current = c.entry
+    before = {b.block_id: b.ref_cnt for b in earlier["pins"]}
+    newer.num_tokens += 1
+    newer.all_token_ids = [*newer.all_token_ids, 99]
+    assert c.lookup(newer)[1] == 26
+    assert c.entry is current and c.previous_entry is None
+    assert newer._qwen_response_end_lease is current
+    assert all(b.ref_cnt == before[b.block_id] - 1 for b in earlier["pins"])
+
+
+@pytest.mark.parametrize("change", ["early_token", "salt", "short", "disabled", "multimodal"])
+def test_fallback_never_reuses_an_incompatible_earlier_prefix(monkeypatch, change):
+    c, newer, earlier, _, _ = consecutive_response_endpoints(monkeypatch)
+    newer.all_token_ids = [*newer.all_token_ids, 99]
+    newer.num_tokens += 1
+    newer.block_hashes = list(newer.block_hashes)
+    if change == "early_token":
+        newer.all_token_ids[12] = 999
+        newer.block_hashes[1:] = [b"changed-before-earlier-state"] * 2
+    elif change == "salt":
+        newer.cache_salt = "another-generation"
+    elif change == "short":
+        newer.num_tokens = earlier["tokens"]
+    elif change == "disabled":
+        c.manager.prefix_cache_lookup_enabled = lambda _: False
+    else:
+        newer.mm_features = ["unsupported"]
+    assert c.lookup(newer) is None
+    assert newer._qwen_response_end_lease is None
+    assert newer.qwen_response_end_local == 0
+
+
+def test_fallback_history_is_bounded_to_one_completed_response(monkeypatch):
+    c, newer, first, pool, groups = consecutive_response_endpoints(monkeypatch)
+    second = c.entry
+    third = SimpleNamespace(**vars(newer))
+    third.request_id = "third-answer"
+    third.all_token_ids = list(range(39))
+    third.block_hashes = [b"first", b"second", b"third", b"fourth"]
+    third.num_tokens = 39
+    third.num_prompt_tokens = 39
+    third.num_computed_tokens = 38
+    assert c.lookup(third)[1] == 26
+    assert c.previous_entry is None
+    for group in groups:
+        group.req_to_blocks[third.request_id] = pool.get_new_blocks(10)
+    # The synthetic fixture uses disjoint pages. Add its actual shared prefix
+    # to model normal allocation, so only the two old edge pages stay exclusive.
+    for index in (0, 2):
+        blocks = groups[index].req_to_blocks[third.request_id]
+        pool.free_blocks(blocks[:3])
+        blocks[:3] = second["blocks"][index][:3]
+        pool.touch(blocks[:3])
+    assert c.remember(
+        third, {"start": 32, "scheduled": 8, "draft": 7, "generated": 6}
+    )
+    assert c.entry["tokens"] == 38
+    assert c.previous_entry is second
+    assert c.previous_entry is not first
+
+
+@pytest.mark.parametrize("unrelated", [False, True])
+def test_optional_retention_cannot_pin_an_unbounded_or_unrelated_prefix(
+    monkeypatch, unrelated
+):
+    c, old, step, pool, groups = fake_cache(monkeypatch)
+    assert c.remember(old, step)
+    old_entry = c.entry
+    newer = SimpleNamespace(**vars(old))
+    newer.num_tokens += 1
+    newer.all_token_ids = [*old.all_token_ids, 99]
+    if not unrelated:
+        assert c.lookup(newer)
+        old_entry["pins"].extend(pool.get_new_blocks(len(groups) + 3))
+    assert c.remember(newer, step)
+    assert c.entry is not old_entry
+    assert c.previous_entry is None
+
+
+def test_reset_releases_both_endpoints_without_recycling_pending_copies(monkeypatch):
+    c, _, earlier, _, _ = consecutive_response_endpoints(monkeypatch)
+    current = c.entry
+    before = {b.block_id: b.ref_cnt for b in earlier["pins"] + current["pins"]}
+    c.clear()
+    assert c.entry is None and c.previous_entry is None
+    assert all(b.ref_cnt == before[b.block_id] - 1 for b in earlier["pins"] + current["pins"])
+    c.clear()
+    destination = current["blocks"][1][-1]
+    assert destination.ref_cnt == 1
+    c.take_copies()
+    c.copies_complete()
+    assert destination.ref_cnt == 0
+
+
 @pytest.mark.parametrize(
     "change", ["different_prefix", "shorter_prompt", "same_length"]
 )

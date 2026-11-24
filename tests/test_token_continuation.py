@@ -2,8 +2,11 @@
 
 import dataclasses
 import fcntl
+import hashlib
+import json
 import os
 import stat
+import struct
 from array import array
 
 import pytest
@@ -71,6 +74,91 @@ def append_suffix(ledger, *, who=None, **changes):
     values.update(changes)
     suffix = values.pop("suffix_ids", [12, 13])
     return ledger.append_verified_suffix(who, suffix, **values)
+
+
+def test_canonical_render_witness_is_bound_to_durable_journal_metadata(tmp_path):
+    root = tmp_path / "private"
+    ledger = continuation.TokenContinuationLedger(root)
+    assert record(
+        ledger,
+        canonical_prefix_sha256="3" * 64,
+        canonical_prefix_characters=123,
+        output_identity_format="json_semantics_v1",
+    )
+    before = ledger.get_record(identity())
+    after = continuation.TokenContinuationLedger(root).get_record(identity())
+    assert after == before
+    assert after.prompt_tokens == len(RAW_PREFIX)
+    assert after.canonical_prefix_sha256 == "3" * 64
+    assert after.canonical_prefix_characters == 123
+    assert after.output_identity_format == "json_semantics_v1"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"prompt_tokens": True},
+        {"prompt_tokens": 0},
+        {"prompt_tokens": 5},
+        {"canonical_prefix_sha256": "bad"},
+        {"canonical_prefix_characters": True},
+        {"canonical_prefix_characters": 0},
+        {"output_identity_format": "unknown"},
+    ],
+)
+def test_invalid_render_witness_metadata_cannot_be_loaded(tmp_path, changes):
+    root = tmp_path / "private"
+    ledger = continuation.TokenContinuationLedger(root)
+    assert record(
+        ledger,
+        canonical_prefix_sha256="3" * 64,
+        canonical_prefix_characters=123,
+        output_identity_format="json_semantics_v1",
+    )
+    path = root / (identity().key + ".ctok")
+    payload = path.read_bytes()
+    size = struct.unpack_from("<I", payload, 8)[0]
+    header = json.loads(payload[12 : 12 + size])
+    header.update(changes)
+    encoded = json.dumps(header, separators=(",", ":")).encode()
+    modified = (
+        payload[:8]
+        + struct.pack("<I", len(encoded))
+        + encoded
+        + payload[12 + size : -32]
+    )
+    path.write_bytes(modified + hashlib.sha256(modified).digest())
+    assert continuation.TokenContinuationLedger(root).get_record(identity()) is None
+
+
+def test_pre_witness_journal_keeps_explicit_legacy_identity_semantics(tmp_path):
+    root = tmp_path / "private"
+    ledger = continuation.TokenContinuationLedger(root)
+    assert record(ledger)
+    path = root / (identity().key + ".ctok")
+    payload = path.read_bytes()
+    size = struct.unpack_from("<I", payload, 8)[0]
+    header = json.loads(payload[12 : 12 + size])
+    for field in (
+        "prompt_tokens",
+        "canonical_prefix_sha256",
+        "canonical_prefix_characters",
+        "output_identity_format",
+    ):
+        del header[field]
+    encoded = json.dumps(header, separators=(",", ":")).encode()
+    modified = (
+        payload[:8]
+        + struct.pack("<I", len(encoded))
+        + encoded
+        + payload[12 + size : -32]
+    )
+    path.write_bytes(modified + hashlib.sha256(modified).digest())
+    old = continuation.TokenContinuationLedger(root).get_record(identity())
+    assert old.prompt_tokens is None
+    assert old.canonical_prefix_sha256 is None
+    assert old.canonical_prefix_characters is None
+    assert old.output_identity_format == "wire_v1"
 
 
 @pytest.mark.parametrize("durable", [False, True])

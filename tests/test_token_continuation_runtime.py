@@ -757,6 +757,7 @@ class CompactionRequest(SimpleNamespace):
     def model_copy(self, *, update):
         return CompactionRequest(**{**vars(self), **update})
 
+
 class CompactionTokenizer(SuffixOnlyTokenizer):
     def apply_chat_template(
         self, *, conversation, tools, chat_template, tokenize, **kwargs
@@ -774,6 +775,7 @@ class CompactionTokenizer(SuffixOnlyTokenizer):
         if kwargs.get("add_generation_prompt"):
             text += "<|im_start|>assistant\n<think>\n"
         return text
+
 
 class CompactionServing(Serving):
     def __init__(self, tokenizer):
@@ -815,6 +817,7 @@ class CompactionServing(Serving):
             ids = tokenizer.encode(text, add_special_tokens=False)
         return req.messages, inputs(ids)
 
+
 def compaction_setup():
     tokenizer = CompactionTokenizer()
     configuration = config()
@@ -833,6 +836,7 @@ def compaction_setup():
         )
     )
     return tokenizer, req
+
 
 def test_compaction_preserves_generated_history_instead_of_reencoding(setup_runtime):
     ledger, _ = setup_runtime
@@ -853,6 +857,7 @@ def test_compaction_preserves_generated_history_instead_of_reencoding(setup_runt
     assert all("P" not in text for text in tokenizer.encoded_texts)
     assert not ledger._active
 
+
 @pytest.mark.parametrize("changed", ["user", "assistant"])
 def test_compaction_changed_messages_fall_back_without_forcing_old_tokens(
     setup_runtime, changed
@@ -870,6 +875,7 @@ def test_compaction_changed_messages_fall_back_without_forcing_old_tokens(
     assert result["continuation"]["canonical_tokens"] == result["historical_tokens"]
     assert result["prompt"][:3] != PROMPT + GENERATED
     assert not ledger._active
+
 
 def test_compaction_keeps_prior_completed_prefix_when_latest_tail_was_aborted(
     setup_runtime,
@@ -891,6 +897,7 @@ def test_compaction_keeps_prior_completed_prefix_when_latest_tail_was_aborted(
     assert result["continuation"]["preserved_tokens"] == 3
     assert result["historical_tokens"] > 4
     assert not ledger._active
+
 
 def test_compaction_refuses_instruction_that_rewrites_historical_template(
     setup_runtime,
@@ -916,6 +923,7 @@ def test_compaction_refuses_instruction_that_rewrites_historical_template(
             )
         )
     assert not ledger._active
+
 
 @pytest.mark.parametrize("second_template", [TEMPLATE, "unrecognized template"])
 def test_actual_timeline_pipeline_preserves_history_across_executor_without_recorder(
@@ -1492,6 +1500,490 @@ def test_timeline_cannot_hide_rejected_incremental_admission(setup_runtime):
             timeline.prefix_rendered(Serving(), inputs(admitted))
     finally:
         timeline._request.reset(context)
+
+
+class ToolRoundtripTokenizer(SuffixOnlyTokenizer):
+    """Use the real pinned Jinja while retaining a transparent CPU token oracle."""
+
+    def __init__(self):
+        super().__init__()
+        from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+        self.environment = ImmutableSandboxedEnvironment()
+        self.environment.globals["raise_exception"] = self.fail_render
+        self.template_text = (
+            Path(__file__).resolve().parents[1]
+            / "experiments/radiance-public/qwen-fixed-v22.3.jinja"
+        ).read_text()
+
+    @staticmethod
+    def fail_render(message):
+        raise ValueError(message)
+
+    def apply_chat_template(
+        self, *, conversation, tools, chat_template, tokenize, **kwargs
+    ):
+        assert tokenize is False and chat_template == self.template_text
+        messages = copy.deepcopy(conversation)
+        for message in messages:
+            for call in message.get("tool_calls", []):
+                arguments = call["function"]["arguments"]
+                if isinstance(arguments, str):
+                    call["function"]["arguments"] = json.loads(arguments)
+        values = {"add_generation_prompt": True, **kwargs}
+        return self.environment.from_string(chat_template).render(
+            messages=messages, tools=tools, **values
+        )
+
+    def encode(self, text, *, add_special_tokens):
+        self.encoded_texts.append(text)
+        if self.reject_history_encoding:
+            assert "UNIQUE_PRIOR_HISTORY" not in text
+        return AlternateSegmentationTokenizer.encode(
+            self, text, add_special_tokens=add_special_tokens
+        )
+
+
+def completed_tool_roundtrip(setup_runtime, monkeypatch, *, preserve_thinking=True):
+    ledger, _ = setup_runtime
+    tokenizer = ToolRoundtripTokenizer()
+    monkeypatch.setattr(
+        runtime,
+        "TEMPLATE_SHA256",
+        hashlib.sha256(tokenizer.template_text.encode()).hexdigest(),
+    )
+    cfg = config()
+    cfg["template_kwargs"]["preserve_thinking"] = preserve_thinking
+    cfg["template_kwargs"]["reasoning_effort"] = "xhigh"
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "inspect_file",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "flags": {"type": "array"},
+                    },
+                },
+            },
+        }
+    ]
+    messages = [
+        {
+            "role": "user",
+            "content": "UNIQUE_PRIOR_HISTORY inspect the two public fixture files",
+        }
+    ]
+    req = request(messages, tools=tools)
+    initial = begin(
+        tokenizer, req=req, configuration=cfg, template=tokenizer.template_text
+    )
+    assert (
+        runtime.encode_prompt(
+            initial,
+            tokenizer,
+            messages,
+            tools,
+            tokenizer.template_text,
+            cfg["template_kwargs"],
+        )
+        is None
+    )
+    prompt = tokenizer.encode(
+        tokenizer.apply_chat_template(
+            conversation=messages,
+            tools=tools,
+            chat_template=tokenizer.template_text,
+            tokenize=False,
+            **cfg["template_kwargs"],
+        ),
+        add_special_tokens=False,
+    )
+    runtime.rendered(initial, Serving(), inputs(prompt))
+    runtime.input_processor(initial, prompt)
+    fields = {
+        "reasoning": " Check both files carefully. \n",
+        "content": "Inspecting both files. \n\n",
+        "tool_calls": [],
+    }
+    xml = []
+    for index, filename in enumerate(("one.txt", "two.txt")):
+        arguments = {"path": filename, "flags": ["café", "beta"]}
+        fields["tool_calls"].append(
+            {
+                "id": f"call-{index}",
+                "type": "function",
+                "function": {
+                    "name": "inspect_file",
+                    "arguments": json.dumps(arguments, ensure_ascii=True),
+                },
+            }
+        )
+        xml.append(
+            f'<tool_call>\n<function=inspect_file>\n<parameter=path>\n{filename}\n</parameter>\n<parameter=flags>\n["café", "beta"]\n</parameter>\n</function>\n</tool_call>'
+        )
+    output_text = (
+        fields["reasoning"]
+        + "</think>\n\n"
+        + fields["content"]
+        + "\n".join(xml)
+        + "<|im_end|>"
+    )
+    generated = tokenizer.encode(output_text, add_special_tokens=False)
+    runtime.output(
+        initial,
+        SimpleNamespace(
+            outputs=[
+                SimpleNamespace(
+                    index=0, token_ids=generated, finish_reason="tool_calls"
+                )
+            ]
+        ),
+    )
+    runtime.delivered(
+        initial,
+        {
+            "reasoning": fields["reasoning"],
+            "content": fields["content"],
+            "tool_calls": [
+                {"index": index, **call}
+                for index, call in enumerate(fields["tool_calls"])
+            ],
+        },
+    )
+    runtime.finish(initial, True)
+    assert initial["token_continuation_reason"] == "journal_saved"
+    assistant = {
+        "role": "assistant",
+        "content": fields["content"],
+        "reasoning_content": fields["reasoning"],
+        "tool_calls": copy.deepcopy(fields["tool_calls"]),
+    }
+    for call in assistant["tool_calls"]:
+        call["function"]["arguments"] = json.dumps(
+            json.loads(call["function"]["arguments"]),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    messages.extend(
+        [
+            assistant,
+            {
+                "role": "tool",
+                "tool_call_id": "call-0",
+                "content": "first fixture result",
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "second fixture result",
+            },
+        ]
+    )
+    tokenizer.encoded_texts.clear()
+    tokenizer.reject_history_encoding = True
+    return ledger, tokenizer, cfg, req, prompt + generated
+
+
+def encode_tool_roundtrip(tokenizer, cfg, req):
+    value = begin(
+        tokenizer, req=req, configuration=cfg, template=tokenizer.template_text
+    )
+    admitted = runtime.encode_prompt(
+        value,
+        tokenizer,
+        req.messages,
+        req.tools,
+        tokenizer.template_text,
+        cfg["template_kwargs"],
+    )
+    return value, admitted
+
+
+def test_two_tool_calls_keep_raw_tokens_across_json_and_jinja_normalization(
+    setup_runtime, monkeypatch
+):
+    ledger, tokenizer, cfg, req, raw = completed_tool_roundtrip(
+        setup_runtime, monkeypatch
+    )
+    record = next(iter(ledger._records.values()))
+    assert record.canonical_prefix_sha256 is not None
+    assert record.output_identity_format == "json_semantics_v1"
+    assert record.prompt_tokens < len(raw)
+    value, admitted = encode_tool_roundtrip(tokenizer, cfg, req)
+    assert admitted[: len(raw)] == raw
+    assert value["token_continuation_reason"] == "rendered_assistant_prefix_preserved"
+    assert len(tokenizer.encoded_texts) == 1
+    assert "first fixture result" in tokenizer.encoded_texts[0]
+    assert "UNIQUE_PRIOR_HISTORY" not in tokenizer.encoded_texts[0]
+    canonical = tokenizer.apply_chat_template(
+        conversation=req.messages,
+        tools=req.tools,
+        chat_template=tokenizer.template_text,
+        tokenize=False,
+        **cfg["template_kwargs"],
+    )
+    assert (
+        tokenizer.decode(
+            admitted, skip_special_tokens=False, clean_up_tokenization_spaces=False
+        )
+        != canonical
+    )
+
+
+def test_tool_normalization_witness_survives_journal_restart_and_third_turn(
+    setup_runtime, monkeypatch
+):
+    ledger, tokenizer, cfg, req, raw = completed_tool_roundtrip(
+        setup_runtime, monkeypatch
+    )
+    root = ledger.root
+    ledger = TokenContinuationLedger(root)
+    monkeypatch.setattr(runtime, "_get_ledger", lambda *args, **kwargs: ledger)
+    value, admitted = encode_tool_roundtrip(tokenizer, cfg, req)
+    runtime.rendered(value, Serving(), inputs(admitted))
+    runtime.input_processor(value, admitted)
+    generated = tokenizer.encode(
+        "I checked both.\n</think>\n\nBoth fixtures pass.<|im_end|>",
+        add_special_tokens=False,
+    )
+    runtime.output(
+        value,
+        SimpleNamespace(
+            outputs=[
+                SimpleNamespace(index=0, token_ids=generated, finish_reason="stop")
+            ]
+        ),
+    )
+    runtime.delivered(
+        value, {"reasoning": "I checked both.\n", "content": "Both fixtures pass."}
+    )
+    runtime.finish(value, True)
+    req.messages.extend(
+        [
+            {
+                "role": "assistant",
+                "content": "Both fixtures pass.",
+                "reasoning_content": "I checked both.\n",
+            },
+            {"role": "user", "content": "Continue with the next fixture"},
+        ]
+    )
+    tokenizer.encoded_texts.clear()
+    _, third = encode_tool_roundtrip(tokenizer, cfg, req)
+    assert third[: len(admitted) + len(generated)] == admitted + generated
+    assert third[: len(raw)] == raw
+    assert (
+        len(tokenizer.encoded_texts) == 1
+        and "UNIQUE_PRIOR_HISTORY" not in tokenizer.encoded_texts[0]
+    )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing_function_close",
+        "missing_call_close",
+        "changed_value",
+        "duplicate_parameter",
+        "extra_parameter",
+        "trailing_text",
+        "injected_value_members",
+    ],
+)
+def test_raw_tool_correspondence_rejects_incomplete_or_changed_xml(
+    setup_runtime, monkeypatch, fault
+):
+    ledger, tokenizer, _, req, raw = completed_tool_roundtrip(
+        setup_runtime, monkeypatch
+    )
+    record = next(iter(ledger._records.values()))
+    prompt = raw[: record.prompt_tokens]
+    output = tokenizer.decode(
+        raw[record.prompt_tokens :],
+        skip_special_tokens=False,
+        clean_up_tokenization_spaces=False,
+    )
+    fields = runtime._assistant_fields(req.messages[1])
+    turn = {
+        "tokenizer": tokenizer,
+        "prompt": prompt,
+        "output": raw[record.prompt_tokens :],
+    }
+    assert runtime._raw_output_matches(turn, fields) is True
+    if fault == "missing_function_close":
+        output = output.replace("</function>", "", 1)
+    elif fault == "missing_call_close":
+        output = output.replace("</tool_call>", "", 1)
+    elif fault == "changed_value":
+        output = output.replace("one.txt", "changed.txt", 1)
+    elif fault == "injected_value_members":
+        output = output.replace(
+            '["café", "beta"]', '["café", "beta"],"ignored":true', 1
+        )
+    elif fault == "duplicate_parameter":
+        output = output.replace(
+            "</function>", "<parameter=path>\none.txt\n</parameter>\n</function>", 1
+        )
+    elif fault == "extra_parameter":
+        output = output.replace(
+            "</function>", "<parameter=extra>\nunexpected\n</parameter>\n</function>", 1
+        )
+    else:
+        output = output.replace("<|im_end|>", "unexpected suffix<|im_end|>")
+    turn["output"] = tokenizer.encode(output, add_special_tokens=False)
+    assert runtime._raw_output_matches(turn, fields) is False
+    assert runtime._completed_canonical_prefix(turn, fields) is None
+
+
+def test_unverified_xml_keeps_the_strict_journal_without_a_render_witness(
+    setup_runtime, monkeypatch
+):
+    ledger, tokenizer, cfg, req, _ = completed_tool_roundtrip(
+        setup_runtime, monkeypatch
+    )
+    value, admitted = encode_tool_roundtrip(tokenizer, cfg, req)
+    runtime.rendered(value, Serving(), inputs(admitted))
+    runtime.input_processor(value, admitted)
+    generated = tokenizer.encode(
+        "Work.\n</think>\n\n<tool_call>\n<function=inspect_file>\n<|im_end|>",
+        add_special_tokens=False,
+    )
+    runtime.output(
+        value,
+        SimpleNamespace(
+            outputs=[
+                SimpleNamespace(index=0, token_ids=generated, finish_reason="stop")
+            ]
+        ),
+    )
+    runtime.delivered(value, {"reasoning": "Work.\n", "content": ""})
+    runtime.finish(value, True)
+    record = next(iter(ledger._records.values()))
+    assert list(record.tokens) == admitted + generated
+    assert record.canonical_prefix_sha256 is None
+    assert record.canonical_prefix_characters is None
+    assert value["token_continuation_reason"] == "journal_saved"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "string",
+        "array_order",
+        "boolean",
+        "call_id",
+        "call_name",
+        "call_type",
+        "old_user",
+        "reasoning",
+        "content",
+        "new_thinking_control",
+        "configuration",
+        "duplicate_keys",
+        "nonfinite",
+    ],
+)
+def test_tool_normalization_rejects_changed_payload_or_render_context(
+    setup_runtime, monkeypatch, change
+):
+    _, tokenizer, cfg, req, _ = completed_tool_roundtrip(setup_runtime, monkeypatch)
+    call = req.messages[1]["tool_calls"][0]
+    args = json.loads(call["function"]["arguments"])
+    if change == "string":
+        args["path"] = " one.txt"
+    elif change == "array_order":
+        args["flags"].reverse()
+    elif change == "boolean":
+        args["flags"] = [True, "beta"]
+    elif change == "call_id":
+        call["id"] = "changed-call"
+    elif change == "call_name":
+        call["function"]["name"] = "another_tool"
+    elif change == "call_type":
+        call["type"] = "custom"
+    elif change == "old_user":
+        req.messages[0]["content"] += " changed"
+    elif change == "reasoning":
+        req.messages[1]["reasoning_content"] += " changed"
+    elif change == "content":
+        req.messages[1]["content"] += " changed"
+    elif change == "new_thinking_control":
+        req.messages.append({"role": "user", "content": "<|think_off|> next"})
+    elif change == "configuration":
+        cfg["template_kwargs"]["preserve_thinking"] = False
+    if change == "duplicate_keys":
+        call["function"]["arguments"] = '{"path":"one.txt","path":"changed.txt"}'
+    elif change == "nonfinite":
+        call["function"]["arguments"] = '{"path":NaN}'
+    else:
+        call["function"]["arguments"] = json.dumps(
+            args, ensure_ascii=False, separators=(",", ":")
+        )
+    _, admitted = encode_tool_roundtrip(tokenizer, cfg, req)
+    assert admitted is None
+    assert tokenizer.encoded_texts == []
+
+
+def test_preserve_thinking_false_cannot_replay_when_new_user_changes_old_history(
+    setup_runtime, monkeypatch
+):
+    _, tokenizer, cfg, req, _ = completed_tool_roundtrip(
+        setup_runtime, monkeypatch, preserve_thinking=False
+    )
+    # Adding a real user query changes which old reasoning blocks Jinja keeps,
+    # despite unchanged previous messages and unchanged template configuration.
+    req.messages.append({"role": "user", "content": "Now inspect the third fixture"})
+    _, admitted = encode_tool_roundtrip(tokenizer, cfg, req)
+    assert admitted is None
+    assert tokenizer.encoded_texts == []
+
+
+@pytest.mark.parametrize(
+    "left,right,equal",
+    [
+        ('{"x": "café", "a": [1, false]}', '{"x":"caf\\u00e9","a":[1,false]}', True),
+        ('{"x":" a "}', '{"x":"a"}', False),
+        ('{"x":[1,2]}', '{"x":[2,1]}', False),
+        ('{"x":true}', '{"x":1}', False),
+        ('{"x":1}', '{"x":1.0}', False),
+        ('{"x":{"a":1,"b":2}}', '{"x":{"b":2,"a":1}}', False),
+    ],
+)
+def test_tool_argument_identity_only_normalizes_unambiguous_json_format(
+    left, right, equal
+):
+    make = lambda args: {
+        "tool_calls": [
+            {
+                "id": "id",
+                "type": "function",
+                "function": {"name": "tool", "arguments": args},
+            }
+        ]
+    }
+    assert (
+        runtime._output_digest(make(left)) == runtime._output_digest(make(right))
+    ) is equal
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"x":1,"x":2}',
+        '{"x":NaN}',
+        '{"x":Infinity}',
+        '{"x":1e999}',
+        '{"x":',
+        "[]",
+        "null",
+    ],
+)
+def test_tool_argument_identity_rejects_ambiguous_or_incomplete_json(arguments):
+    with pytest.raises((TypeError, ValueError)):
+        runtime._json_arguments(arguments)
 
 
 class BackendMetadataTokenizer(AlternateSegmentationTokenizer):

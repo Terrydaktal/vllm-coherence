@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
 import time
 from array import array
 
@@ -66,7 +68,50 @@ def _digest(value):
     return digest.hexdigest()
 
 
-def _assistant_fields(message):
+def _json_arguments(text):
+    """Parse a complete argument object without losing ambiguous JSON data."""
+
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate tool argument key")
+            result[key] = value
+        return result
+
+    def invalid_constant(_value):
+        raise ValueError("nonfinite tool argument")
+
+    if not isinstance(text, str) or len(text.encode()) > MAX_TEXT_BYTES:
+        raise ValueError("unsupported tool argument representation")
+    value = json.loads(text, object_pairs_hook=pairs, parse_constant=invalid_constant)
+    if not isinstance(value, dict):
+        raise TypeError("tool arguments must be an object")
+    _json_identity(value)
+    return value
+
+
+def _json_identity(value):
+    # Object insertion order is intentionally retained: unlike whitespace or
+    # Unicode escaping, reordering a tool's nested mapping can be observable.
+    if isinstance(value, dict):
+        return ["object", [[key, _json_identity(item)] for key, item in value.items()]]
+    if isinstance(value, list):
+        return ["array", [_json_identity(item) for item in value]]
+    if value is None:
+        return ["null"]
+    if type(value) is bool:
+        return ["boolean", value]
+    if type(value) is int:
+        return ["integer", str(value)]
+    if type(value) is float and math.isfinite(value):
+        return ["float", value.hex()]
+    if isinstance(value, str):
+        return ["string", value]
+    raise ValueError("unsupported tool argument value")
+
+
+def _assistant_fields(message, *, semantic_arguments=False):
     content = _get(message, "content") or ""
     reasoning = _get(message, "reasoning_content")
     if reasoning is None:
@@ -85,7 +130,17 @@ def _assistant_fields(message):
                 "type": _get(call, "type") or "function",
                 "function": {
                     "name": _get(function, "name") or "",
-                    "arguments": _get(function, "arguments") or "",
+                    "arguments": (
+                        json.dumps(
+                            _json_identity(
+                                _json_arguments(_get(function, "arguments"))
+                            ),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                        if semantic_arguments
+                        else _get(function, "arguments") or ""
+                    ),
                 },
             }
         )
@@ -100,6 +155,142 @@ def _assistant_fields(message):
     ):
         raise TypeError("unsupported tool function")
     return {"content": content, "reasoning": reasoning, "tool_calls": tools}
+
+
+def _output_digest(message, previous=None):
+    return _digest(
+        _assistant_fields(
+            message,
+            semantic_arguments=previous is None
+            or previous.output_identity_format == "json_semantics_v1",
+        )
+    )
+
+
+def _canonical_prefix(tokenizer, conversation, tools, template_text, kwargs):
+    values = {
+        key: value for key, value in kwargs.items() if not key.startswith("_coherence_")
+    }
+    values["add_generation_prompt"] = False
+    text = tokenizer.apply_chat_template(
+        conversation=conversation,
+        tools=tools,
+        chat_template=template_text,
+        tokenize=False,
+        **values,
+    )
+    if (
+        not isinstance(text, str)
+        or len(text.encode()) > MAX_TEXT_BYTES
+        or not text.endswith("<|im_end|>\n")
+    ):
+        raise ValueError("unsupported canonical history boundary")
+    return text[:-1]
+
+
+def _raw_output_matches(turn, fields):
+    """Conservatively validate exact decoded fields and complete XML calls.
+
+    This is not a replacement parser. Unsupported/ambiguous syntax disables
+    normalization replay; ordinary canonical admission remains available.
+    """
+    tokenizer = turn["tokenizer"]
+    # The authenticated generation header is short ASCII. Decode its bounded
+    # token tail jointly with output, preserving boundary decoding semantics
+    # without rereading a 140K--250K prompt twice after every response.
+    tail = list(turn["prompt"][-128:])
+    prompt = _decode(tokenizer, tail)
+    raw = _decode(tokenizer, [*tail, *turn["output"]])
+    if not raw.startswith(prompt) or not raw.endswith("<|im_end|>"):
+        return False
+    marker = "<|im_start|>assistant\n"
+    generation = next(
+        (
+            suffix
+            for suffix in ("<think>\n\n</think>\n\n", "<think>\n", "")
+            if prompt.endswith(marker + suffix)
+        ),
+        None,
+    )
+    if generation is None:
+        return False
+    body = generation + raw[len(prompt) : -len("<|im_end|>")]
+    if not body.startswith("<think>\n") or body.count("</think>") != 1:
+        return False
+    reasoning, body = body[len("<think>\n") :].split("</think>", 1)
+    if reasoning.strip("\n") != fields["reasoning"].strip("\n"):
+        return False
+    calls = fields["tool_calls"]
+    if not calls:
+        return "<tool_call>" not in body and body.strip("\n") == fields[
+            "content"
+        ].strip("\n")
+    first = body.find("<tool_call>")
+    if first < 0 or body[:first].strip("\n") != fields["content"].strip("\n"):
+        return False
+    body = body[first:]
+    for call in calls:
+        body = body.lstrip("\n")
+        match = re.match(r"<tool_call>\n<function=([A-Za-z_][A-Za-z0-9_.-]*)>\n", body)
+        if (
+            match is None
+            or call["type"] != "function"
+            or match[1] != call["function"]["name"]
+        ):
+            return False
+        arguments = _json_arguments(call["function"]["arguments"])
+        body = body[match.end() :]
+        for key, expected in arguments.items():
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", key):
+                return False
+            start = f"<parameter={key}>\n"
+            if not body.startswith(start):
+                return False
+            value, delimiter, rest = body[len(start) :].partition("\n</parameter>")
+            if not delimiter:
+                return False
+            if isinstance(expected, str):
+                if value != expected:
+                    return False
+            else:
+                # Reuse the duplicate-key/nonfinite/type checks for every
+                # nested scalar/array/object without interpreting XML as data.
+                wrapped = _json_arguments('{"value":' + value + "}")
+                if list(wrapped) != ["value"] or _json_identity(
+                    wrapped["value"]
+                ) != _json_identity(expected):
+                    return False
+            body = rest.removeprefix("\n")
+        end = "</function>\n</tool_call>"
+        if not body.startswith(end):
+            return False
+        body = body[len(end) :]
+    return not body.strip("\n")
+
+
+def _completed_canonical_prefix(turn, fields):
+    context = turn.get("render_context")
+    if context is None or not _raw_output_matches(turn, fields):
+        return None
+    conversation, tools, template_text, kwargs = context
+    assistant = {
+        "role": "assistant",
+        "content": fields["content"],
+        "reasoning_content": fields["reasoning"],
+        "tool_calls": [
+            {
+                **call,
+                "function": {
+                    **call["function"],
+                    "arguments": _json_arguments(call["function"]["arguments"]),
+                },
+            }
+            for call in fields["tool_calls"]
+        ],
+    }
+    return _canonical_prefix(
+        turn["tokenizer"], [*conversation, assistant], tools, template_text, kwargs
+    )
 
 
 def _get_ledger():
@@ -285,6 +476,8 @@ def template(state, text):
             isinstance(text, str)
             and hashlib.sha256(text.encode()).hexdigest() == TEMPLATE_SHA256
         )
+        if turn["template_supported"]:
+            turn["template_text"] = text
 
 
 def render_params(state, conversation, kwargs):
@@ -328,7 +521,7 @@ def _previous(turn, state):
         return None
     if (
         _get(messages[count], "role") != "assistant"
-        or _digest(_assistant_fields(messages[count])) != previous.output_identity
+        or _output_digest(messages[count], previous) != previous.output_identity
     ):
         _report(state, "output_changed")
         return None
@@ -367,12 +560,6 @@ def encode_prompt(
         ):
             _report(state, "incremental_unsupported_tokenizer_or_template")
             return None
-        previous = _previous(turn, state)
-        if previous is None:
-            return None
-        if previous.tokens[-1] != turn["boundary"]:
-            _report(state, "unsupported_boundary")
-            return None
         kwargs = dict(resolved_kwargs)
         if any(
             key in kwargs
@@ -381,6 +568,16 @@ def encode_prompt(
             raise ValueError("private renderer callback not consumed")
         if kwargs.get("return_dict") not in (None, False):
             return None
+        turn["render_context"] = (
+            _plain(conversation),
+            _plain(tools),
+            turn["template_text"],
+            {
+                key: _plain(value)
+                for key, value in kwargs.items()
+                if not key.startswith("_coherence_")
+            },
+        )
         rendered_text = tokenizer.apply_chat_template(
             conversation=conversation,
             tools=tools,
@@ -393,13 +590,46 @@ def encode_prompt(
             or len(rendered_text.encode()) > MAX_TEXT_BYTES
         ):
             raise ValueError("unsupported rendered text")
-        old_text = _decode(tokenizer, previous.tokens)
-        if not rendered_text.startswith(old_text) or len(rendered_text) == len(
-            old_text
-        ):
-            _report(state, "incremental_rendered_prefix_changed")
+        previous = _previous(turn, state)
+        if previous is None:
             return None
-        suffix_text = rendered_text[len(old_text) :]
+        if previous.tokens[-1] != turn["boundary"]:
+            _report(state, "unsupported_boundary")
+            return None
+        old_text = _decode(tokenizer, previous.tokens)
+        reconstructed = False
+        if rendered_text.startswith(old_text) and len(rendered_text) > len(old_text):
+            suffix_text = rendered_text[len(old_text) :]
+        else:
+            count = previous.message_count
+            if (
+                previous.canonical_prefix_sha256 is None
+                or previous.prompt_tokens is None
+                or type(count) is not int
+                or not isinstance(conversation, (list, tuple))
+                or count >= len(conversation)
+                or _get(conversation[count], "role") != "assistant"
+            ):
+                _report(state, "incremental_rendered_prefix_changed")
+                return None
+            canonical = _canonical_prefix(
+                tokenizer,
+                conversation[: count + 1],
+                tools,
+                turn["template_text"],
+                kwargs,
+            )
+            if (
+                len(canonical) != previous.canonical_prefix_characters
+                or hashlib.sha256(canonical.encode()).hexdigest()
+                != previous.canonical_prefix_sha256
+                or not rendered_text.startswith(canonical)
+                or len(rendered_text) == len(canonical)
+            ):
+                _report(state, "canonical_history_changed")
+                return None
+            suffix_text = rendered_text[len(canonical) :]
+            reconstructed = True
         suffix = tokenizer.encode(suffix_text, add_special_tokens=False)
         if _decode(tokenizer, suffix) != suffix_text:
             _report(state, "nonlossless_text_roundtrip")
@@ -409,7 +639,7 @@ def encode_prompt(
             _report(state, proposal.reason)
             return None
         ids = list(proposal.tokens)
-        if _decode(tokenizer, ids) != rendered_text:
+        if _decode(tokenizer, ids) != old_text + suffix_text:
             _report(state, "incremental_decoded_text_changed")
             return None
         turn["incremental_prompt"] = array("i", ids)
@@ -417,7 +647,9 @@ def encode_prompt(
         turn["incremental_previous"] = previous
         _report(
             state,
-            "incremental_suffix_encoded",
+            "rendered_assistant_prefix_preserved"
+            if reconstructed
+            else "incremental_suffix_encoded",
             previous_tokens=len(previous.tokens),
             suffix_tokens=len(suffix),
             admitted_tokens=len(ids),
@@ -493,7 +725,7 @@ def rendered(state, serving, engine_inputs):
         # The immediately following message must be the answer actually sent.
         if (
             _get(messages[count], "role") != "assistant"
-            or _digest(_assistant_fields(messages[count])) != previous.output_identity
+            or _output_digest(messages[count], previous) != previous.output_identity
         ):
             _report(state, "output_changed")
             return engine_inputs
@@ -789,6 +1021,7 @@ async def prepare_compaction(serving, request, instruction, context_window):
             and reason
             in {
                 "incremental_suffix_encoded",
+                "rendered_assistant_prefix_preserved",
                 "already_exact",
                 "preserved_generated_tokens",
             }
@@ -843,14 +1076,28 @@ def finish(state, complete):
             "reasoning": "".join(turn["reasoning"]),
             "tool_calls": [turn["tools"][i] for i in sorted(turn["tools"])],
         }
+        try:
+            canonical = _completed_canonical_prefix(turn, fields)
+            if canonical is None and turn.get("render_context") is not None:
+                _report(state, "raw_assistant_correspondence_unverified")
+        except Exception:  # noqa: BLE001 - a witness is optional, never infer it.
+            canonical = None
+            _report(state, "canonical_render_unavailable")
         saved = ledger.record_completed(
             lease,
             turn["prompt"],
             ids,
             history_identity=turn["history"],
-            output_identity=_digest(fields),
+            output_identity=_output_digest(fields),
             message_count=turn["message_count"],
             processed_tokens=None,
+            canonical_prefix_sha256=hashlib.sha256(canonical.encode()).hexdigest()
+            if canonical is not None
+            else None,
+            canonical_prefix_characters=len(canonical)
+            if canonical is not None
+            else None,
+            output_identity_format="json_semantics_v1",
         )
         _report(state, "journal_saved" if saved else "journal_unavailable")
     except Exception:  # noqa: BLE001 - retain canonical input on unsupported journal data

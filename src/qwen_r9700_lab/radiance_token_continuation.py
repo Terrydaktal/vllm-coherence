@@ -169,6 +169,10 @@ class TokenJournal:
     processed_tokens: int | None = None
     message_count: int | None = None
     contract: str = CONTRACT
+    prompt_tokens: int | None = None
+    canonical_prefix_sha256: str | None = field(default=None, repr=False)
+    canonical_prefix_characters: int | None = None
+    output_identity_format: str = "wire_v1"
 
     @property
     def raw_ids(self):
@@ -356,7 +360,17 @@ class TokenContinuationLedger:
             "processed_tokens",
             "message_count",
         }
-        if not isinstance(header, dict) or set(header) != expected:
+        optional = {
+            "prompt_tokens",
+            "canonical_prefix_sha256",
+            "canonical_prefix_characters",
+            "output_identity_format",
+        }
+        if (
+            not isinstance(header, dict)
+            or not expected.issubset(header)
+            or set(header) - expected - optional
+        ):
             raise _InvalidJournal("unsupported journal metadata")
         if (
             header["schema"] != SCHEMA
@@ -388,6 +402,24 @@ class TokenContinuationLedger:
             type(messages) is not int or not 0 <= messages <= 1024
         ):
             raise _InvalidJournal("invalid history boundary")
+        prompt_tokens = header.get("prompt_tokens")
+        prefix_sha = header.get("canonical_prefix_sha256")
+        prefix_characters = header.get("canonical_prefix_characters")
+        identity_format = header.get("output_identity_format", "wire_v1")
+        if prompt_tokens is not None and (
+            type(prompt_tokens) is not int or not 0 < prompt_tokens < len(tokens)
+        ):
+            raise _InvalidJournal("invalid prompt boundary")
+        if identity_format not in {"wire_v1", "json_semantics_v1"}:
+            raise _InvalidJournal("unsupported output identity format")
+        if prefix_sha is not None or prefix_characters is not None:
+            _identity_digest(prefix_sha)
+            if (
+                prompt_tokens is None
+                or type(prefix_characters) is not int
+                or not 0 < prefix_characters <= 8 * 1024 * 1024
+            ):
+                raise _InvalidJournal("invalid canonical prefix metadata")
         return TokenJournal(
             tokens,
             header["identity"],
@@ -396,6 +428,10 @@ class TokenContinuationLedger:
             header["version"],
             processed,
             messages,
+            prompt_tokens=prompt_tokens,
+            canonical_prefix_sha256=prefix_sha,
+            canonical_prefix_characters=prefix_characters,
+            output_identity_format=identity_format,
         )
 
     def _remember(self, key, record):
@@ -648,6 +684,10 @@ class TokenContinuationLedger:
                 "token_count": len(record.tokens),
                 "processed_tokens": record.processed_tokens,
                 "message_count": record.message_count,
+                "prompt_tokens": record.prompt_tokens,
+                "canonical_prefix_sha256": record.canonical_prefix_sha256,
+                "canonical_prefix_characters": record.canonical_prefix_characters,
+                "output_identity_format": record.output_identity_format,
             },
             separators=(",", ":"),
         ).encode()
@@ -728,6 +768,9 @@ class TokenContinuationLedger:
         processed_tokens=None,
         message_count=None,
         success=True,
+        canonical_prefix_sha256=None,
+        canonical_prefix_characters=None,
+        output_identity_format="wire_v1",
     ):
         with self._lock:
             try:
@@ -757,6 +800,20 @@ class TokenContinuationLedger:
                 ):
                     self._reject("invalid_history_boundary")
                     return False
+                if output_identity_format not in {"wire_v1", "json_semantics_v1"}:
+                    self._reject("invalid_output_identity_format")
+                    return False
+                if (
+                    canonical_prefix_sha256 is not None
+                    or canonical_prefix_characters is not None
+                ):
+                    _identity_digest(canonical_prefix_sha256)
+                    if (
+                        type(canonical_prefix_characters) is not int
+                        or not 0 < canonical_prefix_characters <= 8 * 1024 * 1024
+                    ):
+                        self._reject("invalid_canonical_prefix_metadata")
+                        return False
                 record = TokenJournal(
                     PackedTokenIds(payload),
                     lease.identity.digest,
@@ -765,6 +822,10 @@ class TokenContinuationLedger:
                     secrets.token_hex(16),
                     processed_tokens,
                     message_count,
+                    prompt_tokens=len(prefix),
+                    canonical_prefix_sha256=canonical_prefix_sha256,
+                    canonical_prefix_characters=canonical_prefix_characters,
+                    output_identity_format=output_identity_format,
                 )
                 key = lease.identity.key
                 if self.root is not None:
