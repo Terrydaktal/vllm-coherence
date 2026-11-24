@@ -169,6 +169,8 @@ def launch(args, pi_args):
         history.mkdir(mode=0o700, parents=True, exist_ok=True)
         extensions = [
             "qwen-progress.mjs",
+            "qwen-running-build-title.mjs",
+            "qwen-client-commands.mjs",
             "qwen-gpu-temperature.mjs",
             "qwen-tool-output-condense.mjs",
             "qwen-tool-turn-rehydrate.mjs",
@@ -200,6 +202,9 @@ def launch(args, pi_args):
             **os.environ,
             "PI_CODING_AGENT_DIR": str(agent),
             "PI_OFFLINE": "1",
+            "QWEN_PI_LATEST_LAUNCHER": str(binary),
+            "QWEN_PI_RUNNING_RELEASE": "",
+            "QWEN_PI_BUILD_PROFILE": str(Path(__file__).resolve()),
             "QWEN_RADIANCE_CACHE_HOST": host,
             "QWEN_RADIANCE_CONTAINER": "vllm-coherence",
             "QWEN_RADIANCE_CACHE_ROOT": connection["cache_root"],

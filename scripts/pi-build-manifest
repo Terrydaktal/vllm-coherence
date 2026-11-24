@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Record the verified patched Pi installation independently of Node's ELF ID."""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+import tempfile
+
+SCHEMA = "coherence.pi.installed-build.v1"
+PACKAGE = "@earendil-works/pi-coding-agent"
+PATCHERS = (
+    "streaming-usage", "footer", "tool-call-integrity", "internal-guard-retry",
+    "precontinuation-compaction", "project-history",
+)
+SKIP = {"node_modules", "tests", "test", "target", "artifacts", "captures", ".git"}
+MAX_FILES = 4096
+MAX_DIRECTORIES = 2048
+MAX_BYTES = 64 * 1024 * 1024
+
+
+def stamp(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+            info.st_mtime_ns, info.st_ctime_ns)
+
+
+def stable_read(path, budget=None, *, limit=MAX_BYTES):
+    """Refuse nonregular/changing files and enforce a finite total read budget."""
+    before = path.stat()
+    if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+        raise ValueError(f"not a bounded regular file: {path}")
+    if budget is not None:
+        budget["files"] += 1
+        budget["bytes"] += before.st_size
+        if budget["files"] > MAX_FILES or budget["bytes"] > MAX_BYTES:
+            raise ValueError("Pi SDK inventory budget exceeded")
+    with path.open("rb") as stream:
+        if stamp(os.fstat(stream.fileno())) != stamp(before):
+            raise ValueError(f"file changed before reading: {path}")
+        value = stream.read(limit + 1)
+        if len(value) > limit or stamp(os.fstat(stream.fileno())) != stamp(before):
+            raise ValueError(f"file changed while reading: {path}")
+    if stamp(path.stat()) != stamp(before):
+        raise ValueError(f"file replaced while reading: {path}")
+    return value
+
+
+def sdk_inventory(runtime):
+    scope = runtime / "node_modules/@earendil-works"
+    if not scope.is_dir():
+        raise ValueError("Pi SDK scope is missing")
+    budget = {"files": 0, "bytes": 0, "directories": 0}
+    files = []
+
+    def walk(directory):
+        budget["directories"] += 1
+        if budget["directories"] > MAX_DIRECTORIES:
+            raise ValueError("Pi SDK directory budget exceeded")
+        before = directory.stat()
+        if not stat.S_ISDIR(before.st_mode):
+            raise ValueError("Pi SDK directory is not a directory")
+        # Only package-root links are legitimate npm aliases. Links inside dist
+        # must not silently pull unrelated files into this application identity.
+        for child in sorted(directory.iterdir(), key=lambda p: p.name.encode("utf-8")):
+            if child.name in SKIP:
+                continue
+            if child.is_symlink():
+                raise ValueError(f"unexpected symlink inside SDK dist: {child}")
+            if child.is_dir():
+                walk(child)
+            elif child.suffix in {".js", ".mjs", ".cjs"}:
+                data = stable_read(child, budget)
+                files.append({"path": child.relative_to(scope).as_posix(),
+                              "sha256": hashlib.sha256(data).hexdigest()})
+        if stamp(directory.stat()) != stamp(before):
+            raise ValueError(f"SDK directory changed while reading: {directory}")
+
+    before = scope.stat()
+    for package in sorted(scope.iterdir(), key=lambda p: p.name.encode("utf-8")):
+        if package.name in SKIP:
+            continue
+        if not package.is_dir():
+            continue
+        # npm may place a dependency below pi-coding-agent/node_modules and
+        # alias it into the top scope. Permit only links into this npm runtime.
+        if not package.resolve(strict=True).is_relative_to(runtime):
+            raise ValueError(f"SDK package points outside the runtime: {package}")
+        directory = package / "dist"
+        if directory.is_symlink():
+            raise ValueError(f"unexpected symlink for SDK dist: {directory}")
+        if directory.exists():
+            walk(directory)
+    if stamp(scope.stat()) != stamp(before):
+        raise ValueError("SDK package scope changed while reading")
+    files.sort(key=lambda value: value["path"].encode("utf-8"))
+    if not any(value["path"] == "pi-coding-agent/dist/cli.js" for value in files):
+        raise ValueError("Pi CLI is missing from the SDK inventory")
+    identity = hashlib.sha256()
+    for value in files:
+        identity.update(f'{value["path"]}\0{value["sha256"]}\n'.encode("utf-8"))
+    return files, identity.hexdigest()
+
+
+def build_manifest(runtime, patch_root):
+    package = runtime / "node_modules/@earendil-works/pi-coding-agent"
+    metadata = json.loads(stable_read(package / "package.json", limit=1024 * 1024))
+    if metadata.get("name") != PACKAGE or not isinstance(metadata.get("version"), str):
+        raise ValueError("unexpected Pi package metadata")
+    files, identity = sdk_inventory(runtime)
+    patches = []
+    for name in PATCHERS:
+        path = patch_root / "scripts" / ("patch-pi-" + name)
+        if path.is_symlink():
+            raise ValueError(f"patch source is a symlink: {path}")
+        patches.append({"path": Path(os.path.relpath(path, package)).as_posix(),
+                        "sha256": hashlib.sha256(stable_read(path)).hexdigest()})
+    return {"schema": SCHEMA, "package": PACKAGE, "version": metadata["version"],
+            "entry_point": "dist/cli.js", "sdk_fingerprint": identity,
+            "sdk_files": files, "patches": patches, "patches_verified": True}
+
+
+def verify_patches(runtime, patch_root):
+    for name in PATCHERS:
+        subprocess.run([sys.executable, str(patch_root / "scripts" / ("patch-pi-" + name)),
+                        "--check", str(runtime)], check=True, timeout=30,
+                       stdin=subprocess.DEVNULL)
+
+
+def atomic_manifest(path, value):
+    """Publish an owned private file without following an existing leaf link."""
+    parent = path.parent
+    info = parent.stat()
+    if info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise ValueError("unsafe installed Pi package directory")
+    if path.exists() or path.is_symlink():
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            raise ValueError("unsafe existing Pi build manifest")
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".coherence-build-", dir=parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            json.dump(value, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true", help="verify all patchers and write the installed build manifest")
+    action.add_argument("--check", action="store_true", help="compare the manifest with current SDK and patch-source hashes")
+    parser.add_argument("--runtime", type=Path, required=True, help="npm installation root containing node_modules")
+    parser.add_argument("--patch-root", type=Path, required=True, help="project or packaged release containing scripts/patch-pi-*")
+    parser.add_argument("--verify-patches", action="store_true", help="also execute all six patch checkers with --check")
+    args = parser.parse_args(argv)
+    try:
+        runtime = args.runtime.resolve(strict=True)
+        patch_root = args.patch_root.resolve(strict=True)
+        expected = build_manifest(runtime, patch_root)
+        if args.apply or args.verify_patches:
+            verify_patches(runtime, patch_root)
+            if build_manifest(runtime, patch_root) != expected:
+                raise ValueError("Pi installation or patch sources changed during verification")
+        path = runtime / "node_modules/@earendil-works/pi-coding-agent/coherence-build.json"
+        if args.apply:
+            # Hashing twice also rejects a patch source or SDK changed while the
+            # other inventory was being read, before publishing proof of it.
+            if build_manifest(runtime, patch_root) != expected:
+                raise ValueError("Pi installation changed while constructing its manifest")
+            atomic_manifest(path, expected)
+        else:
+            if path.is_symlink() or json.loads(stable_read(path, limit=2 * 1024 * 1024)) != expected:
+                raise ValueError("installed Pi build manifest does not match current SDK or patch sources")
+        print(f"{'recorded' if args.apply else 'verified'} Pi build {expected['sdk_fingerprint']} at {path}")
+        return 0
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"pi-build-manifest: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

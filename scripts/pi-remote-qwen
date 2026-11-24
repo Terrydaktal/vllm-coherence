@@ -1011,6 +1011,7 @@ pi_link="$HOME/.local/bin/pi"
 install_script="$project_root/scripts/install-pi-coding-agent"
 deploy_script="$project_root/scripts/deploy-pi-models-config"
 progress_extension="$project_root/integrations/pi/qwen-progress.mjs"
+running_build_extension="$project_root/integrations/pi/qwen-running-build-title.mjs"
 tool_output_condense_extension="$project_root/integrations/pi/qwen-tool-output-condense.mjs"
 latency_audit_extension="$project_root/integrations/pi/qwen-latency-audit.mjs"
 tool_turn_rehydrate_extension="$project_root/integrations/pi/qwen-tool-turn-rehydrate.mjs"
@@ -4726,6 +4727,8 @@ flush_latest_snapshot_head() {
 
 declare -a pi_extensions=(
 	--extension "$progress_extension"
+	--extension "$running_build_extension"
+	--extension "$project_root/integrations/pi/qwen-client-commands.mjs"
 	--extension "$tool_output_condense_extension"
 	--extension "$tool_call_integrity_extension"
 	--extension "$repetition_guard_extension"
@@ -4738,6 +4741,9 @@ if [[ -v QWEN_PI_COMPACTION_HANDOFF_REQUEST_ROOT ]]; then
 fi
 declare -a pi_environment=(
 	"PI_CODING_AGENT_DIR=$pi_agent_dir"
+	"QWEN_PI_LATEST_LAUNCHER=$pi_link"
+	'QWEN_PI_RUNNING_RELEASE='
+	"QWEN_PI_BUILD_PROFILE=$project_root/scripts/pi-remote-qwen"
 	'PI_OFFLINE=1'
 	"QWEN_PI_TOOL_RESULT_DIR=$live_tool_result_root"
 )

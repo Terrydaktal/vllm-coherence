@@ -89,6 +89,7 @@ DESCRIPTION
     Eleven tools are enabled by default, including bounded repository searches,
     web research, and archived-output retrieval. Pi operating preferences are
     appended directly; AGENTS.md and CLAUDE.md discovery is disabled.
+    The Formal English Audit extension is also loaded when installed globally.
 
 OPTIONS
     --remote HOST
@@ -171,6 +172,9 @@ FILES
 
 	scripts/qwen-radiance-scheduler-status
 		Singleton monitor using one persistent remote scheduler-status stream.
+
+    ~/.pi/agent/extensions/formal-english-audit.ts
+        Optional installed Formal English Audit extension, loaded explicitly.
 
 PATHS
     ~/.local/state/qwen-r9700/pi-remote/radiance-public-clean-candidate/
@@ -435,6 +439,7 @@ readonly patch_source="$project_root/experiments/radiance-public/patch_streaming
 readonly install_script="$project_root/scripts/install-pi-coding-agent"
 readonly deploy_script="$project_root/scripts/deploy-pi-models-config"
 readonly progress_extension="$project_root/integrations/pi/qwen-progress.mjs"
+readonly running_build_extension="$project_root/integrations/pi/qwen-running-build-title.mjs"
 readonly tool_names_extension="$project_root/integrations/pi/qwen-tool-names.ts"
 readonly tool_names_module="$project_root/integrations/pi/qwen-tool-names.mjs"
 readonly scheduler_telemetry_module="$project_root/integrations/pi/qwen-radiance-scheduler-telemetry.mjs"
@@ -449,6 +454,7 @@ readonly session_search_extension="$project_root/integrations/pi/qwen-session-se
 readonly session_search_worker="$project_root/integrations/pi/qwen-session-search-worker.mjs"
 readonly session_search_index="$project_root/integrations/pi/qwen-session-index.mjs"
 readonly searchtool_extension=${QWEN_PI_SEARCHTOOL_EXTENSION:-/home/lewis/tasks/searchtool/index.ts}
+readonly formal_english_audit_extension="$HOME/.pi/agent/extensions/formal-english-audit.ts"
 readonly searchtool_recovery_extension="$project_root/integrations/pi/qwen-searchtool-recovery.mjs"
 readonly compaction_extension="$project_root/integrations/pi/qwen-radiance-compaction.ts"
 readonly compaction_core="$project_root/integrations/pi/qwen-radiance-compaction.mjs"
@@ -993,6 +999,8 @@ declare -a pi_options=(
 	--no-extensions
 	--exclude-tools 'read,bash,edit,write,grep,find,ls'
 	--extension "$progress_extension"
+	--extension "$running_build_extension"
+	--extension "$project_root/integrations/pi/qwen-client-commands.mjs"
 	--extension "$gpu_temperature_extension"
 	--extension "$tool_output_extension"
 	--extension "$rehydrate_extension"
@@ -1004,8 +1012,13 @@ declare -a pi_options=(
 	--extension "$searchtool_recovery_extension"
 	--extension "$tool_names_extension"
 )
+if [[ -f $formal_english_audit_extension ]]; then
+	pi_options+=(--extension "$formal_english_audit_extension")
+fi
 if [[ -t 0 && -t 1 ]]; then
 	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \
+		QWEN_PI_LATEST_LAUNCHER="$pi_link" QWEN_PI_RUNNING_RELEASE='' \
+		QWEN_PI_BUILD_PROFILE="$project_root/scripts/pi-remote-qwen-radiance" \
 		UV_CACHE_DIR=/data/.cache/uv \
 		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
 		QWEN_RADIANCE_CONTAINER="$CONTAINER" \
@@ -1017,6 +1030,8 @@ if [[ -t 0 && -t 1 ]]; then
 		"${pi_options[@]}" "${pi_args[@]}" {local_port_lock_fd}>&- </dev/tty
 else
 	env PI_CODING_AGENT_DIR="$agent_dir" PI_OFFLINE=1 \
+		QWEN_PI_LATEST_LAUNCHER="$pi_link" QWEN_PI_RUNNING_RELEASE='' \
+		QWEN_PI_BUILD_PROFILE="$project_root/scripts/pi-remote-qwen-radiance" \
 		UV_CACHE_DIR=/data/.cache/uv \
 		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
 		QWEN_RADIANCE_CONTAINER="$CONTAINER" \

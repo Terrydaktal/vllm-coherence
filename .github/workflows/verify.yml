@@ -21,7 +21,7 @@ jobs:
       - name: Install independent GNU oracles and launcher dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y grep findutils ripgrep fd-find strace build-essential
+          sudo apt-get install -y grep findutils ripgrep fd-find strace tmux build-essential
       - name: Install the pinned Pi schema SDK for offline tests
         run: |
           npm install --prefix artifacts/pi-search-sdk --no-package-lock --ignore-scripts @earendil-works/pi-coding-agent@0.84.2
@@ -36,7 +36,7 @@ jobs:
           cargo test --locked --manifest-path integrations/pi/search-wrappers/grep2rg/rust/Cargo.toml --bin grep2rg-rust
           cargo test --locked --manifest-path integrations/pi/search-wrappers/find2fd/rust/Cargo.toml --bin find2fd-rust
           mkdir -p artifacts
-          node --test --test-reporter=tap tests/test_shell_search_wrappers.mjs tests/test_files_only_search.mjs > artifacts/search-tests.tap 2>&1
+          node --test --test-reporter=tap tests/test_shell_search_wrappers.mjs tests/test_files_only_search.mjs tests/test_running_build.mjs tests/test_running_build_title.mjs tests/test_running_build_title_sdk.mjs tests/test_running_build_title_tmux.mjs tests/test_build_process_record.mjs > artifacts/search-tests.tap 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:

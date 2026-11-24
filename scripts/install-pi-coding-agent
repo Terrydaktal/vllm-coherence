@@ -66,6 +66,8 @@ FILES
     scripts/patch-pi-internal-guard-retry
     scripts/patch-pi-precontinuation-compaction
     scripts/patch-pi-project-history
+    scripts/pi-build-manifest
+    $HOME/.local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works/pi-coding-agent/coherence-build.json
     $HOME/.local/share/qwen-r9700/pi/0.84.2
     $HOME/.local/bin/pi
 
@@ -144,6 +146,7 @@ tool_integrity_patch_script="$project_root/scripts/patch-pi-tool-call-integrity"
 internal_guard_retry_patch_script="$project_root/scripts/patch-pi-internal-guard-retry"
 precontinuation_compaction_patch_script="$project_root/scripts/patch-pi-precontinuation-compaction"
 project_history_patch_script="$project_root/scripts/patch-pi-project-history"
+build_manifest_script="$project_root/scripts/pi-build-manifest"
 manifest_dir="$project_root/integrations/pi"
 : "${HOME:?HOME must be set}"
 install_root="$HOME/.local/share/qwen-r9700/pi"
@@ -176,9 +179,11 @@ while (($# > 0)); do
 	esac
 done
 
-for command_name in git jq node npm; do
+for command_name in git jq node npm python3; do
 	command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
 done
+[[ -f $build_manifest_script && ! -L $build_manifest_script && -x $build_manifest_script ]] ||
+	die "missing executable Pi build manifest generator: $build_manifest_script"
 for patch_script in \
 	"$usage_patch_script" \
 	"$footer_patch_script" \
@@ -278,6 +283,9 @@ else
 	[[ ! -e $stage_path ]] || die "runtime appeared during publication; staged directory retained: $stage_path"
 	printf 'installed verified Pi runtime %s\n' "$runtime"
 fi
+
+"$build_manifest_script" --apply --runtime "$runtime" --patch-root "$project_root" ||
+	die "cannot record verified installed Pi build: $runtime"
 
 binary_target="$runtime/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
 [[ -f $binary_target && ! -L $binary_target && -x $binary_target ]] ||

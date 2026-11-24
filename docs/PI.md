@@ -33,6 +33,81 @@ nesting tmux. SSH authentication must already work noninteractively. Supply
 search integration, including one specific to a VM. Terminal keybindings remain
 the terminal owner's configuration.
 
+## Recognize an older running Pi
+
+The terminal title strikes only Pi's application label (`π̶`) when the running
+client differs from the currently installed local client. Session and project
+names remain readable. Replacing the SDK at the same version, retargeting its
+launcher symlink, changing an explicitly loaded extension, or activating a new
+Pi-opsec release can trigger the marker. This compares local installed code;
+it does not query upstream releases or the model backend.
+
+Titles show the session's full working directory with the home directory
+shortened to `~`, for example `π - ~/tasks/emma`, rather than only `emma`.
+An optional session name remains before the directory; paths outside home stay
+absolute. The terminal may append its own ` - Terminal` suffix.
+
+Checks run asynchronously after filesystem changes, with a one-second debounce
+and a thirty-second fallback. Unchanged files reuse content hashes; no check runs
+per token or decode round. The baseline survives `/reload` and session switches,
+and restoring the matching installation clears the strike. Missing or incomplete
+replacement files leave the last established state unchanged. Identity coverage
+includes compiled Pi SDK JavaScript and explicitly loaded extension files and
+their literal local imports; it does not claim to track every third-party or
+dynamically computed import.
+
+New launches load this monitor. Existing processes without it need one `/quit`
+and relaunch first; detaching and reconnecting to a running Pi-opsec process keeps
+that process. Subsequently a struck label means quit/relaunch to load the current
+client. The model backend does not need restarting, and this display-only
+extension adds no model prompt text, tools or conversation entries.
+
+### Application build identity
+
+The installer writes `coherence-build.json` beside the installed
+`@earendil-works/pi-coding-agent/package.json`. It records the SHA-256 inventory
+of compiled Pi SDK JavaScript and the sources of the six verified runtime
+patchers. Apply or verify this metadata without reinstalling npm packages with:
+
+```sh
+scripts/pi-build-manifest --apply --runtime "$HOME/.local/share/qwen-r9700/pi/0.84.2" --patch-root "$PWD"
+scripts/pi-build-manifest --check --runtime "$HOME/.local/share/qwen-r9700/pi/0.84.2" --patch-root "$PWD"
+```
+
+`--apply` requires all six runtime patch checks to pass; it records the existing
+installation and does not apply missing patches. Run `scripts/install-pi-coding-agent`
+when the runtime itself needs patching.
+
+Interactive Pi clients with the build monitor write a private, atomic startup
+record at `$XDG_RUNTIME_DIR/pi/processes/<PID>-<startticks>.json`. It preserves
+the initial application entry point, package version, SDK fingerprint and selected
+extension fingerprint across session switches and reloads. A separate `latest`
+section is checked after filesystem changes and every thirty seconds. Declared
+extensions, literal local imports and the selected launcher's source are covered;
+ordinary auto-loaded user extensions are included when discovery is enabled.
+This is a finite source inventory, not a claim to identify every dynamically
+computed import or third-party dependency. No conversations or model tensors
+enter either record.
+
+ApplicationLauncher compares this evidence independently of Node's ELF build
+identity. It distinguishes **Current**, **Restart required**, **Installation
+needs updating**, and **Unknown**. Missing, malformed, unsafe or more than
+ninety-second-old evidence cannot establish that Pi is current. Visible expanded
+Pi details refresh every two seconds; closing the popup stops these reads.
+An older Pi process without the recorder needs a normal quit/relaunch: its loaded
+build identity cannot be reconstructed from today's installed files.
+
+The runtime record is removed on normal shutdown. Lack of a private, owned
+`XDG_RUNTIME_DIR` disables publication while preserving normal Pi behavior.
+Pi-opsec packages and verifies the same installed manifest inside its guest;
+the guest process record belongs to that guest's runtime directory.
+
+## Quit Pi
+
+`/exit` is an alias for `/quit`: it cancels active work and closes Pi through
+its normal graceful shutdown, including session cleanup. It does not stop the
+shared model backend.
+
 ## Inspect loaded tools
 
 `/tools` lists the tools registered in the current Pi session, with their
