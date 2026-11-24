@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { radianceBridgeRequest, radianceBridgeUrl } from "./qwen-radiance-bridge.mjs";
+import { backendStatusDetails, readBackendLocalStatus, statusLabel } from "./qwen-backend-status.mjs";
 
 const exec = promisify(execFile);
 export const BACKEND_SCHEMA = "urn:coherence:backend-control:v1";
@@ -19,7 +20,7 @@ function progressLine(action, now) {
   return {
     update(report) {
       const observed = action !== "status" && report.operation?.action === action ? report.operation.stage : backendStatusText(report);
-      const next = observed.replace(/[\u0000-\u001f\u007f]/g, " ");
+      const next = statusLabel(observed, 512);
       if (next !== stage) {
         stage = next;
         entered = now();
@@ -39,8 +40,9 @@ export function validateBackendReport(value) {
     throw new Error("invalid backend control response");
   }
   if (value.error) throw new Error(value.error);
-  if (typeof value.ready !== "boolean" || typeof value.running !== "boolean" ||
-      typeof value.busy !== "boolean" || typeof value.pinned !== "boolean") {
+  const unknown = value.state === "unavailable";
+  if (!["ready", "running", "pinned"].every((key) => typeof value[key] === "boolean" || unknown && value[key] === null) ||
+      typeof value.busy !== "boolean") {
     throw new Error("invalid backend status");
   }
   const op = value.operation;
@@ -54,6 +56,17 @@ export function validateBackendReport(value) {
       throw new Error("invalid backend request counts");
     }
   }
+  for (const key of ["release", "resources", "telemetry", "host_control"]) {
+    if (value[key] !== undefined && value[key] !== null &&
+      (typeof value[key] !== "object" || Array.isArray(value[key]))) throw new Error("invalid backend details");
+  }
+  if (value.host_control && typeof value.host_control.reachable !== "boolean") throw new Error("invalid host control status");
+  for (const side of [value.release?.expected, value.release?.observed]) {
+    if (side != null && (typeof side !== "object" || Array.isArray(side) ||
+      ["container", "model", "image", "runtime_abi", "runtime_abi_prefix", "data_abi"].some((key) =>
+        side[key] != null && (typeof side[key] !== "string" || side[key].length > 512)))) throw new Error("invalid release identity");
+  }
+  if (JSON.stringify(value).length > 65_536) throw new Error("backend report is too large");
   return value;
 }
 
@@ -73,12 +86,12 @@ export async function backendCommand(action) {
 
 export function backendStatusText(report) {
   const details = [];
-  if (!report.pinned) details.push("container differs from the pinned release");
+  if (report.pinned === false) details.push("container differs from the pinned release");
   if (report.ready) details.push("API ready");
   if (report.active_requests !== undefined) details.push(`${report.active_requests} active, ${report.queued_requests ?? 0} queued request(s)`);
   if (report.busy && report.operation) details.push(report.operation.stage);
   else if (report.operation?.status === "failed") details.push(`Last ${report.operation.action} failed: ${report.operation.error}`);
-  return `Backend: ${report.state}${details.length ? ` · ${details.join(" · ")}` : ""}`;
+  return statusLabel(`Backend: ${report.state}${details.length ? ` · ${details.join(" · ")}` : ""}`, 700);
 }
 
 export default function installBackend(pi, {
@@ -87,9 +100,12 @@ export default function installBackend(pi, {
   now = () => performance.now(),
   setIntervalFn = setInterval,
   clearIntervalFn = clearInterval,
+  wall = Date.now,
+  readLocal = readBackendLocalStatus,
 } = {}) {
   let pending;
   let visible;
+  let lastKnown;
   const monitors = new Set();
   const dispose = (monitor) => {
     if (monitor.disposed) return;
@@ -106,7 +122,7 @@ export default function installBackend(pi, {
     pending = undefined;
   });
   pi.registerCommand("backend", {
-    description: "Backend status, start pinned model, or flush caches and stop gracefully",
+    description: "Backend, connection, resources and this chat’s cache/request status; start or gracefully stop the pinned model",
     getArgumentCompletions: (prefix) => [...ACTIONS].filter((value) => value.startsWith(prefix))
       .map((value) => ({ value, label: value })),
     handler: async (args, ctx) => {
@@ -131,14 +147,24 @@ export default function installBackend(pi, {
         monitor.timer = setIntervalFn(redraw, 100);
         monitor.timer?.unref?.();
       }
+      let local;
       try {
         if (monitor.disposed) return;
-        let report = validateBackendReport(await run(action));
+        let report;
+        if (mutation) report = validateBackendReport(await run(action));
+        else {
+          const [hostResult, localResult] = await Promise.allSettled([run(action), readLocal(ctx, { now: wall() })]);
+          if (localResult.status === "fulfilled") local = localResult.value;
+          if (hostResult.status === "rejected") throw hostResult.reason;
+          report = validateBackendReport(hostResult.value);
+        }
+        if (report.host_control?.reachable !== false && typeof report.running === "boolean") lastKnown = { report, observed_at_ms: wall() };
         if (monitor.disposed) return;
         panel.update(report);
         redraw();
         if (!mutation || !report.busy) {
-          ctx.ui.notify(backendStatusText(report), report.pinned ? "info" : "warning");
+          ctx.ui.notify(mutation ? backendStatusText(report) : backendStatusDetails({ report, local, lastKnown, now: wall(), theme: ctx.ui.theme }),
+            report.host_control?.reachable === false ? "error" : report.pinned ? "info" : "warning");
           return;
         }
         const operation = report.operation?.id;
@@ -163,7 +189,9 @@ export default function installBackend(pi, {
         }
         throw new Error("operation is still pending on the host; use /backend status");
       } catch (error) {
-        if (!monitor.disposed) ctx.ui.notify(`Backend ${action} failed: ${error.message}. ${mutation ? "Check /backend status before retrying." : ""}`.trim(), "error");
+        if (!monitor.disposed) ctx.ui.notify(mutation ?
+          statusLabel(`Backend ${action} failed: ${error.message}. Check /backend status before retrying.`, 700) :
+          backendStatusDetails({ local, lastKnown, error, now: wall(), theme: ctx.ui.theme }), "error");
       } finally {
         dispose(monitor);
         monitors.delete(monitor);

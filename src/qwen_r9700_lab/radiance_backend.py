@@ -1,8 +1,9 @@
 """Pinned backend lifecycle control, shared by host Pi and the VM bridge.
 
-Only lifecycle metadata is returned. Model inputs, generated tokens and logs are
-never read. Detached operations survive a terminal disconnect, and all callers
-share a lock on the GPU host. Stopping never escalates to SIGKILL.
+Only lifecycle, resource and numeric scheduler metadata is returned. Model inputs,
+generated tokens and logs are never read. Detached operations survive a terminal
+disconnect, and all callers share a lock on the GPU host. Stopping never escalates
+to SIGKILL.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import fcntl
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import shlex
@@ -32,6 +34,110 @@ HEX = re.compile(r"[0-9a-f]{64}\Z")
 MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate"
 SCHEDULER = Path("/dev/shm/qwen-radiance-fair-public-scheduler.json")
 TAIL = Path("/dev/shm/qwen-radiance-snapshot-tail.json")
+DRM = Path("/sys/class/drm")
+MEMINFO = Path("/proc/meminfo")
+SCHEDULER_MAX_AGE = 10
+
+
+def bounded_text(path: Path, maximum=65536):
+    """Read small kernel attributes without loading a driver or following pipes."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("non-regular host resource attribute")
+        raw = stream.read(maximum + 1)
+        if len(raw) > maximum:
+            raise ValueError("oversized host resource attribute")
+        return raw.decode("ascii").strip()
+
+
+def resource_number(path: Path, maximum):
+    try:
+        value = bounded_text(path, 64)
+        if not re.fullmatch(r"[0-9]{1,20}", value):
+            return None
+        number = int(value)
+        return number if number <= maximum else None
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
+def host_resources():
+    """Command-scoped sysfs/proc sample, independent of backend lifetime."""
+    gpu = None
+    try:
+        devices = sorted(DRM.glob("card[0-9]*/device"))[:16]
+    except OSError:
+        devices = []
+    for device in devices:
+        # Select the AMD GPU, just as the shared Pi temperature reader does.
+        # A different vendor's resources must not be attributed to this backend.
+        try:
+            if bounded_text(device / "vendor", 32) != "0x1002":
+                continue
+        except (OSError, ValueError, UnicodeError):
+            continue
+        gpu = {
+            "edge_millicelsius": None,
+            "junction_millicelsius": None,
+            "fan_percent": None,
+            "utilization_percent": resource_number(device / "gpu_busy_percent", 100),
+            "vram_used_bytes": resource_number(
+                device / "mem_info_vram_used", 2**53 - 1
+            ),
+            "vram_total_bytes": resource_number(
+                device / "mem_info_vram_total", 2**53 - 1
+            ),
+        }
+        used, total = gpu["vram_used_bytes"], gpu["vram_total_bytes"]
+        if total == 0 or (used is not None and total is not None and used > total):
+            gpu["vram_used_bytes"] = gpu["vram_total_bytes"] = None
+        try:
+            hwmons = sorted((device / "hwmon").glob("hwmon*"))[:16]
+        except OSError:
+            hwmons = []
+        for hwmon in hwmons:
+            try:
+                labels = sorted(hwmon.glob("temp*_label"))[:16]
+            except OSError:
+                labels = []
+            for label in labels:
+                try:
+                    kind = bounded_text(label, 32)
+                except (OSError, ValueError, UnicodeError):
+                    continue
+                if kind in ("edge", "junction"):
+                    gpu[f"{kind}_millicelsius"] = resource_number(
+                        label.with_name(label.name.removesuffix("_label") + "_input"),
+                        250000,
+                    )
+            pwm = resource_number(hwmon / "pwm1", 1000000)
+            pwm_max = resource_number(hwmon / "pwm1_max", 1000000)
+            if pwm is not None and pwm_max and pwm <= pwm_max:
+                gpu["fan_percent"] = (pwm * 100 + pwm_max // 2) // pwm_max
+        break
+    ram = None
+    try:
+        values = {}
+        for line in bounded_text(MEMINFO).splitlines():
+            match = re.fullmatch(r"(MemTotal|MemAvailable):\s+([0-9]{1,16}) kB", line)
+            if match:
+                values[match[1]] = int(match[2]) * 1024
+        total, available = values.get("MemTotal"), values.get("MemAvailable")
+        if total and available is not None and 0 <= available <= total <= 2**53 - 1:
+            ram = {
+                "total_bytes": total,
+                "available_bytes": available,
+                "used_bytes": total - available,
+            }
+    except (OSError, ValueError, UnicodeError):
+        pass
+    return {
+        "observed_at": time.time(),
+        "source": "host_sysfs_proc",
+        "gpu": gpu,
+        "ram": ram,
+    }
 
 
 def legacy_contract(root: Path, *, container=None, abi=None, cache_root=None) -> dict:
@@ -175,11 +281,17 @@ class Controller:
             os.close(descriptor)
 
     def record(self, **changes):
+        previous = bounded_json(self.record_path) or {}
+        now = time.time()
         value = {
-            **(bounded_json(self.record_path) or {}),
+            **previous,
             **changes,
-            "updated_at": time.time(),
+            "updated_at": now,
         }
+        if changes.get("id") and changes["id"] != previous.get("id"):
+            value.update(started_at=now, finished_at=None)
+        if changes.get("status") in ("complete", "failed"):
+            value["finished_at"] = now
         descriptor, name = tempfile.mkstemp(dir=self.directory, prefix=".operation-")
         try:
             with os.fdopen(descriptor, "w") as stream:
@@ -270,6 +382,7 @@ class Controller:
                 isinstance(value, dict)
                 and isinstance(value.get("data"), list)
                 and len(value["data"]) == 1
+                and isinstance(value["data"][0], dict)
                 and value["data"][0].get("id") == self.config["model"]
             )
         except (OSError, ValueError, TypeError, urllib.error.URLError):
@@ -283,12 +396,17 @@ class Controller:
             raise ValueError("backend start time unavailable") from None
 
     def scheduler(self, row):
-        value = bounded_json(SCHEDULER)
+        return self.scheduler_counts(row, bounded_json(SCHEDULER))
+
+    def scheduler_counts(self, row, value):
         if (
             not isinstance(value, dict)
-            or not isinstance(value.get("updated_at"), (int, float))
+            or type(value.get("updated_at")) not in (int, float)
+            or not math.isfinite(value["updated_at"])
             or value["updated_at"] < self.started_at(row)
             or not isinstance(value.get("requests"), list)
+            or len(value["requests"]) > 4096
+            or any(not isinstance(item, dict) for item in value["requests"])
         ):
             return None
         # Return counts only, never request IDs, tokens, or workspace metadata.
@@ -296,42 +414,229 @@ class Controller:
         return {
             "active_requests": len(rows),
             "queued_requests": sum(r.get("state") == "queued" for r in rows),
+            "generating_requests": sum(r.get("state") == "running" for r in rows),
+            "paused_requests": sum(r.get("state") == "paused" for r in rows),
+        }
+
+    def scheduler_observation(self, row, *, running, now):
+        result = {"status": "unavailable", "observed_at": None, "age_seconds": None}
+        if running is not True:
+            result["status"] = (
+                "backend_stopped" if running is False else "backend_unknown"
+            )
+            return result
+        try:
+            value = bounded_json(SCHEDULER)
+            counts = self.scheduler_counts(row, value)
+            if counts is None:
+                return result
+            updated = value["updated_at"]
+            age = now - updated
+            result.update(observed_at=updated, age_seconds=max(0, age))
+            # Empty idle snapshots do not always change; a fresh tail heartbeat
+            # from the same scheduler process can authenticate its idle state.
+            if counts["active_requests"] == 0 and age > SCHEDULER_MAX_AGE:
+                tail = bounded_json(TAIL)
+                if (
+                    type(value.get("pid")) is int
+                    and value["pid"] > 0
+                    and isinstance(tail, dict)
+                    and tail.get("pid") == value["pid"]
+                    and type(tail.get("updated_at")) in (int, float)
+                    and math.isfinite(tail["updated_at"])
+                    and updated <= tail["updated_at"]
+                    and -5 <= now - tail["updated_at"] <= SCHEDULER_MAX_AGE
+                ):
+                    age = now - tail["updated_at"]
+                    result.update(
+                        observed_at=tail["updated_at"], age_seconds=max(0, age)
+                    )
+            result["status"] = "current" if -5 <= age <= SCHEDULER_MAX_AGE else "stale"
+            if result["status"] == "current":
+                result.update(counts)
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+        return result
+
+    def release_identity(self, row, matches):
+        expected = {
+            key: self.config[key]
+            for key in ("container", "model", "image", "runtime_abi", "data_abi")
+        }
+        observed = None
+        if row is not None:
+
+            def label(value):
+                return (
+                    value
+                    if isinstance(value, str)
+                    and re.fullmatch(r"[A-Za-z0-9_./:-]{1,256}", value)
+                    else None
+                )
+
+            observed = {
+                "container": label(row.get("Name")),
+                "model": None,
+                "image": label(row.get("Image")),
+                "runtime_abi": None,
+                "runtime_abi_prefix": None,
+                "data_abi": None,
+            }
+            args = row.get("Args")
+            if isinstance(args, list):
+                try:
+                    observed["model"] = label(
+                        args[args.index("--served-model-name") + 1]
+                    )
+                except (ValueError, IndexError):
+                    pass
+                try:
+                    transfer = json.loads(args[args.index("--kv-transfer-config") + 1])
+                    match = re.fullmatch(
+                        r"qwen-radiance-public-clean-([0-9a-f]{16})",
+                        transfer.get("engine_id", ""),
+                    )
+                    if match:
+                        observed["runtime_abi_prefix"] = match[1]
+                    tiers = transfer["kv_connector_extra_config"]["secondary_tiers"]
+                    for tier in tiers:
+                        match = re.fullmatch(
+                            r"/cache/snapshots/([0-9a-f]{64})/data",
+                            tier.get("root_dir", ""),
+                        )
+                        if tier.get("type") == "qwen_chat_fs" and match:
+                            observed["data_abi"] = match[1]
+                            break
+                except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+                    pass
+            config = row.get("Config")
+            env = config.get("Env", []) if isinstance(config, dict) else []
+            if isinstance(env, list):
+                for item in env:
+                    match = (
+                        re.fullmatch(
+                            r"TRITON_CACHE_DIR=/cache/runtime/([0-9a-f]{64})/triton",
+                            item,
+                        )
+                        if isinstance(item, str)
+                        else None
+                    )
+                    if match:
+                        observed["runtime_abi"] = match[1]
+                        break
+        return {
+            "expected": expected,
+            "observed": observed,
+            "matches": matches,
+            "verification": "container_configuration",
         }
 
     def status(self, *, busy_override=None):
-        row = self.inspect()
-        running = bool(row and row["State"].get("Running"))
-        matches = row is None or self.matches(row)
-        ready = bool(running and matches and self.ready())
-        counts = self.scheduler(row) if ready else None
+        now = time.time()
+        issues = []
+        row, running, matches, ready = None, None, None, None
+        try:
+            row = self.inspect()
+            if row is None:
+                running, matches, ready = False, True, False
+            else:
+                if (
+                    not isinstance(row, dict)
+                    or type(row["State"]["Running"]) is not bool
+                ):
+                    raise ValueError("invalid backend container state")
+                running = row["State"]["Running"]
+                matches = self.matches(row)
+                ready = False
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            TypeError,
+            KeyError,
+            subprocess.SubprocessError,
+        ):
+            row, running, matches, ready = None, None, None, None
+            issues.append("container_inspection_failed")
+        if running and matches:
+            try:
+                ready = bool(self.ready())
+            except (
+                OSError,
+                ValueError,
+                RuntimeError,
+                TypeError,
+                subprocess.SubprocessError,
+            ):
+                ready = None
+                issues.append("backend_readiness_probe_failed")
+        telemetry = self.scheduler_observation(row, running=running, now=now)
+        counts = (
+            {key: telemetry[key] for key in ("active_requests", "queued_requests")}
+            if ready and telemetry["status"] == "current"
+            else None
+        )
         busy = self.busy() if busy_override is None else busy_override
         operation = bounded_json(self.record_path)
+        if operation is not None and not isinstance(operation, dict):
+            operation = None
+            issues.append("operation_metadata_invalid")
         if not busy and operation and operation.get("status") == "pending":
             operation = {
                 **operation,
                 "status": "failed",
                 "stage": "Operation interrupted",
                 "error": "host lifecycle worker ended before completion",
+                "finished_at": operation.get("updated_at"),
             }
         state = (
-            (
-                "generating"
-                if counts and counts["active_requests"]
-                else "idle"
-                if counts
-                else "running"
+            "unavailable"
+            if running is None or ready is None
+            else (
+                (
+                    "generating"
+                    if counts and telemetry["generating_requests"]
+                    else "idle"
+                    if counts and not counts["active_requests"]
+                    else "running"
+                )
+                if ready
+                else "starting"
+                if running and matches
+                else "stopped"
+                if not running
+                else "unavailable"
             )
-            if ready
-            else "starting"
-            if running and matches
-            else "stopped"
-            if not running
-            else "unavailable"
         )
-        if busy and operation:
+        if busy and operation and running is not None:
             state = "starting" if operation.get("action") == "start" else "stopping"
+        started = None
+        if running:
+            try:
+                candidate = self.started_at(row)
+                if math.isfinite(candidate) and 0 < candidate <= now + 5:
+                    started = candidate
+            except ValueError:
+                issues.append("backend_start_time_unavailable")
+        operation_age = operation_elapsed = None
+        if operation:
+            updated, began, ended = (
+                operation.get(key)
+                for key in ("updated_at", "started_at", "finished_at")
+            )
+            if type(updated) in (int, float) and math.isfinite(updated):
+                operation_age = max(0, now - updated)
+            if type(began) in (int, float) and math.isfinite(began):
+                endpoint = (
+                    ended
+                    if type(ended) in (int, float) and math.isfinite(ended)
+                    else now
+                )
+                operation_elapsed = max(0, endpoint - began)
         return {
             "schema": SCHEMA,
+            "observed_at": now,
+            "host_control": {"reachable": True, "observed_at": now},
             "state": state,
             "running": running,
             "ready": ready,
@@ -340,6 +645,14 @@ class Controller:
             "model": self.config["model"],
             "busy": busy,
             "operation": operation,
+            "operation_age_seconds": operation_age,
+            "operation_elapsed_seconds": operation_elapsed,
+            "started_at": started,
+            "uptime_seconds": max(0, now - started) if started is not None else None,
+            "release": self.release_identity(row, matches),
+            "resources": host_resources(),
+            "telemetry": {"scheduler": telemetry},
+            "issues": issues,
             **(counts or {}),
         }
 
@@ -590,8 +903,10 @@ def main(argv=None):
     parser.add_argument("--cache-root")
     parser.add_argument("--contract-json", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    host_reachable = None
     try:
         if args.contract_json is not None:
+            host_reachable = True
             report = Controller(json.loads(args.contract_json)).execute(args.action)
         else:
             config = legacy_contract(
@@ -601,6 +916,7 @@ def main(argv=None):
                 cache_root=args.cache_root,
             )
             if args.host == "local":
+                host_reachable = True
                 report = Controller(config).execute(args.action)
             else:
                 if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]*", args.host):
@@ -614,6 +930,7 @@ def main(argv=None):
                         json.dumps(config),
                     ]
                 )
+                host_reachable = False
                 result = subprocess.run(
                     [
                         "ssh",
@@ -631,6 +948,7 @@ def main(argv=None):
                     timeout=15,
                     check=False,
                 )
+                host_reachable = result.returncode == 0
                 if result.returncode or len(result.stdout) > 65536:
                     raise RuntimeError(
                         "backend host control unavailable; check the SSH connection"
@@ -639,9 +957,27 @@ def main(argv=None):
         print(json.dumps(report))
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        message = (
+            "backend host control unavailable; check the SSH connection"
+            if host_reachable is False
+            else str(error)[:512]
+        )
         print(
             json.dumps(
-                {"schema": SCHEMA, "state": "unavailable", "error": str(error)[:512]}
+                {
+                    "schema": SCHEMA,
+                    "state": "unavailable",
+                    "host_control": {
+                        "reachable": host_reachable,
+                        "observed_at": time.time(),
+                    },
+                    "issues": [
+                        "host_control_unavailable"
+                        if host_reachable is False
+                        else "host_status_failed"
+                    ],
+                    "error": message,
+                }
             )
         )
         return 0

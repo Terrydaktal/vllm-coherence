@@ -152,6 +152,26 @@ for active requests to finish, flushes the buffered snapshot tails and sends a
 graceful shutdown signal. It never force-kills the model or deletes caches.
 These commands affect the shared backend used by all chats.
 
+`/backend` displays a status snapshot with the host and local connection checks,
+backend state and uptime, expected and observed model/release identities, GPU
+temperatures/utilisation/VRAM, system RAM, active and queued requests, and this
+chat's cache coverage. Cache coverage separates resident tokens from the durable
+disk checkpoint. The scheduler's observed request state is shown; an exact
+queue position is unavailable because the scheduler does not publish one.
+
+Connection information includes the authentication/reconnection stage, last
+successful readiness check, retry time and latest recorded failure when present.
+Status checks use existing telemetry and bounded host reads; they do not send a
+model request or add work to decode rounds. Start/stop still show one progress
+line while the operation is pending.
+
+A reachable host can report a stopped backend and current hardware information
+even when Pi's model connection is down. A failed host-control or tunnel check
+does not establish that the model stopped: its state is shown as unknown unless
+confirmed. Last-known values are explicitly labelled with their age, and missing
+or stale measurements are not presented as fresh zeroes. Host sample ages are
+computed on the host so Pi-opsec's independent clock cannot make them appear fresh.
+
 Start and stop run on the host under one lock, even when multiple Pi windows
 request them. Pi reports progress; disconnecting the terminal does not cancel
 the host operation. `/backend status` can check its outcome after reconnecting.

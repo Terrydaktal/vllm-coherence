@@ -476,6 +476,8 @@ readonly searchtool_recovery_extension="$project_root/integrations/pi/qwen-searc
 readonly compaction_extension="$project_root/integrations/pi/qwen-radiance-compaction.ts"
 readonly compaction_core="$project_root/integrations/pi/qwen-radiance-compaction.mjs"
 readonly connection_module="$project_root/integrations/pi/qwen-radiance-connection.mjs"
+readonly backend_status_module="$project_root/integrations/pi/qwen-backend-status.mjs"
+readonly identity_module="$project_root/integrations/pi/qwen-radiance-identity.mjs"
 readonly compaction_memory="$project_root/integrations/pi/qwen-compaction-memory.mjs"
 readonly compaction_workspace="$project_root/integrations/pi/qwen-compaction-workspace.mjs"
 readonly compaction_restoration="$project_root/integrations/pi/qwen-compaction-restoration.mjs"
@@ -521,7 +523,7 @@ jq -e '.defaultTools | type == "array" and length > 0 and all(.[]; type == "stri
 [[ -f $searchtool_recovery_extension && ! -L $searchtool_recovery_extension &&
 	$(stat -c '%u:%h' -- "$searchtool_recovery_extension") == "$(id -u):1" ]] ||
 	die "recovery extension is missing or unsafe: $searchtool_recovery_extension"
-for compaction_file in "$compaction_extension" "$compaction_core" "$connection_module" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe" "$tools_command_module" "$tool_names_extension" "$tool_names_module"; do
+for compaction_file in "$compaction_extension" "$compaction_core" "$connection_module" "$backend_status_module" "$identity_module" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe" "$tools_command_module" "$tool_names_extension" "$tool_names_module"; do
 	[[ -f $compaction_file && ! -L $compaction_file &&
 		$(stat -c '%u:%h' -- "$compaction_file") == "$(id -u):1" ]] ||
 		die "prefix compaction dependency is missing or unsafe: $compaction_file"

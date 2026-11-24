@@ -17,6 +17,7 @@ function fixture(run, options = {}) {
     run, sleep: async (ms) => { sleeps.push(ms); await options.onSleep?.(ms); }, now: options.now || (() => 0),
     setIntervalFn: (callback, ms) => { const id = ++timerId; timers.set(id, { callback, ms }); return id; },
     clearIntervalFn: (id) => timers.delete(id),
+    readLocal: options.readLocal || (async () => ({})), wall: options.wall || (() => 1_000_000),
   });
   return { command: (arg = "") => commands.get("backend").handler(arg, ctx), notices, sleeps, commands,
     widgets, timers, event: (name) => events.get(name)?.({}, ctx), tick: () => [...timers.values()].forEach(({ callback }) => callback()) };
@@ -27,7 +28,7 @@ test("bare /backend is status, works when stopped, and never emits a model reque
   const f = fixture(async (action) => { calls.push(action); return status(); });
   await f.command();
   assert.deepEqual(calls, ["status"]);
-  assert.equal(f.notices[0].text, "Backend: stopped");
+  assert.match(f.notices[0].text, /^Backend: stopped \(confirmed stopped\)\nConnection:/);
   assert.deepEqual(f.sleeps, []);
   assert.match(f.widgets[0].value[0], /Query backend status/);
   assert.ok(f.widgets.filter(({ value }) => value).every(({ value }) => value.length === 1));
@@ -233,7 +234,8 @@ test("headless command contexts do not allocate a redraw timer", async () => {
   await f.command("status");
   assert.equal(f.widgets.length, 0);
   assert.equal(f.timers.size, 0);
-  assert.deepEqual(notices, ["Backend: stopped"]);
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /^Backend: stopped \(confirmed stopped\)/);
 });
 
 test("status during a start keeps the start panel and mutation lock", async () => {

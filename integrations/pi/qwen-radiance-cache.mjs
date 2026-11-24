@@ -1,69 +1,21 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { lstatSync, readFileSync } from "node:fs";
 import { lstat, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { appendCompactionTiming, getCompactionProgress } from "./qwen-radiance-compaction-progress.mjs";
 import { radianceBridgeRequest, radianceBridgeUrl } from "./qwen-radiance-bridge.mjs";
 import installPriority from "./qwen-radiance-priority.mjs";
 import installBackend from "./qwen-radiance-backend.mjs";
+import { radianceChatIdentity, radiancePreCompactionIdentity } from "./qwen-radiance-identity.mjs";
+export { radianceIdentityPath, radianceChatIdentity, radiancePreCompactionIdentity } from "./qwen-radiance-identity.mjs";
 
 const exec = promisify(execFile);
 const MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate";
-const digest = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const program = resolve(dirname(fileURLToPath(import.meta.url)), "../../scripts/qwen-radiance-cache");
 const ACTIVITY_SCHEMA = "urn:qwen-r9700:radiance-active-pi:v1";
-const HISTORY_SCHEMA = "urn:qwen-r9700:pi-project-history:v1";
 let activityFile;
-
-export function radianceIdentityPath(sessionFile) {
-  const actual = resolve(sessionFile);
-  const sessionDirectory = dirname(actual);
-  if (basename(sessionDirectory) !== "sessions" || basename(dirname(sessionDirectory)) !== ".pi") return actual;
-  const indexPath = join(sessionDirectory, ".identity.json");
-  let indexInfo;
-  try { indexInfo = lstatSync(indexPath); }
-  catch (error) {
-    if (error?.code === "ENOENT") return actual;
-    throw error;
-  }
-  if (!indexInfo.isFile() || indexInfo.isSymbolicLink() || indexInfo.uid !== process.getuid() ||
-      indexInfo.nlink !== 1 || (indexInfo.mode & 0o022) !== 0)
-    throw new Error("unsafe project history identity index");
-  const index = JSON.parse(readFileSync(indexPath, "utf8"));
-  if (index?.schema !== HISTORY_SCHEMA || typeof index.sessions !== "object" || index.sessions === null)
-    throw new Error("invalid project history identity index");
-  const record = index.sessions[basename(actual)];
-  if (record === undefined) return actual;
-  const info = lstatSync(actual);
-  if (!info.isFile() || info.isSymbolicLink() || info.uid !== process.getuid() ||
-      !Number.isSafeInteger(record.device) || !Number.isSafeInteger(record.inode) ||
-      info.dev !== record.device || info.ino !== record.inode ||
-      typeof record.identity_path !== "string" || !record.identity_path.startsWith("/"))
-    throw new Error("project history identity does not match the session file");
-  return resolve(record.identity_path);
-}
-
-export function radianceChatIdentity(ctx) {
-  const manager = ctx.sessionManager;
-  const sessionFile = manager.getSessionFile();
-  if (!sessionFile) throw new Error("Radiance snapshots require a saved Pi session");
-  // Use the latest committed compaction in the file, including when navigating
-  // an older branch. Tree navigation must not resurrect a retired generation.
-  const compaction = manager.getEntries().filter((entry) => entry.type === "compaction").at(-1);
-  return { id: digest([radianceIdentityPath(sessionFile), manager.getSessionId()]),
-    generation: digest(compaction?.id ?? "initial"),
-    title: manager.getSessionName() ?? manager.getCwd(), cwd: manager.getCwd(),
-    session_file: resolve(sessionFile) };
-}
-
-export function radiancePreCompactionIdentity(ctx) {
-  const chat = radianceChatIdentity(ctx);
-  const compactions = ctx.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
-  return { ...chat, generation: digest(compactions.at(-2)?.id ?? "initial") };
-}
 
 export function withRadianceChat(payload, ctx) {
   if (ctx.model?.id !== MODEL || !process.env.QWEN_RADIANCE_CACHE_ABI) return payload;

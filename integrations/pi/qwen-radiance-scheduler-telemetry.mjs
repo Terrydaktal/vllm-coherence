@@ -13,7 +13,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { radianceChatIdentity } from "./qwen-radiance-cache.mjs";
+import { radianceChatIdentity } from "./qwen-radiance-identity.mjs";
 
 const TARGET_PROVIDER = "qwen-r9700";
 const SAMPLE_SCHEMA_V1 = "urn:qwen-r9700:scheduler-telemetry:v1";

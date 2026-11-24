@@ -15,8 +15,11 @@ from qwen_r9700_lab import radiance_backend as backend
 
 @pytest.fixture
 def controller(tmp_path, monkeypatch):
+    monkeypatch.setattr(backend.time, "time", lambda: 1800000000.0)
     monkeypatch.setattr(backend, "SCHEDULER", tmp_path / "scheduler.json")
     monkeypatch.setattr(backend, "TAIL", tmp_path / "tail.json")
+    monkeypatch.setattr(backend, "DRM", tmp_path / "drm")
+    monkeypatch.setattr(backend, "MEMINFO", tmp_path / "meminfo")
     config = {
         "container": "test-backend",
         "model": backend.MODEL,
@@ -108,6 +111,291 @@ def test_status_counts_without_exposing_request_metadata(controller):
 def test_stopped_status_ignores_stale_telemetry(controller, monkeypatch):
     monkeypatch.setattr(controller, "inspect", lambda: None)
     assert controller.status()["state"] == "stopped"
+
+
+def host_resource_fixture(tmp_path):
+    device = tmp_path / "drm/card1/device"
+    hwmon = device / "hwmon/hwmon3"
+    hwmon.mkdir(parents=True)
+    attributes = {
+        device / "vendor": "0x1002",
+        device / "gpu_busy_percent": "73",
+        device / "mem_info_vram_used": str(30 * 1024**3),
+        device / "mem_info_vram_total": str(32 * 1024**3),
+        hwmon / "temp1_label": "edge",
+        hwmon / "temp1_input": "55000",
+        hwmon / "temp2_label": "junction",
+        hwmon / "temp2_input": "88000",
+        hwmon / "pwm1": "128",
+        hwmon / "pwm1_max": "255",
+        tmp_path
+        / "meminfo": "MemTotal:       67108864 kB\nMemAvailable:   33554432 kB\n",
+    }
+    for path, text in attributes.items():
+        path.write_text(text + "\n")
+    return device
+
+
+def test_stopped_backend_still_reports_current_host_resources(
+    controller, tmp_path, monkeypatch
+):
+    host_resource_fixture(tmp_path)
+    monkeypatch.setattr(controller, "inspect", lambda: None)
+    value = controller.status()
+    assert value["state"] == "stopped" and value["running"] is False
+    assert value["host_control"] == {"reachable": True, "observed_at": 1800000000.0}
+    assert value["release"]["observed"] is None
+    assert value["release"]["expected"]["model"] == backend.MODEL
+    assert value["uptime_seconds"] is None
+    assert value["telemetry"]["scheduler"]["status"] == "backend_stopped"
+    assert "active_requests" not in value
+    assert value["resources"]["source"] == "host_sysfs_proc"
+    assert value["resources"]["gpu"] == {
+        "edge_millicelsius": 55000,
+        "junction_millicelsius": 88000,
+        "fan_percent": 50,
+        "utilization_percent": 73,
+        "vram_used_bytes": 30 * 1024**3,
+        "vram_total_bytes": 32 * 1024**3,
+    }
+    assert value["resources"]["ram"] == {
+        "total_bytes": 64 * 1024**3,
+        "available_bytes": 32 * 1024**3,
+        "used_bytes": 32 * 1024**3,
+    }
+
+
+def test_inspection_fault_preserves_reachability_and_does_not_claim_stopped(
+    controller, tmp_path, monkeypatch
+):
+    host_resource_fixture(tmp_path)
+
+    def failed():
+        raise RuntimeError("do not expose arbitrary runtime exception text")
+
+    monkeypatch.setattr(controller, "inspect", failed)
+    value = controller.status()
+    assert value["state"] == "unavailable"
+    assert value["running"] is value["ready"] is value["pinned"] is None
+    assert value["host_control"]["reachable"] is True
+    assert value["resources"]["gpu"]["utilization_percent"] == 73
+    assert value["issues"] == ["container_inspection_failed"]
+    assert "arbitrary" not in json.dumps(value)
+    assert "active_requests" not in value
+    with pytest.raises(RuntimeError, match="differs"):
+        controller.execute("stop")
+
+
+@pytest.mark.parametrize("offset", [-11, 6])
+def test_old_or_future_scheduler_is_not_current(controller, offset):
+    backend.SCHEDULER.write_text(
+        json.dumps(
+            {
+                "updated_at": backend.time.time() + offset,
+                "requests": [{"state": "running"}],
+            }
+        )
+    )
+    value = controller.status()
+    assert value["state"] == "running"
+    assert value["telemetry"]["scheduler"]["status"] == "stale"
+    assert "active_requests" not in value
+
+
+def test_previous_engine_scheduler_and_missing_metadata_are_unavailable(controller):
+    for value in (
+        {
+            "updated_at": controller.started_at(controller.row) - 1,
+            "requests": [{"state": "running"}],
+        },
+        {"updated_at": float("nan"), "requests": []},
+        {"updated_at": backend.time.time(), "requests": [None]},
+    ):
+        backend.SCHEDULER.write_text(json.dumps(value))
+        report = controller.status()
+        assert report["telemetry"]["scheduler"]["status"] == "unavailable"
+        assert "active_requests" not in report
+    backend.SCHEDULER.write_text("not json")
+    assert controller.status()["telemetry"]["scheduler"]["status"] == "unavailable"
+
+
+def test_fresh_same_engine_tail_can_confirm_idle_scheduler(controller):
+    backend.SCHEDULER.write_text(
+        json.dumps(
+            {"updated_at": backend.time.time() - 60, "pid": 1234, "requests": []}
+        )
+    )
+    backend.TAIL.write_text(
+        json.dumps({"updated_at": backend.time.time() - 1, "pid": 1234})
+    )
+    value = controller.status()
+    assert value["state"] == "idle"
+    assert value["telemetry"]["scheduler"]["age_seconds"] == 1
+    backend.TAIL.write_text(
+        json.dumps({"updated_at": backend.time.time() - 1, "pid": 4321})
+    )
+    assert controller.status()["state"] == "running"
+
+
+def test_scheduler_observation_uses_one_atomic_snapshot_and_exact_states(
+    controller, monkeypatch
+):
+    backend.SCHEDULER.write_text(
+        json.dumps(
+            {
+                "updated_at": backend.time.time() - 1,
+                "requests": [
+                    {"state": "running"},
+                    {"state": "paused"},
+                    {"state": "queued"},
+                ],
+            }
+        )
+    )
+    original = backend.bounded_json
+    scheduler_reads = []
+
+    def read(path, *args, **kwargs):
+        value = original(path, *args, **kwargs)
+        if path == backend.SCHEDULER:
+            scheduler_reads.append(path)
+            backend.SCHEDULER.write_text(
+                json.dumps({"updated_at": backend.time.time(), "requests": []})
+            )
+        return value
+
+    monkeypatch.setattr(backend, "bounded_json", read)
+    report = controller.status()
+    sample = report["telemetry"]["scheduler"]
+    assert len(scheduler_reads) == 1
+    assert sample["age_seconds"] == 1
+    assert sample["active_requests"] == 3
+    assert (
+        sample["queued_requests"]
+        == sample["generating_requests"]
+        == sample["paused_requests"]
+        == 1
+    )
+
+
+def test_paused_requests_are_not_labelled_generating(controller):
+    backend.SCHEDULER.write_text(
+        json.dumps(
+            {"updated_at": backend.time.time(), "requests": [{"state": "paused"}]}
+        )
+    )
+    report = controller.status()
+    assert report["state"] == "running"
+    assert report["telemetry"]["scheduler"]["generating_requests"] == 0
+
+
+def test_readiness_probe_fault_keeps_confirmed_container_state(controller, monkeypatch):
+    def failed():
+        raise OSError("not a container failure")
+
+    monkeypatch.setattr(controller, "ready", failed)
+    report = controller.status()
+    assert report["state"] == "unavailable"
+    assert report["running"] is report["pinned"] is True
+    assert report["ready"] is None
+    assert report["issues"] == ["backend_readiness_probe_failed"]
+
+
+def test_unknown_start_time_does_not_invent_uptime(controller):
+    controller.row["State"]["StartedAt"] = "missing"
+    report = controller.status()
+    assert report["uptime_seconds"] is None
+    assert "backend_start_time_unavailable" in report["issues"]
+
+
+def test_release_distinguishes_container_configuration_from_verified_files(controller):
+    controller.row["Config"] = {
+        "Env": [
+            "TRITON_CACHE_DIR=/cache/runtime/" + "b" * 64 + "/triton",
+            "PRIVATE=never expose arbitrary container environment",
+        ]
+    }
+    value = controller.status()
+    assert value["release"]["expected"]["runtime_abi"] == "b" * 64
+    assert value["release"]["observed"]["runtime_abi"] == "b" * 64
+    assert value["release"]["observed"]["runtime_abi_prefix"] == "b" * 16
+    assert value["release"]["verification"] == "container_configuration"
+    assert value["release"]["matches"] is True
+    assert "PRIVATE" not in json.dumps(value)
+    controller.row["Image"] = "d" * 64
+    report = controller.status()
+    assert report["release"]["matches"] is False
+    assert report["release"]["observed"]["image"] == "d" * 64
+    assert report["state"] == "unavailable" and not report["ready"]
+
+
+def test_release_does_not_expand_a_runtime_prefix_into_an_invented_hash(controller):
+    value = controller.status()
+    observed = value["release"]["observed"]
+    assert observed["runtime_abi"] is None
+    assert observed["runtime_abi_prefix"] == "b" * 16
+    assert observed["data_abi"] == "c" * 64
+    assert observed["model"] == backend.MODEL
+
+
+def test_host_uptime_and_operation_ages_are_source_relative(controller, monkeypatch):
+    started = controller.started_at(controller.row)
+    controller.record(id="1" * 32, action="start", status="pending")
+    monkeypatch.setattr(backend.time, "time", lambda: 1800000020.0)
+    controller.record(status="complete")
+    monkeypatch.setattr(backend.time, "time", lambda: 1800000030.0)
+    value = controller.status()
+    assert value["started_at"] == started
+    assert value["uptime_seconds"] == 1800000030 - started
+    assert value["operation_age_seconds"] == 10
+    assert value["operation_elapsed_seconds"] == 20
+    assert value["operation"]["finished_at"] == 1800000020
+
+
+def test_missing_or_bad_resource_attributes_are_optional(controller, tmp_path):
+    value = controller.status()
+    assert value["resources"]["gpu"] is None
+    assert value["resources"]["ram"] is None
+    device = host_resource_fixture(tmp_path)
+    (device / "gpu_busy_percent").write_text("101")
+    (device / "mem_info_vram_used").write_text(str(33 * 1024**3))
+    (device / "hwmon/hwmon3/temp2_input").write_text("9" * 100)
+    backend.MEMINFO.write_text("MemTotal: 100 kB\nMemAvailable: 101 kB\n")
+    report = controller.status()
+    assert report["state"] == "idle"
+    assert report["resources"]["gpu"]["edge_millicelsius"] == 55000
+    for field in (
+        "utilization_percent",
+        "vram_used_bytes",
+        "vram_total_bytes",
+        "junction_millicelsius",
+    ):
+        assert report["resources"]["gpu"][field] is None
+    assert report["resources"]["ram"] is None
+
+
+@pytest.mark.parametrize("failure", ["exit", "timeout"])
+def test_remote_control_failure_is_not_backend_stopped(
+    controller, monkeypatch, capsys, failure
+):
+    monkeypatch.setattr(
+        backend, "legacy_contract", lambda *args, **kwargs: controller.config
+    )
+    with patch.object(
+        backend.subprocess,
+        "run",
+        return_value=SimpleNamespace(
+            returncode=255, stdout="", stderr="private remote failure"
+        ),
+        side_effect=backend.subprocess.TimeoutExpired("private command", 15)
+        if failure == "timeout"
+        else None,
+    ):
+        assert backend.main(["status", "--host", "test-host"]) == 0
+    value = json.loads(capsys.readouterr().out)
+    assert value["state"] == "unavailable"
+    assert value["host_control"]["reachable"] is False
+    assert "private" not in json.dumps(value)
 
 
 def test_existing_ready_start_and_absent_stop_are_idempotent(controller, monkeypatch):
