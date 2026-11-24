@@ -112,9 +112,10 @@ OPTIONS
         Require the existing verified Pi 0.84.2 installation.
 
     --reuse-existing
-        Refuse to start a backend; attach only to an authenticated compatible lane.
-        Authenticate its deployed files on the GPU host. Unused local backend
-        source edits do not prevent reuse of that pinned runtime.
+        Never start a backend. Open Pi and restore history even while offline.
+        Authenticate deployed files, the running lane and readiness in the
+        background; model requests require that connection to be ready.
+        Unused local backend source edits do not prevent reuse.
 
     --preflight-only
         Authenticate local and remote release inputs without starting the GPU.
@@ -128,8 +129,10 @@ OPTIONS
 OPERATION
     The launcher rejects unknown listeners and containers. When port 8080 is
     free it starts the hash-pinned launcher detached, waits for the exact served
-    model, then starts Pi. Pi exit closes only this invocation's SSH tunnel; the
-    backend remains available for another chat and may be stopped explicitly.
+    model, then starts Pi. With --reuse-existing, Pi opens immediately while
+    the connection is authenticated in the background. Pi exit closes only
+    this invocation's SSH tunnel; the backend remains available for another
+    chat and may be stopped explicitly.
     Automatic local-port locks are held for the lifetime of Pi and released by
     the kernel on exit, so concurrent launchers cannot choose the same port.
 	GPU edge/junction temperatures come from one host-keyed monitor shared by
@@ -196,8 +199,9 @@ PATHS
 
 SECURITY NOTES
     All local API listeners are loopback-only. Remote files, image identity,
-    snapshot ABI, container arguments, and served model are checked before Pi
-    is launched. An occupied but unauthenticated endpoint is never stopped.
+    snapshot ABI, container arguments, and served model are checked before
+    generation is permitted. Offline restore does not send conversation data.
+    An occupied but unauthenticated endpoint is never stopped.
 
 EXIT STATUS
     0 when Pi exits successfully; 2 for validation, startup, or health failure;
@@ -371,6 +375,7 @@ no_install=0
 reuse_existing=0
 preflight_only=0
 dry_run=0
+connection_worker=0
 declare -a pi_args=()
 
 while (($# > 0)); do
@@ -397,6 +402,10 @@ while (($# > 0)); do
 		;;
 	--reuse-existing)
 		reuse_existing=1
+		shift
+		;;
+	--backend-connection)
+		connection_worker=1
 		shift
 		;;
 	--preflight-only)
@@ -429,6 +438,14 @@ if ((local_port_explicit)); then
 fi
 case $thinking in off | low | medium | xhigh) ;; *) die "unsupported thinking level: $thinking" ;; esac
 ((dry_run == 0 || preflight_only == 0)) || die '--dry-run and --preflight-only are mutually exclusive'
+if ((connection_worker)); then
+	((reuse_existing && no_install && local_port_explicit && !dry_run && !preflight_only)) ||
+		die 'invalid internal backend connection invocation'
+	# A deferred connection must never prompt through Pi's terminal or wait for
+	# interactive authentication while a restored conversation is being shown.
+	ssh() { command ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "$@"; }
+fi
+readonly deferred_connection=$((reuse_existing && !preflight_only && !connection_worker))
 
 readonly models_source="$project_root/integrations/pi/models-radiance-public-clean-snapshot.json"
 readonly settings_source="$project_root/integrations/pi/settings-radiance.json"
@@ -458,6 +475,7 @@ readonly formal_english_audit_extension="$HOME/.pi/agent/extensions/formal-engli
 readonly searchtool_recovery_extension="$project_root/integrations/pi/qwen-searchtool-recovery.mjs"
 readonly compaction_extension="$project_root/integrations/pi/qwen-radiance-compaction.ts"
 readonly compaction_core="$project_root/integrations/pi/qwen-radiance-compaction.mjs"
+readonly connection_module="$project_root/integrations/pi/qwen-radiance-connection.mjs"
 readonly compaction_memory="$project_root/integrations/pi/qwen-compaction-memory.mjs"
 readonly compaction_workspace="$project_root/integrations/pi/qwen-compaction-workspace.mjs"
 readonly compaction_restoration="$project_root/integrations/pi/qwen-compaction-restoration.mjs"
@@ -472,6 +490,7 @@ readonly compaction_progress="$project_root/integrations/pi/qwen-radiance-compac
 readonly cache_extension="$project_root/integrations/pi/qwen-radiance-cache.mjs"
 readonly compaction_prompt="$project_root/integrations/pi/qwen-loss-sensitive-compact-prompt.md"
 readonly history_program="$project_root/scripts/pi-session-history"
+readonly connection_helper="$project_root/scripts/pi-radiance-connection"
 
 for command_name in awk chmod cmp curl date env flock id jq mkdir mktemp mv nohup readlink sha256sum sleep ss ssh stat tr; do
 	command -v "$command_name" >/dev/null 2>&1 || die "required command is missing: $command_name"
@@ -502,7 +521,7 @@ jq -e '.defaultTools | type == "array" and length > 0 and all(.[]; type == "stri
 [[ -f $searchtool_recovery_extension && ! -L $searchtool_recovery_extension &&
 	$(stat -c '%u:%h' -- "$searchtool_recovery_extension") == "$(id -u):1" ]] ||
 	die "recovery extension is missing or unsafe: $searchtool_recovery_extension"
-for compaction_file in "$compaction_extension" "$compaction_core" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe" "$tools_command_module" "$tool_names_extension" "$tool_names_module"; do
+for compaction_file in "$compaction_extension" "$compaction_core" "$connection_module" "$compaction_memory" "$compaction_workspace" "$compaction_restoration" "$compaction_files" "$compaction_tasks" "$task_plan_extension" "$task_plan_core" "$compaction_progress" "$compaction_prompt" "$cache_extension" "$backend_errors_module" "$backend_errors_probe" "$tools_command_module" "$tool_names_extension" "$tool_names_module"; do
 	[[ -f $compaction_file && ! -L $compaction_file &&
 		$(stat -c '%u:%h' -- "$compaction_file") == "$(id -u):1" ]] ||
 		die "prefix compaction dependency is missing or unsafe: $compaction_file"
@@ -576,7 +595,7 @@ if ((dry_run)); then
 	exit 0
 fi
 
-if ((preflight_only == 0)); then
+if ((preflight_only == 0 && connection_worker == 0)); then
 	project_history_dir=$("$history_program" prepare --cwd "$project_cwd") ||
 		die "cannot prepare project session history: $project_cwd"
 	readonly project_history_dir
@@ -587,11 +606,13 @@ remote_launcher="$REMOTE_ROOT/launch_public_clean_snapshot_server.sh"
 remote_patch="$REMOTE_ROOT/radiance-vllm-mxfp4/patch_streaming_snapshot.py"
 remote_abi="$REMOTE_CACHE/snapshots/$SNAPSHOT_ABI/abi.json"
 
-ssh -T "$remote_host" /usr/bin/bash -s -- \
-	"$remote_launcher" "$REMOTE_LAUNCHER_SHA256" \
-	"$remote_patch" "$SNAPSHOT_PATCH_SHA256" \
-	"${chat_storage_preflight[@]}" \
-	"$remote_abi" "$SNAPSHOT_ABI" "${release_preflight[@]}" <<'REMOTE_PREFLIGHT'
+authenticate_remote_release() {
+	((connection_worker == 0)) || printf 'COHERENCE_PI_CONNECTION_STAGE authenticate\n'
+	ssh -T "$remote_host" /usr/bin/bash -s -- \
+		"$remote_launcher" "$REMOTE_LAUNCHER_SHA256" \
+		"$remote_patch" "$SNAPSHOT_PATCH_SHA256" \
+		"${chat_storage_preflight[@]}" \
+		"$remote_abi" "$SNAPSHOT_ABI" "${release_preflight[@]}" <<'REMOTE_PREFLIGHT'
 set -euo pipefail
 while (($#)); do
     path=$1
@@ -608,14 +629,19 @@ while (($#)); do
     }
 done
 REMOTE_PREFLIGHT
+}
+
+if ((deferred_connection == 0)); then authenticate_remote_release; fi
 
 ((preflight_only == 0)) || exit 0
 
-backend_log=$(
-	ssh -T "$remote_host" /usr/bin/bash -s -- \
-		"$CONTAINER" "$MODEL_ID" "$IMAGE_ID" "$REMOTE_PORT" \
-		"$remote_launcher" "$REMOTE_CACHE" "$SNAPSHOT_DATA_ABI" "$reuse_existing" "$SNAPSHOT_ABI" \
-		"$(jq -r '.runtime.memory_report.compatible_runtime_abis | join(",")' "$abi_source")" <<'REMOTE_BACKEND'
+authenticate_backend() {
+	((connection_worker == 0)) || printf 'COHERENCE_PI_CONNECTION_STAGE readiness\n'
+	backend_log=$(
+		ssh -T "$remote_host" /usr/bin/bash -s -- \
+			"$CONTAINER" "$MODEL_ID" "$IMAGE_ID" "$REMOTE_PORT" \
+			"$remote_launcher" "$REMOTE_CACHE" "$SNAPSHOT_DATA_ABI" "$reuse_existing" "$SNAPSHOT_ABI" \
+			"$(jq -r '.runtime.memory_report.compatible_runtime_abis | join(",")' "$abi_source")" <<'REMOTE_BACKEND'
 set -euo pipefail
 container=$1
 model=$2
@@ -695,116 +721,130 @@ done
 tail -n 80 "$log" >&2 || true
 exit 2
 REMOTE_BACKEND
-) || die 'remote Radiance backend authentication/startup failed'
+	) || die 'remote Radiance backend authentication/startup failed'
 
-prepare_local_port_state
-prepare_gpu_temperature_state
-reserve_local_port
-readonly local_port local_port_lock_fd local_port_selection
-readonly gpu_temperature_state
-printf 'Radiance local tunnel reserved: 127.0.0.1:%s (%s)\n' \
-	"$local_port" "$local_port_selection" >&2
-
-readonly agent_dir="$state_root/agent-$local_port"
-mkdir -p "$agent_dir"
-chmod 0700 "$state_root" "$agent_dir"
-readonly config_destination="$agent_dir/models.json"
-config_stage=$(mktemp "$state_root/.models.json.XXXXXX") || die 'cannot create Pi model configuration stage'
-cleanup_stage() {
-	[[ -z ${config_stage:-} || ! -f $config_stage || -L $config_stage ]] || rm -f -- "$config_stage"
 }
-trap cleanup_stage EXIT
-jq -S --arg base "http://127.0.0.1:$local_port/v1" \
-	'.providers["qwen-r9700"].baseUrl = $base' "$models_source" >"$config_stage" ||
-	die 'cannot render Pi model configuration'
-if [[ -e $config_destination || -L $config_destination ]]; then
-	[[ -f $config_destination && ! -L $config_destination && $(stat -c '%u' -- "$config_destination") == "$(id -u)" ]] ||
-		die 'existing Pi model configuration is unsafe'
-	"$deploy_script" --replace-provider --source "$config_stage" --destination "$config_destination" >/dev/null
-else
-	"$deploy_script" --source "$config_stage" --destination "$config_destination" >/dev/null
-fi
-rm -f -- "$config_stage"
-config_stage=$(mktemp "$agent_dir/.settings.json.XXXXXX") || die 'cannot create Pi settings stage'
-readonly settings="$agent_dir/settings.json"
-if [[ -e $settings || -L $settings ]]; then
-	[[ -f $settings && ! -L $settings && $(stat -c '%u:%h' -- "$settings") == "$(id -u):1" ]] ||
-		die 'existing Pi settings are unsafe'
-	jq -S --slurpfile defaults "$settings_source" '$defaults[0] * .' "$settings" >"$config_stage" ||
-		die 'cannot merge Pi default settings'
-else
-	jq -S . "$settings_source" >"$config_stage" || die 'cannot render Pi default settings'
-fi
-chmod 0600 "$config_stage"
-if cmp -s -- "$config_stage" "$settings"; then
+if ((deferred_connection == 0)); then authenticate_backend; fi
+
+if ((connection_worker == 0)); then
+
+	prepare_local_port_state
+	prepare_gpu_temperature_state
+	reserve_local_port
+	readonly local_port local_port_lock_fd local_port_selection
+	readonly gpu_temperature_state
+	printf 'Radiance local tunnel reserved: 127.0.0.1:%s (%s)\n' \
+		"$local_port" "$local_port_selection" >&2
+
+	readonly agent_dir="$state_root/agent-$local_port"
+	mkdir -p "$agent_dir"
+	chmod 0700 "$state_root" "$agent_dir"
+	readonly config_destination="$agent_dir/models.json"
+	config_stage=$(mktemp "$state_root/.models.json.XXXXXX") || die 'cannot create Pi model configuration stage'
+	cleanup_stage() {
+		[[ -z ${config_stage:-} || ! -f $config_stage || -L $config_stage ]] || rm -f -- "$config_stage"
+	}
+	trap cleanup_stage EXIT
+	jq -S --arg base "http://127.0.0.1:$local_port/v1" \
+		'.providers["qwen-r9700"].baseUrl = $base' "$models_source" >"$config_stage" ||
+		die 'cannot render Pi model configuration'
+	if [[ -e $config_destination || -L $config_destination ]]; then
+		[[ -f $config_destination && ! -L $config_destination && $(stat -c '%u' -- "$config_destination") == "$(id -u)" ]] ||
+			die 'existing Pi model configuration is unsafe'
+		"$deploy_script" --replace-provider --source "$config_stage" --destination "$config_destination" >/dev/null
+	else
+		"$deploy_script" --source "$config_stage" --destination "$config_destination" >/dev/null
+	fi
 	rm -f -- "$config_stage"
+	config_stage=$(mktemp "$agent_dir/.settings.json.XXXXXX") || die 'cannot create Pi settings stage'
+	readonly settings="$agent_dir/settings.json"
+	if [[ -e $settings || -L $settings ]]; then
+		[[ -f $settings && ! -L $settings && $(stat -c '%u:%h' -- "$settings") == "$(id -u):1" ]] ||
+			die 'existing Pi settings are unsafe'
+		jq -S --slurpfile defaults "$settings_source" '$defaults[0] * .' "$settings" >"$config_stage" ||
+			die 'cannot merge Pi default settings'
+	else
+		jq -S . "$settings_source" >"$config_stage" || die 'cannot render Pi default settings'
+	fi
+	chmod 0600 "$config_stage"
+	if cmp -s -- "$config_stage" "$settings"; then
+		rm -f -- "$config_stage"
+	else
+		mv -f -- "$config_stage" "$settings"
+	fi
+	config_stage=''
+	trap - EXIT
+
+	pi_link="$HOME/.local/bin/pi"
+	if ((no_install)); then
+		[[ -L $pi_link && -x $pi_link ]] || die "verified Pi link is missing: $pi_link"
+	elif [[ ! -L $pi_link || ! -x $pi_link ]] || ! "$pi_link" --version 2>/dev/null | grep -qx "$PI_VERSION"; then
+		"$install_script" >/dev/null
+	fi
+	[[ -L $pi_link && -x $pi_link && $("$pi_link" --version) == "$PI_VERSION" ]] || die "Pi $PI_VERSION is unavailable"
+
 else
-	mv -f -- "$config_stage" "$settings"
+	# The parent owns the port lease and Pi configuration. The connection worker
+	# owns only its SSH process; it must not compete for the parent's lock.
+	exec {local_port_lock_fd}</dev/null
 fi
-config_stage=''
-trap - EXIT
 
-pi_link="$HOME/.local/bin/pi"
-if ((no_install)); then
-	[[ -L $pi_link && -x $pi_link ]] || die "verified Pi link is missing: $pi_link"
-elif [[ ! -L $pi_link || ! -x $pi_link ]] || ! "$pi_link" --version 2>/dev/null | grep -qx "$PI_VERSION"; then
-	"$install_script" >/dev/null
-fi
-[[ -L $pi_link && -x $pi_link && $("$pi_link" --version) == "$PI_VERSION" ]] || die "Pi $PI_VERSION is unavailable"
+connect_tunnel_and_warmup() {
+	((connection_worker == 0)) || printf 'COHERENCE_PI_CONNECTION_STAGE tunnel\n'
+	tunnel_log="$state_root/tunnel-$local_port-$(date -u +%Y%m%dT%H%M%SZ).log"
+	ssh -N -T -o ExitOnForwardFailure=yes \
+		-L "127.0.0.1:$local_port:127.0.0.1:$REMOTE_PORT" "$remote_host" \
+		{local_port_lock_fd}>&- >"$tunnel_log" 2>&1 &
+	tunnel_pid=$!
+	tunnel_start=$(awk '{print $22}' "/proc/$tunnel_pid/stat" 2>/dev/null || true)
+	[[ $tunnel_start =~ ^[1-9][0-9]*$ ]] || die 'cannot authenticate SSH tunnel process'
+	cleanup() {
+		local status=$?
+		if owned_process "$tunnel_pid" "$tunnel_start"; then
+			kill -TERM "$tunnel_pid" 2>/dev/null || true
+			wait "$tunnel_pid" 2>/dev/null || true
+		fi
+		exec {local_port_lock_fd}>&-
+		exit "$status"
+	}
+	trap cleanup EXIT HUP INT TERM
+	for _ in {1..100}; do
+		if curl -fsS --max-time 2 "http://127.0.0.1:$local_port/health" >/dev/null 2>&1; then
+			break
+		fi
+		owned_process "$tunnel_pid" "$tunnel_start" || die 'SSH tunnel exited during startup'
+		sleep 0.2
+	done
+	models=$(curl -fsS --max-time 5 "http://127.0.0.1:$local_port/v1/models") || die 'local Radiance endpoint is unavailable'
+	jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$models" >/dev/null ||
+		die 'local endpoint advertises the wrong model'
 
-tunnel_log="$state_root/tunnel-$local_port-$(date -u +%Y%m%dT%H%M%SZ).log"
-ssh -N -T -o ExitOnForwardFailure=yes \
-	-L "127.0.0.1:$local_port:127.0.0.1:$REMOTE_PORT" "$remote_host" \
-	{local_port_lock_fd}>&- >"$tunnel_log" 2>&1 &
-tunnel_pid=$!
-tunnel_start=$(awk '{print $22}' "/proc/$tunnel_pid/stat" 2>/dev/null || true)
-[[ $tunnel_start =~ ^[1-9][0-9]*$ ]] || die 'cannot authenticate SSH tunnel process'
-cleanup() {
-	local status=$?
-	if owned_process "$tunnel_pid" "$tunnel_start"; then
-		kill -TERM "$tunnel_pid" 2>/dev/null || true
-		wait "$tunnel_pid" 2>/dev/null || true
-	fi
-	exec {local_port_lock_fd}>&-
-	exit "$status"
-}
-trap cleanup EXIT HUP INT TERM
-for _ in {1..100}; do
-	if curl -fsS --max-time 2 "http://127.0.0.1:$local_port/health" >/dev/null 2>&1; then
-		break
-	fi
-	owned_process "$tunnel_pid" "$tunnel_start" || die 'SSH tunnel exited during startup'
-	sleep 0.2
-done
-models=$(curl -fsS --max-time 5 "http://127.0.0.1:$local_port/v1/models") || die 'local Radiance endpoint is unavailable'
-jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$models" >/dev/null ||
-	die 'local endpoint advertises the wrong model'
-
-# A health check only proves that the HTTP server is listening.  The first real
-# DFlash request can still compile the model, Global-256 head and rejection
-# kernels for the multi-token speculative shape, which creates the misleading
-# slow-to-normal round transition seen in the preserved diagnosis.  Warm a
-# content-free multi-token request before Pi opens; it is not attached to a
-# session and cannot alter a user's snapshot.  This also runs for
-# --reuse-existing after a backend/engine restart; a private receipt skips the
-# request on later attaches to the same live processes and configuration.
-# Health, model and authenticated-release checks still run on every attach.
-# The request only populates the backend's
-# compiled-kernel cache; it does not change model weights, chat state or
-# snapshot data.  Set QWEN_PI_SKIP_WARMUP=1 only for an explicit diagnostic
-# attach that accepts the risk of an inference-time JIT.
-#
-# Read the container journal, regardless of how the server was started. On
-# reuse, backend_log is the display label "existing", not a filename. Pin the
-# container ID and use a fresh remote timestamp for each attempt so historical
-# JIT warnings cannot poison a later warmup or a replacement server pass it.
-if [[ ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then
-	warmup_payload=$(printf '%s' \
-		'{"model":"qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate","prompt":"Output exactly sixty-four short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":96,"temperature":1.0,"top_p":0.95,"top_k":40,"stream":false}')
-	warmup_payload_sha=$(printf '%s' "$warmup_payload" | sha256sum | cut -d ' ' -f 1)
-	warmup_receipt() {
-		ssh -T "$remote_host" /usr/bin/python3 - "$CONTAINER" "$REMOTE_CACHE" \
-			"$SNAPSHOT_ABI" "$MODEL_ID" "$warmup_payload_sha" "$@" <<'REMOTE_WARMUP_RECEIPT'
+	# A health check only proves that the HTTP server is listening.  The first real
+	# DFlash request can still compile the model, Global-256 head and rejection
+	# kernels for the multi-token speculative shape, which creates the misleading
+	# slow-to-normal round transition seen in the preserved diagnosis.  Warm a
+	# content-free multi-token request before Pi opens; it is not attached to a
+	# session and cannot alter a user's snapshot.  This also runs for
+	# --reuse-existing after a backend/engine restart; a private receipt skips the
+	# request on later attaches to the same live processes and configuration.
+	# Health, model and authenticated-release checks still run on every attach.
+	# The request only populates the backend's
+	# compiled-kernel cache; it does not change model weights, chat state or
+	# snapshot data.  Set QWEN_PI_SKIP_WARMUP=1 only for an explicit diagnostic
+	# attach that accepts the risk of an inference-time JIT.
+	#
+	# Read the container journal, regardless of how the server was started. On
+	# reuse, backend_log is the display label "existing", not a filename. Pin the
+	# container ID and use a fresh remote timestamp for each attempt so historical
+	# JIT warnings cannot poison a later warmup or a replacement server pass it.
+	((connection_worker == 0)) || printf 'COHERENCE_PI_CONNECTION_STAGE warmup\n'
+	if [[ ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then
+		warmup_payload=$(printf '%s' \
+			'{"model":"qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate","prompt":"Output exactly sixty-four short words separated by spaces. Do not stop early. alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa","max_tokens":96,"temperature":1.0,"top_p":0.95,"top_k":40,"stream":false}')
+		warmup_payload_sha=$(printf '%s' "$warmup_payload" | sha256sum | cut -d ' ' -f 1)
+		warmup_receipt() {
+			ssh -T "$remote_host" /usr/bin/python3 - "$CONTAINER" "$REMOTE_CACHE" \
+				"$SNAPSHOT_ABI" "$MODEL_ID" "$warmup_payload_sha" "$@" <<'REMOTE_WARMUP_RECEIPT'
 import hashlib
 import json
 import os
@@ -918,34 +958,34 @@ except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, subp
     print(f"Radiance startup warmup identity/receipt check failed: {detail}", file=sys.stderr)
     sys.exit(2)
 REMOTE_WARMUP_RECEIPT
-	}
-	warmup_identity=$(warmup_receipt check) || die 'Radiance startup warmup could not verify the remote backend identity'
-	read -r jit_container_id warmup_fingerprint warmup_cached <<<"$warmup_identity"
-	[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]] || die 'Radiance startup warmup received an invalid container identity'
-	[[ $warmup_fingerprint =~ ^[0-9a-f]{64}$ && $warmup_cached =~ ^(hit|miss)$ ]] ||
-		die 'Radiance startup warmup received an invalid receipt identity'
-	if [[ $warmup_cached == hit ]]; then
-		printf 'Radiance backend validated; startup warmup already complete for this engine\n' >&2
-	else
-		for warmup_attempt in 1 2 3; do
-			jit_log_since=$(
-				ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" <<'REMOTE_JIT_BEGIN'
+		}
+		warmup_identity=$(warmup_receipt check) || die 'Radiance startup warmup could not verify the remote backend identity'
+		read -r jit_container_id warmup_fingerprint warmup_cached <<<"$warmup_identity"
+		[[ $jit_container_id =~ ^[0-9a-f]{64}$ ]] || die 'Radiance startup warmup received an invalid container identity'
+		[[ $warmup_fingerprint =~ ^[0-9a-f]{64}$ && $warmup_cached =~ ^(hit|miss)$ ]] ||
+			die 'Radiance startup warmup received an invalid receipt identity'
+		if [[ $warmup_cached == hit ]]; then
+			printf 'Radiance backend validated; startup warmup already complete for this engine\n' >&2
+		else
+			for warmup_attempt in 1 2 3; do
+				jit_log_since=$(
+					ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" <<'REMOTE_JIT_BEGIN'
 set -euo pipefail
 container=$1
 [[ $(podman inspect --format '{{.State.Running}}' "$container") == true ]] || exit 2
 podman logs --tail 0 "$container" >/dev/null 2>&1 || exit 2
 date -u +'%Y-%m-%dT%H:%M:%S.%NZ'
 REMOTE_JIT_BEGIN
-			) || die 'Radiance startup warmup could not read the remote backend log'
-			[[ $jit_log_since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$ ]] ||
-				die 'Radiance startup warmup received an invalid remote log timestamp'
-			curl --fail --silent --show-error --max-time 300 \
-				-H 'Content-Type: application/json' \
-				-H "X-Request-ID: pi-radiance-startup-warmup-$warmup_attempt" \
-				-d "$warmup_payload" \
-				"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
-				die 'Radiance startup warmup failed; refusing to start Pi on a cold or unhealthy backend'
-			if ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_CHECK'; then
+				) || die 'Radiance startup warmup could not read the remote backend log'
+				[[ $jit_log_since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$ ]] ||
+					die 'Radiance startup warmup received an invalid remote log timestamp'
+				curl --fail --silent --show-error --max-time 300 \
+					-H 'Content-Type: application/json' \
+					-H "X-Request-ID: pi-radiance-startup-warmup-$warmup_attempt" \
+					-d "$warmup_payload" \
+					"http://127.0.0.1:$local_port/v1/completions" >/dev/null ||
+					die 'Radiance startup warmup failed; refusing to start Pi on a cold or unhealthy backend'
+				if ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_CHECK'; then
 set -euo pipefail
 container=$1
 since=$2
@@ -959,39 +999,83 @@ for poll_attempt in {1..20}; do
 done
 exit 1
 REMOTE_JIT_CHECK
-				jit_status=0
-			else
-				jit_status=$?
-			fi
-			case $jit_status in
-			0)
-				if ((warmup_attempt < 3)); then
-					printf 'Radiance startup warmup compiled new inference shapes; repeating warmup (%s/3)\n' \
-						"$warmup_attempt" >&2
-					continue
+					jit_status=0
+				else
+					jit_status=$?
 				fi
-				ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_TAIL' >&2 || true
+				case $jit_status in
+				0)
+					if ((warmup_attempt < 3)); then
+						printf 'Radiance startup warmup compiled new inference shapes; repeating warmup (%s/3)\n' \
+							"$warmup_attempt" >&2
+						continue
+					fi
+					ssh -T "$remote_host" /usr/bin/bash -s -- "$jit_container_id" "$jit_log_since" <<'REMOTE_JIT_TAIL' >&2 || true
 set -euo pipefail
 podman logs --since "$2" "$1" 2>&1 | grep -F 'JIT compilation during inference'
 REMOTE_JIT_TAIL
-				die 'Radiance startup warmup still observed inference-time Triton JIT after three attempts'
-				;;
-			1) break ;;
-			*) die 'Radiance startup warmup could not inspect the remote backend log' ;;
-			esac
-		done
-		warmup_receipt publish "$warmup_fingerprint" >/dev/null ||
-			die 'Radiance backend changed during startup warmup; retry the launcher'
-		if ((reuse_existing == 1)); then
-			printf 'reused Radiance backend validated; non-session startup warmup complete\n' >&2
-		else
-			printf 'Radiance startup warmup complete; launching Pi\n' >&2
+					die 'Radiance startup warmup still observed inference-time Triton JIT after three attempts'
+					;;
+				1) break ;;
+				*) die 'Radiance startup warmup could not inspect the remote backend log' ;;
+				esac
+			done
+			warmup_receipt publish "$warmup_fingerprint" >/dev/null ||
+				die 'Radiance backend changed during startup warmup; retry the launcher'
+			if ((reuse_existing == 1)); then
+				printf 'reused Radiance backend validated; non-session startup warmup complete\n' >&2
+			else
+				printf 'Radiance startup warmup complete; launching Pi\n' >&2
+			fi
 		fi
 	fi
+
+	printf 'Radiance unrestricted backend ready; local API 127.0.0.1:%s; snapshot ABI %s; backend log %s\n' \
+		"$local_port" "$SNAPSHOT_DATA_ABI" "$backend_log" >&2
+}
+
+if ((connection_worker)); then
+	connect_tunnel_and_warmup
+	printf 'COHERENCE_PI_CONNECTION_READY\n'
+	wait "$tunnel_pid"
+	exit $?
+elif ((deferred_connection)); then
+	[[ -f $connection_helper && ! -L $connection_helper && -x $connection_helper &&
+		$(stat -c '%u:%h' -- "$connection_helper") == "$(id -u):1" ]] ||
+		die "backend connection helper is missing or unsafe: $connection_helper"
+	connection_directory=$(mktemp -d "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/qwen-radiance-connection.XXXXXX") ||
+		die 'cannot create private backend connection state'
+	connection_state="$connection_directory/status.json"
+	"$connection_helper" --state "$connection_state" --parent-pid "$$" \
+		--launcher "${launcher_original_script:-${BASH_SOURCE[0]}}" --remote "$remote_host" \
+		--local-port "$local_port" {local_port_lock_fd}>&- >/dev/null 2>&1 &
+	connection_pid=$!
+	connection_start=$(awk '{print $22}' "/proc/$connection_pid/stat" 2>/dev/null || true)
+	cleanup() {
+		local status=$?
+		if owned_process "$connection_pid" "$connection_start"; then
+			kill -TERM "$connection_pid" 2>/dev/null || true
+			wait "$connection_pid" 2>/dev/null || true
+		fi
+		rm -f -- "$connection_state"
+		rmdir -- "$connection_directory" 2>/dev/null || true
+		exec {local_port_lock_fd}>&-
+		exit "$status"
+	}
+	trap cleanup EXIT HUP INT TERM
+	# Wait only for local bookkeeping, never for SSH, backend readiness or JIT.
+	for _ in {1..40}; do
+		[[ ! -s $connection_state ]] || break
+		owned_process "$connection_pid" "$connection_start" || die 'backend connection helper exited'
+		sleep 0.05
+	done
+	[[ -s $connection_state ]] || die 'backend connection helper did not publish local state'
+	printf 'Radiance backend connection deferred; Pi can restore offline. Backend authentication is required before generation.\n' >&2
+else
+	connection_state=''
+	connect_tunnel_and_warmup
 fi
 
-printf 'Radiance unrestricted backend ready; local API 127.0.0.1:%s; snapshot ABI %s; backend log %s\n' \
-	"$local_port" "$SNAPSHOT_DATA_ABI" "$backend_log" >&2
 declare -a pi_options=(
 	--session-dir "$project_history_dir"
 	--no-context-files
@@ -1020,6 +1104,7 @@ if [[ -t 0 && -t 1 ]]; then
 		QWEN_PI_LATEST_LAUNCHER="$pi_link" QWEN_PI_RUNNING_RELEASE='' \
 		QWEN_PI_BUILD_PROFILE="$project_root/scripts/pi-remote-qwen-radiance" \
 		UV_CACHE_DIR=/data/.cache/uv \
+		QWEN_RADIANCE_CONNECTION_STATE="$connection_state" \
 		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
 		QWEN_RADIANCE_CONTAINER="$CONTAINER" \
 		QWEN_RADIANCE_GPU_TEMPERATURE_STATE="$gpu_temperature_state" \
@@ -1033,6 +1118,7 @@ else
 		QWEN_PI_LATEST_LAUNCHER="$pi_link" QWEN_PI_RUNNING_RELEASE='' \
 		QWEN_PI_BUILD_PROFILE="$project_root/scripts/pi-remote-qwen-radiance" \
 		UV_CACHE_DIR=/data/.cache/uv \
+		QWEN_RADIANCE_CONNECTION_STATE="$connection_state" \
 		QWEN_RADIANCE_LOCAL_PORT="$local_port" \
 		QWEN_RADIANCE_CONTAINER="$CONTAINER" \
 		QWEN_RADIANCE_GPU_TEMPERATURE_STATE="$gpu_temperature_state" \

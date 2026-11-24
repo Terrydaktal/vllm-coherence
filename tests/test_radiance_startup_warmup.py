@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -40,7 +41,11 @@ def run_warmup(
     source = source.replace('"max_tokens":96', f'"max_tokens":{payload_tokens}')
     source = source.replace('policy = "pi-startup-warmup-v1"', f"policy = {policy!r}")
     start = source.index("if [[ ${QWEN_PI_SKIP_WARMUP:-0} != 1 ]]; then")
-    end = source.index("\nprintf 'Radiance unrestricted backend ready;", start)
+    ready = re.search(
+        r"(?m)^[ \t]*printf 'Radiance unrestricted backend ready;", source[start:]
+    )
+    assert ready is not None
+    end = start + ready.start()
     script = tmp_path / "warmup.sh"
     script.write_text(
         "set -euo pipefail\n"

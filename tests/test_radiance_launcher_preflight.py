@@ -222,10 +222,14 @@ def test_reuse_always_checks_remote_hashes_before_preflight_exit(tmp_path, tampe
     if tamper:
         (deployed / tamper).write_text("wrong deployed source\n")
     source = LAUNCHER.read_text()
-    start = source.index(
-        'ssh -T "$remote_host" /usr/bin/bash -s -- \\\n\t"$remote_launcher"'
+    invocation = re.search(
+        r'(?m)^[ \t]*ssh -T "\$remote_host" /usr/bin/bash -s -- \\\n[ \t]*"\$remote_launcher"',
+        source,
     )
-    end = source.index("\n((preflight_only == 0)) || exit 0", start)
+    assert invocation is not None
+    start = invocation.start()
+    delimiter = "\nREMOTE_PREFLIGHT\n"
+    end = source.index(delimiter, start) + len(delimiter)
     setup = "\n".join(f"{key}={shlex.quote(value)}" for key, value in variables.items())
     release_hash = digest(files["release_integration.py"])
     local_start = source.index('[[ $(sha256sum -- "$abi_source"')
@@ -375,7 +379,13 @@ def test_actual_remote_authentication_keeps_complete_compatibility_list_over_ssh
     }
     source = LAUNCHER.read_text()
     start = source.index("backend_log=$(\n")
-    end = source.index("\nprepare_local_port_state", start)
+    delimiter = "\nREMOTE_BACKEND\n"
+    command_end = re.search(
+        r"(?m)^[ \t]*\) \|\| die 'remote Radiance backend authentication/startup failed'$",
+        source[source.index(delimiter, start) + len(delimiter):],
+    )
+    assert command_end is not None
+    end = source.index(delimiter, start) + len(delimiter) + command_end.end()
     setup = "\n".join(
         f"{name}={shlex.quote(value)}" for name, value in variables.items()
     )

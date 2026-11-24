@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+"""Maintain an authenticated SSH connection without blocking Pi history restore."""
+
+import argparse
+import json
+import os
+import selectors
+import signal
+import stat
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+SCHEMA = "coherence.pi.backend-connection.v1"
+MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate"
+STAGES = {
+    "authenticate": "Authenticate deployed backend",
+    "readiness": "Check backend readiness",
+    "tunnel": "Connect local SSH tunnel",
+    "warmup": "Warm backend kernels",
+}
+
+
+def process_start(pid):
+    try:
+        value = Path(f"/proc/{pid}/stat").read_text()
+        fields = value[value.rfind(")") + 2 :].split()
+        return None if fields[0] == "Z" else fields[19]
+    except (OSError, IndexError):
+        return None
+
+
+def publish(path, record):
+    parent = path.parent.lstat()
+    if (
+        not stat.S_ISDIR(parent.st_mode)
+        or parent.st_uid != os.getuid()
+        or stat.S_IMODE(parent.st_mode) != 0o700
+    ):
+        raise ValueError("unsafe connection state directory")
+    if path.exists() or path.is_symlink():
+        existing = path.lstat()
+        if (
+            not stat.S_ISREG(existing.st_mode)
+            or existing.st_uid != os.getuid()
+            or existing.st_nlink != 1
+        ):
+            raise ValueError("unsafe connection state file")
+    descriptor, temporary = tempfile.mkstemp(prefix=".status-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            json.dump(record, stream, separators=(",", ":"))
+            stream.write("\n")
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def endpoint_ready(port):
+    # No redirects, proxies, conversation data, authentication headers or model
+    # requests. The connection worker already authenticated the remote release.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *_args, **_kwargs):
+            return None
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    for route in ("/health", "/v1/models"):
+        try:
+            with opener.open(
+                f"http://127.0.0.1:{port}{route}", timeout=0.8
+            ) as response:
+                if (
+                    response.status != 200
+                    or response.url != f"http://127.0.0.1:{port}{route}"
+                ):
+                    return False
+                data = response.read(65537)
+                if len(data) > 65536:
+                    return False
+                if route == "/v1/models":
+                    value = json.loads(data)
+                    models = value.get("data") if isinstance(value, dict) else None
+                    if (
+                        not isinstance(models, list)
+                        or len(models) != 1
+                        or not isinstance(models[0], dict)
+                        or models[0].get("id") != MODEL
+                    ):
+                        return False
+        except (OSError, ValueError, urllib.error.URLError):
+            return False
+    return True
+
+
+def failure_kind(output):
+    """Classify observed transport failures without recording arbitrary output."""
+    if b"hash mismatch" in output or b"missing or unsafe" in output:
+        return "release_mismatch"
+    if b"container differs" in output or b"unowned endpoint" in output:
+        return "lane_mismatch"
+    if b"not running" in output:
+        return "backend_stopped"
+    if b"Permission denied" in output or b"Host key verification failed" in output:
+        return "authentication_failed"
+    if b"ssh:" in output and any(
+        value in output
+        for value in (
+            b"Connection timed out",
+            b"Connection refused",
+            b"No route to host",
+            b"Could not resolve hostname",
+            b"Network is unreachable",
+        )
+    ):
+        return "host_unreachable"
+    if (
+        b"SSH tunnel" in output
+        or b"forwarding failed" in output
+        or b"local Radiance endpoint is unavailable" in output
+    ):
+        return "tunnel_failed"
+    if b"warmup" in output:
+        return "warmup_failed"
+    return "connection_unavailable"
+
+
+def failure_text(output):
+    return {
+        "release_mismatch": "Backend authentication failed: deployed release files differ. Use /backend status.",
+        "lane_mismatch": "Backend authentication failed: the running lane is incompatible. Use /backend status.",
+        "backend_stopped": "Backend offline. Use /backend start, then retry the request.",
+        "authentication_failed": "SSH authentication failed. Check host access and /backend status.",
+        "host_unreachable": "The backend host could not be reached. Check host access and /backend status.",
+        "tunnel_failed": "The local SSH tunnel failed. The backend's state is unconfirmed; use /backend status.",
+        "warmup_failed": "Backend warmup could not complete. Use /backend status before retrying.",
+        "connection_unavailable": "Backend connection is unavailable. Use /backend status, then retry the request.",
+    }[failure_kind(output)]
+
+
+def terminate(child):
+    if child is None:
+        return
+    # Every worker gets a private process group containing its SSH descendants.
+    try:
+        os.killpg(child.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        child.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        child.wait(timeout=3)
+
+
+def supervise(args):
+    state_path = args.state
+    parent_start = process_start(args.parent_pid)
+    own_start = process_start(os.getpid())
+    if not parent_start or not own_start:
+        raise ValueError("connection process identity is unavailable")
+    child = None
+    stopped = False
+
+    def stop(_number, _frame):
+        nonlocal stopped
+        stopped = True
+
+    for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(number, stop)
+    record = {
+        "schema": SCHEMA,
+        "local_port": args.local_port,
+        "supervisor_pid": os.getpid(),
+        "supervisor_start_ticks": own_start,
+        "state": "offline",
+        "stage": "Backend offline",
+        "connection_attempt": 0,
+    }
+
+    def update():
+        record["updated_at_unix_ms"] = int(time.time() * 1000)
+        publish(state_path, record)
+
+    update()  # Publish local state before any network work or authentication.
+    selector = selectors.DefaultSelector()
+    next_attempt = 0
+    next_health = 0
+    next_update = 0
+    attempt_started = 0
+    failures = 0
+    health_failures = 0
+    authenticated = False
+    output = b""
+    pending = b""
+    try:
+        while not stopped and process_start(args.parent_pid) == parent_start:
+            now = time.monotonic()
+            if child is None and now >= next_attempt:
+                authenticated = False
+                record.update(
+                    state="checking",
+                    stage="Authenticate deployed backend",
+                    connection_attempt=record["connection_attempt"] + 1,
+                    attempt_started_at_unix_ms=int(time.time() * 1000),
+                )
+                record.pop("next_retry_at_unix_ms", None)
+                record.pop("error", None)
+                update()
+                child = subprocess.Popen(
+                    [
+                        str(args.launcher),
+                        "--backend-connection",
+                        "--reuse-existing",
+                        "--no-install",
+                        "--remote",
+                        args.remote,
+                        "--local-port",
+                        str(args.local_port),
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+                os.set_blocking(child.stdout.fileno(), False)
+                selector.register(child.stdout, selectors.EVENT_READ)
+                attempt_started = now
+                output = pending = b""
+            for key, _events in selector.select(0.1):
+                chunk = os.read(key.fd, 16384)
+                output = (output + chunk)[-65536:]
+                pending = (pending + chunk)[-65536:]
+                while b"\n" in pending:
+                    line, pending = pending.split(b"\n", 1)
+                    if (
+                        line == b"COHERENCE_PI_CONNECTION_READY"
+                        and child.poll() is None
+                    ):
+                        authenticated = True
+                        record.update(state="ready", stage="Backend ready")
+                        record.pop("error", None)
+                        record.pop("next_retry_at_unix_ms", None)
+                        failures = 0
+                        health_failures = 0
+                        next_health = 0
+                    elif line.startswith(b"COHERENCE_PI_CONNECTION_STAGE "):
+                        stage = STAGES.get(
+                            line.split(b" ", 1)[1].decode("ascii", errors="ignore")
+                        )
+                        if stage:
+                            record.update(state="checking", stage=stage)
+            now = time.monotonic()
+            lost = child is not None and child.poll() is not None
+            if (
+                child is not None
+                and now - attempt_started > 16 * 60
+                and not authenticated
+            ):
+                lost = True
+            if authenticated and now >= next_health:
+                health_failures = (
+                    0 if endpoint_ready(args.local_port) else health_failures + 1
+                )
+                # Readiness failures block new requests without interrupting an
+                # existing response. Only an exited SSH worker loses ownership
+                # of the tunnel and triggers authentication/reconnection.
+                if health_failures >= 3:
+                    if record["state"] != "offline":
+                        record["last_failure_at_unix_ms"] = int(time.time() * 1000)
+                    record["failure_kind"] = "health_failed"
+                    record.update(
+                        state="offline",
+                        stage="Backend offline",
+                        error=failure_text(b""),
+                    )
+                elif health_failures == 0:
+                    record.update(
+                        state="ready",
+                        stage="Backend ready",
+                        last_ready_at_unix_ms=int(time.time() * 1000),
+                    )
+                    record.pop("error", None)
+                next_health = now + 0.5
+            if lost:
+                selector.unregister(child.stdout)
+                terminate(child)
+                child.stdout.close()
+                child = None
+                authenticated = False
+                failures += 1
+                next_attempt = now + min(10, failures)
+                record.update(
+                    state="offline",
+                    stage="Backend offline",
+                    error=failure_text(output),
+                    failure_kind=failure_kind(output),
+                    last_failure_at_unix_ms=int(time.time() * 1000),
+                    next_retry_at_unix_ms=int(time.time() * 1000)
+                    + min(10, failures) * 1000,
+                )
+                update()
+            if now >= next_update:
+                update()
+                next_update = now + 0.5
+    finally:
+        terminate(child)
+        selector.close()
+        record.update(state="offline", stage="Backend offline")
+        record.pop("next_retry_at_unix_ms", None)
+        update()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--state", type=Path, required=True)
+    parser.add_argument("--parent-pid", type=int, required=True)
+    parser.add_argument("--launcher", type=Path, required=True)
+    parser.add_argument("--remote", required=True)
+    parser.add_argument("--local-port", type=int, required=True)
+    args = parser.parse_args()
+    if (
+        not args.state.is_absolute()
+        or not args.launcher.is_absolute()
+        or not 1 <= args.local_port <= 65535
+    ):
+        parser.error("absolute paths and a valid local port are required")
+    supervise(args)
+
+
+if __name__ == "__main__":
+    main()

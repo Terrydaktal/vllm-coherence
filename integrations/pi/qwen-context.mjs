@@ -1,4 +1,5 @@
 import { getCompactionProgress } from "./qwen-radiance-compaction-progress.mjs";
+import { requireRadianceConnection } from "./qwen-radiance-connection.mjs";
 import { CONTEXT_POLICY_ENTRY, contextPolicy, clonePolicy, contextRows, changeSelection,
   effectiveExclusions, selectionChanges, filterContext, hasThinking, estimateMessageTokens, clearContextFailure } from "./qwen-context-policy.mjs";
 
@@ -33,6 +34,7 @@ export async function previewContextTokens(pi, ctx, policy, dependencies, signal
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
   if (!auth.ok) throw new Error("Cannot authenticate the tokenizer");
   const model = { ...ctx.model, baseUrl: auth.baseUrl ?? ctx.model.baseUrl };
+  await requireRadianceConnection(model, { signal, fetcher });
   const base = model.baseUrl.replace(/\/+$/, "");
   if (!base.endsWith("/v1")) throw new Error("Tokenizer connection is not configured");
   const allTools = new Map(pi.getAllTools().map((tool) => [tool.name, tool]));
@@ -55,6 +57,7 @@ export async function previewContextTokens(pi, ctx, policy, dependencies, signal
       preserve_thinking: true,
       ...(Object.hasOwn(payload.chat_template_kwargs ?? {}, "preserve_reasoning") ? { preserve_reasoning: true } : {}),
     };
+    await requireRadianceConnection(model, { signal, fetcher });
     const response = await fetcher(`${base.slice(0, -3)}/tokenize`, { method: "POST", headers, signal,
       body: JSON.stringify({ model: payload.model, messages: payload.messages, tools: payload.tools,
         chat_template_kwargs: payload.chat_template_kwargs, add_generation_prompt: true, add_special_tokens: false }) });

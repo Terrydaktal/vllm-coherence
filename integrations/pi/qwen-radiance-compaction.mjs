@@ -16,6 +16,7 @@ import { filteredRequestContext, contextPolicy, effectiveExclusions } from "./qw
 import { buildContinuityPacket, selectProtectedTail } from "./qwen-compaction-memory.mjs";
 import { workspaceMemoryText } from "./qwen-compaction-workspace.mjs";
 import { captureContinuityRestoration } from "./qwen-compaction-restoration.mjs";
+import { requireRadianceConnection } from "./qwen-radiance-connection.mjs";
 
 // This is a Pi-only adapter. It does not change the serving/snapshot ABI, model
 // sampling in ordinary turns, or the old fixed-slot compaction implementation.
@@ -437,6 +438,7 @@ export function compactionRetryIdentities(branchEntries, sourceIdentity) {
 
 export async function compactFromPayload({ payload, preparation, policy, customInstructions, model, headers, continuity,
   signal, finishControl, receiptDirectory, sourceIdentity, retryIdentities = [], progress = () => {}, diagnostics = () => undefined, fetcher = fetch }) {
+  await requireRadianceConnection(model, { signal, fetcher });
   const started = performance.now();
   signal?.throwIfAborted();
   const keyFor = (identity) => compactionReceiptKey({ payload, preparation, policy, customInstructions, model, sourceIdentity: identity, continuity });
@@ -497,6 +499,7 @@ export async function compactFromPayload({ payload, preparation, policy, customI
       ? AbortSignal.any([finishControl.signal, ...(signal ? [signal] : [])]) : signal;
     try {
       requestSignal?.throwIfAborted();
+      await requireRadianceConnection(model, { signal: requestSignal, fetcher });
       const responsePending = postJson(`${baseUrl}/completions`, {
         model: payload.model, prompt, max_tokens: maxTokens, temperature: 0.3, top_p: 0.95, top_k: 20,
         add_special_tokens: false, stream: true, stream_options: { include_usage: true, continuous_usage_stats: true },

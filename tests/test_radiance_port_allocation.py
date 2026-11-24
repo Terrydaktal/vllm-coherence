@@ -253,7 +253,7 @@ def test_concurrent_radiance_launchers_reserve_distinct_ports(tmp_path: Path) ->
 
     for port, (_, stderr) in zip(ports, outputs, strict=True):
         assert f"Radiance local tunnel reserved: 127.0.0.1:{port} (automatic)" in stderr
-        assert f"local API 127.0.0.1:{port}" in stderr
+        assert "Radiance backend connection deferred; Pi can restore offline." in stderr
         lock_path = lock_root / f"{port}.lock"
         assert lock_path.stat().st_mode & 0o777 == 0o600
         with lock_path.open("a", encoding="utf-8") as lock_file:

@@ -33,6 +33,32 @@ nesting tmux. SSH authentication must already work noninteractively. Supply
 search integration, including one specific to a VM. Terminal keybindings remain
 the terminal owner's configuration.
 
+The legacy `scripts/pi-remote-qwen-radiance --reuse-existing --no-install`
+launcher also opens the exact saved session while the GPU host or backend is
+offline. Remote authentication, the SSH tunnel and kernel readiness run in the
+background; the interface shows **Checking backend connection** while they run.
+**Backend offline** is reserved for an observed stopped backend; stale status
+or unsuccessful connection checks are labelled as unavailable. Reading
+history, inspecting context and local commands remain available. Generation,
+compaction and exact context token previews require the authenticated connection
+and a ready model before sending conversation data.
+Temporary heartbeat and API-probe failures are retried for at most six seconds,
+with cancellation preserved. Unsafe metadata, lost connection ownership,
+authentication/model mismatches and a confirmed stopped backend still block
+submission. Errors identify the failed readiness check instead of calling every
+failure an offline backend. These checks send only metadata GET requests.
+The status writer publishes by atomic replacement. Readers reopen a retired
+file if replacement occurs between opening and validating it, while still
+rejecting hardlinks, unsafe permissions and mismatched process identities.
+Heartbeat freshness is checked after asynchronous reads complete, so slow local
+file I/O cannot turn a newly published receipt into a false future timestamp.
+
+`--reuse-existing` never starts a backend. Use `/backend status` or `/backend
+start`, then retry the request once the connection is ready; Pi does not need
+restarting. Closing Pi closes its connection worker and owned tunnel. Starting
+without `--reuse-existing` retains the normal backend startup behavior, and
+`--preflight-only` still fails when remote authentication cannot complete.
+
 ## Recognize an older running Pi
 
 The terminal title strikes only Pi's application label (`π̶`) when the running
