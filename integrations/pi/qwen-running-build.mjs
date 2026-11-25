@@ -10,6 +10,15 @@ import { createBuildProcessRecord } from "./qwen-build-process-record.mjs";
 
 const CODE = new Set([".js", ".mjs", ".cjs", ".ts"]);
 const SKIP = new Set(["node_modules", "target", "tests", "test", "captures", "artifacts", ".git"]);
+const LEGACY_PATCH_SOURCES = [
+  "streaming-usage", "footer", "tool-call-integrity", "internal-guard-retry",
+  "precontinuation-compaction", "project-history",
+].map((name) => `patch-pi-${name}`);
+const STREAMING_PATCH_SOURCES = [
+  ...LEGACY_PATCH_SOURCES, "patch-pi-streaming-render",
+  "pi_streaming_markdown_patch.py", "pi_streaming_screen_patch.py",
+  "pi-streaming-markdown.mjs", "pi-streaming-screen.mjs",
+];
 const cleanTitle = (text) => String(text ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu, "").trim();
 const strike = (text) => [...text].map((c) => `${c}\u0336`).join("");
 
@@ -283,8 +292,11 @@ export function createRunningBuildMonitor({
       const manifest = JSON.parse(item.text);
       if (manifest.schema !== "coherence.pi.installed-build.v1" || manifest.package !== "@earendil-works/pi-coding-agent"
         || manifest.entry_point !== "dist/cli.js" || manifest.patches_verified !== true || !/^[a-f0-9]{64}$/.test(manifest.sdk_fingerprint)
-        || !Array.isArray(manifest.patches) || manifest.patches.length !== 6) throw new Error("Unknown installed build manifest");
-      const expected = new Set(["streaming-usage", "footer", "tool-call-integrity", "internal-guard-retry", "precontinuation-compaction", "project-history"].map((name) => `patch-pi-${name}`));
+        || !Array.isArray(manifest.patches)) throw new Error("Unknown installed build manifest");
+      const sources = manifest.patches.length === LEGACY_PATCH_SOURCES.length
+        ? LEGACY_PATCH_SOURCES : STREAMING_PATCH_SOURCES;
+      if (manifest.patches.length !== sources.length) throw new Error("Unknown installed patch set");
+      const expected = new Set(sources);
       let changed = manifest.sdk_fingerprint !== identity.sdk_fingerprint;
       for (const patch of manifest.patches) {
         if (typeof patch.path !== "string" || patch.path.length > 4096 || !/^[a-f0-9]{64}$/.test(patch.sha256)) throw new Error("Unknown patch identity");

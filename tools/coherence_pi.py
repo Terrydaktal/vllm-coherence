@@ -69,10 +69,19 @@ def launch(args, pi_args):
         raise ValueError("invalid backend port")
     runtime = state / "pi"
     binary = state / "bin/pi"
-    if not binary.is_file():
+    scripts = ROOT / "scripts"
+    streaming_renderer = scripts / "patch-pi-streaming-render"
+    installed_runtime = runtime / "0.84.2"
+    render_verified = binary.is_file() and subprocess.run(
+        [str(streaming_renderer), "--check", str(installed_runtime)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0
+    if not render_verified:
         subprocess.run(
             [
-                str(ROOT / "scripts/install-pi-coding-agent"),
+                str(scripts / "install-pi-coding-agent"),
                 "--install-root",
                 str(runtime),
                 "--bin-dir",
@@ -81,8 +90,9 @@ def launch(args, pi_args):
             check=True,
         )
     # Authenticate the patched files on reuse as well as at install time.
-    for patch in sorted((ROOT / "scripts").glob("patch-pi-*")):
-        subprocess.run([str(patch), "--check", str(runtime / "0.84.2")], check=True)
+    for patch in sorted(scripts.glob("patch-pi-*")):
+        if patch != streaming_renderer or not render_verified:
+            subprocess.run([str(patch), "--check", str(installed_runtime)], check=True)
     port, lock, tunnel = connection["port"], None, None
     try:
         if args.ssh:

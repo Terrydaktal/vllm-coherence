@@ -15,7 +15,12 @@ SCHEMA = "coherence.pi.installed-build.v1"
 PACKAGE = "@earendil-works/pi-coding-agent"
 PATCHERS = (
     "streaming-usage", "footer", "tool-call-integrity", "internal-guard-retry",
-    "precontinuation-compaction", "project-history",
+    "precontinuation-compaction", "project-history", "streaming-render",
+)
+PATCH_SOURCES = (
+    *(f"patch-pi-{name}" for name in PATCHERS),
+    "pi_streaming_markdown_patch.py", "pi_streaming_screen_patch.py",
+    "pi-streaming-markdown.mjs", "pi-streaming-screen.mjs",
 )
 SKIP = {"node_modules", "tests", "test", "target", "artifacts", "captures", ".git"}
 MAX_FILES = 4096
@@ -112,8 +117,8 @@ def build_manifest(runtime, patch_root):
         raise ValueError("unexpected Pi package metadata")
     files, identity = sdk_inventory(runtime)
     patches = []
-    for name in PATCHERS:
-        path = patch_root / "scripts" / ("patch-pi-" + name)
+    for name in PATCH_SOURCES:
+        path = patch_root / "scripts" / name
         if path.is_symlink():
             raise ValueError(f"patch source is a symlink: {path}")
         patches.append({"path": Path(os.path.relpath(path, package)).as_posix(),
@@ -166,7 +171,7 @@ def main(argv=None):
     action.add_argument("--check", action="store_true", help="compare the manifest with current SDK and patch-source hashes")
     parser.add_argument("--runtime", type=Path, required=True, help="npm installation root containing node_modules")
     parser.add_argument("--patch-root", type=Path, required=True, help="project or packaged release containing scripts/patch-pi-*")
-    parser.add_argument("--verify-patches", action="store_true", help="also execute all six patch checkers with --check")
+    parser.add_argument("--verify-patches", action="store_true", help="also execute all patch checkers with --check")
     args = parser.parse_args(argv)
     try:
         runtime = args.runtime.resolve(strict=True)

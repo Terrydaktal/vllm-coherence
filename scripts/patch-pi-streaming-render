@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Install and verify Pi 0.84.2's incremental Markdown and main-screen renderer."""
+
+import argparse
+import hashlib
+import os
+import stat
+import tempfile
+from pathlib import Path
+
+from pi_streaming_markdown_patch import patch_markdown
+from pi_streaming_screen_patch import patch_main_screen, patch_tui
+
+
+HERE = Path(__file__).resolve().parent
+DIST = "node_modules/@earendil-works/pi-tui/dist"
+PATCHES = {
+    "components/markdown.js": (
+        "bbffe68aa6bb6968e9eca2681e19b0ea7787fff8124ef996fae282a4c2201465",
+        "49fdc21a28eeabf6a95dde6bb601944928718aea9dc21bbfffb00bd6f1c03fbf",
+        patch_markdown,
+    ),
+    "tui.js": (
+        "744202644a70acf4b0c9f893f115a136dd42524a0d195dec53557b24dc0239e8",
+        "0f22915f08fac4aa42a628418e055933223e884ad6fc9b5448257b7f79dd1035",
+        patch_tui,
+    ),
+    "tui-main-screen.js": (
+        "c039d81fb26597669b13fd249dd4bf685c9a7608e3eb0c9bb3460df89271cd49",
+        "1459800fcdbfefb98bd2d80a5cfd7a3fec981d15bfdfe20d7badf8f1b37b2e9a",
+        patch_main_screen,
+    ),
+}
+MODULES = {
+    "components/pi-streaming-markdown.mjs": "pi-streaming-markdown.mjs",
+    "pi-streaming-screen.mjs": "pi-streaming-screen.mjs",
+}
+
+
+def owned_directory(path):
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise ValueError(f"unsafe runtime directory: {path}")
+
+
+def stable_file(path):
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid() or before.st_mode & 0o022:
+        raise ValueError(f"unsafe runtime file: {path}")
+    data = path.read_bytes()
+    after = path.lstat()
+    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+        after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns
+    ):
+        raise ValueError(f"runtime file changed while being read: {path}")
+    return data, stat.S_IMODE(before.st_mode)
+
+
+def atomic_write(path, data, mode):
+    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def run(runtime, *, apply):
+    if not runtime.is_absolute():
+        raise ValueError("runtime root must be absolute")
+    owned_directory(runtime)
+    dist = (runtime / DIST).resolve(strict=True)
+    if not dist.is_relative_to(runtime.resolve(strict=True)):
+        raise ValueError("Pi TUI package resolves outside the runtime")
+    owned_directory(dist)
+    owned_directory(dist / "components")
+    updates = []
+    for relative, source in MODULES.items():
+        path = dist / relative
+        data = (HERE / source).read_bytes()
+        try:
+            existing, mode = stable_file(path)
+        except FileNotFoundError:
+            existing, mode = None, 0o644
+        if existing != data:
+            updates.append((path, data, mode))
+    for relative, (preimage, postimage, transform) in PATCHES.items():
+        path = dist / relative
+        data, mode = stable_file(path)
+        digest = hashlib.sha256(data).hexdigest()
+        if digest == postimage:
+            continue
+        if digest != preimage:
+            raise ValueError(f"file differs from pinned Pi TUI ABI: {path}")
+        updated = transform(data)
+        if hashlib.sha256(updated).hexdigest() != postimage:
+            raise ValueError(f"unexpected renderer postimage: {path}")
+        updates.append((path, updated, mode))
+    if updates and not apply:
+        raise ValueError(f"streaming renderer patch is absent or incomplete: {updates[0][0]}")
+    for path, data, mode in updates:
+        atomic_write(path, data, mode)
+        if stable_file(path)[0] != data:
+            raise ValueError(f"could not verify streaming renderer file: {path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--check", action="store_true")
+    parser.add_argument("runtime", type=Path)
+    args = parser.parse_args()
+    try:
+        run(args.runtime, apply=args.apply)
+    except (OSError, ValueError) as exc:
+        parser.exit(2, f"patch-pi-streaming-render: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()

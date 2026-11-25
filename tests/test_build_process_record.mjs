@@ -8,7 +8,15 @@ import { createBuildProcessRecord, processStartTicks } from "../integrations/pi/
 import { createRunningBuildMonitor } from "../integrations/pi/qwen-running-build.mjs";
 
 const hash = (text) => createHash("sha256").update(text).digest("hex");
-const patchNames = ["streaming-usage", "footer", "tool-call-integrity", "internal-guard-retry", "precontinuation-compaction", "project-history"];
+const legacyPatchSources = [
+  "streaming-usage", "footer", "tool-call-integrity", "internal-guard-retry",
+  "precontinuation-compaction", "project-history",
+].map((name) => `patch-pi-${name}`);
+const streamingPatchSources = [
+  ...legacyPatchSources, "patch-pi-streaming-render",
+  "pi_streaming_markdown_patch.py", "pi_streaming_screen_patch.py",
+  "pi-streaming-markdown.mjs", "pi-streaming-screen.mjs",
+];
 async function write(path, text) { await mkdir(dirname(path), { recursive: true }); await writeFile(path, text); }
 async function rootFor(t) {
   const root = await mkdtemp(join(tmpdir(), "pi-build-record-"));
@@ -143,7 +151,7 @@ test("stop prevents pending or later publication and bounded records reject exce
   await assert.rejects(lstat(other.path), { code: "ENOENT" });
 });
 
-async function fixture(t) {
+async function fixture(t, patchSources = streamingPatchSources) {
   const root = await rootFor(t), runtimeDir = join(root, "xdg"), runtime = join(root, "runtime");
   await mkdir(runtimeDir, { mode: 0o700 });
   const scope = join(runtime, "node_modules", "@earendil-works"), packageRoot = join(scope, "pi-coding-agent");
@@ -157,8 +165,8 @@ async function fixture(t) {
   await write(join(packageRoot, "package.json"), JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.2", type: "module" }));
   await write(extension, "export default function extension() {}\n"); await write(profile, "export const profile = 'normal';\n"); await symlink(cli, launcher);
   const patches = [];
-  for (const name of patchNames) {
-    const path = join(root, "scripts", `patch-pi-${name}`), text = `# fixture-only patch identity ${name}\n`;
+  for (const name of patchSources) {
+    const path = join(root, "scripts", name), text = `# fixture-only patch identity ${name}\n`;
     await write(path, text); patches.push({ path: relative(packageRoot, path), sha256: hash(text) });
   }
   const manifestPath = join(packageRoot, "coherence-build.json");
@@ -193,6 +201,14 @@ test("monitor publishes current installed identity with independently computed S
   assert.equal(value.latest.status, "current");
   assert.equal(value.latest.manifest_path, f.manifestPath);
   assert.ok(value.latest.checked_at_unix_ms >= value.captured_at_unix_ms);
+});
+
+test("monitor accepts a complete legacy installed build manifest", async (t) => {
+  const f = await fixture(t, legacyPatchSources), monitor = f.monitor();
+  await monitor.start();
+  const value = await json(monitor.recordPath);
+  assert.equal(value.latest.patches_status, "verified");
+  assert.equal(value.latest.status, "current");
 });
 
 test("SDK drift first requires installation update; renewed installation then requires restart", async (t) => {
@@ -231,7 +247,8 @@ test("extension and launch-profile changes require restart without alleging an S
 
 test("patch-source drift requires installing updates even when loaded SDK bytes match", async (t) => {
   const f = await fixture(t), monitor = f.monitor(); await monitor.start();
-  await write(join(f.packageRoot, f.patches[0].path), "# updated patch source, not executed\n"); await monitor.check();
+  const helper = f.patches.find(({ path }) => path.endsWith("/pi-streaming-markdown.mjs"));
+  await write(join(f.packageRoot, helper.path), "# updated patch source, not executed\n"); await monitor.check();
   const value = await json(monitor.recordPath);
   assert.equal(value.latest.status, "installation_update_required");
   assert.equal(value.latest.patches_status, "outdated");

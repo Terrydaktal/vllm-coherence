@@ -83,9 +83,11 @@ def test_backend_install_and_source_inventory_include_prefix_modules():
     assert 'packages = ["src/qwen_r9700_lab"]' in (ROOT / "pyproject.toml").read_text()
 
 
-@pytest.mark.parametrize("already_installed", [False, True])
+@pytest.mark.parametrize(
+    ("already_installed", "renderer_present"), [(False, False), (True, False), (True, True)]
+)
 def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
-    tmp_path, monkeypatch, already_installed
+    tmp_path, monkeypatch, already_installed, renderer_present
 ):
     monkeypatch.syspath_prepend(str(ROOT / "tools"))
     import coherence_pi as pi
@@ -107,9 +109,12 @@ def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
         binary.write_text("synthetic binary")
     calls = []
     launches = []
-    monkeypatch.setattr(
-        pi.subprocess, "run", lambda command, **kwargs: calls.append(command)
-    )
+    def run(command, **kwargs):
+        calls.append(command)
+        probe = Path(command[0]).name == "patch-pi-streaming-render" and not kwargs["check"]
+        return SimpleNamespace(returncode=2 if probe and not renderer_present else 0)
+
+    monkeypatch.setattr(pi.subprocess, "run", run)
     monkeypatch.setattr(pi.subprocess, "call", lambda command, **kwargs: launches.append(command) or 0)
     monkeypatch.setattr(
         pi.urllib.request,
@@ -133,12 +138,19 @@ def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
     installers = [
         call for call in calls if Path(call[0]).name == "install-pi-coding-agent"
     ]
-    assert bool(installers) is not already_installed
+    assert bool(installers) is not renderer_present
     assert [
         str(ROOT / "scripts/patch-pi-tool-call-integrity"),
+        "--check",
+        str(state / "pi/0.84.2"),
+    ] in calls
+    assert [
+        str(ROOT / "scripts/patch-pi-streaming-render"),
         "--check",
         str(state / "pi/0.84.2"),
     ] in calls
     installer_source = (ROOT / "scripts/install-pi-coding-agent").read_text()
     assert '"$tool_integrity_patch_script" --apply "$stage_path"' in installer_source
     assert '"$tool_integrity_patch_script" --apply "$runtime"' in installer_source
+    assert '"$streaming_render_patch_script" --apply "$stage_path"' in installer_source
+    assert '"$streaming_render_patch_script" --apply "$runtime"' in installer_source

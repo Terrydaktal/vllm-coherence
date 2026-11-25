@@ -602,6 +602,98 @@ STREAM_COMPACTION_PATCHES = (
 """,
     ),
     FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js",
+        preimage_sha256="9214a98070719bca4d4162510c95627d61dda8850fe22071905a63a477f575a8",
+        old=b"""    isStreaming = false;
+    constructor(message,""",
+        new=b"""    isStreaming = false;
+    thinkingMarkdown = new Map();
+    thinkingFirstChunks = new WeakMap();
+    constructor(message,""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js",
+        preimage_sha256="9214a98070719bca4d4162510c95627d61dda8850fe22071905a63a477f575a8",
+        old=b"""    updateContent(message, isStreaming = this.isStreaming) {
+        this.lastMessage = message;
+        this.isStreaming = isStreaming;
+""",
+        new=b"""    [Symbol.for("pi.tui.renderChunks")](width) {
+        const renderChunks = this.contentContainer[Symbol.for("pi.tui.renderChunks")];
+        if (!renderChunks) return [this.render(width)];
+        const chunks = renderChunks.call(this.contentContainer, width).filter((rows) => rows.length > 0);
+        if (this.hasToolCalls || chunks.length === 0) return chunks;
+        if (chunks.length === 1) {
+            const rows = chunks[0].slice();
+            rows[0] = OSC133_ZONE_START + rows[0];
+            rows[rows.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + rows[rows.length - 1];
+            return [rows];
+        }
+        // A completed prefix retains its identity through the OSC 133 decoration.
+        // The final marker belongs to the changing tail.
+        const first = chunks[0];
+        let decorated = this.thinkingFirstChunks.get(first);
+        if (!decorated) {
+            const rows = first.slice();
+            rows[0] = OSC133_ZONE_START + rows[0];
+            decorated = Object.freeze(rows);
+            if (Object.isFrozen(first)) this.thinkingFirstChunks.set(first, decorated);
+        }
+        chunks[0] = decorated;
+        const last = chunks[chunks.length - 1].slice();
+        last[last.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + last[last.length - 1];
+        chunks[chunks.length - 1] = last;
+        return chunks;
+    }
+    updateContent(message, isStreaming = this.isStreaming) {
+        this.lastMessage = message;
+        this.isStreaming = isStreaming;
+        const previousThinking = this.thinkingMarkdown;
+        this.thinkingMarkdown = new Map();
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js",
+        preimage_sha256="9214a98070719bca4d4162510c95627d61dda8850fe22071905a63a477f575a8",
+        old=b"""            else if (content.type === "thinking") {
+                const thinkingBlocks = [];
+""",
+        new=b"""            else if (content.type === "thinking") {
+                const thinkingStart = i;
+                const thinkingBlocks = [];
+""",
+    ),
+    FilePatch(
+        relative_path="node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/assistant-message.js",
+        preimage_sha256="9214a98070719bca4d4162510c95627d61dda8850fe22071905a63a477f575a8",
+        old=b"""                    // Render each run of thinking blocks as one Markdown section.
+                    this.contentContainer.addChild(new Markdown(thinkingBlocks.join("\\n\\n"), this.outputPad, 0, this.markdownTheme, {
+                        color: (text) => theme.fg("thinkingText", text),
+                        italic: true,
+                    }, {
+                        transform: createMarkdownTransform("assistant-thinking", this.isStreaming, this.markdownTransformers),
+                    }));
+""",
+        new=b"""                    const text = thinkingBlocks.join("\\n\\n");
+                    const incremental = this.markdownTransformers.length === 0;
+                    let component = incremental ? previousThinking.get(thinkingStart) : undefined;
+                    if (component?.paddingX === this.outputPad && component.setStreamingText) {
+                        component.setStreamingText(text);
+                    } else {
+                        component = new Markdown(text, this.outputPad, 0, this.markdownTheme, {
+                            color: (text) => theme.fg("thinkingText", text),
+                            italic: true,
+                        }, incremental ? {
+                            streamingAppend: true,
+                        } : {
+                            transform: createMarkdownTransform("assistant-thinking", this.isStreaming, this.markdownTransformers),
+                        });
+                    }
+                    if (incremental) this.thinkingMarkdown.set(thinkingStart, component);
+                    this.contentContainer.addChild(component);
+""",
+    ),
+    FilePatch(
         relative_path="node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
         preimage_sha256="dec5883a233163881bb22afbbcdaecb30141efe3d2bcff62348335dc98d6cf8f",
         old=b"""    // Track last assistant message for auto-compaction check

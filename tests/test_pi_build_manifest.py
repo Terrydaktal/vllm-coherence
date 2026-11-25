@@ -35,6 +35,9 @@ def installation(tmp_path):
             "runtime = pathlib.Path(sys.argv[2])\n"
             "with (runtime / 'checks.log').open('a') as log:\n"
             f"    log.write({name!r} + '\\n')\n")
+    for name in manifest.PATCH_SOURCES:
+        if not name.startswith("patch-pi-"):
+            (patch_root / "scripts" / name).write_text(f"# synthetic patch source {name}\n")
     return runtime, patch_root, package
 
 
@@ -45,7 +48,7 @@ def run(installation, *arguments):
                           capture_output=True, text=True, timeout=10)
 
 
-def test_apply_records_exact_fingerprint_and_six_verified_patch_sources(installation):
+def test_apply_records_exact_fingerprint_and_verified_patch_sources(installation):
     runtime, patch_root, package = installation
     assert run(installation, "--apply").returncode == 0
     path = package / "coherence-build.json"
@@ -61,9 +64,9 @@ def test_apply_records_exact_fingerprint_and_six_verified_patch_sources(installa
                                    "sha256": hashlib.sha256((package / "dist/cli.js").read_bytes()).hexdigest()}]
     entry = value["sdk_files"][0]
     assert value["sdk_fingerprint"] == hashlib.sha256(f'{entry["path"]}\0{entry["sha256"]}\n'.encode()).hexdigest()
-    assert len(value["patches"]) == 6
-    for entry, name in zip(value["patches"], manifest.PATCHERS):
-        actual = patch_root / "scripts" / ("patch-pi-" + name)
+    assert len(value["patches"]) == len(manifest.PATCH_SOURCES)
+    for entry, name in zip(value["patches"], manifest.PATCH_SOURCES):
+        actual = patch_root / "scripts" / name
         assert (package / entry["path"]).resolve() == actual
         assert entry["sha256"] == hashlib.sha256(actual.read_bytes()).hexdigest()
     before = path.read_bytes()
@@ -71,7 +74,8 @@ def test_apply_records_exact_fingerprint_and_six_verified_patch_sources(installa
     assert path.read_bytes() == before
 
 
-def test_check_is_read_only_and_detects_sdk_or_patcher_changes(installation):
+@pytest.mark.parametrize("source", ["patch-pi-footer", "pi-streaming-markdown.mjs"])
+def test_check_is_read_only_and_detects_sdk_or_patcher_changes(installation, source):
     runtime, patch_root, package = installation
     assert run(installation, "--apply").returncode == 0
     path = package / "coherence-build.json"
@@ -86,7 +90,7 @@ def test_check_is_read_only_and_detects_sdk_or_patcher_changes(installation):
     assert path.read_bytes() == before
     target.write_bytes(original)
     assert run(installation, "--check").returncode == 0
-    target = patch_root / "scripts/patch-pi-footer"
+    target = patch_root / "scripts" / source
     target.write_text(target.read_text() + "# updated patch source\n")
     assert run(installation, "--check").returncode == 2
     assert path.read_bytes() == before

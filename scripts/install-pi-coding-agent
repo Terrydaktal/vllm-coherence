@@ -66,6 +66,11 @@ FILES
     scripts/patch-pi-internal-guard-retry
     scripts/patch-pi-precontinuation-compaction
     scripts/patch-pi-project-history
+    scripts/patch-pi-streaming-render
+    scripts/pi_streaming_markdown_patch.py
+    scripts/pi_streaming_screen_patch.py
+    scripts/pi-streaming-markdown.mjs
+    scripts/pi-streaming-screen.mjs
     scripts/pi-build-manifest
     $HOME/.local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works/pi-coding-agent/coherence-build.json
     $HOME/.local/share/qwen-r9700/pi/0.84.2
@@ -136,6 +141,8 @@ verify_runtime() {
 		die "Pi pre-continuation compaction patch is not authenticated: $runtime"
 	"$project_history_patch_script" --check "$runtime" ||
 		die "Pi project-local history patch is not authenticated: $runtime"
+	"$streaming_render_patch_script" --check "$runtime" ||
+		die "Pi incremental streaming renderer is not authenticated: $runtime"
 }
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -146,6 +153,7 @@ tool_integrity_patch_script="$project_root/scripts/patch-pi-tool-call-integrity"
 internal_guard_retry_patch_script="$project_root/scripts/patch-pi-internal-guard-retry"
 precontinuation_compaction_patch_script="$project_root/scripts/patch-pi-precontinuation-compaction"
 project_history_patch_script="$project_root/scripts/patch-pi-project-history"
+streaming_render_patch_script="$project_root/scripts/patch-pi-streaming-render"
 build_manifest_script="$project_root/scripts/pi-build-manifest"
 manifest_dir="$project_root/integrations/pi"
 : "${HOME:?HOME must be set}"
@@ -190,9 +198,14 @@ for patch_script in \
 	"$tool_integrity_patch_script" \
 	"$internal_guard_retry_patch_script" \
 	"$precontinuation_compaction_patch_script" \
-	"$project_history_patch_script"; do
+	"$project_history_patch_script" \
+	"$streaming_render_patch_script"; do
 	[[ -f $patch_script && ! -L $patch_script && -x $patch_script ]] ||
 		die "missing executable Pi runtime patcher: $patch_script"
+done
+for source in pi_streaming_markdown_patch.py pi_streaming_screen_patch.py pi-streaming-markdown.mjs pi-streaming-screen.mjs; do
+	[[ -f $script_dir/$source && ! -L $script_dir/$source ]] ||
+		die "missing regular Pi streaming renderer source: $script_dir/$source"
 done
 
 node -e '
@@ -256,6 +269,8 @@ if [[ -e $runtime || -L $runtime ]]; then
 		die "cannot patch pre-continuation compaction in existing Pi runtime: $runtime"
 	"$project_history_patch_script" --apply "$runtime" ||
 		die "cannot patch project-local history in existing Pi runtime: $runtime"
+	"$streaming_render_patch_script" --apply "$runtime" ||
+		die "cannot patch incremental rendering in existing Pi runtime: $runtime"
 	verify_runtime "$runtime"
 	printf 'verified existing Pi runtime %s\n' "$runtime"
 else
@@ -278,6 +293,8 @@ else
 		die "cannot patch pre-continuation compaction in staged Pi runtime: $stage_path"
 	"$project_history_patch_script" --apply "$stage_path" ||
 		die "cannot patch project-local history in staged Pi runtime: $stage_path"
+	"$streaming_render_patch_script" --apply "$stage_path" ||
+		die "cannot patch incremental rendering in staged Pi runtime: $stage_path"
 	verify_runtime "$stage_path"
 	mv -T -n -- "$stage_path" "$runtime" || die "cannot publish runtime: $runtime"
 	[[ ! -e $stage_path ]] || die "runtime appeared during publication; staged directory retained: $stage_path"
