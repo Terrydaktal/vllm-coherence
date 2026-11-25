@@ -1,0 +1,7 @@
+{
+  "max_model_len": 327952,
+  "kv_cache_memory_bytes": 12447383552,
+  "draft_rotary_rows": 327960,
+  "original_draft_config_sha256": "5b5668a00b26aaebd88c7e3d961f7d1cdef025867fee158dfccb84f29fd8caec",
+  "rotary_policy": "native frequencies with an extended FP8 draft position table"
+}

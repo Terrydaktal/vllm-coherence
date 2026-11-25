@@ -33,8 +33,8 @@ from pathlib import Path
 
 SCHEMA = "urn:coherence:generated-token-continuation:v1"
 CONTRACT = "generated_tokens_v1"
-DEFAULT_MAX_TOKENS = 253_792
-MAX_TOKENS = 300_000
+MAX_TOKENS = 344_000
+DEFAULT_MAX_TOKENS = MAX_TOKENS
 MAX_BYTES = 32 * 1024 * 1024
 MAX_HEADER = 16 * 1024
 MAX_DIRECTORY_ENTRIES = 256

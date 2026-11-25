@@ -270,6 +270,29 @@ test("the reserve guard interrupts below 240K using prompt, cache-read, cache-wr
   assert.equal(f.toolExecutions(), 0);
 });
 
+for (const [contextWindow, reserveTokens, threshold] of [
+  [319000, 8192, 305208],
+  [340000, 8192, 326208],
+  [340000, 16384, 323616],
+]) {
+  test(`${contextWindow} context preserves ${contextWindow - threshold} tokens of checkpoint headroom`, options, async (t) => {
+    const f = await fixture(t, { contextWindow, reserveTokens });
+    f.start();
+    const first = await f.first();
+    first.update("usage_update", f.partial(usage(threshold - 2000, 1999)));
+    await until(() => f.events.some((event) => event.type === "message_update"), "extended context below threshold");
+    assert.equal(first.signal.aborted, false);
+    first.update("usage_update", f.partial(usage(threshold - 2000, 2000)));
+    await until(() => first.signal.aborted, "extended context interruption");
+    await until(() => f.controls.length === 2, "extended context continuation");
+    const checkpointEntry = f.sessionManager.getEntries().find((entry) => entry.type === "compaction");
+    assert.equal(checkpointEntry.details.streamCompaction.threshold, threshold);
+    assert.equal(checkpointEntry.details.streamCompaction.tokens, threshold);
+    f.controls[1].finish("stop", f.assistant([{ type: "text", text: "Extended context task complete." }], usage(100, 100)));
+    await f.settle();
+  });
+}
+
 for (const [name, settings, tokens, extras] of [
   ["disabled compaction", { enabled: false }, usage(238000, 2000), {}],
   ["another provider", { provider: "synthetic-other-provider" }, usage(238000, 2000), {}],

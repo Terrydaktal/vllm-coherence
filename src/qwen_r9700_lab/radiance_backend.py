@@ -164,6 +164,9 @@ def legacy_contract(root: Path, *, container=None, abi=None, cache_root=None) ->
         raise ValueError("backend lifecycle is not configured for this deployment")
     if manifest["storage"]["data_abi"] != data_abi:
         raise ValueError("pinned snapshot identity mismatch")
+    max_model_len = manifest["serving"]["max_model_len"]
+    if type(max_model_len) is not int or max_model_len < 1:
+        raise ValueError("invalid context window in pinned backend manifest")
     remote = Path(constant("REMOTE_ROOT"))
     patches = remote / "radiance-vllm-mxfp4"
     files = {
@@ -186,6 +189,7 @@ def legacy_contract(root: Path, *, container=None, abi=None, cache_root=None) ->
     return {
         "container": name,
         "model": constant("MODEL_ID"),
+        "max_model_len": max_model_len,
         "port": int(constant("REMOTE_PORT")),
         "image": constant("IMAGE_ID"),
         "runtime_abi": runtime_abi,
@@ -334,15 +338,17 @@ class Controller:
         args = row.get("Args", [])
         if not isinstance(args, list) or any(not isinstance(x, str) for x in args):
             return False
+        lengths = [args[i + 1 : i + 2] for i, arg in enumerate(args) if arg == "--max-model-len"]
         pairs = [
             ("--served-model-name", c["model"]),
-            ("--max-model-len", "253792"),
             ("--kv-cache-dtype", "fp8"),
             ("--port", str(c["port"])),
         ]
         if (
             row.get("Name") != c["container"]
             or row.get("Image") != c["image"]
+            or lengths != [[str(c["max_model_len"])]]
+            or any(arg.startswith("--max-model-len=") for arg in args)
             or any(
                 not any(args[i : i + 2] == list(pair) for i in range(len(args) - 1))
                 for pair in pairs
@@ -384,6 +390,7 @@ class Controller:
                 and len(value["data"]) == 1
                 and isinstance(value["data"][0], dict)
                 and value["data"][0].get("id") == self.config["model"]
+                and value["data"][0].get("max_model_len") in (None, self.config["max_model_len"])
             )
         except (OSError, ValueError, TypeError, urllib.error.URLError):
             return False

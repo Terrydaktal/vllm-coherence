@@ -384,6 +384,16 @@ test("provider guard preserves the payload chain and absent state configuration 
   installRadianceConnection({ registerProvider: () => assert.fail("legacy clients do not override their provider") });
 });
 
+test("ready supervisor does not admit a different advertised context window", async (t) => {
+  const { path } = await fixture(t);
+  const profile = { ...model, contextWindow: 319000 };
+  const fetcher = (window) => async (url) => String(url).endsWith("/health")
+    ? new Response("ok") : Response.json({ data: [{ id: MODEL, max_model_len: window }] });
+  await requireRadianceConnection(profile, { path, fetcher: fetcher(319000) });
+  await assert.rejects(requireRadianceConnection(profile, { path, fetcher: fetcher(253792) }),
+    { code: "QWEN_BACKEND_CONNECTION_UNAVAILABLE", reason: "model_context_mismatch", retryable: false });
+});
+
 test("footer checks fresh metadata before claiming offline and ignores a stopped monitor", async (t) => {
   const { path } = await fixture(t);
   environment(t, { QWEN_RADIANCE_CONNECTION_STATE: path });

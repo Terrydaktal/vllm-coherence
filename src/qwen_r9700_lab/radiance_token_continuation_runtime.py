@@ -914,7 +914,7 @@ async def prepare_compaction(serving, request, instruction, context_window):
         or len(instruction.encode()) > 262_144
         or any(control in instruction for control in ("<|think", "<|im_"))
         or type(context_window) is not int
-        or not 1 <= context_window <= 262_144
+        or not 1 <= context_window <= journal.MAX_TOKENS
     ):
         raise ValueError("invalid compaction preparation parameters")
     tokenizer = serving.renderer.tokenizer

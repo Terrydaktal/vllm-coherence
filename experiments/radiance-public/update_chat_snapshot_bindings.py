@@ -349,6 +349,24 @@ manifest["serving"]["target_verify_head"] = (
 )
 manifest["serving"]["draft_rerank"] = 80
 manifest["serving"]["r4d_attention_fp8"] = 0
+extended_context_path = BASE / "extended-context.json"
+if extended_context_path.is_file():
+    extended_context = json.loads(extended_context_path.read_text())
+    manifest["runtime"]["extended_context"] = extended_context
+    for name in (
+        "extended-context.json",
+        "extended_context_bootstrap.py",
+        "extended_context_prefill.py",
+        "extended_context_worker.py",
+        "host_embedding.py",
+    ):
+        manifest["runtime"]["release_files"][name] = sha(BASE / name)
+    manifest["serving"].update(
+        max_model_len=extended_context["max_model_len"],
+        kv_cache_memory_bytes=extended_context["kv_cache_memory_bytes"],
+        max_num_batched_tokens=4096,
+        cudagraph_mode="FULL_AND_PIECEWISE",
+    )
 # A new vLLM/kernel stack must not reinterpret old binary state. Keep this data
 # contract independent of telemetry/installer source hashes for future repairs.
 data_contract = {
@@ -364,6 +382,8 @@ previous_data_abi = hashlib.sha256(
     json.dumps(data_contract, sort_keys=True).encode()
 ).hexdigest()
 data_contract["prefill_math"] = prefill_math
+if "extended_context" in manifest["runtime"]:
+    data_contract["extended_context"] = manifest["runtime"]["extended_context"]
 if profile.get("optimized_d7"):
     data_contract["optimized_arithmetic"] = profile["optimized_d7"]["arithmetic"]
     from optimized_pi_release import compatible_output_head_contract
@@ -383,10 +403,16 @@ data_abi = hashlib.sha256(
 ).hexdigest()
 manifest["storage"]["data_abi"] = data_abi
 manifest["storage"]["data_contract"] = data_contract
+if "extended_context" in manifest["runtime"]:
+    # Previous runtime aliases were admitted under the original capacity.
+    manifest["runtime"]["memory_report"]["compatible_runtime_abis"] = []
 # Retain only explicitly reviewed predecessor IDs when the serialized numerical
 # contract is unchanged. Refreshing diagnostic/startup code must not silently
 # drop the live predecessors; a new arithmetic/data ABI cannot inherit them.
-if prior.get("storage", {}).get("data_abi") == data_abi:
+if (
+    "extended_context" not in manifest["runtime"]
+    and prior.get("storage", {}).get("data_abi") == data_abi
+):
     compatible = manifest["runtime"]["memory_report"]["compatible_runtime_abis"]
     for predecessor in (
         prior.get("runtime", {})

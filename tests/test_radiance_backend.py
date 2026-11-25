@@ -23,6 +23,7 @@ def controller(tmp_path, monkeypatch):
     config = {
         "container": "test-backend",
         "model": backend.MODEL,
+        "max_model_len": 253792,
         "port": 8080,
         "image": "a" * 64,
         "runtime_abi": "b" * 64,
@@ -74,15 +75,26 @@ def controller(tmp_path, monkeypatch):
 def test_same_contract_as_launcher():
     root = Path(__file__).resolve().parents[1]
     config = backend.legacy_contract(root)
-    assert (
-        config["data_abi"]
-        == "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d"
-    )
     assert config["files"][config["launcher"]]
+    manifest_path = root / "experiments/radiance-public/snapshot-abi-chat-cache-v1.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert config["data_abi"] == manifest["storage"]["data_abi"]
+    assert config["max_model_len"] == manifest["serving"]["max_model_len"]
     with pytest.raises(ValueError, match="not configured"):
         backend.legacy_contract(root, container="another-backend")
     with pytest.raises(ValueError, match="not configured"):
         backend.legacy_contract(root, abi="f" * 64)
+
+
+def test_context_boundary_must_match_pinned_command_without_override(controller):
+    assert controller.matches(controller.row)
+    controller.config["max_model_len"] = 319000
+    assert not controller.matches(controller.row)
+    args = controller.row["Args"]
+    args[args.index("--max-model-len") + 1] = "319000"
+    assert controller.matches(controller.row)
+    args.extend(["--max-model-len", "253792"])
+    assert not controller.matches(controller.row)
 
 
 def test_status_counts_without_exposing_request_metadata(controller):

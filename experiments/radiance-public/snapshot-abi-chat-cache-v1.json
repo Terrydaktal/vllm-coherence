@@ -117,7 +117,12 @@
       "optimized_d7_worker.py": "e9e9948328d039ef38654d5d97e9a1c63d4ed94379ae308bfa52887c70f982b5",
       "stock_gdn_norm_quant.py": "24bb94804e803f49a21e2a88ddcf30f060a6a133a42cb0d0b94af04bc6d6ac9e",
       "radiance_verifyhead_global.py": "d92bed94b1a7a5fb76d11e2a1de3aba0b878330041003783cf5ea8087a17641f",
-      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138"
+      "rocr-poll-backoff/runtime.json": "5a8d5c92820ee0e93bb0dd3465f180eedadce9162c99dda2b7c6d517083a4138",
+      "extended-context.json": "6e35aabf1afcf2aab0810d68d5c21f682205e1d5b25accc26b9493357f300907",
+      "extended_context_bootstrap.py": "2a047e2ece9ea1bc17eedeb547b124ecabd6a88284f72e2dd5bd7cd0240ea5a3",
+      "extended_context_prefill.py": "645e5355666c5a0f24c2e9da950079a5fdc8ddb93352285af0024438800feabe",
+      "extended_context_worker.py": "8ff63061a6d25fe9245d568c4f1156bee1347cd453d2a3935e774f25bee68e19",
+      "host_embedding.py": "79540dbed326d69313d87cfa2335859fd1401deb63cc556a7dc5e94ab0d87afa"
     },
     "process_memory_policy": {
       "helper": "radiance_memory.py:disable_transparent_hugepages",
@@ -409,8 +414,8 @@
         "radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
         "radiance_prefix_lineage.py": "2f4b3d08e7051c766be584e78ab3b58215b3ba85bb04169560b5b37fe4058021",
         "radiance_prefix_runtime.py": "b8fa4aa4eb77606e8f3e10b11d7a96edffb5e36cb16e7e4d4c4a3fb6968c5936",
-        "radiance_token_continuation.py": "9b8ba79af0ec9dd6f979b6e93591977b1eeabb9b22c2e735270e3565733b2b72",
-        "radiance_token_continuation_runtime.py": "88e4e0c76938f36e68d90072b210aa62de3ec1bb49d4f65e5e54df19615a9d76",
+        "radiance_token_continuation.py": "e8443df1550c1116d933e1022c269cd46725c399982dcbf61809a6ca419d8542",
+        "radiance_token_continuation_runtime.py": "5899e8e92b052a65776c2ad592a5fe63bf12e446d2591e17dcaf84b82c7f6757",
         "radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
         "radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
         "radiance_chat_tier.py": "b5374b9e3f5ce1b7e272607946561d37f177fd8d4d4d53b2523fd032815231a0",
@@ -434,29 +439,7 @@
         "request_interval_seconds": 10,
         "contract": "on-request allocator snapshot with include_traces=False; numeric segment/block sizes; best-effort fixed-root storage owners; no addresses, trace history or tensor values; separate private/default/unknown pools; bounded analysis and overwritten tmpfs output"
       },
-      "compatible_runtime_abis": [
-        "68c6d626b6f2891f26dc394b20fff70c8ea80cd6885e2352d3c3cf37134fec40",
-        "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
-        "7fc9b5c6083ce353eaf12535bca550579607155cb7c930a961661e3cb1080cb1",
-        "ab9f9a025c2af425aef38fffbffe54e71d043e53444558bbdbecef0f86d2c7e5",
-        "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
-        "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
-        "463acc0e77210aca656099864cda189a06d320bb37f9f67fa5d9caebab881c6c",
-        "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
-        "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
-        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
-        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
-        "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c",
-        "9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247",
-        "2a9b3a0b1f4a77cce74de1d2d22b17e2d915cfe470e1ad4cfd9918c9e9baf801",
-        "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
-        "f014330cebc8c71d156dbb2ea7ac17fa5ecea14e51c6e2be481a35c0c7449586",
-        "404e7eb3c7c3c6ed105c9860c8502c4cee5928057713aa3f97f4da13b55fed7a",
-        "a1630fae05ab4f9dd6ca6a7dcdfa55c1feaf9d36fdbb9bbb16229709c099f6b4",
-        "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
-        "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede",
-        "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6"
-      ]
+      "compatible_runtime_abis": []
     },
     "buffered_tool_usage": {
       "installer": "patch_chat_snapshot.py",
@@ -540,14 +523,21 @@
       "unsupported": "Canonical rendering on edits, cancellation, concurrency, missing or corrupt journal, unsupported metadata or context limit.",
       "processed_state": "Journal records emitted IDs, not an invented processed-token count; existing KV/GDN/conv/drafter endpoint checks decide reusable state.",
       "privacy": "Raw IDs stay in private journal; telemetry emits fixed reasons and counts only."
+    },
+    "extended_context": {
+      "max_model_len": 327952,
+      "kv_cache_memory_bytes": 12447383552,
+      "draft_rotary_rows": 327960,
+      "original_draft_config_sha256": "5b5668a00b26aaebd88c7e3d961f7d1cdef025867fee158dfccb84f29fd8caec",
+      "rotary_policy": "native frequencies with an extended FP8 draft position table"
     }
   },
   "serving": {
     "language_model_only": true,
-    "max_model_len": 253792,
+    "max_model_len": 327952,
     "max_num_seqs": 2,
-    "max_num_batched_tokens": 2048,
-    "kv_cache_memory_bytes": 10000000000,
+    "max_num_batched_tokens": 4096,
+    "kv_cache_memory_bytes": 12447383552,
     "kv_cache_dtype": "fp8",
     "attention_backend": "R4D",
     "mamba_cache_mode": "align",
@@ -562,7 +552,7 @@
       8
     ],
     "effective_chat_template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-    "cudagraph_mode": "PIECEWISE",
+    "cudagraph_mode": "FULL_AND_PIECEWISE",
     "target_verify_head": true,
     "draft_rerank": 80,
     "r4d_attention_fp8": 0
@@ -581,7 +571,7 @@
     "load_failure_policy": "fail",
     "content_hashes_cross_restart": true,
     "writes": "temporary-file-plus-atomic-rename",
-    "data_abi": "d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d",
+    "data_abi": "c950b8bd7955820b387d91f7d66d10749ce53dec3af78c5dc4c4b8fe751fda1d",
     "data_contract": {
       "schema": "qwen-radiance-release-data-v1",
       "image_digest": "sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc",
@@ -634,10 +624,10 @@
       },
       "serving": {
         "language_model_only": true,
-        "max_model_len": 253792,
+        "max_model_len": 327952,
         "max_num_seqs": 2,
-        "max_num_batched_tokens": 2048,
-        "kv_cache_memory_bytes": 10000000000,
+        "max_num_batched_tokens": 4096,
+        "kv_cache_memory_bytes": 12447383552,
         "kv_cache_dtype": "fp8",
         "attention_backend": "R4D",
         "mamba_cache_mode": "align",
@@ -652,7 +642,7 @@
           8
         ],
         "effective_chat_template_sha256": "6e1439c913ad7df4a966493ad70de7e7fc5a548d41bbe417c1571f766603629b",
-        "cudagraph_mode": "PIECEWISE",
+        "cudagraph_mode": "FULL_AND_PIECEWISE",
         "target_verify_head": true,
         "draft_rerank": 80,
         "r4d_attention_fp8": 0
@@ -663,6 +653,13 @@
         "decay_span_threshold": 128,
         "source_sha256": "174152c14314ab28e5f6ab7cb400b7d04f9a6d71df7534d4d4ad5b0fc46a1695",
         "binary_sha256": "8b04f207868a4e800f5865e248a0f18396c1ec75dfb1fbd3ed696db97d28243a"
+      },
+      "extended_context": {
+        "max_model_len": 327952,
+        "kv_cache_memory_bytes": 12447383552,
+        "draft_rotary_rows": 327960,
+        "original_draft_config_sha256": "5b5668a00b26aaebd88c7e3d961f7d1cdef025867fee158dfccb84f29fd8caec",
+        "rotary_policy": "native frequencies with an extended FP8 draft position table"
       },
       "optimized_arithmetic": {
         "repair_sha256": "64295d52dafeb4e9231157c925e329c78f07303cf67efc2cc7724d034b23c042",
@@ -707,7 +704,7 @@
         }
       }
     },
-    "previous_data_abi": "d5ca655a9121c9207dd638fa2ed927b8f15ad16ccc407e33c22c4f8cf10f396f",
+    "previous_data_abi": "321ef7a33cabc401982dc6e9b7817769ef061c63229de35421743bdaef43812e",
     "migration": "reuse compatible data across runtime commits; retire inactive incompatible chat snapshots; rebuild resumed chats after numerical or layout changes",
     "chat_snapshots": {
       "isolation": "session identity and compaction generation cache_salt",

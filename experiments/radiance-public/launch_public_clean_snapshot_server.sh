@@ -4,8 +4,8 @@ set -euo pipefail
 
 readonly launcher_root=/home/lewis/projects/r9700-radiance-1.0.16-20260913
 readonly cache_root=/home/lewis/.cache/qwen-radiance-public-clean-snapshot-v1
-readonly abi_id=9f928840bae1fa46eb93676faaedcd98c2acf56ca2168a33b2204fde036f4dc0
-readonly data_abi=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
+readonly abi_id=6ef0b2bcd28118a889499acc87a261665132ba9185ce75db24374f880ea391f5
+readonly data_abi=c950b8bd7955820b387d91f7d66d10749ce53dec3af78c5dc4c4b8fe751fda1d
 readonly snapshot_root="${cache_root}/snapshots/${abi_id}"
 readonly expected_patch_sha256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
 readonly model_id=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
@@ -44,6 +44,43 @@ while IFS=$'\t' read -r module expected; do
 		exit 1
 	}
 done < <(jq -r '(.runtime.chat_storage.modules + .runtime.release_files) | to_entries[] | [.key, .value] | @tsv' "$snapshot_root/abi.json")
+
+context_window=$(jq -er '.serving.max_model_len' "$snapshot_root/abi.json")
+kv_memory=$(jq -er '.serving.kv_cache_memory_bytes' "$snapshot_root/abi.json")
+bootstrap=/patches/bootstrap_radiance_release.py
+declare -a context_mounts=()
+if [[ $context_window =~ ^[0-9]{6}$ && $kv_memory =~ ^[0-9]{11}$ ]] &&
+	((context_window >= 319000 && context_window <= 344000)); then
+	draft_positions=$(jq -er '.runtime.extended_context.draft_rotary_rows' "$snapshot_root/abi.json")
+	draft_config_sha256=$(jq -er '.runtime.extended_context.original_draft_config_sha256' "$snapshot_root/abi.json")
+	draft_model=/home/lewis/models-radiance/Qwen3.8-27B-DFlash2-FP8
+	[[ $draft_positions == "$((context_window + 8))" && $draft_config_sha256 =~ ^[0-9a-f]{64}$ &&
+		$(sha256sum "$draft_model/config.json" | awk '{print $1}') == "$draft_config_sha256" ]] || {
+		printf 'extended context requires the pinned FP8 draft configuration\n' >&2
+		exit 1
+	}
+	draft_config_dir="$cache_root/runtime/$abi_id"
+	(
+		umask 077
+		mkdir -p "$draft_config_dir"
+	)
+	draft_config=$(mktemp "$draft_config_dir/draft-config.XXXXXXXX.json")
+	jq --argjson positions "$draft_positions" '.max_position_embeddings = $positions' \
+		"$draft_model/config.json" >"$draft_config"
+	# Each lifetime owns its temporary override and the final file is sealed by
+	# the original checkpoint hash and authenticated position count above.
+	mv -fT -- "$draft_config" "$draft_config_dir/fp8-draft-config.json"
+	site=/opt/vllm/lib/python3.12/site-packages
+	for module in host_embedding.py extended_context_prefill.py extended_context_worker.py; do
+		context_mounts+=(-v "$launcher_root/radiance-vllm-mxfp4/$module:$site/$module:ro")
+	done
+	context_mounts+=(-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 -e "QWEN_EXTENDED_CONTEXT_TOKENS=$context_window")
+	context_mounts+=(-v "$draft_config_dir/fp8-draft-config.json:/models/Qwen3.8-27B-DFlash2-FP8/config.json:ro")
+	bootstrap=/patches/extended_context_bootstrap.py
+elif [[ $context_window != 253792 || $kv_memory != 10000000000 ]]; then
+	printf 'unsupported serving context or KV allocation for this release\n' >&2
+	exit 1
+fi
 
 [[ -d $optimized_root && ! -L $optimized_root &&
 	$(sha256sum "$optimized_root/optimized-release.json" | awk '{print $1}') == $(jq -r '.optimized_d7.manifest_sha256' radiance-vllm-mxfp4/runtime-radiance-1.0.16.json) ]] || {
@@ -232,12 +269,13 @@ exec podman run --rm --pull=never --name "$container_name" --privileged --ipc=ho
 	-v "$optimized_root":/qualification:ro \
 	-v "$speed_root":/work:ro \
 	-v "$rocr_library":/opt/rocm/core-7.14/lib/libhsa-runtime64.so.1.21.0:ro \
-	--entrypoint /opt/vllm/bin/python "$image" /patches/bootstrap_radiance_release.py \
+	"${context_mounts[@]}" \
+	--entrypoint /opt/vllm/bin/python "$image" "$bootstrap" \
 	/models/Qwen3.8-27B-Uncensored-MXFP4-awq --served-model-name "$model_id" \
 	--host 0.0.0.0 --port "$port" --kv-cache-dtype fp8 --tensor-parallel-size 1 \
 	--shutdown-timeout 60 \
-	--gpu-memory-utilization 0.97 --kv-cache-memory 10000000000 \
-	--max-model-len 253792 --max-num-seqs 2 --max-num-batched-tokens 4096 \
+	--gpu-memory-utilization 0.97 --kv-cache-memory "$kv_memory" \
+	--max-model-len "$context_window" --max-num-seqs 2 --max-num-batched-tokens 4096 \
 	--attention-backend R4D --speculative-config "$speculative_config" \
 	--no-async-scheduling --language-model-only --skip-mm-profiling \
 	--scheduler-cls qwen_radiance_fair_scheduler.FairScheduler --additional-config "$fair_config" \

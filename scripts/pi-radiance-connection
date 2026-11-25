@@ -60,7 +60,7 @@ def publish(path, record):
         Path(temporary).unlink(missing_ok=True)
 
 
-def endpoint_ready(port):
+def endpoint_ready(port, context_window=None):
     # No redirects, proxies, conversation data, authentication headers or model
     # requests. The connection worker already authenticated the remote release.
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -89,6 +89,8 @@ def endpoint_ready(port):
                         or len(models) != 1
                         or not isinstance(models[0], dict)
                         or models[0].get("id") != MODEL
+                        or (context_window is not None
+                            and models[0].get("max_model_len") not in (None, context_window))
                     ):
                         return False
         except (OSError, ValueError, urllib.error.URLError):
@@ -267,7 +269,7 @@ def supervise(args):
                 lost = True
             if authenticated and now >= next_health:
                 health_failures = (
-                    0 if endpoint_ready(args.local_port) else health_failures + 1
+                    0 if endpoint_ready(args.local_port, args.context_window) else health_failures + 1
                 )
                 # Readiness failures block new requests without interrupting an
                 # existing response. Only an exited SSH worker loses ownership
@@ -325,6 +327,7 @@ def main():
     parser.add_argument("--launcher", type=Path, required=True)
     parser.add_argument("--remote", required=True)
     parser.add_argument("--local-port", type=int, required=True)
+    parser.add_argument("--context-window", type=int)
     args = parser.parse_args()
     if (
         not args.state.is_absolute()
@@ -332,6 +335,8 @@ def main():
         or not 1 <= args.local_port <= 65535
     ):
         parser.error("absolute paths and a valid local port are required")
+    if args.context_window is not None and args.context_window < 1:
+        parser.error("context window must be positive")
     supervise(args)
 
 

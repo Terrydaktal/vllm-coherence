@@ -56,3 +56,31 @@ tools/coherence serve --model /models/target --draft /models/dflash2-fp8 \
 
 Use a fresh state directory. Its snapshot and compiler cache identity includes
 both host embedding source files.
+
+## 327,952-token authenticated Pi lane
+
+The authenticated R9700 launcher binds the context limit to `extended-context.json`.
+It uses the original FP8 drafter and fixed-32 target attention with pinned host
+embeddings and a 12,447,383,552-byte KV allocation. The target retains its
+existing MRoPE table. The launcher verifies the original draft configuration
+and generates a read-only override with 327,960 rotary rows. Rotary frequencies
+stay the same.
+
+The launcher authenticates the frozen speed release before selecting the updated
+worker. That worker checks target and draft rotary capacity and extends both
+prefill admission guards using the same fixed-split HIP kernel. The sizing test
+keeps the previous profile's spare KV blocks and sets aside 168 MiB of GPU
+memory for allocation peaks. On one R9700, the 329,600-token profile dropped
+to 151 MiB free during the live checkpoint check, so the launcher uses the
+next lower allocation step.
+
+The 327,952-token production profile kept 259 MiB free across startup,
+cache handover, checkpoint generation and a 327,888-token cold prompt followed
+by 64 output tokens with speculative decoding. Graceful shutdown published
+all 407 expected blocks for the long request. The final startup and continuation
+check kept 206 MiB free.
+
+The authenticated profile uses a separate snapshot data namespace. Pi reads the
+limit from the matching manifest. Preserve the previous namespace for rollback
+before switching because the active engine collects incompatible namespaces.
+Restart existing Pi sessions to pick up the new capacity and authenticated lane.

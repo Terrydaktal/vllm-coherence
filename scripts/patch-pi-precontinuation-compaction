@@ -9,7 +9,7 @@ import os
 import stat
 import tempfile
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 
@@ -1033,7 +1033,17 @@ STREAM_COMPACTION_PATCHES = (
 """,
     ),
 )
-PATCHES += STREAM_COMPACTION_PATCHES
+def with_window_relative_stream_limit(patch: FilePatch) -> FilePatch:
+    old = b"        const threshold = Math.min(240000, window - reserve);\n"
+    if old not in patch.new:
+        return patch
+    # Maintain the existing 240K ceiling on 253,792-token and smaller lanes.
+    # Larger contexts retain the same 13,792-token checkpoint reserve.
+    new = b"        const threshold = Math.min(window - reserve, Math.max(240000, window - 13792));\n"
+    return replace(patch, new=patch.new.replace(old, new), legacy=(*patch.legacy, patch.new))
+
+
+PATCHES += tuple(with_window_relative_stream_limit(patch) for patch in STREAM_COMPACTION_PATCHES)
 
 
 def sha256(data: bytes) -> str:
@@ -1076,8 +1086,6 @@ def classify(data: bytes, patches: FilePatch | tuple[FilePatch, ...]) -> str:
     for patch in patches:
         old_count = candidate.count(patch.old)
         new_count = candidate.count(patch.new)
-        if old_count == 1 and new_count == 0:
-            continue
         # A replacement can retain its original statement as a suffix. Reverse
         # the entire unique replacement first; the complete preimage digest
         # below still rejects an extra original statement or any other change.
@@ -1089,6 +1097,8 @@ def classify(data: bytes, patches: FilePatch | tuple[FilePatch, ...]) -> str:
         if new_count == 0 and len(matching_legacy) == 1:
             candidate = candidate.replace(matching_legacy[0], patch.old)
             legacy_applied += 1
+            continue
+        if old_count == 1 and new_count == 0 and not matching_legacy:
             continue
         raise PatchError(f"file differs from both pinned patch states: {patch.relative_path}")
     if sha256(candidate) not in next(iter(preimages)):
@@ -1146,13 +1156,14 @@ def run(root: Path, *, apply: bool) -> None:
                 raise PatchError(f"pre-continuation compaction patch is absent: {path}")
             updated = data
             for patch in patches:
-                if patch.old in updated and patch.new not in updated:
-                    updated = updated.replace(patch.old, patch.new)
+                if patch.new in updated:
                     continue
                 for legacy in patch.legacy:
-                    if legacy in updated and patch.new not in updated:
+                    if legacy in updated:
                         updated = updated.replace(legacy, patch.new)
                         break
+                else:
+                    updated = updated.replace(patch.old, patch.new)
             atomic_write(path, updated, details)
             data, _ = stable_read(path)
             if classify(data, patches) != "patched":

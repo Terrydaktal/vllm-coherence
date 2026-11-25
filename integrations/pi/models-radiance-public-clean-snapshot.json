@@ -45,8 +45,8 @@
           "input": [
             "text"
           ],
-          "contextWindow": 253792,
-          "maxTokens": 253792,
+          "contextWindow": 327952,
+          "maxTokens": 327952,
           "samplingParams": {
             "temperature": 1.0,
             "top_p": 0.95,

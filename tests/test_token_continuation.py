@@ -12,6 +12,7 @@ from array import array
 import pytest
 
 from qwen_r9700_lab import radiance_token_continuation as continuation
+from qwen_r9700_lab import snapshot_geometry
 
 HISTORY = "1" * 64
 OUTPUT = "2" * 64
@@ -674,13 +675,43 @@ def test_private_root_environment_configuration(tmp_path, monkeypatch):
     assert record(ledger)
 
 
+def test_extended_context_journal_roundtrips_a_full_319k_history(tmp_path):
+    root = tmp_path / "private"
+    ledger = continuation.TokenContinuationLedger(root)
+    assert ledger.record_completed(
+        ledger.begin(identity()),
+        [10] * 318_999,
+        [99],
+        history_identity=HISTORY,
+        output_identity=OUTPUT,
+        message_count=3,
+        success=True,
+    )
+    reopened = continuation.TokenContinuationLedger(root)
+    saved = reopened.get_record(identity())
+    assert len(saved.tokens) == 319_000
+    assert saved.tokens[-1] == 99
+    assert reopened.health["retained_bytes"] == 319_000 * 4
+
+
+def test_extended_context_uses_existing_snapshot_page_and_hash_alignment():
+    old_boundary = snapshot_geometry.boundary_geometry(253_792)
+    new_boundary = snapshot_geometry.boundary_geometry(319_000)
+    assert old_boundary.replay_boundary_tokens == 253_776
+    assert new_boundary.replay_boundary_tokens == 318_992
+    assert new_boundary.full_attention_pages == 194
+    assert snapshot_geometry.boundary_geometry(332_896).full_attention_pages == 202
+    with pytest.raises(snapshot_geometry.SnapshotGeometryError, match="outside"):
+        snapshot_geometry.boundary_geometry(snapshot_geometry.MAX_PROMPT_TOKENS + 1)
+
+
 def test_no_record_and_bad_bounds_are_explicit():
     ledger = continuation.TokenContinuationLedger()
     assert propose(ledger).reason == "no_record"
     for kwargs in (
         {"max_chats": 9},
         {"max_pending": 9},
-        {"max_tokens": 300001},
+        {"max_tokens": continuation.MAX_TOKENS + 1},
         {"max_bytes": continuation.MAX_BYTES + 1},
     ):
         with pytest.raises(ValueError):

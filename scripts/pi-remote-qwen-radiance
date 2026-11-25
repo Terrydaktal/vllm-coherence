@@ -58,10 +58,10 @@ readonly PROGRAM=pi-remote-qwen-radiance
 readonly PI_VERSION=0.84.2
 readonly MODEL_ID=qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate
 readonly PI_MODEL="qwen-r9700/$MODEL_ID"
-readonly SNAPSHOT_ABI=9f928840bae1fa46eb93676faaedcd98c2acf56ca2168a33b2204fde036f4dc0
-readonly SNAPSHOT_DATA_ABI=d1d796bfb20355f97eaa4d31911647bd707543dc11d79224bd38fc59a1256d2d
+readonly SNAPSHOT_ABI=6ef0b2bcd28118a889499acc87a261665132ba9185ce75db24374f880ea391f5
+readonly SNAPSHOT_DATA_ABI=c950b8bd7955820b387d91f7d66d10749ce53dec3af78c5dc4c4b8fe751fda1d
 readonly SNAPSHOT_PATCH_SHA256=d3f67e813275bf8331e2d586e74c6e466307d39f0953396431c8c00c501259dd
-readonly REMOTE_LAUNCHER_SHA256=16af0ab8aa44082b0cd4c6bc97cfe06555df71e567a977304021f55c4143ed6e
+readonly REMOTE_LAUNCHER_SHA256=248a0195d2d76e71e696720862772e73a813cd642ac26a9f2b9b17e92c0145f5
 readonly IMAGE_ID=4adbeb66552ed76b329734ee5e830d79ed22961662b886e5029c9920d1bdb7cf
 readonly DEFAULT_REMOTE=lewis@ai
 readonly AUTO_LOCAL_PORT_FIRST=8012
@@ -533,6 +533,9 @@ done
 	die "project session history helper is missing or unsafe: $history_program"
 [[ $(sha256sum -- "$abi_source" | awk '{print $1}') == "$SNAPSHOT_ABI" ]] || die 'local snapshot ABI hash mismatch'
 [[ $(jq -r '.storage.data_abi' "$abi_source") == "$SNAPSHOT_DATA_ABI" ]] || die 'local snapshot data ABI mismatch'
+model_context_window=$(jq -er '.serving.max_model_len | select(type == "number" and floor == . and . > 0)' "$abi_source") ||
+	die 'invalid context window in pinned snapshot manifest'
+readonly model_context_window
 # Reuse runs only the already-deployed backend, not these development sources.
 # Its complete remote file manifest and live container are still authenticated
 # below. Starting a backend also requires matching local release sources.
@@ -571,7 +574,7 @@ done < <(jq -r '.runtime.release_files | to_entries[] | [.key, .value] | @tsv' "
 jq -e --arg model "$MODEL_ID" '
   [.providers["qwen-r9700"].models[] | select(.id == $model)] as $models
   | ($models | length) == 1
-  and $models[0].contextWindow == 253792
+  and ($models[0].contextWindow | type == "number" and floor == . and . > 0)
   and $models[0].maxTokens == $models[0].contextWindow
 	  and $models[0].samplingParams == {temperature: 1, top_p: 0.95, top_k: 40}
 ' "$models_source" >/dev/null || die 'local Pi model contract is invalid'
@@ -587,7 +590,7 @@ if ((dry_run)); then
 	fi
 	printf 'runtime ABI:  %s\n' "$SNAPSHOT_ABI"
 	printf 'snapshot ABI: %s\n' "$SNAPSHOT_DATA_ABI"
-	printf 'context:      253792\n'
+	printf 'context:      %s\n' "$model_context_window"
 	printf 'generation:   all remaining context; no separate output or thinking cap\n'
 	printf 'sampling:     public stochastic 1/0.95/40\n'
 	printf 'default tools: %s\n' "$(jq -r '.defaultTools | join(", ")' "$settings_source")"
@@ -642,7 +645,7 @@ authenticate_backend() {
 	backend_log=$(
 		ssh -T "$remote_host" /usr/bin/bash -s -- \
 			"$CONTAINER" "$MODEL_ID" "$IMAGE_ID" "$REMOTE_PORT" \
-			"$remote_launcher" "$REMOTE_CACHE" "$SNAPSHOT_DATA_ABI" "$reuse_existing" "$SNAPSHOT_ABI" \
+			"$remote_launcher" "$REMOTE_CACHE" "$SNAPSHOT_DATA_ABI" "$reuse_existing" "$SNAPSHOT_ABI" "$model_context_window" \
 			"$(jq -r '.runtime.memory_report.compatible_runtime_abis | join(",")' "$abi_source")" <<'REMOTE_BACKEND'
 set -euo pipefail
 container=$1
@@ -654,8 +657,9 @@ cache=$6
 abi=$7
 reuse=$8
 runtime_abi=$9
+context_window=${10}
 # SSH's command string can omit the final empty compatibility argument.
-compatible_runtime_abi=${10-}
+compatible_runtime_abi=${11-}
 
 validate_backend() {
     local inspect models args candidate runtime_matches=0
@@ -665,10 +669,15 @@ validate_backend() {
       length == 1 and .[0].State.Running == true
       and .[0].Image == $image and .[0].Name == $name
     ' <<<"$inspect" >/dev/null || return 1
+    jq -e --arg window "$context_window" '
+      .[0].Args as $args
+      | [$args | range(0; length) | select($args[.] == "--max-model-len") | $args[. + 1]] == [$window]
+        and all($args[]; startswith("--max-model-len=") | not)
+    ' <<<"$inspect" >/dev/null || return 1
     args=$(jq -r '.[0].Args | join(" ")' <<<"$inspect") || return 1
     # Diagnostic additions preserve the exact qualified predecessors while live.
     # SSH joins argv into a remote shell command. A space-separated list loses
-    # all but $10; commas preserve the complete authenticated list as one word.
+    # all but the first value; commas preserve the complete authenticated list as one word.
     IFS=, read -r -a compatible_runtime_abis <<<"$compatible_runtime_abi"
     for candidate in "$runtime_abi" "${compatible_runtime_abis[@]}"; do
         [[ $candidate =~ ^[0-9a-f]{64}$ ]] || continue
@@ -679,13 +688,15 @@ validate_backend() {
     done
     ((runtime_matches == 1)) || return 1
     [[ $args == *"--served-model-name $model"* \
-        && $args == *'--max-model-len 253792'* \
 		        && $args == *"/cache/snapshots/$abi/data"* \
 			        && $args == *'qwen_chat_fs'* \
         && $args == *'--kv-cache-dtype fp8'* \
         && $args == *'--speculative-config'* ]] || return 1
     models=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/v1/models") || return 1
-    jq -e --arg model "$model" '.data | length == 1 and .[0].id == $model' \
+    jq -e --arg model "$model" --argjson window "$context_window" '
+      .data | length == 1 and .[0].id == $model
+        and (.[0].max_model_len as $observed | $observed == null or $observed == $window)
+    ' \
         <<<"$models" >/dev/null
 }
 
@@ -747,8 +758,10 @@ if ((connection_worker == 0)); then
 		[[ -z ${config_stage:-} || ! -f $config_stage || -L $config_stage ]] || rm -f -- "$config_stage"
 	}
 	trap cleanup_stage EXIT
-	jq -S --arg base "http://127.0.0.1:$local_port/v1" \
-		'.providers["qwen-r9700"].baseUrl = $base' "$models_source" >"$config_stage" ||
+	jq -S --arg base "http://127.0.0.1:$local_port/v1" --arg model "$MODEL_ID" --argjson window "$model_context_window" '
+	  .providers["qwen-r9700"].baseUrl = $base
+	  | (.providers["qwen-r9700"].models[] | select(.id == $model)) |= (.contextWindow = $window | .maxTokens = $window)
+	' "$models_source" >"$config_stage" ||
 		die 'cannot render Pi model configuration'
 	if [[ -e $config_destination || -L $config_destination ]]; then
 		[[ -f $config_destination && ! -L $config_destination && $(stat -c '%u' -- "$config_destination") == "$(id -u)" ]] ||
@@ -818,8 +831,10 @@ connect_tunnel_and_warmup() {
 		sleep 0.2
 	done
 	models=$(curl -fsS --max-time 5 "http://127.0.0.1:$local_port/v1/models") || die 'local Radiance endpoint is unavailable'
-	jq -e --arg model "$MODEL_ID" '.data | length == 1 and .[0].id == $model' <<<"$models" >/dev/null ||
-		die 'local endpoint advertises the wrong model'
+	jq -e --arg model "$MODEL_ID" --argjson window "$model_context_window" '
+	  .data | length == 1 and .[0].id == $model
+	    and (.[0].max_model_len as $observed | $observed == null or $observed == $window)
+	' <<<"$models" >/dev/null || die 'local endpoint advertises the wrong model or context window'
 
 	# A health check only proves that the HTTP server is listening.  The first real
 	# DFlash request can still compile the model, Global-256 head and rejection
@@ -1050,7 +1065,7 @@ elif ((deferred_connection)); then
 	connection_state="$connection_directory/status.json"
 	"$connection_helper" --state "$connection_state" --parent-pid "$$" \
 		--launcher "${launcher_original_script:-${BASH_SOURCE[0]}}" --remote "$remote_host" \
-		--local-port "$local_port" {local_port_lock_fd}>&- >/dev/null 2>&1 &
+		--local-port "$local_port" --context-window "$model_context_window" {local_port_lock_fd}>&- >/dev/null 2>&1 &
 	connection_pid=$!
 	connection_start=$(awk '{print $22}' "/proc/$connection_pid/stat" 2>/dev/null || true)
 	cleanup() {

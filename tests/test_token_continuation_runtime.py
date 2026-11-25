@@ -14,6 +14,7 @@ import hashlib
 import importlib.util
 import json
 import unicodedata
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -855,6 +856,38 @@ def test_compaction_preserves_generated_history_instead_of_reencoding(setup_runt
         "canonical_tokens": None,
     }
     assert all("P" not in text for text in tokenizer.encoded_texts)
+    assert not ledger._active
+
+
+@pytest.mark.parametrize(
+    ("model_limit", "expectation"),
+    [
+        (319_000, nullcontext()),
+        (253_792, pytest.raises(ValueError, match="invalid compaction prompt tokens")),
+    ],
+)
+def test_compaction_supports_319k_but_enforces_the_engine_context(
+    setup_runtime, model_limit, expectation
+):
+    ledger, _ = setup_runtime
+    tokenizer, req = compaction_setup()
+    req.messages[0]["content"] = "changed to require canonical encoding"
+    tokenizer.reject_history_encoding = False
+    serving = CompactionServing(tokenizer)
+    serving.model_config.max_model_len = model_limit
+    render_chat_request = serving.render_chat_request
+
+    async def long_synthetic_prompt(request):
+        messages, engine_inputs = await render_chat_request(request)
+        prompt = engine_inputs[0]["prompt_token_ids"]
+        return messages, inputs([42] * 318_900 + prompt)
+
+    serving.render_chat_request = long_synthetic_prompt
+    with expectation:
+        result = asyncio.run(
+            runtime.prepare_compaction(serving, req, "checkpoint", 319_000)
+        )
+        assert 318_900 < len(result["prompt"]) <= 319_000
     assert not ledger._active
 
 

@@ -113,8 +113,8 @@
     "src/qwen_r9700_lab/radiance_pinned_memory.py": "2cae967d6fbd835faacf4047e582d9f98f8417b6aa72834d14426d1451eea334",
     "src/qwen_r9700_lab/radiance_kfd_trace.py": "1e9d6e145f4226dd8dd7d2195d2c95f4b2b45260fdf01adecf8cfbaf0bed82f2",
     "src/qwen_r9700_lab/radiance_request_timeline.py": "1a9defcec05132dfafbe06d07b66a43e29124b2f15fad73d01749466e6405c42",
-    "src/qwen_r9700_lab/radiance_token_continuation.py": "9b8ba79af0ec9dd6f979b6e93591977b1eeabb9b22c2e735270e3565733b2b72",
-    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py": "88e4e0c76938f36e68d90072b210aa62de3ec1bb49d4f65e5e54df19615a9d76"
+    "src/qwen_r9700_lab/radiance_token_continuation.py": "e8443df1550c1116d933e1022c269cd46725c399982dcbf61809a6ca419d8542",
+    "src/qwen_r9700_lab/radiance_token_continuation_runtime.py": "5899e8e92b052a65776c2ad592a5fe63bf12e446d2591e17dcaf84b82c7f6757"
   },
   "support_files": {
     "support/libhsa-runtime64.so.1.21.0": "38ec92308ff664afec6b7e58299c2b487c5dd849f957633b26fd959cb631bbda"

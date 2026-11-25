@@ -162,9 +162,10 @@ export function prepareContinuity(event, ctx) {
   const tail = selectProtectedTail(selected.filter((entry) => entry.type === "message"), { tokenBudget, estimateTokens: estimate });
   const stream = event.streamCompaction;
   const newest = selected.filter((entry) => entry.type === "message").at(-1)?.message;
+  const maximumStreamThreshold = Math.min(window, Math.max(240000, window - 13792));
   const streamCompaction = stream?.contract === "radiance-stream-compaction-v1" &&
     Number.isSafeInteger(stream.tokens) && Number.isSafeInteger(stream.threshold) &&
-    stream.threshold > 0 && stream.threshold <= Math.min(240000, window) && stream.tokens >= stream.threshold &&
+    stream.threshold > 0 && stream.threshold <= maximumStreamThreshold && stream.tokens >= stream.threshold &&
     typeof stream.completed === "boolean" && Number.isSafeInteger(stream.interruptedMessageTimestamp) &&
     stream.interruptedMessageTimestamp === newest?.timestamp &&
     ["aborted", "stop"].includes(newest?.stopReason)

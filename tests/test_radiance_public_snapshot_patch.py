@@ -433,61 +433,10 @@ def test_chat_storage_abi_authenticates_every_runtime_module_and_launcher():
     for name, expected in manifest["runtime"].get("release_files", {}).items():
         assert hashlib.sha256((base / name).read_bytes()).hexdigest() == expected
     assert manifest["storage"]["data_abi"] != manifest["storage"]["previous_data_abi"]
-    assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == [
-        # Tool-turn replay repairs retain the predecessor's numerical/data ABI.
-        "68c6d626b6f2891f26dc394b20fff70c8ea80cd6885e2352d3c3cf37134fec40",
-        # Text-render continuation routing preserves the exact numerical state.
-        "a94e7040ce83d8e3567e3cc24d3b74cc782ef987401016c8b7769940083e7411",
-        # Suffix-only encoding changes request construction, not saved GPU state.
-        "7fc9b5c6083ce353eaf12535bca550579607155cb7c930a961661e3cb1080cb1",
-        # Renderer executor callback repair preserves numerical/state semantics.
-        "ab9f9a025c2af425aef38fffbffe54e71d043e53444558bbdbecef0f86d2c7e5",
-        # Preserve exact state validation across the generated-token adapter update.
-        "b40251cf18272ca6e89591708f49d32a75580544e006da246855049f8aa3c1e9",
-        # Checkpoint page-cache residency changes do not alter model arithmetic.
-        "3b83740b77e6c13a17f97a65e0e81c8ef57821f374c96f8b2d82d96e38d3765a",
-        # Durable-file cache advice changes residency, not serialized state.
-        "463acc0e77210aca656099864cda189a06d320bb37f9f67fa5d9caebab881c6c",
-        # The prefix observer and asynchronous prefill markers preserve the
-        # deployed numerical kernels and serialized cache contract.
-        "d7336c4e9998c8f4b6e4c0b2b7fd698c6acd12c37c33576c5a088e1eca0f402e",
-        # Storage retention changes preserve the deployed numerical/data ABI.
-        "09a6d7fba175d2189ac6c84fac3d18f236835fe0934cd58dd7242cf7122ad4b0",
-        "a0fbc562276e24fcce8ddf48d71634920ec722e27dedeb3b1e78995a3da34832",
-        # The current arithmetic remains deployed while the M1 candidate is
-        # qualified separately. Its later deployment must also change data_abi.
-        "2fcc0356f7108572673b38e95c067cfa6c657b0ae0229b3a32ce256f76a6ad01",
-        # Increasing residency to one GPU bank and two RAM banks preserves
-        # the predecessor's arithmetic and snapshot data contract.
-        "cb8911a44a32cc8d0dd7d8d095ab79ae050a794c0a7e353be9da8375a30def3c",
-        # Cache-job diagnostics change observation only, retaining this live
-        # predecessor's arithmetic, cache contents and serialized format.
-        "9b04fd3be5e3619897412ad166d1d9bd5d2d9c4cf062e1ef21ef9bcad3bd3247",
-        # Thread counters and asynchronous generation HIP markers preserve
-        # the initial cache-job recorder's arithmetic and snapshot data format.
-        "2a9b3a0b1f4a77cce74de1d2d22b17e2d915cfe470e1ad4cfd9918c9e9baf801",
-        # First-use allocation/copy/wait spans measure existing operations only;
-        # the active generation-diagnostics runtime remains compatible.
-        "cb9e0a3223236031c4805b99f6d40558bad223738d4d4010a5537902ce37aea5",
-        # Reuse rejection diagnostics retain the preceding staged handover
-        # timing runtime's arithmetic and serialized snapshot contract.
-        "f014330cebc8c71d156dbb2ea7ac17fa5ecea14e51c6e2be481a35c0c7449586",
-        # Exact-size startup handover banks preserve all cache arithmetic and
-        # the serialized data ABI from the preceding live diagnostics release.
-        "404e7eb3c7c3c6ed105c9860c8502c4cee5928057713aa3f97f4da13b55fed7a",
-        # The opt-in KFD reader performs no GPU work and preserves the exact
-        # pinned-bank release's arithmetic and snapshot data format.
-        "a1630fae05ab4f9dd6ca6a7dcdfa55c1feaf9d36fdbb9bbb16229709c099f6b4",
-        # Process-wide THP protection changes startup host memory policy only;
-        # the previous queue-diagnostics release retains its numerical/data ABI.
-        "d288b4eda01de15354dbcb120131f2aada496762fe0397d35fbee4be84d26777",
-        # Completing the generated authentication metadata leaves the already
-        # deployed process-policy code and snapshot numerical contract unchanged.
-        "255eba530476c64d41e8e6e315ce00340ede0da2ea0855b3b3016cc00574dede",
-        # Checkpoint preparation shares the ordinary authenticated token journal;
-        # it does not change arithmetic or the existing serialized snapshot data.
-        "619d117d8ae63548c5e471ef4f12e28189bec4b737d782f97aeff82d9901f9b6",
-    ]
+    assert manifest["runtime"]["memory_report"]["compatible_runtime_abis"] == []
+    extended = manifest["runtime"]["extended_context"]
+    assert manifest["serving"]["max_model_len"] == extended["max_model_len"]
+    assert manifest["storage"]["data_contract"]["extended_context"] == extended
     for name, expected in manifest["runtime"]["chat_storage"]["modules"].items():
         source = (
             REPO_ROOT / "src/qwen_r9700_lab"
@@ -552,12 +501,15 @@ def test_container_start_preserves_native_caches_by_runtime_identity(tmp_path, r
         "fair_config": "{}",
         "kv_transfer_config": "{}",
         "speculative_config": "{}",
+        "context_window": "319000",
+        "kv_memory": "12200000000",
+        "bootstrap": "/patches/extended_context_bootstrap.py",
     }
     script = "set -eu\n" + "\n".join(
         f"{key}={shlex.quote(value)}" for key, value in variables.items()
     )
     result = subprocess.run(
-        ["bash", "-c", script + "\nrelease_environment=()\n" + command],
+        ["bash", "-c", script + "\nrelease_environment=()\ncontext_mounts=()\n" + command],
         capture_output=True,
         text=True,
         check=True,
@@ -576,6 +528,8 @@ def test_container_start_preserves_native_caches_by_runtime_identity(tmp_path, r
     mounts = [args[i + 1] for i, arg in enumerate(args) if arg == "-v"]
     assert f"{variables['cache_root']}:/cache" in mounts
     assert "--rm" in args
+    assert args[args.index("--max-model-len") + 1] == "319000"
+    assert args[args.index("--kv-cache-memory") + 1] == "12200000000"
 
 
 def test_snapshot_states_survive_both_mamba_release_paths_without_accumulating():

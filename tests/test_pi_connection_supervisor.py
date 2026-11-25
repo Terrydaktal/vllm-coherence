@@ -26,6 +26,8 @@ loader.exec_module(supervisor)
     "models, expected",
     [
         ({"data": [{"id": supervisor.MODEL}]}, True),
+        ({"data": [{"id": supervisor.MODEL, "max_model_len": 319000}]}, True),
+        ({"data": [{"id": supervisor.MODEL, "max_model_len": 253792}]}, False),
         ({"data": [{"id": "wrong-model"}]}, False),
         ({"data": [{"id": supervisor.MODEL}, {"id": "extra"}]}, False),
         ({"data": None}, False),
@@ -50,7 +52,7 @@ def test_ready_requires_exact_model_contract(models, expected):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        assert supervisor.endpoint_ready(server.server_port) is expected
+        assert supervisor.endpoint_ready(server.server_port, 319000) is expected
     finally:
         server.shutdown()
         server.server_close()

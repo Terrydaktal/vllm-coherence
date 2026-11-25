@@ -93,6 +93,7 @@ def preflight_fixture(tmp_path):
         json.dumps(
             {
                 "storage": {"data_abi": "a" * 64},
+                "serving": {"max_model_len": 319000},
                 "runtime": {
                     "chat_storage": {
                         "modules": {
@@ -306,6 +307,7 @@ def test_invalid_module_inventory_fails_before_remote_call(tmp_path, invalid):
     "case",
     [
         "current",
+        "larger_context",
         "first_compatible",
         "last_compatible",
         "empty_compatible",
@@ -313,6 +315,8 @@ def test_invalid_module_inventory_fails_before_remote_call(tmp_path, invalid):
         "wrong_image",
         "wrong_data_abi",
         "wrong_model",
+        "wrong_context",
+        "wrong_reported_context",
         "stopped",
     ],
 )
@@ -320,6 +324,7 @@ def test_actual_remote_authentication_keeps_complete_compatibility_list_over_ssh
     tmp_path, case
 ):
     current, first, last, data_abi = (c * 64 for c in ("a", "b", "c", "d"))
+    window = "340000" if case == "larger_context" else "319000"
     abi = tmp_path / "abi.json"
     compatible = [] if case == "empty_compatible" else [first, last]
     abi.write_text(
@@ -350,7 +355,7 @@ def test_actual_remote_authentication_keeps_complete_compatibility_list_over_ssh
                         "--served-model-name",
                         model,
                         "--max-model-len",
-                        "253792",
+                        "253792" if case == "wrong_context" else window,
                         f"/cache/snapshots/{lane_abi}/data",
                         "qwen_chat_fs",
                         "--kv-cache-dtype",
@@ -363,7 +368,10 @@ def test_actual_remote_authentication_keeps_complete_compatibility_list_over_ssh
         )
     )
     models = tmp_path / "models.json"
-    models.write_text(json.dumps({"data": [{"id": "synthetic-model"}]}))
+    model_record = {"id": "synthetic-model"}
+    if case == "wrong_reported_context":
+        model_record["max_model_len"] = 253792
+    models.write_text(json.dumps({"data": [model_record]}))
     variables = {
         "CONTAINER": "test-container",
         "MODEL_ID": "synthetic-model",
@@ -374,6 +382,7 @@ def test_actual_remote_authentication_keeps_complete_compatibility_list_over_ssh
         "SNAPSHOT_DATA_ABI": data_abi,
         "reuse_existing": "1",
         "SNAPSHOT_ABI": current,
+        "model_context_window": window,
         "abi_source": str(abi),
         "remote_host": "fixture-host",
     }
@@ -422,6 +431,7 @@ die() {{ printf '%s\\n' "$*" >&2; exit 2; }}
     )
     accepted = case in {
         "current",
+        "larger_context",
         "first_compatible",
         "last_compatible",
         "empty_compatible",

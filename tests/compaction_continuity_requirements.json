@@ -123,7 +123,7 @@
         "test_stream_compaction_sdk.mjs",
         "test_patch_pi_precontinuation_compaction.py"
       ],
-      "property": "Fresh same-model Qwen usage triggers at the earlier of 240000 and context window minus configured reserve; disabled, malformed, absent and stale usage do not interrupt"
+      "property": "Fresh same-model Qwen usage triggers at the earlier of context window minus configured reserve and the lane's ceiling (240000 at 253792 or below; otherwise context window minus 13792). Disabled, malformed, absent and stale usage do not interrupt"
     },
     {
       "id": "interrupted-turn-archive",

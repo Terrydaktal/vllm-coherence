@@ -142,6 +142,10 @@ export async function requireRadianceConnection(model, { signal, fetcher = fetch
       if (!Array.isArray(models?.data) || models.data.length !== 1 || models.data[0]?.id !== model.id) {
         throw unavailable("model_mismatch", "the expected backend model was not returned");
       }
+      const observedWindow = models.data[0].max_model_len;
+      if (observedWindow != null && Number.isSafeInteger(model.contextWindow) && observedWindow !== model.contextWindow) {
+        throw unavailable("model_context_mismatch", "the backend context window changed; reopen Pi to load the pinned model profile");
+      }
       // A stop or supervisor replacement during probes invalidates admission.
       stage = "receipt";
       const current = await readConnection({ path, now });
