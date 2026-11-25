@@ -42,3 +42,17 @@ bundle, package it, update the pinned release manifest, then publish source and
 archive together. Never overwrite an existing versioned asset. A changed compiler,
 source, model, state layout or arithmetic contract needs a new identity. CPU checks
 of portability tooling do not extend native evidence to other hardware/profiles.
+
+## Experimental host embedding storage
+
+The opt-in worker maps the 2.37 GiB BF16 input embedding table from pinned host
+memory on a single gfx1201 GPU. Startup verifies the mapped bytes and checks
+that the FP8 drafter shares the same table. The configured KV pool stays fixed.
+
+```sh
+tools/coherence serve --model /models/target --draft /models/dflash2-fp8 \
+  --state /path/to/host-embedding-state --port 18081 --experimental-host-embedding
+```
+
+Use a fresh state directory. Its snapshot and compiler cache identity includes
+both host embedding source files.

@@ -22,6 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "experiments/radiance-public"
 MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate"
+EXPERIMENTAL_WORKER = "experimental_runtime_worker.py"
+HOST_EMBEDDING = "host_embedding.py"
 HELP = """NAME
     coherence - pinned inference, persistent sessions and conformance tooling
 
@@ -29,6 +31,7 @@ SYNOPSIS
     tools/coherence doctor
     tools/coherence prepare [--archive PATH] [--state PATH]
     tools/coherence serve --model PATH --draft PATH [--dry-run] [--state PATH]
+    tools/coherence serve --model PATH --draft PATH --experimental-host-embedding --state PATH [--dry-run]
     tools/coherence pi [--ssh HOST] [--remote-state PATH] [--state PATH] [-- PI_OPTIONS]
     tools/coherence cache [--state PATH] [-- CACHE_OPTIONS]
     tools/coherence verify-runtime [--state PATH]
@@ -36,7 +39,7 @@ SYNOPSIS
 DESCRIPTION
     Coherence is a standalone downstream fork of Radiance. Preparation verifies
     the release archive and every payload file. Serving uses the pinned image,
-    repaired D7 arithmetic, global-256 target head, GGZ14 performance backports,
+    repaired D7 arithmetic, Global-512 target head, GGZ14 performance backports,
     persistent compressed snapshots and response-boundary scheduling.
 
 OPTIONS
@@ -44,6 +47,9 @@ OPTIONS
     --archive PATH     Use an already downloaded, checksum-verified release archive.
     --model PATH       Qwen3.8-27B-Uncensored-MXFP4-awq directory.
     --draft PATH       Corresponding Qwen3.8-27B-DFlash2-FP8 directory.
+    --experimental-host-embedding
+                       Read the input embedding table from pinned host memory.
+                       Requires a dedicated, explicit --state directory.
     --engine NAME      podman (the supported container runtime).
     --port PORT        Local API port (default: 8080).
     --head MODE        global512 (default), global256 or full-bf16.
@@ -222,12 +228,58 @@ def verify_runtime(state):
     return manifest
 
 
+def state_connection(state):
+    connection = state / "connection.json"
+    if connection.is_symlink():
+        raise ValueError("state connection must not be a symlink")
+    if not connection.exists():
+        return None
+    value = read_json(connection)
+    if not isinstance(value, dict):
+        raise TypeError("invalid state connection")
+    if any(name.startswith("experimental_") for name in value):
+        raise ValueError("this state belongs to an unsupported experimental runtime")
+    return value
+
+
+def host_embedding_enabled(connection):
+    experiments = connection.get("memory_experiments", [])
+    if experiments == ["host_embedding"]:
+        return True
+    if experiments == []:
+        return False
+    raise ValueError("this state belongs to an unsupported memory experiment")
+
+
+def check_host_embedding_state(state, enabled):
+    existing = state_connection(state)
+    if existing is not None and host_embedding_enabled(existing) != enabled:
+        raise ValueError("use a separate state directory for host embedding")
+    if enabled:
+        root, default = state.resolve(), state_path().resolve()
+        if root.is_relative_to(default) or default.is_relative_to(root):
+            raise ValueError("host embedding requires a state directory separate from the default")
+
+
+def snapshot_identity(spec, host_embedding=False):
+    binding = {
+        "release": spec["sha256"],
+        "integration": {n: digest(ROOT / n) for n in spec["patch_files"]},
+        "schema": "urn:coherence:snapshot:v1",
+    }
+    if host_embedding:
+        binding["memory_experiments"] = {"host_embedding": digest(RUNTIME / HOST_EMBEDDING)}
+        binding["experimental_runtime_worker"] = digest(ROOT / "tools" / EXPERIMENTAL_WORKER)
+    return hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
+
+
 def prepare(state, archive=None, head="global512"):
     with deployment_lock(state):
-        return _prepare(state, archive, head)
+        existing = state_connection(state) or {}
+        return _prepare(state, archive, head, host_embedding_enabled(existing))
 
 
-def _prepare(state, archive=None, head="global512"):
+def _prepare(state, archive=None, head="global512", host_embedding=False):
     private_directory(state)
     spec = release()
     runtime = state / "runtime"
@@ -304,28 +356,16 @@ def _prepare(state, archive=None, head="global512"):
     write_json(patches / "runtime-radiance-1.0.16.json", profile)
     # A separate namespace for this exported release; old user cache is never
     # reinterpreted under a new state/arithmetic contract.
-    identity = hashlib.sha256(
-        json.dumps(
-            {
-                "release": spec["sha256"],
-                "integration": {n: digest(ROOT / n) for n in names},
-                "schema": "urn:coherence:snapshot:v1",
-            },
-            sort_keys=True,
-        ).encode()
-    ).hexdigest()
+    identity = snapshot_identity(spec, host_embedding)
     cache = state / "cache"
     private_directory(cache)
     data = cache / "snapshots" / identity / "data"
     data.mkdir(mode=0o700, parents=True, exist_ok=True)
-    write_json(
-        data.parent / "abi.json",
-        {
-            "schema": "urn:coherence:snapshot:v1",
-            "storage": {"data_abi": identity},
-            "release": spec["sha256"],
-        },
-    )
+    abi_manifest = {
+        "schema": "urn:coherence:snapshot:v1",
+        "storage": {"data_abi": identity},
+        "release": spec["sha256"],
+    }
     connection = {
         "abi": identity,
         "cache_root": str(cache),
@@ -334,6 +374,10 @@ def _prepare(state, archive=None, head="global512"):
         "model": MODEL,
         "head": head,
     }
+    if host_embedding:
+        abi_manifest["memory_experiments"] = ["host_embedding"]
+        connection["memory_experiments"] = ["host_embedding"]
+    write_json(data.parent / "abi.json", abi_manifest)
     existing = state / "connection.json"
     if existing.exists():
         connection["port"] = read_json(existing).get("port", 8080)
@@ -384,6 +428,9 @@ def serving_command(args, connection):
     environment["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"] = (
         args.head.removeprefix("global") if args.head.startswith("global") else "512"
     )
+    host_embedding = host_embedding_enabled(connection)
+    if host_embedding:
+        environment["AITER_JIT_DIR"] = f"/cache/runtime/{abi}/aiter-gfx1201"
     transfer = {
         "kv_connector": "OffloadingConnector",
         "engine_id": f"coherence-{abi[:16]}",
@@ -462,6 +509,13 @@ def serving_command(args, connection):
         "-v",
         f"{state}/runtime/support/libhsa-runtime64.so.1.21.0:/opt/rocm/core-7.14/lib/libhsa-runtime64.so.1.21.0:ro",
     ]
+    worker = "optimized_d7_worker.OptimizedWorker"
+    if host_embedding:
+        worker = "experimental_runtime_worker.ExperimentalRuntimeWorker"
+        for source in (ROOT / "tools" / EXPERIMENTAL_WORKER, RUNTIME / HOST_EMBEDDING):
+            if ":" in str(source) or "\n" in str(source):
+                raise ValueError("invalid host embedding mount path")
+            command += ["-v", f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro"]
     command += [
         "--entrypoint",
         "/opt/vllm/bin/python",
@@ -506,7 +560,7 @@ def serving_command(args, connection):
         "--additional-config",
         json.dumps(fair),
         "--worker-cls",
-        "optimized_d7_worker.OptimizedWorker",
+        worker,
         "--kv-transfer-config",
         json.dumps(transfer),
         "--middleware",
@@ -549,6 +603,7 @@ def main(argv=None):
     )
     parser.add_argument("--model")
     parser.add_argument("--draft")
+    parser.add_argument("--experimental-host-embedding", action="store_true")
     parser.add_argument("--engine", choices=("podman",), default="podman")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--dry-run", action="store_true")
@@ -565,6 +620,11 @@ def main(argv=None):
         parser.error("unexpected arguments: " + shlex.join(remainder))
     try:
         state = state_path(args.state)
+        host_embedding = args.experimental_host_embedding
+        if host_embedding and (
+            args.command != "serve" or not args.state
+        ):
+            raise ValueError("host embedding requires serve and an explicit --state directory")
         if args.command == "doctor":
             print(
                 json.dumps(
@@ -603,8 +663,13 @@ def main(argv=None):
         elif args.command == "serve":
             if not args.model or not args.draft or not 1 <= args.port <= 65535:
                 raise ValueError("serve requires --model, --draft and a valid --port")
+            check_host_embedding_state(state, host_embedding)
             if args.dry_run:
-                print(shlex.join(serving_command(args, {"abi": "DRY_RUN_ABI"})))
+                connection = {"abi": "DRY_RUN_ABI"}
+                if host_embedding:
+                    connection["abi"] = snapshot_identity(release(), host_embedding=True)
+                    connection["memory_experiments"] = ["host_embedding"]
+                print(shlex.join(serving_command(args, connection)))
                 return 0
             for model in (args.model, args.draft):
                 if not (Path(model).expanduser() / "config.json").is_file():
@@ -619,6 +684,7 @@ def main(argv=None):
                     "at least 18 GiB free /dev/shm is required for the RAM tier"
                 )
             with deployment_lock(state):
+                check_host_embedding_state(state, host_embedding)
                 existing = subprocess.run(
                     [args.engine, "container", "exists", "vllm-coherence"], check=False
                 )
@@ -626,7 +692,7 @@ def main(argv=None):
                     raise ValueError(
                         "cannot start while the Coherence container exists or container inspection fails"
                     )
-                connection = _prepare(state, args.archive, args.head)
+                connection = _prepare(state, args.archive, args.head, host_embedding)
                 connection["port"] = args.port
                 write_json(state / "connection.json", connection)
                 command = serving_command(args, connection)
@@ -660,7 +726,7 @@ def main(argv=None):
                 "QWEN_RADIANCE_GPU_TEMPERATURE_HELPER": str(ROOT / "scripts/qwen-radiance-gpu-temperature"),
             })
         return 0
-    except (OSError, ValueError, KeyError, tarfile.TarError) as error:
+    except (OSError, ValueError, TypeError, KeyError, tarfile.TarError) as error:
         print(f"coherence: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

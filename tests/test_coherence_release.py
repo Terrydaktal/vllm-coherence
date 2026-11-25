@@ -1,5 +1,6 @@
 import io
 import json
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -55,10 +56,9 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path, head):
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    import shlex
-
     command = shlex.split(result.stdout)
     assert "--enforce-eager" not in command
+    assert command[command.index("--worker-cls") + 1] == "optimized_d7_worker.OptimizedWorker"
     assert command[command.index("--host") + 1] == "127.0.0.1"
     assert "TORCHINDUCTOR_EMULATE_PRECISION_CASTS=1" in command
     assert f"RADIANCE_VERIFY_HEAD={0 if head == 'full-bf16' else 1}" in command
@@ -81,6 +81,41 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path, head):
     assert json.loads(command[command.index("--additional-config") + 1])["qwen_fair"][
         "max_cached_chats"
     ] == 3
+
+
+def test_host_embedding_uses_its_own_worker_cache_and_state(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
+    state = tmp_path / "candidate"
+    args = ["serve", "--dry-run", "--model", "/models/target", "--draft", "/models/draft"]
+    flag = "--experimental-host-embedding"
+    assert cli.main([*args, flag]) == 2
+    assert "explicit --state" in capsys.readouterr().err
+    assert cli.main([*args, flag, "--state", str(cli.state_path())]) == 2
+    assert "separate from the default" in capsys.readouterr().err
+
+    args.extend(["--state", str(state)])
+    assert cli.main([*args, flag]) == 0
+    command = shlex.split(capsys.readouterr().out)
+    assert command[command.index("--worker-cls") + 1] == (
+        "experimental_runtime_worker.ExperimentalRuntimeWorker"
+    )
+    assert command[command.index("--max-num-seqs") + 1] == "2"
+    for source in (ROOT / "tools" / cli.EXPERIMENTAL_WORKER, cli.RUNTIME / cli.HOST_EMBEDDING):
+        assert f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro" in command
+
+    release = cli.release()
+    abi = cli.snapshot_identity(release, host_embedding=True)
+    assert abi != cli.snapshot_identity(release)
+    assert f"QWEN_RADIANCE_CACHE_ABI={abi}" in command
+    assert f"TRITON_CACHE_DIR=/cache/runtime/{abi}/triton" in command
+    assert f"AITER_JIT_DIR=/cache/runtime/{abi}/aiter-gfx1201" in command
+    assert not state.exists()
+
+    state.mkdir()
+    cli.write_json(state / "connection.json", {"memory_experiments": ["host_embedding"]})
+    assert cli.main(args) == 2
+    assert "separate state directory" in capsys.readouterr().err
+    assert cli.main([*args, flag]) == 0
 
 
 @pytest.mark.parametrize(
