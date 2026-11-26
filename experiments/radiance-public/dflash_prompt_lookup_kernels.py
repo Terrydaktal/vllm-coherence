@@ -63,6 +63,7 @@ def apply(
     position_bits: tl.constexpr,
     block_count: tl.constexpr,
     block_k: tl.constexpr,
+    hit=None,
 ):
     indices = tl.arange(0, block_count)
     key = tl.max(tl.load(best + indices, mask=indices < blocks, other=0), 0)
@@ -74,6 +75,8 @@ def apply(
     warm &= new_tokens - 1 >= hot
     use = (key >> position_bits) >= tl.where(warm, stay, enter)
     tl.store(previous, tl.where(use, length, -1))
+    if hit is not None:
+        tl.store(hit, use.to(tl.int32))
     tl.store(stats, tl.load(stats) + 1)
     tl.store(stats + 2, tl.load(stats + 2) + warm.to(tl.int32))
     if use:

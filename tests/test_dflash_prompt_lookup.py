@@ -46,6 +46,8 @@ def test_entire_coupled_proposal_and_probability_cache_replaced():
     logits[:, :, 5] = 8.0
     cached = torch.tensor([3, 4, 5] * 14, dtype=torch.int64).reshape(2, 7, 3)
 
+    hit = torch.empty_like(previous)
+
     def run(window, same_request=0):
         scan[(5,)](
             rows, rows.stride(0), length, slot, sampled, best, window, 7, 24, 20, 16
@@ -74,13 +76,16 @@ def test_entire_coupled_proposal_and_probability_cache_replaced():
             20,
             8,
             4,
+            hit,
             num_warps=4,
         )
 
     run(100)
+    assert hit.item() == 0
     assert proposals.tolist() == [[3] * 7]
     assert stats.tolist() == [1, 0, 0]
     run(40)
+    assert hit.item() == 1
     assert proposals.tolist() == [[5] * 7]
     assert cached[1].tolist() == [[3, 4, 5]] * 7
     assert torch.isfinite(logits[1]).sum().item() == 7
@@ -101,6 +106,7 @@ def test_entire_coupled_proposal_and_probability_cache_replaced():
     sampled.zero_()
     proposals.fill_(9)
     run(40)
+    assert hit.item() == 0
     assert proposals.tolist() == [[9] * 7]
     assert stats.tolist() == [4, 2, 0]
 
