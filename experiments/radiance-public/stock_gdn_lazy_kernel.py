@@ -220,36 +220,47 @@ def materialize_align(
     group = tl.load(group_indices + layer)
     bt = tl.load(bt_ptrs + group).to(tl.pointer_type(tl.int32)) + batch * bt_stride
     base = tl.load(bt + base_col).to(tl.int64)
-    stash_slot = tl.load(bt + base_col + 1).to(tl.int64)
     destination = tl.load(bt + dest_col).to(tl.int64)
-    if base <= 0 or stash_slot <= 0 or destination <= 0:
+    if base <= 0 or destination <= 0:
         tl.atomic_or(errors, 16)
         tl.device_assert(False, "lazy GDN align copy has a null slot")
         return
     state = tl.multiple_of(tl.load(state_ptrs + layer).to(tl.pointer_type(tl.float32)), 16)
     stride = tl.multiple_of(tl.load(slot_strides + layer), 128)
-    alogs = tl.load(alog_ptrs + layer).to(tl.pointer_type(tl.float32))
-    biases = tl.load(bias_ptrs + layer).to(tl.pointer_type(tl.bfloat16))
-    alog, bias = tl.load(alogs + head), tl.load(biases + head).to(tl.float32)
-    stash = (state + stash_slot * stride + head * 16384).to(tl.pointer_type(tl.bfloat16))
-    stash += part * 8192
-    valid = tl.load(stash.to(tl.pointer_type(tl.int32)))
-    owner = tl.load(stash.to(tl.pointer_type(tl.int32)) + 1)
-    if extra < 0 or extra > 7 or (extra > 0 and (extra >= valid or owner != base)):
+    if extra < 0 or extra > 7:
         tl.atomic_or(errors, 32)
         tl.device_assert(False, "lazy GDN align replay has stale state")
         return
     ok, ov = tl.arange(0, 128), part * 32 + tl.arange(0, 32)
     address = head * 16384 + ov[:, None] * 128 + ok[None, :]
     h = tl.load(state + base * stride + address)
-    h = replay(h, stash, extra, alog, bias, scale)
+    stash_header = tl.full((), 0, tl.int64).to(tl.pointer_type(tl.int32))
+    if extra > 0:
+        stash_slot = tl.load(bt + base_col + 1, mask=base_col + 1 < bt_stride, other=0).to(tl.int64)
+        if stash_slot <= 0:
+            tl.atomic_or(errors, 16)
+            tl.device_assert(False, "lazy GDN align replay has a null stash")
+            return
+        stash = (state + stash_slot * stride + head * 16384).to(tl.pointer_type(tl.bfloat16))
+        stash += part * 8192
+        stash_header = stash.to(tl.pointer_type(tl.int32))
+        valid = tl.load(stash_header)
+        owner = tl.load(stash_header + 1)
+        if extra >= valid or owner != base:
+            tl.atomic_or(errors, 32)
+            tl.device_assert(False, "lazy GDN align replay has stale state")
+            return
+        alogs = tl.load(alog_ptrs + layer).to(tl.pointer_type(tl.float32))
+        biases = tl.load(bias_ptrs + layer).to(tl.pointer_type(tl.bfloat16))
+        alog, bias = tl.load(alogs + head), tl.load(biases + head).to(tl.float32)
+        h = replay(h, stash, extra, alog, bias, scale)
     tl.debug_barrier()
     tl.store(state + destination * stride + address, h)
     if MODE == 0:
-        new_stash = tl.load(bt + dest_col + 1).to(tl.int64)
+        new_stash = tl.load(bt + dest_col + 1, mask=dest_col + 1 < bt_stride, other=0).to(tl.int64)
         header = state + new_stash * stride + head * 16384 + part * 4096
-        tl.store(header.to(tl.pointer_type(tl.int32)), 0)
-    elif destination == base:
+        tl.store(header.to(tl.pointer_type(tl.int32)), 0, mask=new_stash > 0)
+    elif destination == base and extra > 0:
         # The accompanying V2 postprocess resets accepted to one. Mark the old
         # stash invalid so it cannot be replayed against the advanced base.
-        tl.store(stash.to(tl.pointer_type(tl.int32)), 0)
+        tl.store(stash_header, 0)

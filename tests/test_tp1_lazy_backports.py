@@ -1,9 +1,58 @@
 import hashlib
 import importlib
 import json
+import os
 from pathlib import Path
 
 import pytest
+
+
+@pytest.mark.skipif(
+    os.getenv("TRITON_INTERPRET") != "1", reason="enable the Triton CPU interpreter"
+)
+def test_lazy_alignment_copies_state_without_an_old_replay_stash(monkeypatch):
+    import torch
+
+    monkeypatch.syspath_prepend(
+        str(Path(__file__).parents[1] / "experiments/radiance-public")
+    )
+    from stock_gdn_lazy_kernel import materialize_align
+
+    width = 128 * 128
+    bank = torch.arange(3 * width, dtype=torch.float32).reshape(3, width)
+    original = bank.clone()
+    table = torch.tensor([1, 0, 2, 0], dtype=torch.int32)
+    state_pointers = torch.tensor([bank.data_ptr()], dtype=torch.int64)
+    table_pointers = torch.tensor([table.data_ptr()], dtype=torch.int64)
+    slot_stride = torch.tensor([width], dtype=torch.int64)
+    zero = torch.tensor([0], dtype=torch.int32)
+    destination = torch.tensor([2], dtype=torch.int32)
+    errors = zero.clone()
+    # A multi-block migration can have no stash in the old slot's neighbor.
+    # Both stash pointer arrays are deliberately invalid for the copy-only path.
+    materialize_align[(4, 1, 1)](
+        state_pointers,
+        slot_stride,
+        zero,
+        table_pointers,
+        table_pointers,
+        table_pointers,
+        zero,
+        destination,
+        zero,
+        zero,
+        zero,
+        zero,
+        errors,
+        1.0,
+        len(table),
+        1648,
+        0,
+        False,
+    )
+    assert errors.tolist() == [0]
+    assert torch.equal(bank[2], original[1])
+    assert torch.equal(bank[:2], original[:2])
 
 
 @pytest.fixture
