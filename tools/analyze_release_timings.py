@@ -36,7 +36,7 @@ def phase(layer, region, name):
         if region == "post":
             return "Post-attention/GDN residual/normalization"
         raise ValueError("norm/quant kernel outside admitted normalization boundary")
-    if "gdn_norm_quant_kernel" in name:
+    if "gdn_norm_quant_kernel" in name or name == "_tiled_norm_quant.kd":
         if region != "mix" or layer % 4 == 3:
             raise ValueError("GDN norm/quant in another layer or region")
         return "GDN output gated normalization"
@@ -252,11 +252,37 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups, h
             "kernel_groups": kernels}
 
 
+def target_projections(events):
+    """Locate M8 projections and enforce the tiled GDN producer/consumer pairing."""
+    points = []
+    for i, event in enumerate(events):
+        name = event["name"]
+        kind = projection(name)
+        if "radiance_mxfp4_fp8_gemm_atiled<2, true, 128>(" in name:
+            layer, position = divmod(len(points), 4)
+            if layer % 4 != 3 and position == 1 and i and events[i - 1]["name"] == "_tiled_norm_quant.kd":
+                kind = "tiled_gdn_output"
+            else:
+                kind = "unexpected_tiled_projection"
+        if kind:
+            points.append((i, kind))
+    return points
+
+
+def matches_target_projection_order(points):
+    expected = ("split1", "split4", "split1", "split4")
+    return len(points) == 256 and all(
+        kind == expected[i % 4] or (kind == "tiled_gdn_output" and i % 4 == 1 and i // 4 % 4 != 3)
+        for i, (_, kind) in enumerate(points)
+    )
+
+
 def target_inventory_issue(events):
     """Admit complete M8 inventories, including both short-context page groups."""
-    points = [(i, projection(e["name"])) for i, e in enumerate(events) if projection(e["name"])]
-    if [p for _, p in points] != ["split1", "split4", "split1", "split4"] * 64:
-        return f"incomplete projection inventory ({len(points)}/256)"
+    points = target_projections(events)
+    if not matches_target_projection_order(points):
+        return ("out-of-order target projection inventory" if len(points) == 256 else
+                f"incomplete projection inventory ({len(points)}/256)")
     for layer in range(64):
         a, b, c, d = [points[layer * 4 + j][0] for j in range(4)]
         names = [e["name"] for e in events[a + 1:b]]
@@ -372,12 +398,8 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
         _, events = targets[index]
         if len({(e["args"]["device"], e["args"]["stream"]) for e in events}) != 1:
             raise ValueError("non-serial target stream")
-        points = [
-            (i, projection(e["name"]))
-            for i, e in enumerate(events)
-            if projection(e["name"])
-        ]
-        if [p for _, p in points] != ["split1", "split4", "split1", "split4"] * 64:
+        points = target_projections(events)
+        if not matches_target_projection_order(points):
             raise ValueError(f"backported four-projection layer inventory differs: round={index}, count={len(points)}, kinds={dict(Counter(p for _,p in points))}")
         for layer in range(64):
             a, b, c, d = [points[layer * 4 + j][0] for j in range(4)]

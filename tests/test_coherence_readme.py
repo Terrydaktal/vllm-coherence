@@ -28,6 +28,37 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     data = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
     readme = (ROOT / "README.md").read_text()
     assert update(readme, data) == readme
+    november = json.loads((ROOT / data["candidate_measurement"]).read_text())
+    highlights = readme.split("<!-- COHERENCE_BENCHMARK_SUMMARY -->", 1)[1].split(
+        "<!-- /COHERENCE_BENCHMARK_SUMMARY -->", 1
+    )[0]
+    for context in ("0K", "60K", "200K"):
+        row = november["coding"][context]["november_final"]
+        assert f"| {context} | {row['generated_tokens']:,} | **{row['post_first_tokens_per_second']:.2f}** |" in highlights
+    assert november["candidate_manifest_sha256"][:8] in highlights
+    assert f"{november['measurement_date']} isolated candidate" in readme
+    assert f"rerun status: `{november['workload_capture']['chain_status']}`" in readme
+    assert "JSON request reached a natural stop and failed the format check" in readme
+    assert "exposed no separate reasoning channel" in readme
+    assert "0/3,863 timed rounds at least 90 ms" in readme
+    assert "Their cause remains unattributed" in readme
+    assert "benchmarks/results/retained-20261126/round-records.json" in readme
+    assert "20/20 cases passed, with byte-exact hidden rows 608/608 and exact full BF16 logits 608/608" in readme
+    assert "2,528/2,528" in readme and "17/17 checks" in readme
+    assert "618 / 961 / 760 complete M8 cycles" in readme
+    assert "| Compiled M1 → compiled M8 | 320/320 | 320/320 · 320/320 |" in readme
+    assert "| **26. Estimated runtime overhead** | 2.524 / 2.403 / 2.601 (estimate) |" in readme
+    assert "326,160 input; 307,342 cached; 512 generated" in readme
+    assert "The old-policy negative control did not reproduce repeated allocator preemption" in readme
+    assert "3/3 cycles retained one published generation and left the other chat unchanged" in readme
+    assert "| 60,000 tokens | **32.86 s** | **1,826** | 33.27 s | 2 |" in readme
+    assert "| 200,000 tokens | **198.97 s** | **1,005** | 199.66 s | 2 |" in readme
+
+
+def test_october_baseline_retains_its_own_measurement_provenance():
+    data = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
+    data.pop("candidate_measurement")
+    readme = update((ROOT / "README.md").read_text(), data)
     assert len(data["stages"]) == 29 and len(data["layers"]) == 64
     assert [row["layer"] for row in data["layers"]] == list(range(64))
     assert math.isclose(
@@ -225,9 +256,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "benchmark_pi_coding_contexts.py" in readme
     assert "| 0K |" in readme and "| 60K |" in readme and "| 200K |" in readme
     assert "Peak 3s" in readme
-    chained = json.loads(
-        (ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text()
-    )
+    chained = json.loads((ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text())
     assert f"rerun status: `{chained['status']}`" in readme
     checkpoint = chained["stages"][-1]["checkpoint_validation"]
     assert ("The checkpoint format failed validation" in readme) is not checkpoint["passed"]
@@ -254,7 +283,7 @@ def test_readme_is_current_only_and_matches_committed_measurements():
     assert "cold-prefill/continuation study demonstrated the arithmetic repair" not in remaining
     missing_reasoning = any(
         row.get("thinking_enabled") and not row.get("reasoning_channel_observed")
-        for row in json.loads((ROOT / "benchmarks/results/pi-coding-json-compaction.json").read_text())["stages"]
+        for row in chained["stages"]
     )
     if missing_reasoning:
         assert "no separate reasoning channel" in remaining
@@ -467,10 +496,12 @@ def test_shared_workload_cannot_borrow_another_capture_head():
         workload_target_head(report)
 
 
-def test_current_context_results_account_for_every_round():
-    report = json.loads(
-        (ROOT / "benchmarks/results/pi-coding-contexts.json").read_text()
-    )
+@pytest.mark.parametrize("artifact", [
+    "benchmarks/results/pi-coding-contexts.json",
+    "benchmarks/results/retained-20261126/round-records.json",
+])
+def test_context_results_account_for_every_round(artifact):
+    report = json.loads((ROOT / artifact).read_text())
     for context in ("0K", "60K", "200K"):
         capture = report["contexts"][context]["round_capture"]
         records = capture["records"]

@@ -1,6 +1,7 @@
 {
   "schema": "urn:coherence:current-readme-evidence:v1",
   "revision": "backported",
+  "candidate_measurement": "benchmarks/results/retained-20261126/results.json",
   "measurement_commit": "99d5fcfd1bcd0fe6f70445d154e63b7092b02f24",
   "serving_overhead": {
     "status": "estimated_from_separate_runs",

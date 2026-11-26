@@ -123,3 +123,6 @@ def test_published_runtime_identity_distinguishes_speed_candidates(monkeypatch):
     other = copy.deepcopy(metadata)
     other.pop("speed_candidate")
     assert package.digest(package.runtime(metadata)) != package.digest(package.runtime(other))
+    first = dict(metadata, retained_build={"binding": "build-A"})
+    second = dict(metadata, retained_build={"binding": "build-B"})
+    assert package.digest(package.runtime(first)) != package.digest(package.runtime(second))

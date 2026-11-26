@@ -7,6 +7,7 @@ import contextlib
 import fcntl
 import hashlib
 import json
+import math
 import os
 import shlex
 import shutil
@@ -24,6 +25,16 @@ RUNTIME = ROOT / "experiments/radiance-public"
 MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate"
 EXPERIMENTAL_WORKER = "experimental_runtime_worker.py"
 HOST_EMBEDDING = "host_embedding.py"
+PERFORMANCE_WORKER = "performance_runtime_worker.py"
+EXPERIMENT_ROOT = "/coherence-experiments"
+PERFORMANCE_SOURCES = {
+    "cache_buffer_views": ("cache_buffer_views.py", "cache_buffer_view_tier.py"),
+    "proposal_temperature": ("dflash_proposal_temperature.py",),
+    "prompt_lookup": ("dflash_prompt_lookup.py", "dflash_prompt_lookup_kernels.py"),
+    "head_live_rows": ("head_live_rows.py",),
+    "gdn_prefill_direct": ("gdn_prefill_direct.py",),
+    "mxfp4": ("mxfp4_prefill_candidate.py",),
+}
 HELP = """NAME
     coherence - pinned inference, persistent sessions and conformance tooling
 
@@ -50,6 +61,30 @@ OPTIONS
     --experimental-host-embedding
                        Read the input embedding table from pinned host memory.
                        Requires a dedicated, explicit --state directory.
+    --experimental-prompt-lookup
+                       Propose matching text from earlier in the prompt.
+    --experimental-prompt-lookup-skip-draft
+                       Predict distant matches from recent hits. A new confirmed
+                       hit skips the neural query forward for that round.
+                       Requires --experimental-prompt-lookup.
+    --experimental-proposal-temperature T
+                       Set the DFlash2 proposal temperature for sampled requests.
+                       Verification uses the recorded proposal law.
+    --experimental-head-live-rows
+                       Select and rescore Global-512 candidates only on live rows.
+    --experimental-gdn-direct-scan
+                       Write the prepared GDN scan into its destination.
+    --experimental-gdn-direct-projection
+                       Produce tiled FP8 activations for GDN output projection.
+    --experimental-cache-buffer-views
+                       Skip the intermediate snapshot-block buffer copy.
+    --experimental-mxfp4-build BUILD
+                       Supply a tested or experimental MXFP4 candidate build.
+    --experimental-mxfp4-preprocess
+                       Preprocess eligible tiled prefill weights at load.
+    --experimental-mxfp4-slab-ahead
+                       Load the next slab ahead for preprocessed projections.
+                       Requires --experimental-mxfp4-preprocess.
     --engine NAME      podman (the supported container runtime).
     --port PORT        Local API port (default: 8080).
     --head MODE        global512 (default), global256 or full-bf16.
@@ -258,28 +293,124 @@ def check_host_embedding_state(state, enabled):
     if enabled:
         root, default = state.resolve(), state_path().resolve()
         if root.is_relative_to(default) or default.is_relative_to(root):
-            raise ValueError("host embedding requires a state directory separate from the default")
+            raise ValueError(
+                "host embedding requires a state directory separate from the default"
+            )
 
 
-def snapshot_identity(spec, host_embedding=False):
+def performance_experiments(args):
+    bindings = {}
+    builds = {}
+    proposal = args.experimental_proposal_temperature
+    if proposal is not None and (not math.isfinite(proposal) or not 0 < proposal <= 100):
+        raise ValueError("proposal temperature must be finite and in (0, 100]")
+    mxfp4 = args.experimental_mxfp4_preprocess
+    if (
+        args.experimental_prompt_lookup_skip_draft
+        and not args.experimental_prompt_lookup
+    ):
+        raise ValueError(
+            "--experimental-prompt-lookup-skip-draft requires --experimental-prompt-lookup"
+        )
+    if args.experimental_head_live_rows and args.head != "global512":
+        raise ValueError("--experimental-head-live-rows requires --head global512")
+    if args.experimental_mxfp4_slab_ahead and not mxfp4:
+        raise ValueError(
+            "--experimental-mxfp4-slab-ahead requires --experimental-mxfp4-preprocess"
+        )
+    if mxfp4 != bool(args.experimental_mxfp4_build):
+        raise ValueError(
+            "MXFP4 experiments require --experimental-mxfp4-build and --experimental-mxfp4-preprocess"
+        )
+    for name, enabled, build in (
+        ("cache_buffer_views", args.experimental_cache_buffer_views, None),
+        ("prompt_lookup", args.experimental_prompt_lookup, None),
+        ("head_live_rows", args.experimental_head_live_rows, None),
+        ("proposal_temperature", proposal is not None, None),
+        (
+            "gdn_prefill_direct",
+            args.experimental_gdn_direct_scan
+            or args.experimental_gdn_direct_projection,
+            None,
+        ),
+        ("mxfp4", mxfp4, args.experimental_mxfp4_build),
+    ):
+        if not enabled:
+            continue
+        binding = {
+            "sources": {
+                source: digest(RUNTIME / source) for source in PERFORMANCE_SOURCES[name]
+            },
+        }
+        if build:
+            path = Path(build).expanduser().resolve()
+            if ":" in str(path) or "\n" in str(path):
+                raise ValueError("invalid performance build mount path")
+            binding["artifact"] = digest(path / "build.json")
+            builds[name] = path
+        if name == "mxfp4":
+            binding["preprocess"] = args.experimental_mxfp4_preprocess
+            binding["slab_ahead"] = args.experimental_mxfp4_slab_ahead
+        if name == "proposal_temperature":
+            binding["temperature"] = proposal
+        if name == "prompt_lookup":
+            binding["skip_draft"] = args.experimental_prompt_lookup_skip_draft
+        if name == "gdn_prefill_direct":
+            binding["scan"] = args.experimental_gdn_direct_scan
+            binding["projection"] = args.experimental_gdn_direct_projection
+        bindings[name] = binding
+    if bindings:
+        bindings["worker"] = digest(ROOT / "tools" / PERFORMANCE_WORKER)
+    return bindings, builds
+
+
+def check_performance_state(state, bindings):
+    existing = state_connection(state)
+    if existing is not None and existing.get("performance_experiments", {}) != bindings:
+        raise ValueError(
+            "use a separate --state directory for each performance experiment configuration"
+        )
+    if bindings:
+        root, default = state.resolve(), state_path().resolve()
+        if root.is_relative_to(default) or default.is_relative_to(root):
+            raise ValueError(
+                "performance experiments require state separate from the default"
+            )
+
+
+def snapshot_identity(spec, host_embedding=False, performance=None):
     binding = {
         "release": spec["sha256"],
         "integration": {n: digest(ROOT / n) for n in spec["patch_files"]},
         "schema": "urn:coherence:snapshot:v1",
     }
     if host_embedding:
-        binding["memory_experiments"] = {"host_embedding": digest(RUNTIME / HOST_EMBEDDING)}
-        binding["experimental_runtime_worker"] = digest(ROOT / "tools" / EXPERIMENTAL_WORKER)
+        binding["memory_experiments"] = {
+            "host_embedding": digest(RUNTIME / HOST_EMBEDDING)
+        }
+        binding["experimental_runtime_worker"] = digest(
+            ROOT / "tools" / EXPERIMENTAL_WORKER
+        )
+    if performance:
+        binding["performance_experiments"] = performance
     return hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
 
 
 def prepare(state, archive=None, head="global512"):
     with deployment_lock(state):
         existing = state_connection(state) or {}
-        return _prepare(state, archive, head, host_embedding_enabled(existing))
+        return _prepare(
+            state,
+            archive,
+            head,
+            host_embedding_enabled(existing),
+            existing.get("performance_experiments"),
+        )
 
 
-def _prepare(state, archive=None, head="global512", host_embedding=False):
+def _prepare(
+    state, archive=None, head="global512", host_embedding=False, performance=None
+):
     private_directory(state)
     spec = release()
     runtime = state / "runtime"
@@ -356,7 +487,7 @@ def _prepare(state, archive=None, head="global512", host_embedding=False):
     write_json(patches / "runtime-radiance-1.0.16.json", profile)
     # A separate namespace for this exported release; old user cache is never
     # reinterpreted under a new state/arithmetic contract.
-    identity = snapshot_identity(spec, host_embedding)
+    identity = snapshot_identity(spec, host_embedding, performance)
     cache = state / "cache"
     private_directory(cache)
     data = cache / "snapshots" / identity / "data"
@@ -377,6 +508,9 @@ def _prepare(state, archive=None, head="global512", host_embedding=False):
     if host_embedding:
         abi_manifest["memory_experiments"] = ["host_embedding"]
         connection["memory_experiments"] = ["host_embedding"]
+    if performance:
+        abi_manifest["performance_experiments"] = performance
+        connection["performance_experiments"] = performance
     write_json(data.parent / "abi.json", abi_manifest)
     existing = state / "connection.json"
     if existing.exists():
@@ -431,6 +565,11 @@ def serving_command(args, connection):
     host_embedding = host_embedding_enabled(connection)
     if host_embedding:
         environment["AITER_JIT_DIR"] = f"/cache/runtime/{abi}/aiter-gfx1201"
+    performance = connection.get("performance_experiments", {})
+    if performance:
+        environment["QWEN_PERFORMANCE_EXPERIMENTS"] = json.dumps(
+            performance, sort_keys=True
+        )
     transfer = {
         "kv_connector": "OffloadingConnector",
         "engine_id": f"coherence-{abi[:16]}",
@@ -459,6 +598,12 @@ def serving_command(args, connection):
             ],
         },
     }
+    if "cache_buffer_views" in performance:
+        # The scheduler owns the filesystem tier, independently of the model worker.
+        transfer["kv_connector_extra_config"]["secondary_tiers"][0].update(
+            type="BufferViewChatFileSystemTierManager",
+            module_path="cache_buffer_view_tier",
+        )
     fair = {
         "qwen_fair": {
             "policy": "response_boundary",
@@ -482,7 +627,6 @@ def serving_command(args, connection):
         "--rm",
         "--name",
         "vllm-coherence",
-        "--ipc=host",
         "--network=host",
         "--stop-timeout",
         "90",
@@ -493,6 +637,10 @@ def serving_command(args, connection):
         "--security-opt",
         "seccomp=unconfined",
     ]
+    if performance:
+        command += ["--ipc=private", "--shm-size=20g"]
+    else:
+        command.append("--ipc=host")
     if args.engine == "podman":
         command += ["--group-add", "keep-groups"]
     for key, value in environment.items():
@@ -515,7 +663,26 @@ def serving_command(args, connection):
         for source in (ROOT / "tools" / EXPERIMENTAL_WORKER, RUNTIME / HOST_EMBEDDING):
             if ":" in str(source) or "\n" in str(source):
                 raise ValueError("invalid host embedding mount path")
-            command += ["-v", f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro"]
+            command += [
+                "-v",
+                f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro",
+            ]
+    if performance:
+        worker = "performance_runtime_worker." + (
+            "HostEmbeddingPerformanceWorker" if host_embedding else "PerformanceWorker"
+        )
+        sources = [ROOT / "tools" / PERFORMANCE_WORKER]
+        for name in PERFORMANCE_SOURCES.keys() & performance.keys():
+            sources.extend(RUNTIME / source for source in PERFORMANCE_SOURCES[name])
+        for source in sorted(set(sources)):
+            if ":" in str(source) or "\n" in str(source):
+                raise ValueError("invalid performance source mount path")
+            command += [
+                "-v",
+                f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro",
+            ]
+        for name, build_path in sorted(args.performance_builds.items()):
+            command += ["-v", f"{build_path}:{EXPERIMENT_ROOT}/{name}:ro"]
     command += [
         "--entrypoint",
         "/opt/vllm/bin/python",
@@ -604,6 +771,16 @@ def main(argv=None):
     parser.add_argument("--model")
     parser.add_argument("--draft")
     parser.add_argument("--experimental-host-embedding", action="store_true")
+    parser.add_argument("--experimental-prompt-lookup", action="store_true")
+    parser.add_argument("--experimental-prompt-lookup-skip-draft", action="store_true")
+    parser.add_argument("--experimental-proposal-temperature", type=float)
+    parser.add_argument("--experimental-head-live-rows", action="store_true")
+    parser.add_argument("--experimental-gdn-direct-scan", action="store_true")
+    parser.add_argument("--experimental-gdn-direct-projection", action="store_true")
+    parser.add_argument("--experimental-cache-buffer-views", action="store_true")
+    parser.add_argument("--experimental-mxfp4-build")
+    parser.add_argument("--experimental-mxfp4-preprocess", action="store_true")
+    parser.add_argument("--experimental-mxfp4-slab-ahead", action="store_true")
     parser.add_argument("--engine", choices=("podman",), default="podman")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--dry-run", action="store_true")
@@ -621,10 +798,13 @@ def main(argv=None):
     try:
         state = state_path(args.state)
         host_embedding = args.experimental_host_embedding
-        if host_embedding and (
+        performance, args.performance_builds = performance_experiments(args)
+        if (host_embedding or performance) and (
             args.command != "serve" or not args.state
         ):
-            raise ValueError("host embedding requires serve and an explicit --state directory")
+            raise ValueError(
+                "experiments require serve and an explicit --state directory"
+            )
         if args.command == "doctor":
             print(
                 json.dumps(
@@ -664,11 +844,17 @@ def main(argv=None):
             if not args.model or not args.draft or not 1 <= args.port <= 65535:
                 raise ValueError("serve requires --model, --draft and a valid --port")
             check_host_embedding_state(state, host_embedding)
+            check_performance_state(state, performance)
             if args.dry_run:
                 connection = {"abi": "DRY_RUN_ABI"}
+                if host_embedding or performance:
+                    connection["abi"] = snapshot_identity(
+                        release(), host_embedding, performance
+                    )
                 if host_embedding:
-                    connection["abi"] = snapshot_identity(release(), host_embedding=True)
                     connection["memory_experiments"] = ["host_embedding"]
+                if performance:
+                    connection["performance_experiments"] = performance
                 print(shlex.join(serving_command(args, connection)))
                 return 0
             for model in (args.model, args.draft):
@@ -685,6 +871,7 @@ def main(argv=None):
                 )
             with deployment_lock(state):
                 check_host_embedding_state(state, host_embedding)
+                check_performance_state(state, performance)
                 existing = subprocess.run(
                     [args.engine, "container", "exists", "vllm-coherence"], check=False
                 )
@@ -692,7 +879,9 @@ def main(argv=None):
                     raise ValueError(
                         "cannot start while the Coherence container exists or container inspection fails"
                     )
-                connection = _prepare(state, args.archive, args.head, host_embedding)
+                connection = _prepare(
+                    state, args.archive, args.head, host_embedding, performance
+                )
                 connection["port"] = args.port
                 write_json(state / "connection.json", connection)
                 command = serving_command(args, connection)
@@ -703,9 +892,13 @@ def main(argv=None):
             return launch(args, remainder)
         elif args.command == "cache":
             connection = read_json(state / "connection.json")
-            telemetry = state / "telemetry" / hashlib.sha256(
-                ("local" + connection["cache_root"]).encode()
-            ).hexdigest()[:16]
+            telemetry = (
+                state
+                / "telemetry"
+                / hashlib.sha256(
+                    ("local" + connection["cache_root"]).encode()
+                ).hexdigest()[:16]
+            )
             private_directory(telemetry)
             private_directory(telemetry / "clients")
             command = [
@@ -719,12 +912,19 @@ def main(argv=None):
                 str(telemetry),
                 *remainder,
             ]
-            return subprocess.call(command, env={
-                **os.environ,
-                "QWEN_RADIANCE_CONTAINER": "vllm-coherence",
-                "QWEN_RADIANCE_SCHEDULER_HELPER": str(ROOT / "scripts/qwen-radiance-scheduler-status"),
-                "QWEN_RADIANCE_GPU_TEMPERATURE_HELPER": str(ROOT / "scripts/qwen-radiance-gpu-temperature"),
-            })
+            return subprocess.call(
+                command,
+                env={
+                    **os.environ,
+                    "QWEN_RADIANCE_CONTAINER": "vllm-coherence",
+                    "QWEN_RADIANCE_SCHEDULER_HELPER": str(
+                        ROOT / "scripts/qwen-radiance-scheduler-status"
+                    ),
+                    "QWEN_RADIANCE_GPU_TEMPERATURE_HELPER": str(
+                        ROOT / "scripts/qwen-radiance-gpu-temperature"
+                    ),
+                },
+            )
         return 0
     except (OSError, ValueError, TypeError, KeyError, tarfile.TarError) as error:
         print(f"coherence: {error}", file=sys.stderr)

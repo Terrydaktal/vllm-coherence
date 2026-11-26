@@ -57,6 +57,30 @@ tools/coherence serve --model /models/target --draft /models/dflash2-fp8 \
 Use a fresh state directory. Its snapshot and compiler cache identity includes
 both host embedding source files.
 
+## Performance experiments
+
+Use `tools/coherence serve` with a dedicated `--state` directory for each set of
+candidate flags. The launcher binds the selected source and build manifests into
+the snapshot and compiler cache identity. Build for gfx1201 inside the pinned
+container without GPU devices.
+
+| Serve option | Build driver and inputs |
+| --- | --- |
+| `--experimental-prompt-lookup` | Compiled at runtime by Triton. Looks for a matching suffix earlier than the drafter's sliding window. A hit replaces all seven proposals and records their point-mass distributions for the verifier. |
+| Add `--experimental-prompt-lookup-skip-draft` | On a confirmed distant match, the drafter updates committed context KV and skips the speculative query forward. Prefer this for tasks that copy earlier text. In a warm 60K edit it added 7.0% throughput over distant lookup alone. On fresh prose with no hits, reading the device decision cost 1.3% throughput. |
+| `--experimental-mxfp4-build BUILD --experimental-mxfp4-preprocess` | `mxfp4_prefill_candidate.py build --repo COHERENCE --output BUILD`. Preprocesses eligible input projection weights within a 96 MiB budget. |
+| Add `--experimental-mxfp4-slab-ahead` to preprocessing | The same build loads the next weight slab while computing the current one for projections with preprocessed weights. Other projections use the original kernel. |
+| `--experimental-gdn-direct-scan` | The prepared prefill scan writes directly into the GDN layer's output buffer. |
+| `--experimental-gdn-direct-projection` | Writes FP8 activations in the existing aligned projection's tile layout. |
+| `--experimental-head-live-rows` | Global-512 selects and reranks only live rows after the padded coarse matrix operation. Requires the Global-512 head. |
+| `--experimental-cache-buffer-views` | Loads disk snapshot blocks through views and retains the existing decompression and SHA-256 checks. |
+
+These are candidates for the isolated portable lane. Test forced hidden/logit
+and state equality, disk restore, and natural single-stream output on the
+target GPU before adopting them in an authenticated Pi release. For prompt
+lookup, measure edits that copy earlier text, new code and reasoning separately
+and record tokens per round alongside round time.
+
 ## 327,952-token authenticated Pi lane
 
 The authenticated R9700 launcher binds the context limit to `extended-context.json`.

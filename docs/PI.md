@@ -6,37 +6,31 @@ changes; this guide explains setup, counters and session behavior.
 
 ## Start or resume a workspace
 
-Run these from the development folder whose history you want to use:
+Use an SSH host configured with the authenticated 327,952-token backend.
+Run the launcher from the workspace whose history you want to use.
 
 ```sh
-/path/to/vllm-coherence/tools/coherence pi -- --thinking xhigh
-/path/to/vllm-coherence/tools/coherence pi -- --session last
+/path/to/vllm-coherence/scripts/pi-remote-qwen-radiance --remote user@gpu-host
+/path/to/vllm-coherence/scripts/pi-remote-qwen-radiance --remote user@gpu-host --reuse-existing --session last
 ```
 
-The first command starts a new chat. The second resumes the latest session in
-that workspace. Transcripts are model-neutral files in `WORKSPACE/.pi/sessions`;
-changing models can reuse the transcript, but incompatible model/KV state needs
-recomputation. Add `.pi/` to the workspace's `.gitignore` to keep transcripts private.
+The first command starts a new chat and starts the backend if needed. The
+second resumes the latest session in that workspace. Transcripts are
+model-neutral files in `WORKSPACE/.pi/sessions`. A model change can reuse the
+transcript, with cache state recomputed when needed. Add `.pi/` to the
+workspace's `.gitignore` to keep transcripts private.
 
-The launcher verifies the Pi 0.84.2 lock and patches exact known runtime bytes.
-It installs to `STATE/pi/0.84.2` and exposes `STATE/bin/pi` as a symlink, preserving
-unrelated Pi installations. Reuse checks authenticate the patched runtime again.
+The launcher installs Pi 0.84.2 in private state and verifies its patched
+runtime on reuse. SSH authentication must work noninteractively. The launcher
+reserves an available local port for the API forward.
 Progress, temperatures, tool condensation/rehydration, compaction, cache identity
 and priority support load with the operating prompt. `--no-context-files` keeps
 AGENTS files out of Pi's context. Internal loop interruption is not enabled by
 the release launcher.
 
-For a remote GPU host, use `tools/coherence pi --ssh gpu-host -- --session last`.
-The launcher reserves a free forwarding port and uses SSH directly, without
-nesting tmux. SSH authentication must already work noninteractively. Supply
-`--search-extension /path/to/index.ts` before the `--` separator to use your own
-search integration, including one specific to a VM. Terminal keybindings remain
-the terminal owner's configuration.
-
-The legacy `scripts/pi-remote-qwen-radiance --reuse-existing --no-install`
-launcher also opens the exact saved session while the GPU host or backend is
-offline. Remote authentication, the SSH tunnel and kernel readiness run in the
-background; the interface shows **Checking backend connection** while they run.
+`--reuse-existing` opens the exact saved session while the GPU host or backend
+is offline. Remote authentication, the SSH tunnel and kernel readiness run in
+the background. The interface shows **Checking backend connection** while they run.
 **Backend offline** is reserved for an observed stopped backend; stale status
 or unsuccessful connection checks are labelled as unavailable. Reading
 history, inspecting context and local commands remain available. Generation,
@@ -406,8 +400,7 @@ qwen-radiance-cache --once
 qwen-radiance-cache show CHAT
 qwen-radiance-cache purge-tests --dry-run
 qwen-radiance-cache purge-tests
-tools/coherence cache
-tools/coherence cache -- audit
+qwen-radiance-cache audit
 ```
 
 The inventory separates current disk usage from cumulative **disk traffic**, and
@@ -463,8 +456,6 @@ Press **q/Escape** to exit, **arrow/Page keys** to scroll rows and columns,
 `--once`, `--json` without `watch`, and redirected output retain a single report.
 For a live JSON stream use `watch --json`; `--telemetry-state PATH` selects an
 explicit Pi telemetry directory, and `--interval` can slow the default 100 ms read.
-The portable `tools/coherence cache` entry point selects the same deployment and
-telemetry directory as `tools/coherence pi`.
 
 ## Concurrent chats and priority
 
@@ -573,9 +564,8 @@ consumed request bodies are not replayed; cancellation also stops the retry.
 If both connections fail, the report retains both attempts. Restart Pi
 after installing the provider patch; `/reload` alone does not reload that module.
 
-Start `tools/coherence serve` on the GPU host if its API is unavailable. Retain
-failing artifacts when verification fails; prepare into a fresh `--state` rather
-than bypassing checks.
+Use `/backend status` to inspect the authenticated backend. If it is stopped,
+use `/backend start` and retry once it is ready.
 
 A new Coherence installation uses its own snapshot namespace. It does not
 automatically import another backend's KV files. State/arithmetic compatibility

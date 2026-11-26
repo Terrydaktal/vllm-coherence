@@ -228,3 +228,68 @@ recomputes the 17 gates from the numeric reports without the GPU. The
 320-position stage report includes the first local stage mismatch when
 a difference is present. Keep raw tensors and token IDs in the private
 capture directory.
+
+## Reproducing the November R9700 candidate
+
+The [November report](../benchmarks/results/retained-20261126/REPORT.md)
+links the measured manifest, numeric captures and operator receipts. Use the
+pinned ROCm image and the authenticated extended-context release on a dedicated
+benchmark cache. Compile the candidate without GPU devices.
+
+Set `stock` to the release's `diagnostics/attention-precision-v1/build`
+directory, which contains the sealed shared-attention source, headers and build
+receipt. Run the following from the repository root.
+
+```bash
+repo=$(pwd -P)
+work=$(mktemp -d)
+podman run --rm --network=none --pull=never \
+  -v "$repo:/source:ro" -v "$work:/build:rw" -v "$stock:/stock:ro" \
+  -e PYTHONPATH=/source/src --entrypoint /bin/sh \
+  docker.io/magiccodingman/vllm-radiance@sha256:83a9dc02a8f8e75aabe81366d36ebaa2e35fcbe181cacf8e8e0a4cef4ebccbcc -ec '
+src=/source/experiments/radiance-public
+receipts=/source/benchmarks/results/retained-20261126
+python=/opt/vllm/bin/python
+"$python" "$src/build_retained_worker.py" --output /build/base
+"$python" "$src/build_stock_fp8_epilogue.py" --max-norm-rows 4096 --output /build/wide-norm
+"$python" "$src/attention_runtime_splits.py" --variant shifts --stock /stock --output /build/attention-splits
+"$python" "$src/amend_retained_numerics.py" \
+  --parent /build/base --output /build/candidate \
+  --wide-norm /build/wide-norm --attention-splits /build/attention-splits \
+  --qk-norm-receipt "$receipts/qk-norm-qualification.json" \
+  --draft-context-receipt "$receipts/draft-context-qualification.json"
+'
+```
+
+The builder records the exact selected sources, generated kernels and binary
+hashes. Save the rebuilt manifest with new captures. The published manifest
+binds the original measurements. The rebuild differs in the GDN source's
+unused tuning code and the normalization receipt's local build paths. All
+four numerical correction identities matched the original capture.
+
+Use `python tools/retained_suite_launch.py` with a saved `podman inspect` of
+the authenticated extended-context release, `--overlay "$work/candidate"`,
+`--private-cache`, a fresh `--output-directory` and `--argv launch.json`.
+Supply the release's cache compatibility manifest in the dedicated cache and
+copy its compiler caches if desired. The launcher carries over the image,
+weights, FP8 DFlash2 depth 7, Global-512, context limit, KV reserve and graph
+configuration. Its read-only source and overlay mounts use a distinct loopback
+port and private IPC. Keep the inspect record and the generated mode-0600 argv
+private. Run the argv with Python's `subprocess.run` after the benchmark GPU is
+available.
+
+Use the existing shared Pi benchmark suite against that endpoint. Launch a
+separate `--probe prefill` instance for installed prefill timing and the 17
+numerical gates. Run those clients inside the diagnostic container, with a fresh
+output path under `/prefill-diagnosis/refresh` and the matching shared-control
+archive mounted read-only. Use `--probe response-end` for stop/replay cache
+qualification.
+
+For the [existing 320-position confirmations](CURRENT_CONFIRMATIONS.md#repeating-the-checks),
+use one disposable process per arm with `--speed-candidate --retained-workers`.
+Mount the amended overlay at `/retained` and supply the retained initializer
+from that overlay alongside the `retained_confirmation_worker.py` and
+`retained_tape_dispatch.py` adapters in the container's site-packages.
+The bootstrap puts the amended overlay and its indexed GDN kernel on the
+worker's Python path. Each arm records the same authenticated manifest and the full-BF16
+diagnostic head. Keep the 320 fixture and per-position evidence private.

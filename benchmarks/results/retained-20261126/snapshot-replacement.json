@@ -1,0 +1,52 @@
+{
+  "schema": "coherence-benchmark-snapshot-replacement-v1",
+  "candidate_manifest_sha256": "621b999abb596ae6ff572ae039be8b1856172719e1a6cccf72b71bf2f49ab780",
+  "old_prompt_tokens": 10000,
+  "new_prompt_tokens": 4000,
+  "output_tokens": 8,
+  "status": "PASS_FOR_DECLARED_SCOPE",
+  "cycles": [
+    {
+      "pass": true,
+      "previous_file_bytes": 483706960,
+      "retained_file_bytes": 483706960,
+      "replaced_file_bytes": 316877572,
+      "replaced_blocks": 15,
+      "activation_seconds": 0.00648852251470089,
+      "request_to_durable_seconds": 2.9978602938354015,
+      "after_publish_generation_count": 1,
+      "other_chat_unchanged": true,
+      "previous_published_tokens": 10007,
+      "replaced_published_tokens": 4008
+    },
+    {
+      "pass": true,
+      "previous_file_bytes": 316877572,
+      "retained_file_bytes": 316877572,
+      "replaced_file_bytes": 316891937,
+      "replaced_blocks": 15,
+      "activation_seconds": 0.005270982161164284,
+      "request_to_durable_seconds": 2.844455488026142,
+      "after_publish_generation_count": 1,
+      "other_chat_unchanged": true,
+      "previous_published_tokens": 4008,
+      "replaced_published_tokens": 4008
+    },
+    {
+      "pass": true,
+      "previous_file_bytes": 316891937,
+      "retained_file_bytes": 316891937,
+      "replaced_file_bytes": 316916490,
+      "replaced_blocks": 15,
+      "activation_seconds": 0.0055026160553097725,
+      "request_to_durable_seconds": 2.9182161251083016,
+      "after_publish_generation_count": 1,
+      "other_chat_unchanged": true,
+      "previous_published_tokens": 4008,
+      "replaced_published_tokens": 4008
+    }
+  ],
+  "measurement_date": "2026-11-26",
+  "receipt_sha256": "cbf9ae5498815fd8a1376d2755de571e952db6175d26868fe713cdd1d31a2413",
+  "source_sha256": "f0495dc32c61c4f8485e7cab6934c18f560fb2727d8fa1d126a8835bca4712fb"
+}

@@ -31,6 +31,8 @@ def runtime(metadata):
     }
     if "speed_candidate" in metadata:
         result["speed_candidate"] = metadata["speed_candidate"]
+    if "retained_build" in metadata:
+        result["retained_build"] = metadata["retained_build"]
     return result
 
 
@@ -162,6 +164,26 @@ def package(args):
                 if observation["host_page_policy_bytes"] < observation["allocated_bytes"]:
                     raise ValueError(f"{context}: page policy does not cover the pinned allocation")
             binding["host_page_policy_observations"][context] = observation
+    measured = workers["0K"]["profile"]["metadata"].get("retained_build")
+    if measured is not None:
+        from qwen_r9700_lab.diagnostic_contract import authenticate
+        retained = read(private / "retained-manifest.json")
+        authenticate(retained)
+        if measured["binding"] != retained["sha256"]:
+            raise ValueError("stage timings and retained build have different source hashes")
+        if any(runtime["retained_build"] != measured for arms in runtimes.values() for runtime in arms.values()):
+            raise ValueError("retained build differs across contexts")
+        binding["worker"] = "fourteen_worker.Worker"
+        binding["retained_build"] = retained
+        for name, expected in retained["files"].items():
+            if "/" in name or not name.endswith(".py") or name == "radiance_drafthead_candidate.py":
+                continue
+            source = f"experiments/radiance-public/{name}"
+            stored = private / "retained" / name
+            local = stored if stored.is_file() else ROOT / source
+            if hashlib.sha256(local.read_bytes()).hexdigest() != expected:
+                raise ValueError(f"retained runtime source differs from capture: {name}")
+            binding["source_sha256"][source] = expected
     bind_source_commit(binding, args.source_commit, args.source_repository)
     depth = binding["environment"]["RADIANCE_VERIFY_HEAD_GLOBAL_TOPK"]
     if depth not in ("256", "512"):

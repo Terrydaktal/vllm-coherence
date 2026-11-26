@@ -135,12 +135,16 @@ Pi-opsec bundle also passed preparation and SDK checks.
 ## Automatic compaction during generation
 
 The Qwen/Radiance harness watches fresh provider usage while an answer is
-streaming. It interrupts at the earlier of **240,000 context tokens** and the
-model's context window minus Pi's configured `compaction.reserveTokens`. With
-the 253,792-token model and the default 16,384-token reserve, the threshold is
-**237,408 tokens**. The existing checks between tool batches and completed
-answers remain active. Disabling automatic compaction disables the streaming
-guard too; other providers and models retain their existing behavior.
+streaming. The threshold is
+`min(window - reserve, max(240000, window - 13792))`, where `reserve` is
+Pi's configured `compaction.reserveTokens`.
+
+With a **327,952-token** context window and the default **16,384-token** reserve,
+streaming compaction triggers at **311,568 tokens**.
+
+The existing checks between tool batches and completed answers still apply.
+Disabling automatic compaction also disables the streaming guard. The guard
+applies to the configured Qwen/Radiance model.
 
 The interrupted assistant message is saved to the original session JSONL before
 compaction begins. Its already received thinking and prose remain intact, with

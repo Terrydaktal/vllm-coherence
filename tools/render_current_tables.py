@@ -17,22 +17,52 @@ from compute_stage26_residual import compute as audit_stage26
 ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- COHERENCE_CURRENT_RESULTS -->"
 END = "<!-- /COHERENCE_CURRENT_RESULTS -->"
+SUMMARY_START = "<!-- COHERENCE_BENCHMARK_SUMMARY -->"
+SUMMARY_END = "<!-- /COHERENCE_BENCHMARK_SUMMARY -->"
 REPOSITORY = "https://github.com/Terrydaktal/vllm-coherence"
+NOVEMBER_RESULTS = "benchmarks/results/retained-20261126/results.json"
+NOVEMBER_REPORT = "benchmarks/results/retained-20261126/REPORT.md"
+NOVEMBER_ROUNDS = "benchmarks/results/retained-20261126/round-records.json"
+NOVEMBER_LIFECYCLE = "benchmarks/results/retained-20261126/lifecycle.json"
+NOVEMBER_SNAPSHOT_REPLACEMENT = "benchmarks/results/retained-20261126/snapshot-replacement.json"
 # Keep captured checkout identities intact; link to the same tree after rewording.
 REWORDED_COMMITS = {
     "7386d835a32e4be3549e87cfff9bb9998e0a91c3": "9bb795d2e612c76087d16932841131edf4834d5e",
 }
-def render_head_candidate_benchmark():
+
+
+def render_head_candidate_benchmark(candidate=None):
     current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
-    reference = current.get("head_candidate_result", "benchmarks/results/head-candidate-depth-20260924.json")
-    evidence = json.loads((ROOT / reference).read_text())
+    october_reference = current.get("head_candidate_result", "benchmarks/results/head-candidate-depth-20260924.json")
+    if candidate is None:
+        reference = october_reference
+        evidence = json.loads((ROOT / reference).read_text())
+        capture_label = "The serving comparison"
+    else:
+        reference = NOVEMBER_RESULTS
+        modes = candidate["head"]["november_final"]
+        capture = candidate["head"]["november_capture"]
+        evidence = {
+            "requests": {"stages": capture["requests"]},
+            "modes": modes,
+            "timings_m8": {mode: result["latency_m8"] for mode, result in modes.items()},
+            "sampling": capture["sampling"],
+        }
+        capture_label = f"The {candidate['measurement_date']} isolated candidate comparison"
     requests = evidence["requests"]["stages"]
-    workloads = "; ".join(f"{row['label']}: {row['input_tokens']:,} input and {row['output_tokens']:,} output tokens ({row['finish_reason']})" for row in requests)
+    workloads = " and ".join(
+        f"{row['label']} ({row['input_tokens']:,} input, {row['output_tokens']:,} output)"
+        for row in requests
+    )
+    sampling = evidence.get("sampling", {"temperature": 1, "top_p": 0.95, "top_k": 40})
     rows = evidence["modes"]["full"]["rows"]
     samples = evidence["timings_m8"]["full"]["samples"]
     lines = [
         "## Global-512 target-head", "",
-        "Global-512 is the serving default. This paired comparison used identical hidden inputs for every head method from two natural completions starting with the retained 60K Pi prefix: " + workloads + ". Sampling was temperature 1, top-p 0.95 and top-k 40.", "",
+        "Global-512 is the serving default. " + capture_label
+        + " used identical hidden inputs for every head method, collected from two natural completions "
+        + f"starting with the retained 60K Pi prefix for {workloads}. Temperature was {sampling['temperature']:g}, "
+        + f"top-p {sampling['top_p']:g} and top-k {sampling['top_k']}.", "",
         "| Target path | Median M8 head time | Same top-1 token | Complete reference top-20 retained | Complete reference top-40 retained |",
         "|---|---:|---:|---:|---:|",
     ]
@@ -52,6 +82,17 @@ def render_head_candidate_benchmark():
         f"Incomplete top-40 retention occurred in {misses[0]:,} rows with Global-256 and {misses[1]:,} with Global-512; the added median head time was {added:.3f} ms. Retention includes cutoff ties and does not establish score equality, ordering or identical sampling probabilities. Both shortlists remain approximate; the full BF16 head is the reference for this comparison, not an independently proved model. The drafter is unchanged.", "",
         f"Global-512 reranked values differed from the full-head reference in {current_head['retained_value_mismatches']:,}/{current_head['retained_values']:,} retained scores (maximum absolute difference {current_head['max_retained_logit_difference']:g}); the diagnostic filtered probabilities differed in {current_head['rows_with_diagnostic_probability_difference']:,}/{rows:,} rows. Candidate recall and retained-score fidelity are separate checks.", "",
         f"[Methodology and limits](docs/HEAD_CANDIDATE_DEPTH.md) · [Numeric results]({reference}) · [Earlier Global-256 study](docs/VERIFY_HEAD_GLOBAL_TOPK.md)."]
+    if candidate is not None:
+        prior = candidate["head"]["october"]["global512"]["latency_m8"]["median_ms"]
+        lines += [
+            "",
+            (
+                f"The {candidate['comparison_date']} Global-512 control took {prior:.3f} ms. "
+                "The two dates use different input trajectories. "
+                f"[October release evidence]({october_reference}) · "
+                f"[November comparison]({NOVEMBER_REPORT}#head-latency-and-numerical-results)."
+            ),
+        ]
     return lines
 
 
@@ -100,6 +141,113 @@ def commit_marker(commit):
         raise ValueError("evidence must identify a full commit hash")
     commit = REWORDED_COMMITS.get(commit, commit)
     return f"[`{commit[:7]}`]({REPOSITORY}/commit/{commit})"
+
+
+def read_candidate(data):
+    reference = data.get("candidate_measurement")
+    if reference is None:
+        return None
+    if reference != NOVEMBER_RESULTS:
+        raise ValueError("unknown retained candidate report")
+    candidate = json.loads((ROOT / reference).read_text())
+    manifest = json.loads((ROOT / reference).with_name("measured-worker-manifest.json").read_text())
+    identity = manifest.pop("sha256")
+    encoded = json.dumps(manifest, allow_nan=False, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(encoded.encode()).hexdigest()
+    if identity != digest or identity != candidate["candidate_manifest_sha256"]:
+        raise ValueError("candidate results and measured worker manifest differ")
+    return candidate
+
+
+def candidate_capture(name):
+    return str(Path(NOVEMBER_RESULTS).with_name(name + ".json"))
+
+
+def read_candidate_capture(name):
+    return json.loads((ROOT / candidate_capture(name)).read_text())
+
+
+def candidate_profile_audit(candidate, raw, historical_rows):
+    """Check the retained stage totals against the matched native round samples."""
+    summary = candidate["stage_profile"]
+    manifest = candidate["candidate_manifest_sha256"]
+    if (
+        raw["binding"]["retained_manifest_sha256"] != manifest
+        or raw["measurement_date"] != candidate["measurement_date"]
+        or raw["target_head"] != candidate["target_head"].lower().replace("-", "")
+        or raw["context_order"] != summary["context_order"]
+        or raw["status"] != "matched_estimate"
+    ):
+        raise ValueError("candidate stage and summary captures differ")
+    results = {}
+    rows = summary["stages"]
+    if [row["number"] for row in rows] != list(range(1, raw["stage_count"] + 2)):
+        raise ValueError("candidate stage numbering differs from the profile")
+    labels = [label.replace("Global-256", candidate["target_head"]) for label, _, _ in historical_rows]
+    if [row["stage"] for row in rows[:-1]] != labels:
+        raise ValueError("candidate stage labels differ from the profile")
+    for index, context in enumerate(raw["context_order"]):
+        profile = raw["contexts"][context]
+        control = raw["observer_comparison"]["contexts"][context]
+        saved = summary["contexts"][context]["november_final"]
+        before = control["control_before_round_ms"]
+        after = control["control_after_round_ms"]
+        union = profile["round_timing_ms"]["gpu_busy_ms"]
+        clean = statistics.mean(before + after)
+        timings = [row["november_final_ms"][index] for row in rows]
+        stage_samples = [profile["stages_ms"][scope] for _, scope, _ in historical_rows]
+        if (
+            not profile["same_output_and_accepted_schedule"]
+            or len(before) != len(after)
+            or len(before) != profile["included_rounds"]
+            or len(before) != saved["matched_rounds_per_arm"]
+            or not all(math.isfinite(value) and value >= 0 for value in timings)
+            or not all(
+                math.isclose(lhs, rhs, rel_tol=0, abs_tol=1e-8)
+                for lhs, rhs in (
+                    *zip(timings[:-1], stage_samples, strict=True),
+                    (sum(profile["stages_ms"].values()), profile["stage_sum_ms"]),
+                    (sum(timings[:-1]), profile["stage_sum_ms"]),
+                    (profile["stage_sum_ms"], saved["gpu_stage_sum_ms"]),
+                    (union, saved["gpu_busy_union_ms"]),
+                    (clean, saved["unprofiled_worker_round_ms"]),
+                    (clean - union, saved["control_minus_gpu_union_ms"]),
+                    (clean - union, timings[-1]),
+                )
+            )
+        ):
+            raise ValueError("candidate stage totals do not match controls for " + context)
+        results[context] = {
+            "union_corrected_difference_ms": clean - union,
+            "full_uninstrumented_round_ms": clean,
+        }
+    return {"status": "matched_estimate", "contexts": results}
+
+
+def candidate_confirmations(candidate, profile):
+    stages = read_candidate_capture("stage-confirmations")
+    whole = read_candidate_capture("whole-model-confirmations")
+    validate_stage_correctness({}, profile, stages, whole)
+    bindings = [stages["binding"], *(arm["binding"] for arm in whole["executions"].values())]
+    if any(binding["retained_manifest_sha256"] != candidate["candidate_manifest_sha256"] for binding in bindings):
+        raise ValueError("correctness evidence belongs to another worker")
+    return stages, whole
+
+
+def candidate_operator_confirmation(candidate):
+    """Independent primitive checks run against the candidate's base release."""
+    reference = candidate_capture("operator-confirmations")
+    if candidate is None or not (ROOT / reference).exists():
+        return None
+    audit = read_candidate_capture("operator-confirmations")
+    profile = read_candidate_capture("stage-detail")
+    if (
+        audit["optimized_manifest_sha256"] != profile["binding"]["optimized_manifest_sha256"]
+        or sum(group["checks"] for group in audit["groups"].values()) != audit["checks"]
+        or sum(group["checks"] - group["passed"] for group in audit["groups"].values()) != audit["failed_checks"]
+    ):
+        raise ValueError("independent operator report and measured base release differ")
+    return audit
 
 
 def validate_stage_correctness(data, profile, stages, full_model):
@@ -151,7 +299,7 @@ def evidence_with_commits(data, stage, evidence):
     return f"{evidence} · {markers[0]}"
 
 
-def current_stage_profile(data):
+def current_stage_profile(data, candidate=None):
     """Return the old grouped 26-row view populated by the new profile.
 
     The README historically exposed a grouped 26-row table.  The replacement
@@ -162,7 +310,10 @@ def current_stage_profile(data):
     rendered with an explicit inclusion or measurement-status label rather than
     being presented as measured zero milliseconds.
     """
-    evidence = ROOT / data.get("matched_stage_profile", "benchmarks/results/compiled-global256-stage-profile-1200.json")
+    profile_ref = candidate_capture("stage-detail") if candidate is not None else data.get(
+        "matched_stage_profile", "benchmarks/results/compiled-global256-stage-profile-1200.json"
+    )
+    evidence = ROOT / profile_ref
     base = data.get("stage_profile_2k")
     if not evidence.exists() or not isinstance(base, dict):
         return base
@@ -203,10 +354,15 @@ def current_stage_profile(data):
         counts = " / ".join(str(raw["contexts"][c]["included_rounds"]) for c in raw["context_order"])
         outputs = " / ".join(f"{raw['contexts'][c]['generated_tokens_per_arm']:,}" for c in raw["context_order"])
         deltas = " / ".join(f"{raw['observer_comparison']['contexts'][c]['mean_delta_ms']:.3f}" for c in raw["context_order"])
+        worker = (
+            f"the compiled Global-{depth} candidate on an isolated worker"
+            if candidate is not None else
+            f"the compiled, optimized Global-{depth} serving backend"
+        )
         grouped["scope"] = (
-            f"Measured on {grouped['measurement_date']} using the compiled, optimized Global-{depth} serving backend"
+            f"Measured on {grouped['measurement_date']} using {worker}"
             + (" with the pinned-RAM huge-page promotion repair" if raw["binding"].get("host_runtime") else "")
-            + "; sampling is temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes: "
+            + ". Sampling uses temperature 1.0, top-p 0.95 and top-k 40. Context labels are starting prefixes "
             "0K, the private 60K Pi fixture, and the public synthetic 200K fixture. Each context ran "
             "a natural warmup followed by clean control, trace, and clean control; each arm generated "
             + outputs + " tokens respectively. Generated-token hashes and accepted-token schedules matched. "
@@ -226,10 +382,19 @@ def current_stage_profile(data):
                if data.get("uncommitted_qualification") else
                "The header identifies the measured source commit. ")
             + "The capture retains its original checkout and source identities. "
-            f"[Capture and source identities]({data['matched_stage_profile']}) "
-            f"· [controls]({data['matched_stage_control']}) · [method and uncertainty](docs/STAGE_TIMING.md)."
+            f"[Capture and source identities]({profile_ref}) "
+            "· [method and uncertainty](docs/STAGE_TIMING.md)."
         )
-        if data.get("current_qualification_document"):
+        if candidate is not None:
+            grouped["scope"] += (
+                f"\n\nThe benchmark ran the isolated November worker "
+                f"`{candidate['candidate_manifest_sha256'][:12]}` at context capacity "
+                f"{candidate['model_context_limit']:,}. The header identifies the captured base "
+                f"commit and measured worker overlay. [Candidate report]({NOVEMBER_REPORT})."
+            )
+        else:
+            grouped["scope"] += f" [Matched controls]({data['matched_stage_control']})."
+        if candidate is None and data.get("current_qualification_document"):
             grouped["scope"] += (
                 "\n\nThe backend includes the full-graph cache-preparation repair and "
                 "measurement adapters described in the [September 25 speed investigation]("
@@ -243,7 +408,7 @@ def current_stage_profile(data):
                     "The experimental worker is separate from the normal Pi deployment."
                 )
             )
-        elif data.get("uncommitted_qualification"):
+        elif candidate is None and data.get("uncommitted_qualification"):
             grouped["scope"] += (
                 "\n\nThis candidate rerun uses the banked speed changes plus the uncommitted "
                 "full-graph cache-preparation repair and measurement adapters. The commit link "
@@ -253,7 +418,7 @@ def current_stage_profile(data):
         long_context = raw["observer_comparison"]["contexts"].get("200K", {})
         later = long_context.get("control_after_round_ms", [])
         pauses = [value for value in later if value > 100]
-        if pauses:
+        if pauses and candidate is None:
             low, high = long_context["remainder_before_after_range_ms"]
             grouped["scope"] += (
                 f"\n\nThe later 200K clean control retained {len(pauses)} intervals above 100 ms, "
@@ -266,7 +431,7 @@ def current_stage_profile(data):
     grouped["stage26"] = copy.deepcopy(base["stage26"])
     control_ref = (data["matched_stage_control"] if matched else
                    grouped.get("stage26_benchmark", {}).get("artifact"))
-    if control_ref:
+    if candidate is None and control_ref:
         control_path = ROOT / control_ref
         if not control_path.exists():
             raise ValueError(f"stage-26 control artifact is missing: {control_ref}")
@@ -432,6 +597,8 @@ def current_stage_profile(data):
         ),
     )
     grouped["stage_order"] = [row[0] for row in historical_rows]
+    if candidate is not None:
+        grouped["stage26_audit"] = candidate_profile_audit(candidate, raw, historical_rows)
     grouped["stage_labels"] = {row[0]: row[0].replace("Global-256", f"Global-{depth}") for row in historical_rows}
     grouped["evidence_sources"] = {row[0]: row[0] for row in historical_rows}
     grouped["historical_raw_scopes"] = {row[0]: row[1] for row in historical_rows}
@@ -462,7 +629,45 @@ def current_stage_profile(data):
     return grouped
 
 
-def _render_stage_profile_table(data):
+NOVEMBER_STAGE_CHANGES = {
+    "Drafter": ("9842b30b53c9b7b32fa30e4562cefbef1b5ff5ad", "skip draft queries on confirmed distant-match streaks"),
+    "Embedding + first input normalization + FP8 production": ("6c34f50ef02260159fcf6059e9637bad1f9bd79a", "preserve FP8 rounding in wide prefill"),
+    "Layer input residual/normalization + FP8 production": ("6c34f50ef02260159fcf6059e9637bad1f9bd79a", "preserve FP8 rounding in wide prefill"),
+    "GDN layout/copies and buffer initialization": ("d43d9a74e713e7d283075fd6032ebef37d3be08e", "initialize qualified prefill convolution slots in place"),
+    "GDN convolution": ("d43d9a74e713e7d283075fd6032ebef37d3be08e", "initialize qualified prefill convolution slots in place"),
+    "GDN recurrence and gates": ("b312bf1552882ed066b960307dd4df4316cb76b7", "preserve lazy GDN alignment alongside the indexed-state and packed-bias changes"),
+    "GDN output projection": ("41730ab2594b50969aae1799b94d357b4d73502a", "produce FP8 tiles directly for wide input"),
+    "Attention Q/K normalization, RoPE and layout": ("2aaa0d389033ba71a5f0abf35b2974459aa5ffff", "use the M1 reduction in wide Q/K normalization"),
+    "Attention decode": ("f3b5778b5b1e4e4c2d9bd751bf3882ead13db84a", "preserve logical splits in short FULL graphs"),
+    "Attention split-KV merge": ("f3b5778b5b1e4e4c2d9bd751bf3882ead13db84a", "preserve logical splits in short FULL graphs"),
+    "Post-attention/GDN residual/normalization + FP8 production": ("6c34f50ef02260159fcf6059e9637bad1f9bd79a", "preserve FP8 rounding in wide prefill"),
+    "Global-256 target head": ("dd1aa906f9e795bd4008224ce6661b5fdb69fa16", "rerank live Global-512 rows only"),
+}
+
+OPERATOR_CHECKS_BY_STAGE = {
+    "Embedding + first input normalization + FP8 production": ("embedding", "fused_norm_quant_m1"),
+    "Layer input residual/normalization + FP8 production": ("residual_norm", "fused_norm_quant_m1"),
+    "↳ GDN input activation FP8 quantization": ("fused_norm_quant_m1",),
+    "↳ Attention input activation FP8 quantization": ("fused_norm_quant_m1",),
+    "GDN convolution": ("gdn_convolution", "convolution_history", "convolution_slot_isolation"),
+    "GDN recurrence and gates": ("gdn_recurrence", "gdn_output", "gdn_slot_isolation", "gdn_long_decay"),
+    "GDN output gated normalization + FP8 production": ("gdn_gated_norm", "gdn_fused_quant_m1"),
+    "↳ GDN output activation FP8 quantization": ("gdn_fused_quant_m1",),
+    "Attention Q/K normalization, RoPE and layout": ("rope", "rope_dispatch", "rope_tail"),
+    "Attention KV write": ("kv_fp8_storage", "kv_write"),
+    "Attention decode": ("attention_periodic_long_context", "attention_memory_isolation"),
+    "Attention split-KV merge": ("attention_periodic_long_context", "attention_memory_isolation"),
+    "Attention output gating": ("attention_sigmoid_gate",),
+    "Post-attention/GDN residual/normalization + FP8 production": ("residual_norm", "fused_norm_quant_m1"),
+    "↳ MLP gate/up input FP8 quantization": ("fused_norm_quant_m1",),
+    "MLP SiLU and gating": ("mlp_silu_gate",),
+    "MLP down input FP8 quantization": ("mlp_fused_quant_m1",),
+    "Final normalization/layout": ("normalization",),
+    "Global-256 target head": ("head_rerank", "head_coefficient", "head_full_m1"),
+}
+
+
+def _render_stage_profile_table(data, candidate=None):
     """Render the archived 26-stage attribution as one 0K/60K/200K column.
 
     The older aggregate ``stages`` table is retained in the JSON for the
@@ -472,7 +677,7 @@ def _render_stage_profile_table(data):
     separate unprofiled-round control. Rendering fails if that control is not
     complete; a profiler-cycle remainder is never substituted for it.
     """
-    profile = current_stage_profile(data)
+    profile = current_stage_profile(data, candidate)
     if not isinstance(profile, dict):
         raise ValueError("the current measurements do not contain the 2K stage profile")
     order = profile["stage_order"]
@@ -484,12 +689,18 @@ def _render_stage_profile_table(data):
     confirmations_ref = data.get("current_stage_confirmations")
     confirmations = json.loads((ROOT / confirmations_ref).read_text()) if confirmations_ref else None
     historical_correctness = False
-    if confirmations:
+    if candidate is not None:
+        confirmations_ref = candidate_capture("stage-confirmations")
+        confirmations, _ = candidate_confirmations(candidate, profile)
+    elif confirmations:
         full_model = json.loads((ROOT / data["current_confirmations"]).read_text())
         historical_correctness = validate_stage_correctness(data, profile, confirmations, full_model)
     study_label = "current 320-token run"
     study_binding = ""
-    if historical_correctness:
+    if candidate is not None:
+        study_label = f"{candidate['measurement_date']} stage replay"
+        study_binding = f" · worker `{candidate['candidate_manifest_sha256'][:8]}`"
+    elif historical_correctness:
         evidence_date = datetime.strptime(data["correctness_refresh"]["evidence_date"], "%Y-%m-%d")
         study_label = evidence_date.strftime("%B") + f" {evidence_date.day} study"
         study_binding = f" · source binding `{confirmations['binding']['source_binding_sha256'][:12]}`"
@@ -497,7 +708,9 @@ def _render_stage_profile_table(data):
                "Archived diagnostic interval per retained compiled profile cycle")
     run_label = (f"{profile['measurement_date']}; run {commit}" if profile.get("matched") else
                  f"evidence run {commit}")
-    if data.get("uncommitted_qualification"):
+    if candidate is not None:
+        run_label = f"{profile['measurement_date']}; base {commit} + worker `{candidate['candidate_manifest_sha256'][:8]}`"
+    elif data.get("uncommitted_qualification"):
         run_label = f"{profile['measurement_date']}; base {commit} + recorded working-tree changes"
     lines = [
         f"| Stage | {heading} ({' / '.join(context_order)}; milliseconds unless explicitly marked; {run_label}) | Current M1->M8 correctness and eager->compiled correctness evidence | Last relevant code commit / change | What this stage does |",
@@ -540,8 +753,9 @@ def _render_stage_profile_table(data):
             elif stage in {"Attention decode", "Attention split-KV merge"}:
                 provenance = provenance_marker(data, stage)
         if profile.get("target_head") == "global512" and stage == "Global-256 target head":
-            head_ref = data["head_candidate_result"]
-            measured_head = json.loads((ROOT / head_ref).read_text())["modes"]["global512"]
+            head_ref = NOVEMBER_RESULTS if candidate is not None else data["head_candidate_result"]
+            measured_head = (candidate["head"]["november_final"]["global512"] if candidate is not None else
+                             json.loads((ROOT / head_ref).read_text())["modes"]["global512"])
             evidence = (
                 f"Same top-1: {measured_head['argmax_equal']:,}/{measured_head['rows']:,}; "
                 f"complete reference top-20 retained: {measured_head['top20_complete_including_ties']:,}/{measured_head['rows']:,}. "
@@ -550,6 +764,9 @@ def _render_stage_profile_table(data):
             previous_head = commit_marker(data["stage_provenance"][stage]["commit"])
             current_head = commit_marker(data["target_head_change_commit"])
             provenance = current_head + ": increase target shortlist to 512; drafter unchanged. Extends the Global-256 method from " + previous_head + "."
+        if candidate is not None and stage in NOVEMBER_STAGE_CHANGES:
+            change_commit, change = NOVEMBER_STAGE_CHANGES[stage]
+            provenance = f"{commit_marker(change_commit)} · {change}."
         if confirmations:
             paired_stage = (
                 "Attention decode and split-KV merge"
@@ -566,6 +783,8 @@ def _render_stage_profile_table(data):
                 )
                 if paired_stage != stage:
                     evidence += " Decode and merge checked together."
+                if candidate is not None and stage == "Attention Q/K normalization, RoPE and layout":
+                    evidence += " Separate Q and K checks cover 32 sites."
             elif stage == "GDN layout/copies and buffer initialization":
                 evidence = (
                     f"Authoritative cache/state restored in all {confirmations['cache_restored_groups']} "
@@ -628,9 +847,11 @@ def _render_stage_profile_table(data):
         estimates = [audit["contexts"][key]["union_corrected_difference_ms"] for key in context_order]
         timing = " / ".join(f"{value:.3f}" for value in estimates)
         totals = " / ".join(f"{audit['contexts'][key]['full_uninstrumented_round_ms']:.3f}" for key in context_order)
+        control_ref = (candidate_capture("stage-detail") if candidate is not None else
+                       data.get("matched_stage_residual", "benchmarks/results/matched-stage-residual-20260923.json"))
         lines.extend([
             f"| **26. {profile['stage26']['label']}** | {timing} (estimate) | "
-            f"[Matched control minus GPU activity union]({data.get('matched_stage_residual', 'benchmarks/results/matched-stage-residual-20260923.json')}) | "
+            f"[Matched control minus GPU activity union]({control_ref}) | "
             f"{commit}: record matched unprofiled controls and overlap-corrected residuals | Indirect observer effects are not proved zero. |",
             f"| **Total reconstructed round (stages 1–26)** | **{totals}** | "
             "GPU activity union plus the estimated remainder | "
@@ -639,12 +860,24 @@ def _render_stage_profile_table(data):
     return lines
 
 
-def render_stage_profile_table(data):
+def render_stage_profile_table(data, candidate=None):
     """Keep independently scoped eager-M1 evidence when refreshing timings."""
     import re
 
     evidence = json.loads((ROOT / "benchmarks/results/eager-m1-readme-evidence.json").read_text())
-    lines = _render_stage_profile_table(data)
+    audit = candidate_operator_confirmation(candidate)
+    gdn_ref = candidate_capture("retained-gdn-bias")
+    gdn = None
+    if candidate is not None and (ROOT / gdn_ref).exists():
+        gdn = read_candidate_capture("retained-gdn-bias")
+        if (
+            gdn["schema"] != "coherence-retained-gdn-bias-v1"
+            or gdn["candidate_manifest_sha256"] != candidate["candidate_manifest_sha256"]
+            or sum(group["checks"] for group in gdn["groups"].values()) != gdn["checks"]
+            or sum(group["passed"] for group in gdn["groups"].values()) != gdn["passed"]
+        ):
+            raise ValueError("indexed GDN operator evidence belongs to another worker")
+    lines = _render_stage_profile_table(data, candidate)
     enriched = []
     observed = set()
     for line in lines:
@@ -660,12 +893,92 @@ def render_stage_profile_table(data):
             label = re.sub(r"^\*\*\d+\. ", "", cells[0]).removesuffix("**")
             key = "Global-256 target head" if label == "Global-512 target head" else label
             value = evidence["rows"][key]
+            if candidate is not None and key == "Global-256 target head":
+                head = candidate["head"]["november_final"]["global512"]
+                value = (
+                    "**4/5 for independently sampled score arithmetic.** Three 512-row weight "
+                    "slabs were checked against FP64 criteria in the 25 September operator audit. "
+                    f"The November head study retains top-1 in {head['argmax_equal']:,}/{head['rows']:,} rows, "
+                    f"complete top-20 in {head['top20_complete_including_ties']:,}/{head['rows']:,} and "
+                    f"complete top-40 in {head['top40_complete_including_ties']:,}/{head['rows']:,}. "
+                    "**Uncertainty:** scores are sampled, shortlist selection is approximate, and the "
+                    f"head study combines M1 and M8. [November head evidence]({NOVEMBER_RESULTS})."
+                )
+            if audit:
+                keys = OPERATOR_CHECKS_BY_STAGE.get(key, ())
+                if key.endswith("projection"):
+                    keys = ("mxfp4_projection", "mxfp4_coefficient")
+                if keys:
+                    groups = [audit["groups"][name] for name in keys]
+                    passed = sum(group["passed"] for group in groups)
+                    count = sum(group["checks"] for group in groups)
+                    coverage = " across all audited matrices" if key.endswith("projection") else ""
+                    value += (
+                        f" Independent base-release repeat{coverage} passed {passed:,}/{count:,} checks "
+                        f"in these operator groups. [Repeat]({candidate_capture('operator-confirmations')})."
+                    )
+            if gdn and key == "GDN recurrence and gates":
+                groups = gdn["groups"]
+                output = groups["retained_gdn_indexed_output"]
+                state = groups["retained_gdn_indexed_state"]
+                value += (
+                    f" The retained indexed bias wrapper passed {gdn['passed']:,}/{gdn['checks']:,} "
+                    "state, output and guard checks against an FP64 oracle across the sampled "
+                    f"accepted-state slots. Maximum absolute error was {output['max_absolute_error']:.3g} "
+                    f"for output and {state['max_absolute_error']:.3g} for state. [Retained bias audit]({gdn_ref})."
+                )
             observed.add(key)
         cells.insert(3, value)
         enriched.append("| " + " | ".join(cells) + " |")
     if observed != set(evidence["rows"]):
         raise ValueError("eager-M1 evidence does not cover every compiled stage row")
     scope = []
+    if candidate is not None:
+        manifest = candidate["candidate_manifest_sha256"][:8]
+        confirmations = read_candidate_capture("stage-confirmations")
+        local_checks = sum(
+            result["invocations"]
+            for checks in confirmations["local_checks"].values()
+            for result in checks.values()
+        )
+        layer_sites = sum(len(boundary["instances"]) for boundary in confirmations["inventory"].values())
+        repeated = []
+        if audit:
+            repeated = [
+                (
+                    f"The independent repeat passed {audit['checks'] - audit['failed_checks']:,}/"
+                    f"{audit['checks']:,} checks at {audit['rows_per_site']:,} rows per sampled site "
+                    f"on base release `{audit['optimized_manifest_sha256'][:8]}`. Projection "
+                    "checks sample output channels across all tested matrices. The long "
+                    "attention checks use structured pages. "
+                    f"[Independent repeat]({candidate_capture('operator-confirmations')})."
+                ),
+                "",
+            ]
+        return [
+            (
+                "The **eager M1** column uses independent operator evidence at the named "
+                "dates and links each claim to its scope. Confidence scores are editorial "
+                "assessments. **1/5** is untested, **2/5** limited, **3/5** moderate, "
+                "**4/5** high and **5/5** very high for the tested properties. These scores "
+                "are not probabilities of being bug-free. Independent FP64 checks use declared "
+                "error criteria. [Arithmetic contract](docs/M1_ARITHMETIC_CONTRACT.md) · "
+                "[September independent operator audit](benchmarks/results/current-operator-confirmations-20260925.json)."
+            ),
+            "",
+            *repeated,
+            (
+                f"The November worker `{manifest}` stage replays checked {len(confirmations['inventory'])} boundaries and "
+                f"{layer_sites:,} layer instances over {confirmations['decode_positions']} decode positions. "
+                f"The resulting {local_checks:,} local output and state checks passed. "
+                f"All {confirmations['groups']} eight-token groups restored authoritative state "
+                "and detected deliberate corruption. The replays share native operators "
+                "and establish execution equivalence on the sampled inputs. "
+                f"[Stage replay capture]({candidate_capture('stage-confirmations')})."
+            ),
+            "",
+            *enriched,
+        ]
     refresh = data.get("correctness_refresh", {})
     if refresh.get("status") == "NOT_RERUN":
         profile = current_stage_profile(data)
@@ -707,16 +1020,45 @@ def workload_target_head(report):
     return head
 
 
-def render_chained_workload_results(report=None):
-    if report is None:
-        report = json.loads(CHAINED_RESULTS.read_text())
+def render_chained_workload_results(report=None, candidate=None):
+    if candidate is not None:
+        capture = candidate["workload_capture"]
+        report = {
+            "sampling": candidate["target_sampling"],
+            "stages": [
+                {"stage": key, **row["november_final"]}
+                for key, row in candidate["continuation_chain"].items()
+            ],
+            "status": capture["chain_status"],
+            "suite_capture_id": capture["suite_capture_id"],
+        }
+        run_date = candidate["measurement_date"]
+        head = candidate["target_head"]
+        compaction_temperature = capture["checkpoint_temperature"]
+        source = NOVEMBER_RESULTS
+        profile = (
+            f"The {run_date} isolated candidate uses {head} and "
+            f"{candidate['drafter']} with proposal temperature {candidate['proposal_temperature']:g}. "
+            "The same 60K prefix and task sequence were used for the October control. Later prompts "
+            f"incorporate each run's earlier output. [October release control](benchmarks/results/pi-coding-json-compaction.json) · "
+            f"[November comparison]({NOVEMBER_REPORT}#coding-and-chained-requests)."
+        )
+    else:
+        if report is None:
+            report = json.loads(CHAINED_RESULTS.read_text())
+        run_date = datetime.fromtimestamp(report["started_at"], tz=UTC).date().isoformat()
+        head = workload_target_head(report)
+        source = "benchmarks/results/pi-coding-json-compaction.json"
+        profile = (
+            f"The {run_date} serving control uses {head}, the attention-page-boundary "
+            "repair and the pinned-RAM huge-page promotion repair."
+        )
     sampling = report["sampling"]
-    run_date = datetime.fromtimestamp(report["started_at"], tz=UTC).date().isoformat()
     stages = {row["stage"]: row for row in report["stages"]}
     compaction = stages.get("compaction", {})
     checkpoint = compaction.get("checkpoint_validation", {})
-    compaction_temperature = compaction.get("sampling", {}).get("temperature", 0.3)
-    head = workload_target_head(report)
+    if candidate is None:
+        compaction_temperature = compaction.get("sampling", {}).get("temperature", 0.3)
     runner = (
         "[benchmark_pi_coding_contexts.py --suite]"
         "(experiments/radiance-public/benchmark_pi_coding_contexts.py)"
@@ -728,17 +1070,14 @@ def render_chained_workload_results(report=None):
         "## Benchmarks",
         "",
         (
-            "This benchmark uses the retained 60,000-input-token Pi prefix and the compiled "
-            f"Coherence backend with {head}, the attention-page-boundary repair and the "
-            "pinned-RAM huge-page promotion repair. Five "
+            profile + " Five "
             "requests are chained in one context: code, prose about code measurement, JSON, "
             "thinking/prose and checkpoint generation. Code and JSON disable thinking; both "
             "prose requests enable it. All requests stop naturally. "
             f"Generation uses temperature {sampling['temperature']:g}, top-p {sampling['top_p']:g}, "
             f"top-k {sampling['top_k']} and seed {sampling['seed']}; compaction uses temperature "
             f"{compaction_temperature:g}. The checkpoint request forces a snapshot-tail flush. "
-            "Private fixture text was not decoded or inspected. Public results contain "
-            "aggregates and hashes, not chat text or token arrays. "
+            "Public results contain aggregate counters and source identities. "
             + ("The shared suite retains sealed continuation tokens privately for resumability. "
                if report.get("suite_capture_id") else "")
             + f"Runner: {runner}."
@@ -791,29 +1130,53 @@ def render_chained_workload_results(report=None):
     lines.extend([
         "",
         (
-            f"{run_date} rerun status: `{report['status']}`. [Numeric results and release identity]"
-            "(benchmarks/results/pi-coding-json-compaction.json)."
+            f"{run_date} rerun status: `{report['status']}`. [Numeric results and tested identity]({source})."
         ),
         "",
     ])
     return lines
 
 
-def render_coding_json_compaction_benchmark():
+def render_coding_json_compaction_benchmark(candidate=None):
     return [
-        *render_chained_workload_results(),
-        *render_coding_context_benchmark(),
+        *render_chained_workload_results(candidate=candidate),
+        *render_coding_context_benchmark(candidate),
         "",
-        *render_round_capture_summary(),
+        *render_round_capture_summary(candidate),
         "",
-        *render_round_histogram(),
+        *render_round_histogram(candidate),
         "",
-        *render_known_remaining_symptoms(),
+        *render_known_remaining_symptoms(candidate),
     ]
 
 
-def render_known_remaining_symptoms():
+def render_known_remaining_symptoms(candidate=None):
     current = json.loads((ROOT / "benchmarks/results/coherence-current.json").read_text())
+    if candidate is not None:
+        histograms = [candidate["histogram"][context]["november_final"] for context in ("0K", "60K", "200K")]
+        rounds = sum(row["measured_round_count"] for row in histograms)
+        stalls = sum(row["rounds_at_least_90_ms"] for row in histograms)
+        head = candidate["head"]["november_final"]["global512"]
+        return [
+            "### Known remaining symptoms and likely causes", "",
+            (
+                f"**November round latency.** The candidate recorded {stalls:,}/{rounds:,} timed rounds at least 90 ms. "
+                "The October profiler investigation recorded separate 591.203 ms and 751.876 ms pauses. Their cause "
+                "remains unattributed because the original diagnostic feeds were incomplete. "
+                f"[November per-round records]({NOVEMBER_ROUNDS}) · [October matched controls]({current['matched_stage_control']})."
+            ), "",
+            (
+                "**Reasoning throughput could not be isolated.** The prose and thinking-enabled requests "
+                "exposed no separate reasoning channel. The JSON request reached a natural stop and failed "
+                f"the format check. [Workload evidence]({NOVEMBER_RESULTS})."
+            ), "",
+            (
+                "**Global-512 remains approximate.** The November candidate matched reference top-1 in "
+                f"{head['argmax_equal']:,}/{head['rows']:,} rows and retained all reference top-20 candidates "
+                f"in {head['top20_complete_including_ties']:,}. Retained-score differences are reported above. "
+                f"[Head evidence]({NOVEMBER_REPORT}#head-latency-and-numerical-results)."
+            ),
+        ]
     head = json.loads((ROOT / current["head_candidate_result"]).read_text())["modes"]["global512"]
     round_result = round_histogram_result_path()
     workload = json.loads(round_result.read_text())
@@ -1009,17 +1372,47 @@ def _coding_context_value(value, suffix=""):
     return f"{value:,}{suffix}" if isinstance(value, int) else str(value)
 
 
-def render_coding_context_benchmark():
+def _load_candidate_rounds(candidate):
+    report = json.loads((ROOT / NOVEMBER_ROUNDS).read_text())
+    capture = candidate["workload_capture"]
+    for key in ("suite_capture_id", "contract_sha256", "runtime_manifest_sha256", "capture_selection"):
+        if report[key] != capture[key]:
+            raise ValueError("candidate round capture identity differs from the coding table")
+    if report["retained_manifest_sha256"] != candidate["candidate_manifest_sha256"]:
+        raise ValueError("candidate round capture uses a different worker manifest")
+    for context, row in report["contexts"].items():
+        current = candidate["coding"][context]["november_final"]
+        fields = ("prompt_tokens", "generated_tokens")
+        if any(current[field] != row[field] for field in fields) or any(
+            current["round_capture"][field] != row["round_capture"][field]
+            for field in current["round_capture"]
+        ):
+            raise ValueError(f"{context} per-round record summary differs from the coding table")
+    return report
+
+
+def render_coding_context_benchmark(candidate=None):
     """Render the same coding task at independent 0K/60K/200K prefixes."""
 
     report = {}
-    if CODING_CONTEXT_RESULTS.is_file():
+    source = "benchmarks/results/pi-coding-contexts.json"
+    if candidate is not None:
+        capture = candidate["workload_capture"]
+        report = {
+            "contexts": {context: row["november_final"] for context, row in candidate["coding"].items()},
+            "status": capture["coding_status"],
+            "suite_capture_id": capture["suite_capture_id"],
+            "coding_min_tokens": capture["coding_min_tokens"],
+            "sampling": candidate["target_sampling"],
+        }
+        source = NOVEMBER_ROUNDS
+    elif CODING_CONTEXT_RESULTS.is_file():
         try:
-            candidate = json.loads(CODING_CONTEXT_RESULTS.read_text())
+            artifact = json.loads(CODING_CONTEXT_RESULTS.read_text())
         except (OSError, json.JSONDecodeError):
-            candidate = {}
-        if isinstance(candidate, dict):
-            report = candidate
+            artifact = {}
+        if isinstance(artifact, dict):
+            report = artifact
     contexts = report.get("contexts") if isinstance(report.get("contexts"), dict) else {}
     rows = []
     for context in ("0K", "60K", "200K"):
@@ -1064,6 +1457,15 @@ def render_coding_context_benchmark():
         )
     report_state = report.get("status") if report else "not_run"
     sampling = report.get("sampling", {})
+    scope = ""
+    if candidate is not None:
+        scope = (
+            f"These are {candidate['measurement_date']} isolated candidate measurements. "
+            "All three arms generated the same token sequences from warm and cold starts within this build. "
+            "The earlier November candidate used the same prompts and sampling settings. "
+            "October used a different drafter proposal policy. "
+            f"[Paired throughput comparison]({NOVEMBER_REPORT}#coding-and-chained-requests)."
+        )
     provenance = report.get("fixture_provenance") if isinstance(report, dict) else None
     provenance_line = None
     if isinstance(provenance, dict):
@@ -1088,11 +1490,16 @@ def render_coding_context_benchmark():
             "benchmark_pi_coding_contexts.py)."
         ),
         "",
-        "| Context | Prompt tokens | Generated tokens | Mean round | Post-first | Peak 3s | Acceptance | Round events (total; speculative/expected; timed) | Validation |",
+        *([scope, ""] if scope else []),
+        "| Context | Prompt tokens | Generated tokens | Mean round | Post-first | Peak 3s | Acceptance | Round events (total; speculative/expected; timed) | Output minimum |",
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         *rows,
         "",
-        f"Report status: `{report_state}`. [Numeric results and every round](benchmarks/results/pi-coding-contexts.json). Each completed row stores every scheduler event under `contexts.<context>.round_capture.records`; a count mismatch is a validation failure. The target is {report.get('coding_min_tokens', 5000):,} output tokens, with shorter natural completions reported explicitly.",
+        (
+            f"Report status: `{report_state}`. [Numeric results and every round]({source}). "
+            "The round records appear under `contexts.<context>.round_capture.records`. "
+            f"The target is {report.get('coding_min_tokens', 5000):,} output tokens, with shorter natural completions reported explicitly."
+        ),
         "",
         *( [provenance_line, ""] if provenance_line else [] ),
         (
@@ -1109,17 +1516,19 @@ def render_coding_context_benchmark():
     ]
 
 
-def render_round_capture_summary():
+def render_round_capture_summary(candidate=None):
     """Show whether the context benchmark retained every scheduler event."""
 
     report = {}
-    if CODING_CONTEXT_RESULTS.is_file():
+    if candidate is not None:
+        report = _load_candidate_rounds(candidate)
+    elif CODING_CONTEXT_RESULTS.is_file():
         try:
-            candidate = json.loads(CODING_CONTEXT_RESULTS.read_text())
+            artifact = json.loads(CODING_CONTEXT_RESULTS.read_text())
         except (OSError, json.JSONDecodeError):
-            candidate = {}
-        if isinstance(candidate, dict):
-            report = candidate
+            artifact = {}
+        if isinstance(artifact, dict):
+            report = artifact
     contexts = report.get("contexts") if isinstance(report.get("contexts"), dict) else {}
     rows = []
     for context in ("0K", "60K", "200K"):
@@ -1137,6 +1546,24 @@ def render_round_capture_summary():
             f"{capture.get('unmeasured_round_count', 0):,} | {missing} | "
             f"{capture.get('status', 'unknown')} |"
         )
+    diagnostic_status = []
+    if candidate is not None:
+        coverage = candidate["diagnostic_coverage"]
+        diagnostic_labels = {
+            "0K": "0K", "60K": "60K", "200K": "200K", "coding": "chained coding", "prose_code": "prose about code",
+            "json": "JSON", "thinking": "thinking/prose", "compaction": "checkpoint generation",
+        }
+        coverage_rows = coverage["coding"] | coverage["continuation_chain"]
+        losses = ", ".join(diagnostic_labels[key] for key, issues in coverage_rows.items()
+                           if "recorder_reports_loss" in issues)
+        rotation = ", ".join(diagnostic_labels[key] for key, issues in coverage_rows.items()
+                             if "rotation_did_not_settle" in issues)
+        diagnostic_status = [
+            f"The {candidate['measurement_date']} public round records cover all expected speculative rounds. "
+            + (f"The separate diagnostic recorder reported event loss for {losses}. " if losses else "")
+            + (f"Archive rotation did not settle for {rotation}. " if rotation else "")
+            + f"[Timing and diagnostic coverage]({NOVEMBER_REPORT}#round-latency).", "",
+        ]
     return [
         "### Complete per-round capture",
         "",
@@ -1153,22 +1580,26 @@ def render_round_capture_summary():
         "| ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         *rows,
         "",
+        *diagnostic_status,
+        "",
     ]
 
 
-def render_round_histogram():
+def render_round_histogram(candidate=None):
     """Rebin complete captured rounds for display without changing the capture."""
 
     report = {}
-    result_path = round_histogram_result_path()
-    dedicated_capture = result_path == ROUND_HISTOGRAM_RESULTS
-    if result_path.is_file():
+    result_path = ROOT / NOVEMBER_ROUNDS if candidate is not None else round_histogram_result_path()
+    dedicated_capture = candidate is not None or result_path == ROUND_HISTOGRAM_RESULTS
+    if candidate is not None:
+        report = _load_candidate_rounds(candidate)
+    elif result_path.is_file():
         try:
-            candidate = json.loads(result_path.read_text())
+            artifact = json.loads(result_path.read_text())
         except (OSError, json.JSONDecodeError):
-            candidate = {}
-        if isinstance(candidate, dict):
-            report = candidate
+            artifact = {}
+        if isinstance(artifact, dict):
+            report = artifact
     contexts = report.get("contexts") if isinstance(report.get("contexts"), dict) else {}
     captures = {
         context: contexts.get(context, {}).get("round_capture")
@@ -1444,8 +1875,8 @@ def render_round_histogram():
     ]
 
 
-def current_fine_detail(data):
-    reference = data.get("matched_stage_profile")
+def current_fine_detail(data, candidate=None):
+    reference = candidate_capture("stage-detail") if candidate is not None else data.get("matched_stage_profile")
     if not reference:
         return None
     capture = json.loads((ROOT / reference).read_text())
@@ -1474,7 +1905,7 @@ def current_fine_detail(data):
             "date": capture["measurement_date"]}
 
 
-def render_cache_state_equivalence(data):
+def render_cache_state_equivalence(data, candidate=None):
     """Keep cache-path equality and latency attached to their original captures."""
     alignment_path = data["prefill_alignment_evidence"]
     alignment = json.loads((ROOT / alignment_path).read_text())
@@ -1486,6 +1917,12 @@ def render_cache_state_equivalence(data):
     pressure = json.loads((ROOT / pressure_path).read_text())
     snapshot_path = data["current_snapshot_confirmations"]
     snapshot = json.loads((ROOT / snapshot_path).read_text())
+    additional = {}
+    if candidate is not None and (ROOT / NOVEMBER_LIFECYCLE).is_file():
+        additional = json.loads((ROOT / NOVEMBER_LIFECYCLE).read_text())
+        if (additional["schema"] != "coherence-retained-lifecycle-v1"
+            or additional["candidate_manifest_sha256"] != candidate["candidate_manifest_sha256"]):
+            raise ValueError("lifecycle results use a different candidate or schema")
     rows = []
 
     def add(comparison, workload, correctness, timing, evidence):
@@ -1500,6 +1937,19 @@ def render_cache_state_equivalence(data):
     aligned_link = f"[2026-09-27 alignment]({alignment_path})"
     cache_link = f"[2026-09-27 cache paths]({cache_path})"
     lifecycle_link = f"[2026-09-27 lifecycle]({deployment_path})"
+    pressure_link = f"[2026-09-27 pressure checks]({pressure_path})"
+    benchmark_lifecycle_link = (
+        f"[{candidate['measurement_date']} candidate lifecycle]({NOVEMBER_LIFECYCLE})" if additional else ""
+    )
+
+    def response_cases(mode, previous, previous_link=cache_link):
+        current = additional.get("response_end", {}).get(mode, {})
+        complete = current.get("status", "").startswith("PASS")
+        if mode == "pressure" and current.get("forward_progress"):
+            complete = True  # The two observed positive cases are useful if the negative control misses.
+        if complete and current.get("cases"):
+            return current["cases"], benchmark_lifecycle_link
+        return previous, previous_link
     # Numerical replay and the current cold-prefill speed arm have different
     # workloads. Do not substitute a prefill timing for the replay itself.
     prefill_times = {
@@ -1521,33 +1971,114 @@ def render_cache_state_equivalence(data):
         return (f"Byte-exact hidden rows {case['hidden_exact_rows']:,}/{count:,}; full BF16-logit rows "
                 f"{case['logits']['full_logits_exact']:,}/{count:,}.<br>{ranks}")
 
-    for case in alignment["model_comparisons"]:
-        count = case["positions"]
+    if candidate is None:
+        for case in alignment["model_comparisons"]:
+            count = case["positions"]
+            add(
+                "Cold prefill ↔ retained decode history",
+                f"{case['first_position']:,}-token prefix + {count:,} forced token positions",
+                numerical_result(case), prefill_times[case["first_position"]], aligned_link,
+            )
+    else:
+        candidate_link = f"[{candidate['measurement_date']} candidate]({NOVEMBER_REPORT})"
+        checks = candidate["correctness"]
+        short = checks["short_vectors"]
+        positions = sum(case["positions"] for case in short)
+        hidden = sum(case["bit_exact_hidden_rows"] for case in short)
+        logits = sum(case["full_logits_exact"] for case in short)
         add(
-            "Cold prefill ↔ retained decode history",
-            f"{case['first_position']:,}-token prefix + {count:,} forced token positions",
-            numerical_result(case), prefill_times[case["first_position"]], aligned_link,
+            "Short cold prefill ↔ fresh M8 decode history",
+            "Cold prompt rows around 127/128, 255/256, 1,023/1,024, 1,647/1,648 and 3,296",
+            f"{sum(case['pass'] for case in short)}/{len(short)} cases passed, with byte-exact hidden rows "
+            f"{hidden:,}/{positions:,} and exact full BF16 logits {logits:,}/{positions:,}",
+            "Vector replay not separately timed", candidate_link,
+        )
+        for case in checks["long_vectors"]:
+            context = case["context_tokens"]
+            vectors = case["fresh_prefill_vs_fresh_m8"]
+            count = vectors["positions"]
+            add(
+                "Cold prefill ↔ fresh M8 decode history",
+                f"{context:,}-token prefix + {count:,} forced-token positions",
+                f"Byte-exact hidden rows {vectors['bit_exact_hidden_rows']:,}/{count:,}; exact full BF16-logit "
+                f"rows {vectors['full_logits_exact']:,}/{count:,}; identical top-1 {vectors['top1_ordered']:,}/{count:,}",
+                prefill_times[context], candidate_link,
+            )
+        coding = [candidate["coding"][context] for context in ("0K", "60K", "200K")]
+        add(
+            "Warm coding ↔ cold coding",
+            "The same natural-stop workload at 0K / 60K / 200K starting context",
+            f"{sum(case['final_warm_equals_cold'] for case in coding)}/{len(coding)} exact outputs. "
+            + " / ".join(f"{case['november_final']['generated_tokens']:,}" for case in coding)
+            + " generated tokens", "Throughput and first data in the coding table",
+            f"[{candidate['measurement_date']} coding capture]({NOVEMBER_REPORT}#coding-and-chained-requests)",
+        )
+        target = checks["cache_target_rows"]
+        boundary = checks["boundary_checks"]
+        add(
+            "Cached continuation ↔ fresh execution",
+            f"{target['prompt_tokens']:,}-token prompt, comparison from position {target['first_common_position']:,}; "
+            "256- and 1,024-token chunk boundaries",
+            f"Byte-exact hidden rows {target['exact_hidden_bit_rows']:,}/{target['common_rows']:,}; "
+            f"{sum(boundary.values())}/{len(boundary)} checks including 128-token greedy and sampled replay, "
+            "native and forced graph/KV boundaries, and sampled cancellation with a waiter",
+            "Paths not separately timed", candidate_link,
+        )
+        encodings = candidate["cache"]["encoding_checks"]
+        damaged = next(case for case in encodings if case["storage_case"] == "damage")
+        add(
+            "Natural, raw, compressed and damaged disk checkpoints ↔ cold controls",
+            f"{', '.join(f'{n:,}' for n in sorted({case['context'] for case in encodings}))} context tokens; "
+            f"{damaged['cached_tokens']} tokens reused after damage",
+            f"{sum(case['pass'] and case['ids_exact'] for case in encodings)}/{len(encodings)} exact 64-token outputs",
+            "Paths not separately timed", candidate_link,
+        )
+        tool_cases = candidate["cache"]["tool_continuations"]
+        add(
+            "Cached tool continuation across GPU/RAM handover ↔ cold controls",
+            "256- and 1,648-token prefixes; resident GPU and parked RAM paths; "
+            f"{', '.join(f'{n:,}' for n in sorted({case['cached_tokens'] for case in tool_cases}))} tokens reused",
+            f"{sum(case['pass'] for case in tool_cases)}/{len(tool_cases)} exact 64-token continuations",
+            "Paths not separately timed", candidate_link,
         )
 
-    copies = cache["native_byte_preservation"]
-    add(
-        "Response-end state copy ↔ source state",
-        f"{copies['layer_count']} GDN layers; {copies['gdn_conv_comparisons']:,} state/history checks; "
-        f"{copies['physical_page_copies']:,} physical-page copies",
-        f"{'Exact' if copies['same_bytes'] else 'DIFFERENT'}: {copies['bytes_compared']:,} bytes; "
-        f"observed accepted offsets {', '.join(map(str, copies['accepted_offsets_observed']))}",
-        "Not a production timing capture", cache_link,
-    )
+    state_copy = additional.get("response_state_copy")
+    if state_copy is not None:
+        copies = state_copy["copies"]
+        page_copies = state_copy["copy_on_write"]
+        checked = copies + page_copies
+        layers = len({row["layer"] for row in copies})
+        add(
+            "Response-end state copy ↔ source state",
+            f"{layers} GDN layers, {len(copies):,} state/history checks and {len(page_copies):,} physical-page copies",
+            f"{sum(row['same_bytes'] for row in checked):,}/{len(checked):,} byte-exact copies across "
+            f"{sum(row['bytes'] for row in checked):,} bytes checked. Status `{state_copy['status']}`.",
+            "Instrumented byte-copy check", benchmark_lifecycle_link,
+        )
+    else:
+        copies = cache["native_byte_preservation"]
+        add(
+            "Response-end state copy ↔ source state",
+            f"{copies['layer_count']} GDN layers; {copies['gdn_conv_comparisons']:,} state/history checks; "
+            f"{copies['physical_page_copies']:,} physical-page copies",
+            f"{'Exact' if copies['same_bytes'] else 'DIFFERENT'}: {copies['bytes_compared']:,} bytes; "
+            f"observed accepted offsets {', '.join(map(str, copies['accepted_offsets_observed']))}",
+            "Not a production timing capture", cache_link,
+        )
 
     def continuations(label, cases, evidence, scope=""):
         passed = sum(case["same_tokens"] for case in cases)
         prompts = sorted({case["prompt_tokens"] for case in cases})
         missing = sorted({case["uncached_tokens"] for case in cases})
+        cached = sorted({case["cached_tokens"] for case in cases if "cached_tokens" in case})
         output = sorted({case["continuation_tokens"] for case in cases})
+        coverage = f"{', '.join(f'{n:,}' for n in prompts)} input tokens"
+        if len(cached) == 1:
+            coverage += f", {cached[0]:,} cached"
+        coverage += f", {', '.join(f'{n:,}' for n in missing)} uncached"
         add(
             label,
-            f"{', '.join(f'{n:,}' for n in prompts)} input tokens; "
-            f"{', '.join(f'{n:,}' for n in missing)} uncached",
+            coverage,
             f"{passed}/{len(cases)} exact continuations, "
             f"{' / '.join(map(str, output))} generated tokens each" + (f"; {scope}" if scope else ""),
             "First data **" + span([case["first_data_seconds"] for case in cases]) + "**",
@@ -1555,22 +2086,47 @@ def render_cache_state_equivalence(data):
         )
 
     runs = cache["native_continuations"]
-    continuations("Resident GPU reuse across block/response boundaries", runs["warm-boundaries-v3"]["cases"], cache_link)
+    continuations(
+        "Resident GPU reuse across block/response boundaries",
+        *response_cases("warm", runs["warm-boundaries-v3"]["cases"]),
+    )
+    long_warm, long_warm_link = response_cases("warm_long", [])
+    for case in long_warm:
+        add(
+            "Resident GPU append, long context",
+            f"{case['prompt_tokens']:,} input tokens, {case['cached_tokens']:,} cached, "
+            f"{case['prompt_tokens'] - case['cached_tokens']:,} uncached",
+            "Exact resident prefix reported" if case["exact_resident_prefix"] else "Resident-prefix check failed",
+            f"First data **{case['first_data_seconds']:.3f} s**", long_warm_link,
+        )
     for case in runs["warm-long-v3"]["cases"]:
-        continuations("Resident GPU reuse, long context", [case], cache_link)
-    continuations("GPU → RAM → GPU chat handover", runs["handover-v2"]["cases"], cache_link)
+        continuations("Resident GPU continuation ↔ uninterrupted control, long context", [case], cache_link)
+    continuations("GPU → RAM → GPU chat handover", *response_cases("handover", runs["handover-v2"]["cases"]))
     continuations(
         "Reuse after GPU-bank eviction",
-        runs["eviction-v2"]["cases"] + runs["aligned-eviction-v6"]["cases"], cache_link,
+        *response_cases("eviction", runs["eviction-v2"]["cases"] + runs["aligned-eviction-v6"]["cases"]),
     )
-    continuations("Disk restore after backend restart, short context", runs["restore-v3"]["cases"], cache_link)
-    for case in runs["restore-long-v4"]["cases"]:
-        continuations("Disk restore after backend restart, long context", [case], cache_link)
+    if candidate is None:
+        continuations("Disk restore after backend restart, short context", runs["restore-v3"]["cases"], cache_link)
+        for case in runs["restore-long-v4"]["cases"]:
+            continuations("Disk restore after backend restart, long context", [case], cache_link)
+    else:
+        restarted = candidate["cache"]["november_final"]
+        final_contexts = {case["prompt_tokens"] for case in restarted}
+        earlier = [case for case in candidate["cache"]["november_intermediate"] if case["prompt_tokens"] not in final_contexts]
+        for case in sorted(restarted + earlier, key=lambda row: row["prompt_tokens"]):
+            prompt_tokens = case["prompt_tokens"]
+            evidence = (candidate_link if prompt_tokens in final_contexts else
+                        f"[{candidate['measurement_date']} intermediate worker]({NOVEMBER_REPORT})")
+            continuations(
+                "Disk restore after backend restart",
+                [{**case, "uncached_tokens": prompt_tokens - case["cached_tokens"]}], evidence,
+            )
     continuations(
         "Damaged snapshot → reject and cold rebuild", runs["restore-damaged-v4"]["cases"],
         cache_link, "corrupted endpoint rejected; zero cached tokens used",
     )
-    continuations("Reuse after explicit stop boundary", runs["stop-v4"]["cases"], cache_link)
+    continuations("Reuse after explicit stop boundary", *response_cases("stop", runs["stop-v4"]["cases"]))
     for report in alignment["tool_continuations"]:
         head = "full BF16" if report["target_head_policy"] == "full-bf16" else "Global-512"
         continuations(
@@ -1583,25 +2139,34 @@ def render_cache_state_equivalence(data):
         "T=1, top-p=0.95, top-k=40, seed=0; same prefill/decode boundaries, not a cold comparison",
     )
     continuations(
-        "Cancelled continuation ↔ uninterrupted control", pressure["cancelled_continuations"],
-        f"[2026-09-27 pressure checks]({pressure_path})",
+        "Cancelled continuation ↔ uninterrupted control",
+        *response_cases("cancel", pressure["cancelled_continuations"], pressure_link),
     )
 
     lifecycle = {case["name"]: case for case in deployment["packaged_lifecycle"]["cases"]}
-    cancel = lifecycle["cancel_decode_and_replay"]["interruptions"]
+    candidate_lifecycle = {row["case"]: row for row in additional.get("lifecycle", {}).get("cases", [])}
+
+    def lifecycle_case(name):
+        recorded = candidate_lifecycle.get(name, {})
+        if recorded.get("status") == "PASS":
+            return recorded["results"], benchmark_lifecycle_link
+        return lifecycle[name], lifecycle_link
+
+    decode, decode_link = lifecycle_case("cancel_decode_and_replay")
+    cancel = decode["interruptions"]
     add(
         "Cancel during decode → replay",
         "Interrupted after " + ", ".join(str(c["received_tokens"]) for c in cancel) + " received tokens",
         f"{sum(c['replay_equal'] for c in cancel)}/{len(cancel)} replays equal uninterrupted control",
         "Cancellation to scheduler release: **" + span([c["release_seconds"] * 1000 for c in cancel], "ms") + "**",
-        lifecycle_link,
+        decode_link,
     )
     for key, label, result in (
         ("cancel_cold_prefill_and_replay", "Cancel during cold prefill → replay", "replay_equal"),
         ("cancel_queued_request", "Cancel queued chat → replay", "owner_and_cancelled_replay_equal"),
         ("sampled_cancel_and_waiter_replay", "Sampled cancellation with another chat waiting → replay", "waiter_and_cancelled_replay_equal"),
     ):
-        case = lifecycle[key]
+        case, case_link = lifecycle_case(key)
         context = (
             f"60K input; {case['computed_tokens_when_cancelled']:,} processed at cancellation"
             if key == "cancel_cold_prefill_and_replay" else
@@ -1609,18 +2174,24 @@ def render_cache_state_equivalence(data):
             if key == "sampled_cancel_and_waiter_replay" else "Two chats; cancelled request had not generated"
         )
         add(label, context, "Replay equal" if case[result] else "Replay DIFFERENT",
-            f"Cancellation to scheduler release: **{case['release_seconds'] * 1000:.3f} ms**", lifecycle_link)
-    handovers = [lifecycle[name] for name in (
+            f"Cancellation to scheduler release: **{case['release_seconds'] * 1000:,.3f} ms**", case_link)
+    handover_names = (
         "equal_priority_response_handover", "priority2_complete", "priority2_parked",
         "priority2_urgent", "priority1_tool_boundary_hold",
-    )]
+    )
+    captured = [candidate_lifecycle[name] for name in handover_names if name in candidate_lifecycle]
+    handovers, handover_link = (
+        (captured, benchmark_lifecycle_link) if len(captured) == len(handover_names)
+        else ([lifecycle[name] for name in handover_names], lifecycle_link)
+    )
     add(
         "Concurrent chats and priority handovers ↔ uninterrupted controls",
         "Equal priority, immediate priority-2 takeover/cancellation, priority-1 tool-boundary hold",
         f"{sum(c['status'] == 'PASS' for c in handovers)}/{len(handovers)} lifecycle cases pass their output/ownership checks",
-        "Isolated handover latency not measured", lifecycle_link,
+        "Isolated handover latency not measured", handover_link,
     )
-    for case in pressure["capacity_cases"]:
+    capacity, capacity_link = response_cases("pressure", pressure["capacity_cases"], pressure_link)
+    for case in capacity:
         preemptions = max(sample["preemptions"] for sample in case["samples"])
         add(
             "Near-limit endpoint ownership and cache reclamation",
@@ -1628,36 +2199,99 @@ def render_cache_state_equivalence(data):
             f"{case['usage']['prompt_tokens_details']['cached_tokens']:,} cached; {case['tokens']:,} generated",
             f"{preemptions} allocator preemptions; forward progress (not numerical-equivalence evidence)",
             f"First data **{case['first_data_seconds']:.3f} s**",
-            f"[2026-09-27 pressure checks]({pressure_path})",
+            capacity_link,
         )
-    cycles = snapshot["cycles"]
-    safe = sum(c["removed_before_verification_bytes"] == 0 and c["fallback_removed_after_verification"]
-               and c["remaining_generations"] == 1 for c in cycles)
-    add(
-        "Compaction-generation snapshot replacement",
-        f"{len(cycles)} publication/retirement cycles",
-        f"{safe}/{len(cycles)} keep the previous disk head until replacement verification, then retain one generation; "
-        "lifecycle safety, not old/new summary equivalence",
-        "Not separately benchmarked", f"[2026-09-25 snapshots]({snapshot_path})",
-    )
+    snapshot_replacement = additional.get("snapshot_replacement")
+    replacement_path = NOVEMBER_LIFECYCLE
+    if candidate is not None and (ROOT / NOVEMBER_SNAPSHOT_REPLACEMENT).is_file():
+        replacement_path = NOVEMBER_SNAPSHOT_REPLACEMENT
+        snapshot_replacement = json.loads((ROOT / replacement_path).read_text())
+    if snapshot_replacement is not None:
+        if (snapshot_replacement["schema"] != "coherence-benchmark-snapshot-replacement-v1"
+            or snapshot_replacement["candidate_manifest_sha256"] != candidate["candidate_manifest_sha256"]):
+            raise ValueError("snapshot replacement uses a different candidate or schema")
+        cycles = snapshot_replacement["cycles"]
+        safe = [c for c in cycles if c["pass"] and c["after_publish_generation_count"] == 1
+                and c["other_chat_unchanged"]]
+        measured = (
+            f"Activation **{span([c['activation_seconds'] * 1000 for c in safe], 'ms')}**. "
+            f"Request to durable snapshot **{span([c['request_to_durable_seconds'] for c in safe])}**."
+            if safe else "No completed cycle timing"
+        )
+        cycle_count = snapshot_replacement.get("requested_cycles", len(cycles))
+        published_lengths = [c["replaced_published_tokens"] for c in cycles if "replaced_published_tokens" in c]
+        published = (
+            " Published lengths " + " → ".join(f"{n:,}" for n in [cycles[0]["previous_published_tokens"], *published_lengths]) + "."
+            if published_lengths and "previous_published_tokens" in cycles[0] else ""
+        )
+        add(
+            "Compaction-generation snapshot replacement",
+            f"{cycle_count} synthetic storage cycles. A {snapshot_replacement['old_prompt_tokens']:,}-token initial prompt "
+            f"preceded {snapshot_replacement['new_prompt_tokens']:,}-token prompts requesting "
+            f"{snapshot_replacement['output_tokens']} output tokens each." + published,
+            f"{len(safe)}/{cycle_count} cycles retained one published generation and left the other chat unchanged. "
+            f"Status `{snapshot_replacement['status']}`.",
+            measured + " Synthetic publication follows generation. Full Pi compaction was not timed.",
+            f"[{candidate['measurement_date']} candidate snapshot replacement]({replacement_path})",
+        )
+    else:
+        cycles = snapshot["cycles"]
+        safe = sum(c["removed_before_verification_bytes"] == 0 and c["fallback_removed_after_verification"]
+                   and c["remaining_generations"] == 1 for c in cycles)
+        add(
+            "Compaction-generation snapshot replacement",
+            f"{len(cycles)} publication/retirement cycles",
+            f"{safe}/{len(cycles)} keep the previous disk head until replacement verification, then retain one generation; "
+            "lifecycle safety, not old/new summary equivalence",
+            "Not separately benchmarked", f"[2026-09-25 snapshots]({snapshot_path})",
+        )
+    sweep_scope = ""
+    if additional:
+        endpoints = additional.get("response_end", {})
+        incomplete = [f"{name} (`{report['status']}`)" for name, report in endpoints.items()
+                      if not report["status"].startswith("PASS")]
+        scheduler_status = additional["lifecycle"]["status"]
+        if scheduler_status != "PASS":
+            incomplete.append(f"scheduler lifecycle (`{scheduler_status}`)")
+        sweep_scope = (
+            " Incomplete candidate probes include " + ", ".join(incomplete) + "."
+            if incomplete else " The candidate sweep also covers the response-end and scheduler paths linked below."
+        )
+        pressure_report = endpoints.get("pressure", {})
+        if (pressure_report.get("forward_progress")
+            and pressure_report.get("negative_control", {}).get("repeated_preemption") is False):
+            sweep_scope += (
+                " Both candidate pressure requests finished. The old-policy negative control did not reproduce repeated "
+                "allocator preemption, so the wider comparison remains incomplete."
+            )
+        if incomplete:
+            sweep_scope += f" {benchmark_lifecycle_link}."
     return [
         "### Cache-state equivalence and prefill/restore timings", "",
         (
+            f"The isolated {candidate['measurement_date']} candidate covers fresh prefill/decode equality, "
+            "cache-boundary replay, tool continuation and restarted disk restore. Additional paths retain "
+            "the dates and scopes of their earlier measurements." + sweep_scope if candidate is not None else
             "The latest recorded result for each path is shown once, with its capture date. "
             "These synthetic cache/equality checks were not rerun in the October 9 speed refresh; "
             "their timings describe the captured builds. Current cold-prefill speeds are shown below."
         ), "",
-        "| State / execution comparison | Workload and cache coverage | Latest correctness evidence | Latest measured speed / latency | Capture |",
+        "| State / execution comparison | Workload and cache coverage | Correctness evidence | Measured speed / latency | Capture |",
         "| --- | --- | --- | --- | --- |",
         *rows, "",
-        "**Timing boundaries:** first data is request-to-first-output wall time, including admission, "
-        "handover, restore and any required prefill; it is not pure disk or RAM transfer time. Restart "
-        "measurements start after the backend is ready. Cancellation "
-        "times measure scheduler release, not completion of the replay. No qualification-suite runtime "
-        "is substituted for an operation benchmark.", "",
-        "**Equality boundaries:** set/order lists identical token sets followed by identical ordering. "
-        "The full-vector prefill checks cover 2,320 distinct forced-token positions; the packaged "
-        "1,000-position repeat does not add new positions. Matching generated tokens alone does not "
+        (
+            "**Timing boundaries:** first data is request-to-first-output wall time, including admission, "
+            "handover, restore and any required prefill; it is not pure disk or RAM transfer time. Restart "
+            "measurements start after the backend is ready. Cancellation "
+            "times measure scheduler release, not completion of the replay. No qualification-suite runtime "
+            "is substituted for an operation benchmark."
+        ), "",
+        ("**Equality boundaries:** the candidate full-vector prefill checks cover 2,320 distinct forced-token positions. "
+         if candidate is not None else
+         "**Equality boundaries:** set/order lists identical token sets followed by identical ordering. "
+         "The full-vector prefill checks cover 2,320 distinct forced-token positions; the packaged "
+         "1,000-position repeat does not add new positions. ")
+        + "Matching generated tokens alone does not "
         "establish equality of every latent state or logit. Compaction creates a new history, so its "
         "storage test checks safe replacement rather than equivalence to the uncompressed conversation. "
         "These finite checks do not prove arbitrary-input correctness, exhaustive scheduling interleavings "
@@ -1665,8 +2299,48 @@ def render_cache_state_equivalence(data):
     ]
 
 
-def render_prefill_speed(data):
+def render_candidate_prefill_speed(candidate):
+    measurement_date = candidate["measurement_date"]
+    lines = [
+        f"### Cold-prefill speeds ({measurement_date} candidate)", "",
+        "| Cold context | Mean prefill | Prefill tokens/s | Mean first data | Samples |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    ranges = []
+    stock_prefill = []
+    for context in (60000, 200000):
+        family = candidate["cold_prefill"][str(context)]
+        after = family["november_final"]
+        stock = family["november_stock"]
+        if len(after) != 2 or len(stock) != 2 or any(row["cached_tokens"] != 0 for row in after + stock):
+            raise ValueError("candidate prefill needs two cold measurements per worker and context")
+        seconds = [row["backend_prefill_seconds"] for row in after]
+        mean = statistics.mean(seconds)
+        first_data = statistics.mean(row["first_data_seconds"] for row in after)
+        lines.append(
+            f"| {context:,} tokens | **{mean:.2f} s** | **{context / mean:,.0f}** | "
+            f"{first_data:.2f} s | {len(after)} |"
+        )
+        ranges.append(f"{min(seconds):.2f}–{max(seconds):.2f} s")
+        stock_prefill.append(f"{statistics.mean(row['backend_prefill_seconds'] for row in stock):.2f} s")
+    lines += [
+        "",
+        (
+            "Each unprofiled request reused zero tokens and requested one generated token. Prefill tokens/s "
+            "divides prompt length by mean backend-prefill time. First data measures request start through "
+            f"first output. Prefill ranges were {' / '.join(ranges)} at 60K / 200K. The same-date stock workers "
+            f"averaged {' / '.join(stock_prefill)} with the same prompts and settings. "
+            f"[Measurement and fresh vector comparisons]({NOVEMBER_REPORT})."
+        ),
+        "",
+    ]
+    return lines
+
+
+def render_prefill_speed(data, candidate=None):
     """Show current cold-prefill speed without historical comparison columns."""
+    if candidate is not None:
+        return render_candidate_prefill_speed(candidate)
     if not data.get("prefill_speed_timing"):
         return []
     timing = json.loads((ROOT / data["prefill_speed_timing"]).read_text())
@@ -1769,14 +2443,56 @@ def render_prefill_speed(data):
     return lines
 
 
-def render(data):
+def render_benchmark_summary(candidate):
+    contexts = ("0K", "60K", "200K")
+    manifest = candidate["candidate_manifest_sha256"][:8]
+    lines = [
+        SUMMARY_START,
+        (
+            "One R9700 ran the same coding task at three starting context lengths "
+            f"on the {candidate['measurement_date']} isolated candidate `{manifest}`."
+        ),
+        "",
+        "| Starting context | Generated tokens | Coding tok/s after first output | Peak 3-second tok/s | Mean decode round |",
+        "| ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for context in contexts:
+        row = candidate["coding"][context]["november_final"]
+        lines.append(
+            f"| {context} | {row['generated_tokens']:,} | **{row['post_first_tokens_per_second']:.2f}** | "
+            f"{row['peak_3s_tokens_per_second']:.2f} | {row['mean_generation_round_ms']:.2f} ms |"
+        )
+    histograms = [candidate["histogram"][context]["november_final"] for context in contexts]
+    rounds = sum(row["measured_round_count"] for row in histograms)
+    maximum_ms = max(row["maximum_ms"] for row in histograms)
+    prefill_60k, prefill_200k = (
+        statistics.mean(
+            row["backend_prefill_seconds"] for row in candidate["cold_prefill"][context]["november_final"]
+        )
+        for context in ("60000", "200000")
+    )
+    lines += [
+        "",
+        (
+            f"The slowest of {rounds:,} timed coding rounds took {maximum_ms:.3f} ms. "
+            f"Separate cold-prefill runs averaged {prefill_60k:.2f} s at 60K and {prefill_200k:.2f} s at 200K. "
+            f"[Full benchmark tables](#benchmarks) · [Cold-prefill and cache results]({NOVEMBER_REPORT})"
+        ),
+        SUMMARY_END,
+    ]
+    return "\n".join(lines)
+
+
+def render(data, candidate=None):
+    if candidate is None:
+        candidate = read_candidate(data)
     timing = data["round_timing"]
     mean = timing["mean"]
     retained_cycles = len(timing["rounds"])
-    detail = current_fine_detail(data)
+    detail = current_fine_detail(data, candidate)
     if detail:
         retained_cycles = detail["cycles"]
-    stage_profile = current_stage_profile(data)
+    stage_profile = current_stage_profile(data, candidate)
     serving_overhead = data["serving_overhead"]
     if serving_overhead["status"] != "estimated_from_separate_runs":
         raise ValueError(
@@ -1803,30 +2519,69 @@ def render(data):
         abs_tol=1e-8,
     ):
         raise ValueError("GPU work and overhead do not reconcile to elapsed time")
-    lines = [
-        START,
-        "## Current numerical results",
-        "",
-        data["correctness_scope"],
-        "",
-        "| Prediction | Same token set | Same ordering | Mean shared tokens |",
-        "| --- | ---: | ---: | ---: |",
-    ]
-    for row in data["predictions"]:
-        n = row["rows"]
-        k = row["k"]
-        lines.append(
-            f"| Top {k} | {row['set']:,} / {n:,} ({100 * row['set'] / n:.2f}%) | {row['order']:,} / {n:,} ({100 * row['order'] / n:.2f}%) | {row['overlap']:.4f} / {k} |"
-        )
+    lines = [START, "## Current numerical results", ""]
+    if candidate is None:
+        lines += [
+            data["correctness_scope"],
+            "",
+            "| Prediction | Same token set | Same ordering | Mean shared tokens |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+        for row in data["predictions"]:
+            n, k = row["rows"], row["k"]
+            lines.append(
+                f"| Top {k} | {row['set']:,} / {n:,} ({100 * row['set'] / n:.2f}%) | {row['order']:,} / {n:,} ({100 * row['order'] / n:.2f}%) | {row['overlap']:.4f} / {k} |"
+            )
+        lines += ["", data["correctness_limits"]]
+    else:
+        _, whole = candidate_confirmations(candidate, stage_profile)
+        lines += [
+            (
+                f"The {candidate['measurement_date']} isolated worker "
+                f"`{candidate['candidate_manifest_sha256'][:8]}` was checked at "
+                f"{whole['decode_tokens_per_arm']:,} forced decode positions after a fresh "
+                f"{whole['prefix_tokens']:,}-token prefill. Each arm uses the full BF16 "
+                "comparison head to expose differences inside the target model. "
+                f"[Whole-model capture]({candidate_capture('whole-model-confirmations')})."
+            ),
+            "",
+            "| Execution pair | Exact decode logits | Top-1 set/order | Top-10 set/order | Top-20 set/order | Exact prefill logits |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+        ]
+        pairs = {
+            "compiled-m1_vs_compiled-m8": "Compiled M1 → compiled M8",
+            "eager-m1_vs_compiled-m1": "Eager M1 → compiled M1",
+            "eager-m8_vs_compiled-m8": "Eager M8 → compiled M8",
+            "eager-m1_vs_compiled-m8": "Eager M1 → compiled M8",
+        }
+        for key, label in pairs.items():
+            pair = whole["comparisons"][key]
+            decode = pair["decode"]
+            count = decode["positions"]
+            top = [f"{decode[k]['set_exact']}/{count} · {decode[k]['ranked_exact']}/{count}" for k in ("1", "10", "20")]
+            exact = "Yes" if pair["prefill"]["full_logits_exact"] else "No"
+            lines.append(f"| {label} | {decode['full_logits_exact']}/{count} | " + " | ".join(top) + f" | {exact} |")
+        stock = candidate["correctness"]["stock_vs_final"]["compiled-m8"]
+        count = stock["positions"]
+        lines += [
+            "",
+            (
+                f"Against stock release arithmetic on the same fixture, candidate compiled M8 "
+                f"matched top-1 at {stock['top1_ordered']}/{count} positions and full logits at "
+                f"{stock['decode_full_logits_exact']}/{count}. Ordered top-20 matched at "
+                f"{stock['top20_ordered']}/{count}, with mean overlap {stock['mean_top20_overlap']:g}/20. "
+                "The table establishes consistency between execution paths in the measured "
+                "candidate. Approximate head recall and independent arithmetic have separate "
+                f"coverage below. [Stock comparison]({NOVEMBER_RESULTS})."
+            ),
+        ]
     lines += [
-        "",
-        data["correctness_limits"],
         "",
         "## Compiled backend stages",
         "",
         stage_profile["scope"] if stage_profile else data["timing_scope"],
         "",
-        *render_stage_profile_table(data),
+        *render_stage_profile_table(data, candidate),
         "",
         (
             "The table groups the backend into 26 stages. Each timing cell is ordered "
@@ -1857,9 +2612,9 @@ def render(data):
             "breakdown of the production kernel's time."
         ),
         "",
-        *render_cache_state_equivalence(data),
+        *render_cache_state_equivalence(data, candidate),
         "",
-        *render_prefill_speed(data),
+        *render_prefill_speed(data, candidate),
         (
             (f"The expandable layer and kernel tables use the same {retained_cycles:,} retained "
              f"60K cycles as the main table ({detail['date']}). GPU activity crossing a worker "
@@ -1908,11 +2663,15 @@ def render(data):
         "",
         "</details>",
         "",
-        *render_head_candidate_benchmark(),
+        *render_head_candidate_benchmark(candidate),
         "",
-        *render_coding_json_compaction_benchmark(),
+        *render_coding_json_compaction_benchmark(candidate),
         "",
         (
+            f"[November aggregate results]({NOVEMBER_RESULTS}) · "
+            "[October release baseline](benchmarks/results/coherence-current.json) · "
+            "[Historical technical report](reports/d7-rdna4-2026-09-17/REPORT.md)."
+            if candidate is not None else
             "Aggregate data: [current measurements](benchmarks/results/coherence-current.json). "
             "Historical methodology and detailed numerical evidence: [technical report](reports/d7-rdna4-2026-09-17/REPORT.md)."
         ),
@@ -1922,12 +2681,19 @@ def render(data):
     return "\n".join(lines)
 
 
+def replace_generated_section(text, start, end, content):
+    if text.count(start) != 1 or text.count(end) != 1 or text.index(start) >= text.index(end):
+        raise ValueError(f"invalid README measurement markers for {start}")
+    a = text.index(start)
+    b = text.index(end) + len(end)
+    return text[:a] + content + text[b:]
+
+
 def update(text, data):
-    if text.count(START) != 1 or text.count(END) != 1:
-        raise ValueError("README measurement markers are missing or duplicated")
-    a = text.index(START)
-    b = text.index(END) + len(END)
-    return text[:a] + render(data) + text[b:]
+    candidate = read_candidate(data)
+    if candidate is not None:
+        text = replace_generated_section(text, SUMMARY_START, SUMMARY_END, render_benchmark_summary(candidate))
+    return replace_generated_section(text, START, END, render(data, candidate))
 
 
 def main():

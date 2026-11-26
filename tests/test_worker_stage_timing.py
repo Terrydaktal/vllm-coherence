@@ -33,6 +33,16 @@ def test_worker_window_clips_previous_tail_and_unions_overlap():
     assert len(result["omissions"]) == 2
 
 
+def test_tiled_gdn_projection_requires_the_exact_location_and_producer():
+    check = analyzer().target_projections
+    names = ["radiance_mxfp4_fp8_gemm_decode<8, 128, 1>", "_tiled_norm_quant.kd",
+             "void radiance_mxfp4_fp8_gemm_atiled<2, true, 128>(args)"]
+    events = [{"name": name} for name in names]
+    assert check(events) == [(0, "split1"), (2, "tiled_gdn_output")]
+    assert check([events[0], events[-1]])[-1][1] == "unexpected_tiled_projection"
+    assert check(events[1:])[-1][1] == "unexpected_tiled_projection"
+
+
 def test_bad_target_overlap_excludes_whole_host_window_before_accumulation():
     markers = [{"ph": "X", "cat": "user_annotation", "name": f"qwen_timing_round/{i}",
                 "ts": i * 10., "dur": 9.} for i in range(5)]

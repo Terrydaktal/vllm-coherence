@@ -10,7 +10,7 @@ The direct base is magiccodingman's Radiance, which continues StillDeadcode's
 Radiance/libr4d work and incorporates GGZ14's MXFP4/W4A8 optimizations. vLLM and
 the AMD runtime/compiler/operator stack underpin those projects. Coherence's
 contribution is the additional repair, instrumentation, qualification and agent
-session work described in the [README](README.md#what-terrydaktal-adds-in-coherence).
+session work described in the [README overview](README.md#vllm-coherence).
 
 | Component | Origin |
 | --- | --- |

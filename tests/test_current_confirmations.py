@@ -1,6 +1,8 @@
 import copy
 import importlib.util
 import json
+import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -56,6 +58,22 @@ def test_eager_control_retains_the_existing_rotary_repair():
     ] == "original"
 
 
+def test_retained_arms_wrap_the_corresponding_graph_and_reference_workers():
+    def base(*args, **kwargs):
+        return {"worker_cls": "optimized_d7_worker.OptimizedWorker"}
+
+    for mode, speculation, cls in (
+        ("compiled", False, "CompiledM1"), ("compiled", True, "CompiledM8"),
+        ("eager", False, "Eager"), ("eager", True, "Eager"),
+        ("compiled-no-graphs", True, "Stages"),
+    ):
+        config = MODULE.current_config(
+            base, {}, "fixed-bf16", execution_mode=mode, speculation=speculation,
+            speed_candidate=True, retained_workers=True,
+        )
+        assert config["worker_cls"] == "retained_confirmation_worker." + cls
+
+
 def test_banked_speed_config_changes_only_candidate_m8_and_its_stage_replay():
     base = lambda *a, **kw: {"worker_cls": "original", "compilation_config": {"cudagraph_mode": "PIECEWISE"}}
     args = {"speed_candidate": True, "execution_mode": "compiled", "speculation": True}
@@ -67,6 +85,45 @@ def test_banked_speed_config_changes_only_candidate_m8_and_its_stage_replay():
     assert reference["compilation_config"]["cudagraph_mode"] == "PIECEWISE"
     assert MODULE.current_config(base, {}, "fixed-bf16", **{**args, "execution_mode": "eager"})["worker_cls"] == "rotary_mode_d7_worker.RotaryRneWorker"
     assert MODULE.current_config(base, {}, "fixed-bf16", **{**args, "execution_mode": "compiled-no-graphs"})["worker_cls"] == "speed_confirmation_worker.SpeedTapeWorker"
+
+
+def test_released_control_excludes_experimental_and_multirow_paths():
+    def base(*args, **kwargs):
+        return {"worker_cls": "original"}
+
+    options = dict(execution_mode="eager", speculation=False, released_eager_m1=True)
+    assert MODULE.current_config(base, {}, "fixed-bf16", **options)["worker_cls"] == "released_eager_m1_worker.ReleasedEagerM1"
+    for incompatible in ({"execution_mode": "compiled"}, {"speculation": True},
+                         {"speed_candidate": True}, {"retained_workers": True}):
+        with pytest.raises(ValueError, match="unmodified"):
+            MODULE.current_config(base, {}, "fixed-bf16", **(options | incompatible))
+
+
+def test_retained_shape_counter_receipt_survives_json_and_later_updates(monkeypatch):
+    from qwen_r9700_lab.diagnostic_contract import authenticate
+
+    class Worker:
+        def qwen_optimized_metadata(self):
+            return {}
+
+    for module_name, cls in (("optimized_d7_worker", "OptimizedWorker"),
+                             ("rotary_mode_d7_worker", "RotaryRneWorker"),
+                             ("speed_confirmation_worker", "SpeedTapeWorker"),
+                             ("speed_matched_stage_worker", "SpeedMatchedStageWorker")):
+        stub = types.ModuleType(module_name)
+        setattr(stub, cls, Worker)
+        monkeypatch.setitem(sys.modules, module_name, stub)
+    path = ROOT / "experiments/radiance-public/retained_confirmation_worker.py"
+    spec = importlib.util.spec_from_file_location("sample_retained_worker", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    worker = module.CompiledM8()
+    counts = {8: 288, 16: 48, 2: 96}
+    worker._retained_diagnostic = {"rows": counts}
+    receipt = seal(worker.qwen_optimized_metadata())
+    counts[8] += 48
+    authenticate(json.loads(json.dumps(receipt)))
+    assert receipt["retained_qualification"]["rows"]["8"] == 288
 
 
 def test_complete_pair_and_late_negative_control():

@@ -58,7 +58,10 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path, head):
     assert result.returncode == 0, result.stderr
     command = shlex.split(result.stdout)
     assert "--enforce-eager" not in command
-    assert command[command.index("--worker-cls") + 1] == "optimized_d7_worker.OptimizedWorker"
+    assert (
+        command[command.index("--worker-cls") + 1]
+        == "optimized_d7_worker.OptimizedWorker"
+    )
     assert command[command.index("--host") + 1] == "127.0.0.1"
     assert "TORCHINDUCTOR_EMULATE_PRECISION_CASTS=1" in command
     assert f"RADIANCE_VERIFY_HEAD={0 if head == 'full-bf16' else 1}" in command
@@ -78,15 +81,27 @@ def test_dry_run_keeps_compiled_profile_and_correct_mounts(tmp_path, head):
         ]
         == 2
     )
-    assert json.loads(command[command.index("--additional-config") + 1])["qwen_fair"][
-        "max_cached_chats"
-    ] == 3
+    assert (
+        json.loads(command[command.index("--additional-config") + 1])["qwen_fair"][
+            "max_cached_chats"
+        ]
+        == 3
+    )
 
 
-def test_host_embedding_uses_its_own_worker_cache_and_state(tmp_path, capsys, monkeypatch):
+def test_host_embedding_uses_its_own_worker_cache_and_state(
+    tmp_path, capsys, monkeypatch
+):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
     state = tmp_path / "candidate"
-    args = ["serve", "--dry-run", "--model", "/models/target", "--draft", "/models/draft"]
+    args = [
+        "serve",
+        "--dry-run",
+        "--model",
+        "/models/target",
+        "--draft",
+        "/models/draft",
+    ]
     flag = "--experimental-host-embedding"
     assert cli.main([*args, flag]) == 2
     assert "explicit --state" in capsys.readouterr().err
@@ -100,8 +115,14 @@ def test_host_embedding_uses_its_own_worker_cache_and_state(tmp_path, capsys, mo
         "experimental_runtime_worker.ExperimentalRuntimeWorker"
     )
     assert command[command.index("--max-num-seqs") + 1] == "2"
-    for source in (ROOT / "tools" / cli.EXPERIMENTAL_WORKER, cli.RUNTIME / cli.HOST_EMBEDDING):
-        assert f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro" in command
+    for source in (
+        ROOT / "tools" / cli.EXPERIMENTAL_WORKER,
+        cli.RUNTIME / cli.HOST_EMBEDDING,
+    ):
+        assert (
+            f"{source}:/opt/vllm/lib/python3.12/site-packages/{source.name}:ro"
+            in command
+        )
 
     release = cli.release()
     abi = cli.snapshot_identity(release, host_embedding=True)
@@ -112,10 +133,156 @@ def test_host_embedding_uses_its_own_worker_cache_and_state(tmp_path, capsys, mo
     assert not state.exists()
 
     state.mkdir()
-    cli.write_json(state / "connection.json", {"memory_experiments": ["host_embedding"]})
+    cli.write_json(
+        state / "connection.json", {"memory_experiments": ["host_embedding"]}
+    )
     assert cli.main(args) == 2
     assert "separate state directory" in capsys.readouterr().err
     assert cli.main([*args, flag]) == 0
+
+
+def test_prompt_lookup_keeps_probabilistic_verifier_and_binds_its_own_state(
+    tmp_path, capsys
+):
+    state = tmp_path / "prompt-lookup"
+    args = [
+        "serve",
+        "--dry-run",
+        "--model",
+        "/models/target",
+        "--draft",
+        "/models/draft",
+    ]
+    flag = "--experimental-prompt-lookup"
+    assert cli.main([*args, flag]) == 2
+    assert "explicit --state" in capsys.readouterr().err
+    assert cli.main([*args, flag, "--state", str(state)]) == 0
+    command = shlex.split(capsys.readouterr().out)
+    assert (
+        command[command.index("--worker-cls") + 1]
+        == "performance_runtime_worker.PerformanceWorker"
+    )
+    assert "--ipc=private" in command
+    transfer = json.loads(command[command.index("--kv-transfer-config") + 1])
+    (tier,) = transfer["kv_connector_extra_config"]["secondary_tiers"]
+    assert tier["type"] == "qwen_chat_fs"
+    assert "module_path" not in tier
+    spec = json.loads(command[command.index("--speculative-config") + 1])
+    assert spec["draft_sample_method"] == "probabilistic"
+    assert spec["num_speculative_tokens"] == 7
+    experiments = json.loads(
+        next(
+            entry.split("=", 1)[1]
+            for entry in command
+            if entry.startswith("QWEN_PERFORMANCE_EXPERIMENTS=")
+        )
+    )
+    abi = cli.snapshot_identity(cli.release(), performance=experiments)
+    assert abi != cli.snapshot_identity(cli.release())
+    assert f"QWEN_RADIANCE_CACHE_ABI={abi}" in command
+    state.mkdir()
+    cli.write_json(state / "connection.json", {"performance_experiments": experiments})
+    assert cli.main([*args, "--state", str(state)]) == 2
+    assert "separate --state" in capsys.readouterr().err
+
+
+def test_followup_performance_flags_bind_to_isolated_worker(tmp_path, capsys):
+    state = tmp_path / "experiments"
+    args = [
+        "serve",
+        "--dry-run",
+        "--model",
+        "/models/target",
+        "--draft",
+        "/models/draft",
+        "--state",
+        str(state),
+    ]
+    assert cli.main([*args, "--experimental-prompt-lookup-skip-draft"]) == 2
+    assert "requires --experimental-prompt-lookup" in capsys.readouterr().err
+    assert (
+        cli.main([*args, "--head", "full-bf16", "--experimental-head-live-rows"]) == 2
+    )
+    assert "requires --head global512" in capsys.readouterr().err
+
+    assert (
+        cli.main(
+            [
+                *args,
+                "--experimental-proposal-temperature",
+                "0.55",
+                "--experimental-prompt-lookup",
+                "--experimental-prompt-lookup-skip-draft",
+                "--experimental-head-live-rows",
+                "--experimental-gdn-direct-scan",
+                "--experimental-gdn-direct-projection",
+                "--experimental-cache-buffer-views",
+            ]
+        )
+        == 0
+    )
+    command = shlex.split(capsys.readouterr().out)
+    assert command[command.index("--max-num-seqs") + 1] == "2"
+    config = next(
+        arg for arg in command if arg.startswith("QWEN_PERFORMANCE_EXPERIMENTS=")
+    )
+    experiments = json.loads(config.split("=", 1)[1])
+    assert set(experiments) == {
+        "worker",
+        "prompt_lookup",
+        "proposal_temperature",
+        "head_live_rows",
+        "gdn_prefill_direct",
+        "cache_buffer_views",
+    }
+    assert experiments["proposal_temperature"]["temperature"] == 0.55
+    assert experiments["prompt_lookup"]["skip_draft"]
+    assert experiments["gdn_prefill_direct"]["scan"]
+    assert experiments["gdn_prefill_direct"]["projection"]
+    transfer = json.loads(command[command.index("--kv-transfer-config") + 1])
+    (tier,) = transfer["kv_connector_extra_config"]["secondary_tiers"]
+    assert tier["type"] == "BufferViewChatFileSystemTierManager"
+    assert tier["module_path"] == "cache_buffer_view_tier"
+    for binding in experiments.values():
+        if isinstance(binding, dict):
+            for source in binding["sources"]:
+                assert (
+                    f"{cli.RUNTIME / source}:/opt/vllm/lib/python3.12/site-packages/{source}:ro"
+                    in command
+                )
+    assert not state.exists()
+
+
+def test_mxfp4_slab_ahead_requires_preprocessing(tmp_path, capsys):
+    build = tmp_path / "mx-build"
+    build.mkdir()
+    (build / "build.json").write_text("{}")
+    args = [
+        "serve",
+        "--dry-run",
+        "--model",
+        "/models/target",
+        "--draft",
+        "/models/draft",
+        "--state",
+        str(tmp_path / "state"),
+        "--experimental-mxfp4-build",
+        str(build),
+    ]
+    slab = "--experimental-mxfp4-slab-ahead"
+    preprocess = "--experimental-mxfp4-preprocess"
+    assert cli.main([*args, slab]) == 2
+    assert f"requires {preprocess}" in capsys.readouterr().err
+    for flags in ([preprocess], [preprocess, slab]):
+        assert cli.main([*args, *flags]) == 0
+        command = shlex.split(capsys.readouterr().out)
+        env = next(
+            item for item in command if item.startswith("QWEN_PERFORMANCE_EXPERIMENTS=")
+        )
+        binding = json.loads(env.split("=", 1)[1])["mxfp4"]
+        assert binding["preprocess"] is True
+        assert binding["slab_ahead"] == (slab in flags)
+        assert f"{build}:/coherence-experiments/mxfp4:ro" in command
 
 
 @pytest.mark.parametrize(

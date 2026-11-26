@@ -1,6 +1,7 @@
 """The audit must refuse incomplete evidence and the wrong target inventory."""
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -60,3 +61,58 @@ def test_mtp_weights_cannot_replace_missing_target_projections(audit):
 def test_oracle_does_not_import_gpu_framework(audit):
     # Loading the audit and checking its report must not initialize a GPU.
     assert "torch" not in audit.__dict__
+
+
+def test_retained_bias_binds_the_selected_adapter_sources(audit, tmp_path):
+    from qwen_r9700_lab.diagnostic_contract import seal
+
+    manifest_path = tmp_path / "manifest.json"
+    sources = {}
+    for name in ("gdn_prefill_direct", "prefill_bank_norm"):
+        source = tmp_path / f"{name}.py"
+        source.write_text(f"# {name}\n")
+        sources[name] = source
+    data = {
+        "schema": "coherence-source-bound-combined-experiment-v1",
+        "selection": ["gdn_bias"],
+        "files": {source.name: audit.sha(source) for source in sources.values()},
+    }
+    bound = seal(data)
+    manifest_path.write_text(json.dumps(bound))
+    assert audit.retained_bias_sources(manifest_path) == (bound["sha256"], sources)
+
+    manifest_path.write_text(json.dumps({**bound, "selection": []}))
+    with pytest.raises(ValueError, match="changed after publication"):
+        audit.retained_bias_sources(manifest_path)
+
+    manifest_path.write_text(json.dumps(seal({**data, "selection": []})))
+    with pytest.raises(ValueError, match="does not select"):
+        audit.retained_bias_sources(manifest_path)
+
+    manifest_path.write_text(json.dumps(bound))
+    sources["prefill_bank_norm"].write_text("# changed\n")
+    with pytest.raises(ValueError, match="source changed"):
+        audit.retained_bias_sources(manifest_path)
+
+
+def test_wrong_release_is_rejected_before_gpu_initialization(
+    audit, monkeypatch, tmp_path, capsys
+):
+    (tmp_path / "optimized-release.json").write_text("{}")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "audit",
+            "--release",
+            str(tmp_path),
+            "--output",
+            str(tmp_path / "output.json"),
+            "--allow-gpu",
+            "--expected-release-sha256",
+            "0" * 64,
+        ],
+    )
+    with pytest.raises(SystemExit, match="2"):
+        audit.main()
+    assert "release manifest differs" in capsys.readouterr().err

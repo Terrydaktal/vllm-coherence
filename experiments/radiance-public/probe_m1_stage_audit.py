@@ -18,6 +18,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from types import MethodType
 
 import m1_stage_oracles as ref
 import numpy as np
@@ -25,6 +26,25 @@ import numpy as np
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def retained_bias_sources(manifest_path):
+    from qwen_r9700_lab.diagnostic_contract import authenticate
+
+    manifest = json.loads(manifest_path.read_text())
+    authenticate(manifest)
+    if (
+        manifest["schema"] != "coherence-source-bound-combined-experiment-v1"
+        or "gdn_bias" not in manifest["selection"]
+    ):
+        raise ValueError("retained manifest does not select the GDN bias hoist")
+    sources = {}
+    for name in ("gdn_prefill_direct", "prefill_bank_norm"):
+        source = manifest_path.with_name(f"{name}.py")
+        if sha(source) != manifest["files"].get(source.name):
+            raise ValueError(f"retained GDN source changed: {source.name}")
+        sources[name] = source
+    return manifest["sha256"], sources
 
 
 def module(path, name):
@@ -126,6 +146,14 @@ class Audit:
                 "Known Global-512 shortlist approximation is not changed by this audit.",
             ],
         }
+        if args.retained_manifest:
+            identity, self.retained_bias_sources = retained_bias_sources(
+                args.retained_manifest
+            )
+            self.report["retained_gdn_bias"] = {
+                "manifest_sha256": identity,
+                "scope": "The retained BF16 bias hoist in the indexed GDN adapter only. Other selected stages exercise release primitives.",
+            }
         self.started = time.monotonic()
         torch.set_num_threads(4)
         torch.set_grad_enabled(False)
@@ -1066,6 +1094,114 @@ class Audit:
                 exact=True,
             )
 
+    def retained_gdn_bias(self):
+        t = self.torch
+        relative_path = "diagnostics/packed-gdn-build-001/packed_recurrent.py"
+        packed = self.args.release / relative_path
+        if sha(packed) != self.manifest["files"][relative_path]:
+            raise ValueError("release packed GDN adapter changed")
+        scan_spec = importlib.util.find_spec("stock_gdn_scan_kernel")
+        if scan_spec is None or scan_spec.origin is None:
+            raise ValueError("release GDN scan source is unavailable")
+        scan = Path(scan_spec.origin)
+        if (
+            sha(scan)
+            != self.manifest["m1_arithmetic"]["contract"]["sources"][scan.name]
+        ):
+            raise ValueError("release GDN scan source changed")
+        self.source("packed_gdn_adapter", packed)
+        self.source("packed_gdn_scan", scan)
+        for name, source in self.retained_bias_sources.items():
+            self.source(name, source)
+        module(self.retained_bias_sources["gdn_prefill_direct"], "gdn_prefill_direct")
+        hook = module(
+            self.retained_bias_sources["prefill_bank_norm"], "prefill_bank_norm"
+        )
+        adapter = module(packed, "m1_audit_packed_recurrent").StockIndexedAdapter(t)
+
+        # Eight logical rows write noncontiguous physical slots, starting from
+        # the same pre-existing accepted state used by the installed adapter.
+        rows = 8
+        dimensions = (48, 128, 128)
+        slots = [3, 6, 1, 4, 2, 8, 7, 5]
+        indices = t.tensor([slots], dtype=t.int32, device="cuda")
+        cu = t.tensor([0, rows], dtype=t.int32, device="cuda")
+        accepted = t.zeros(1, dtype=t.int32, device="cuda")
+        state = t.empty((10, *dimensions), dtype=t.float32, device="cuda")
+        output = t.empty((rows, 48, 128), dtype=t.bfloat16, device="cuda")
+        names = sorted(
+            name.removesuffix("A_log")
+            for name in self.index
+            if name.endswith("linear_attn.A_log")
+        )
+        if len(names) != 48:
+            raise ValueError("unexpected indexed GDN layer inventory")
+        for layer, name in enumerate(names):
+            self.check_idle()
+            al, bias = self.tensor(name + "A_log"), self.tensor(name + "dt_bias")
+            mixed = self.random((rows, 10240))
+            a, b = self.random((rows, 48), 6), self.random((rows, 48), 4)
+            initial = self.random(dimensions, 0.025).float()
+            state.fill_(0.125)
+            state[slots[layer % rows]].copy_(initial.cuda())
+            accepted.fill_(layer % rows + 1)
+            cache = bias.float().cuda()
+            # Use the real immutable weight and check the uncached tensor path
+            # with a different object that is also rounded at the BF16 boundary.
+            supplied = cache if (layer // rows) % 2 else cache.clone() + 0.0027
+            recurrent = MethodType(hook.hoisted_recurrent(adapter, [cache]), adapter)
+            q, k, v = [
+                part.view(rows, -1, 128)
+                for part in mixed.cuda().split((2048, 2048, 6144), dim=1)
+            ]
+            recurrent(
+                q,
+                k,
+                v,
+                a.cuda(),
+                b.cuda(),
+                al.float().cuda(),
+                supplied,
+                state,
+                output,
+                cu,
+                indices,
+                accepted,
+                1,
+                48,
+                16,
+                128**-0.5,
+            )
+            oracle = self.array(initial)
+            log64, bias64 = self.array(al), self.array(supplied.bfloat16())
+            predicted = []
+            for i, slot in enumerate(slots):
+                oracle, value = ref.gdn_step(
+                    oracle,
+                    self.array(mixed[i]),
+                    self.array(a[i]),
+                    self.array(b[i]),
+                    log64,
+                    bias64,
+                )
+                self.record(
+                    "retained_gdn_indexed_state",
+                    f"{name}row-{i + 1}",
+                    state[slot],
+                    oracle,
+                    relative=2e-4,
+                    bias="cached" if supplied is cache else "fallback",
+                )
+                predicted.append(value)
+            self.record(
+                "retained_gdn_indexed_output", name, output, np.stack(predicted)
+            )
+            self.record(
+                "retained_gdn_indexed_slot_isolation",
+                name,
+                passed=bool((state[0] == 0.125).all() and (state[9] == 0.125).all()),
+            )
+
     def run(self):
         for name in self.args.stages:
             self.check_idle()
@@ -1132,6 +1268,7 @@ def main():
             "convolution",
             "attention",
             "head",
+            "retained_gdn_bias",
         ),
         default=[
             "norms",
@@ -1147,6 +1284,8 @@ def main():
     parser.add_argument("--transitions", type=int, default=8192)
     parser.add_argument("--seed", type=int, default=240926)
     parser.add_argument("--memory-mib", type=int, default=192)
+    parser.add_argument("--expected-release-sha256")
+    parser.add_argument("--retained-manifest", type=Path)
     parser.add_argument("--api", default="http://127.0.0.1:8080")
     parser.add_argument("--backend-stopped", action="store_true")
     parser.add_argument("--allow-gpu", action="store_true")
@@ -1160,6 +1299,15 @@ def main():
         parser.error("GPU opt-in and bounded nonempty cases required")
     if args.output.exists():
         parser.error("output already exists; preserve previous evidence")
+    if bool(args.retained_manifest) != ("retained_gdn_bias" in args.stages):
+        parser.error(
+            "the retained GDN bias stage and its manifest must be specified together"
+        )
+    if (
+        args.expected_release_sha256
+        and sha(args.release / "optimized-release.json") != args.expected_release_sha256
+    ):
+        parser.error("release manifest differs from the expected SHA-256")
     release = json.loads((args.release / "optimized-release.json").read_text())
     for path in reversed(release["pythonpath"]):
         sys.path.append(path)

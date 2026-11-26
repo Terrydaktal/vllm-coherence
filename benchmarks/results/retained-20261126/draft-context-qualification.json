@@ -1,0 +1,183 @@
+{
+  "schema": 1,
+  "purpose": "Partition-invariant DFlash2 fused BF16 context K/V on Radeon AI PRO R9700",
+  "passed": true,
+  "source_sha256": "cda9100127d0397444770a009d98fd654d8ebb0d9304db6550a93e9ed1038fcb",
+  "producer_sha256": "e3bcee30722064e6fcf86b389f0a2c40a1a228ec7ea9efc0a7a31ef055b07577",
+  "tile": [
+    64,
+    128,
+    64
+  ],
+  "arch": "gfx1201",
+  "weight_shape": [
+    10240,
+    5120
+  ],
+  "bias_observed": false,
+  "short_counts": {
+    "waiter": 384,
+    "cancelled_replay": 512
+  },
+  "long_checks": {
+    "1.0": {
+      "tokens": 128,
+      "hidden_exact": 128,
+      "draft_cache_exact_bytes": 20961280,
+      "first_distribution_exact": true,
+      "cold_cached": 0,
+      "warm_cached": 57680,
+      "first_different_output_old_warm": 5
+    },
+    "0.0": {
+      "tokens": 128,
+      "hidden_exact": 128,
+      "draft_cache_exact_bytes": 20961280,
+      "first_distribution_exact": true,
+      "cold_cached": 0,
+      "warm_cached": 57680,
+      "first_different_output_old_warm": null
+    }
+  },
+  "invariant_partition_rows": [
+    2049,
+    2528,
+    3296
+  ],
+  "release_changed_elements": {
+    "2049": 1329,
+    "2528": 2945,
+    "3296": 0
+  },
+  "operator_time_us": {
+    "release": {
+      "1": 202.781,
+      "8": 183.435,
+      "401": 589.351,
+      "880": 1249.726,
+      "1648": 1484.328,
+      "2049": 2028.846,
+      "2528": 2359.915,
+      "3296": 3029.677
+    },
+    "fixed": {
+      "1": 272.782,
+      "8": 208.071,
+      "401": 468.13,
+      "880": 839.42,
+      "1648": 1677.28,
+      "2049": 2144.537,
+      "2528": 2602.16,
+      "3296": 3297.613
+    }
+  },
+  "error_vs_bf16_release": {
+    "1": {
+      "total_elements": 10240,
+      "changed_elements": 4,
+      "finite": true,
+      "max_abs": 0.00390625,
+      "rms": 5.480433653585196e-05,
+      "max_bfloat16_ulp": 4,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "8": {
+      "total_elements": 81920,
+      "changed_elements": 30,
+      "finite": true,
+      "max_abs": 0.125,
+      "rms": 0.0005307528304687838,
+      "max_bfloat16_ulp": 15,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "401": {
+      "total_elements": 4106240,
+      "changed_elements": 1413,
+      "finite": true,
+      "max_abs": 0.25,
+      "rms": 0.0004143089294180478,
+      "max_bfloat16_ulp": 736,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "880": {
+      "total_elements": 9011200,
+      "changed_elements": 3104,
+      "finite": true,
+      "max_abs": 0.25,
+      "rms": 0.0004019502042358077,
+      "max_bfloat16_ulp": 736,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "1648": {
+      "total_elements": 16875520,
+      "changed_elements": 5707,
+      "finite": true,
+      "max_abs": 0.25,
+      "rms": 0.00038517490370655084,
+      "max_bfloat16_ulp": 788,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "2049": {
+      "total_elements": 20981760,
+      "changed_elements": 7090,
+      "finite": true,
+      "max_abs": 0.25,
+      "rms": 0.00038443208701279875,
+      "max_bfloat16_ulp": 788,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "2528": {
+      "total_elements": 25886720,
+      "changed_elements": 8733,
+      "finite": true,
+      "max_abs": 0.25,
+      "rms": 0.00038906216564254354,
+      "max_bfloat16_ulp": 788,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    },
+    "3296": {
+      "total_elements": 33751040,
+      "changed_elements": 11424,
+      "finite": true,
+      "max_abs": 0.25,
+      "rms": 0.00038756492599499495,
+      "max_bfloat16_ulp": 788,
+      "last_m1_row_exact": true,
+      "last_m8_rows_exact": true
+    }
+  },
+  "artifacts": {
+    "operator": {
+      "path": "gemma-suite/draft-projection-operators.json",
+      "sha256": "f2c6e9cdd95ab61b6fb80af808eea459bc35d5a5b856423de3e4e2cd9a33840e"
+    },
+    "numeric": {
+      "path": "gemma-suite/draft-projection-numeric.json",
+      "sha256": "43776d64e7bc2141ec1ca246db8f83b9ffdf906e371d23a4366724a78c81b22f"
+    },
+    "install": {
+      "path": "gemma-suite/refresh/draft-partition/installed.json",
+      "sha256": "b08909043151f892f46df16457d5b8cd7ce3975b087e023271bcffc1dfcfe969"
+    },
+    "short": {
+      "path": "gemma-suite/refresh/draft-partition/short",
+      "sha256": "dd003b858223bd8738f3510ab034e5e6ad741234188c71aa318451f71cfcca4d"
+    },
+    "long": {
+      "path": "gemma-suite/refresh/draft-partition/natural/sampled-replay-results.json",
+      "sha256": "6fdebf466f5473cbf731f3067b1890ab1b3474a24a85cf6caac588d473e9be49"
+    },
+    "restore": {
+      "path": "gemma-suite/refresh/draft-partition/restore.json",
+      "sha256": "fa5ebb481c1bde966e3ae945c86e35e8d6f169085abaf8b6aafc3864aed6d7f7"
+    }
+  },
+  "sha256": "92afaf66bd8729b17ae02d1cc2688c73d9b4bc2b543c352aaae159cc9c1cdefc"
+}

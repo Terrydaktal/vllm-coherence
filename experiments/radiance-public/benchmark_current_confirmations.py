@@ -44,7 +44,7 @@ STAGE_INVENTORY = {
 }
 
 
-def current_config(base_config, spec, lane, *, speed_candidate=False, **kwargs):
+def current_config(base_config, spec, lane, *, speed_candidate=False, retained_workers=False, released_eager_m1=False, **kwargs):
     config = base_config(spec, lane, **kwargs)
     if kwargs["execution_mode"] == "compiled-no-graphs":
         config["worker_cls"] = "native_d7_tape_worker.NativeTapeWorker"
@@ -52,11 +52,25 @@ def current_config(base_config, spec, lane, *, speed_candidate=False, **kwargs):
         # The eager control must include the already-qualified RNE RoPE repair.
         # ExecutionModeWorker alone is the historical, unaligned eager path.
         config["worker_cls"] = "rotary_mode_d7_worker.RotaryRneWorker"
+    if released_eager_m1:
+        if kwargs["execution_mode"] != "eager" or kwargs["speculation"] or retained_workers or speed_candidate:
+            raise ValueError("released eager M1 control requires an unmodified non-speculative eager worker")
+        config["worker_cls"] = "released_eager_m1_worker.ReleasedEagerM1"
     if speed_candidate and kwargs["execution_mode"] == "compiled" and kwargs["speculation"]:
         config["worker_cls"] = "speed_matched_stage_worker.SpeedMatchedStageWorker"
         config["compilation_config"] = {"cudagraph_mode": "FULL_AND_PIECEWISE", "cudagraph_capture_sizes": [1, 2, 4, 8]}
     if speed_candidate and kwargs["execution_mode"] == "compiled-no-graphs":
         config["worker_cls"] = "speed_confirmation_worker.SpeedTapeWorker"
+    if retained_workers:
+        if not speed_candidate:
+            raise ValueError("retained confirmations require the qualified speed candidate")
+        name = {
+            "optimized_d7_worker.OptimizedWorker": "CompiledM1",
+            "speed_matched_stage_worker.SpeedMatchedStageWorker": "CompiledM8",
+            "rotary_mode_d7_worker.RotaryRneWorker": "Eager",
+            "speed_confirmation_worker.SpeedTapeWorker": "Stages",
+        }[config["worker_cls"]]
+        config["worker_cls"] = "retained_confirmation_worker." + name
     return config
 
 
@@ -75,6 +89,10 @@ def bootstrap(args):
     os.environ["QWEN_OPTIMIZED_STARTUP_RECEIPT"] = str(args.output / "before-compile.json")
     if args.speed_candidate:
         os.environ["QWEN_SPEED_FULL_GRAPH_CAPTURE"] = "1" if args.arm == "compiled-m8" else "0"
+    if args.retained_workers:
+        os.environ["PYTHONPATH"] = os.pathsep.join(
+            ("/retained", "/retained/direct-build", os.environ["PYTHONPATH"])
+        )
     os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve()), "worker", *old[2:]])
 
 
@@ -106,6 +124,12 @@ def worker(args):
     if args.speed_candidate:
         names.update(("speed_candidate_worker.py", "speed_matched_stage_worker.py",
                       "matched_stage_profile_worker.py", "speed_confirmation_worker.py"))
+    if args.retained_workers:
+        names.update(("retained_confirmation_worker.py", "retained_tape_dispatch.py", "fourteen_retained.py"))
+    if args.released_eager_m1:
+        if args.arm != "eager-m1":
+            raise ValueError("released eager M1 control requires the eager-m1 arm")
+        names.add("released_eager_m1_worker.py")
     names = sorted(names)
     binding = seal({
         "schema": "urn:qwen:radiance-native-binding:v1",
@@ -113,6 +137,16 @@ def worker(args):
         "release_manifest_sha256": profile["optimized_d7"]["manifest_sha256"],
         "scope": "Authenticated installed source identity, not a correctness certificate",
     })
+    retained_binding = {}
+    if args.retained_workers:
+        import importlib.util
+        from fourteen_retained import manifest as retained_manifest
+
+        for name in ("retained_confirmation_worker", "fourteen_retained"):
+            actual = importlib.util.find_spec(name)
+            if actual is None or hashlib.sha256(Path(actual.origin).read_bytes()).hexdigest() != binding["files"][name + ".py"]:
+                raise ValueError(f"retained qualification resolves a different {name}")
+        retained_binding["retained_manifest_sha256"] = retained_manifest()["sha256"]
     spec = {"binding": binding, "native_config": spec["native_config"]}
     actual_spec = args.output / "installed-spec.json"
     write_private(actual_spec, spec)
@@ -127,13 +161,17 @@ def worker(args):
         "snapshot_reuse": False,
         "serving_timing_measurement": False,
         "speed_candidate": args.speed_candidate,
+        "retained_workers": args.retained_workers,
+        "released_eager_m1": args.released_eager_m1,
+        **retained_binding,
     })
     lane = "fixed-bf16"
     (args.output / lane).mkdir(mode=0o700)
     (args.private / lane).mkdir(mode=0o700)
     original_config = benchmark.make_config
     benchmark.make_config = lambda spec, lane, **kw: current_config(
-        original_config, spec, lane, speed_candidate=args.speed_candidate, **kw)
+        original_config, spec, lane, speed_candidate=args.speed_candidate,
+        retained_workers=args.retained_workers, released_eager_m1=args.released_eager_m1, **kw)
     benchmark.worker(SimpleNamespace(
         spec=actual_spec, fixture=args.fixture, output=args.output, private=args.private,
         lane=lane, m1=args.arm.endswith("m1"), isolated_capture=False,
@@ -180,6 +218,14 @@ def summarize(root, output):
         authenticate(metadata)
         authenticate(sample)
         compiled = arm.startswith("compiled")
+        if bindings[arm].get("retained_workers"):
+            retained = metadata["retained_qualification"]
+            require(retained["initializer_sha256"] and retained["adapter_sha256"] and retained["installed"],
+                    "missing retained load receipts")
+            require(retained["configuration"]["binding"] == bindings[arm]["retained_manifest_sha256"],
+                    "loaded retained operators differ from the requested build")
+            require(retained["configuration"]["full_head"], "diagnostic full-head route was not selected")
+            require(retained["window"] == metadata["effective_capacity"]["max_model_len"], "context binding mismatch")
         require(metadata["enforce_eager"] is not compiled, "execution mode changed")
         require(metadata["compilation_mode"] == (3 if compiled else 0), "wrong compiler mode")
         candidate = bindings[arm].get("speed_candidate", False)
@@ -207,6 +253,8 @@ def summarize(root, output):
             "eager_rotary_repair": metadata.get("rotary_intervention"),
             "speed_candidate": metadata.get("speed_candidate"),
         }
+    if any(b.get("retained_workers") for b in bindings.values()):
+        require(len({b["retained_manifest_sha256"] for b in bindings.values()}) == 1, "different retained builds across arms")
     for key in ("release_manifest_sha256", "source_binding_sha256", "fixture_sha256"):
         require(len({b[key] for b in bindings.values()}) == 1, "different execution binding: " + key)
     pairs = [("compiled-m1", "compiled-m8"), ("eager-m1", "compiled-m1"),
@@ -328,6 +376,13 @@ def summarize_stages(root, arm, output):
     for key in ("release_manifest_sha256", "source_binding_sha256", "fixture_sha256"):
         if binding[key] != control_binding[key]:
             raise ValueError("stage execution binding changed: " + key)
+    if binding.get("retained_workers"):
+        retained = metadata["retained_qualification"]
+        reference = private_json(root / "compiled-m8" / "execution-binding.json")
+        if not (retained["configuration"]["full_head"] and retained["installed"]
+                and retained["configuration"]["binding"] == binding["retained_manifest_sha256"]
+                == reference.get("retained_manifest_sha256")):
+            raise ValueError("stage replay did not use the same retained build as the graph")
     paths = sorted(private.glob("native-tape-group-*.json"))
     if len(paths) != 40:
         raise ValueError("incomplete 320-position stage capture")
@@ -347,9 +402,12 @@ def summarize_stages(root, arm, output):
             raise ValueError("missing current M1/M8 or eager/compiled stage comparison")
     passed = all(values["full_logits_exact"] == values["positions"] == 320
                  for stage in aggregate["stages"].values() for values in stage.values())
+    first_local_difference = first_stage_difference(groups)
+    if binding.get("retained_workers"):
+        passed = passed and first_local_difference is None
     report = seal({
         "schema": "coherence-current-stage-confirmations-v1",
-        "first_local_difference": first_stage_difference(groups),
+        "first_local_difference": first_local_difference,
         "status": "SAMPLE_CHECKED" if passed else "DISAGREEMENT_OBSERVED",
         "prefix_tokens": 60000, "decode_positions": 320, "groups": 40,
         "optimized_manifest_sha256": binding["release_manifest_sha256"],
@@ -381,6 +439,8 @@ def main():
     parser.add_argument("--operator-audit", type=Path)
     parser.add_argument("--stage-arm", default="stages")
     parser.add_argument("--patches", type=Path, default=Path("/patches"))
+    parser.add_argument("--retained-workers", action="store_true", help="bind the benchmark candidate hooks to every worker")
+    parser.add_argument("--released-eager-m1", action="store_true", help="compare the released extended-context and host-embedding eager M1 with all experimental hooks disabled")
     parser.add_argument("--speed-candidate", action="store_true",
                         help="qualify the banked full-graph M8 against original M1/eager operators")
     args = parser.parse_args()

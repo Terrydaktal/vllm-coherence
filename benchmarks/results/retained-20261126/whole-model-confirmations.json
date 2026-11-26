@@ -1,0 +1,457 @@
+{
+  "schema": "coherence-current-320-confirmations-v1",
+  "status": "SAMPLE_CHECKED",
+  "prefix_tokens": 60000,
+  "decode_tokens_per_arm": 320,
+  "prefill_predictions_per_arm": 1,
+  "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+  "optimized_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+  "scope": "Current corrected release: common forced Pi tokens, fresh prefill in every arm; full BF16 comparison head; no snapshot reuse. Approximate Global-512 support has separate evidence.",
+  "limits": "Finite agreement, not arbitrary-input proof, independent model certification, natural completion quality, all rejection histories or snapshot/concurrency qualification. This 320-token slice was recovered from the retained Pi corpus and differs from the historical standalone 320 fixture.",
+  "executions": {
+    "compiled-m1": {
+      "metadata_sha256": "04aa5e812d7a0378afb9a59c7e7f061a9fe311a2ae9bd0c3abfa1162ce58690f",
+      "private_rows_sha256": "9e6003c671b9b43d05590365b02bb2991cbea80204231b98f3cd4efb39c131e2",
+      "sample_sha256": "adcef791491cb7df073a65cb922a0333849ef8a28195a748d06da6ddfcae8ff8",
+      "binding": {
+        "arm": "compiled-m1",
+        "driver_sha256": "05c2a51ea031633da523082019e86ac503c8896d6b3fcf7525752e83dd77f844",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+        "released_eager_m1": false,
+        "retained_manifest_sha256": "621b999abb596ae6ff572ae039be8b1856172719e1a6cccf72b71bf2f49ab780",
+        "retained_workers": true,
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "d526d7f892eff8ac542055a767b9a7b843e420c9d8c720a9c5bca64f53fcb2c5",
+        "speed_candidate": true
+      },
+      "compilation_mode": 3,
+      "graph_mode": "PIECEWISE",
+      "target_graph_replays": 20800,
+      "eager_rotary_repair": null,
+      "speed_candidate": null
+    },
+    "compiled-m8": {
+      "metadata_sha256": "13bbc59267b1690795cc73e6341f249698ffdcd74b6f4c5c364b5107b2ecbe1c",
+      "private_rows_sha256": "5bc69b1b5f3f1021586bf7691f8ba404e0e3ba3c1348824d29b80d3e666ae46e",
+      "sample_sha256": "26adc0d58150f97f3d8a24de23e7e6bab5950361c41f60da0f08d002935641ff",
+      "binding": {
+        "arm": "compiled-m8",
+        "driver_sha256": "05c2a51ea031633da523082019e86ac503c8896d6b3fcf7525752e83dd77f844",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+        "released_eager_m1": false,
+        "retained_manifest_sha256": "621b999abb596ae6ff572ae039be8b1856172719e1a6cccf72b71bf2f49ab780",
+        "retained_workers": true,
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "d526d7f892eff8ac542055a767b9a7b843e420c9d8c720a9c5bca64f53fcb2c5",
+        "speed_candidate": true
+      },
+      "compilation_mode": 3,
+      "graph_mode": "FULL_AND_PIECEWISE",
+      "target_graph_replays": 40,
+      "eager_rotary_repair": null,
+      "speed_candidate": {
+        "draft_attention": {
+          "qualification_sha256": "bd4388a4dbb510ffa38157fab412fc599346da69feea0c10cc0e4098b3ec9843",
+          "qualified_generator_sha256": "6680b6394d394605a1f1c55b1a66cc4fe50f6ee29ae06abb00ffc573cdd4d328",
+          "scope": "drafter only; original target attention is unchanged",
+          "source_sha256": "01cf56d3bda4e60a24d2b224847a5e2531dfcd88327b1c3137b2247651f4c5d9",
+          "variant": "unit_w4_s1_occ2"
+        },
+        "draft_attention_enabled": true,
+        "full_graph_enabled": true,
+        "sources": {
+          "matched_stage_profile_worker.py": "cd51d1990d9efc71b73690b310ffea119a0d88266b438ba389b9a6cabf5496f2",
+          "speed_candidate_worker.py": "5558b139f33bdbae1539f06272be39fd8dee2abf80a3d76fbf1fbb21fcfda3fc",
+          "speed_matched_stage_worker.py": "1eba3d1f9fe29049f881ec6afa2d078f519fa8078f1c17880a3e332a1e43122a"
+        },
+        "target_gemm": {
+          "binary_sha256": "b451db24d512acd057bec81b954f9197e56a702adaed2b438701ab445ab8a3db",
+          "qualification_sha256": "ecb05706280429da2d685db705841109d0abc4cc59a669bf3ada106ec10da578",
+          "scope": "full target graph, M1/M8 down and output projections only",
+          "variant": "local_split"
+        },
+        "target_gemm_enabled": true,
+        "target_graph_launches_per_round": 1
+      }
+    },
+    "eager-m1": {
+      "metadata_sha256": "876836020f0366e07028796c9a29de509be92d9fdecf389597a03e1cf8e4cf1c",
+      "private_rows_sha256": "d06b54262c7718bff6522111d8234308ece9a8436612b9b3c72d1ab7f53e3745",
+      "sample_sha256": "5fd4344410970595ebf35b7471a34459f9e8fe2a668bf0cdb5fc9f659df2599c",
+      "binding": {
+        "arm": "eager-m1",
+        "driver_sha256": "05c2a51ea031633da523082019e86ac503c8896d6b3fcf7525752e83dd77f844",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+        "released_eager_m1": false,
+        "retained_manifest_sha256": "621b999abb596ae6ff572ae039be8b1856172719e1a6cccf72b71bf2f49ab780",
+        "retained_workers": true,
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "d526d7f892eff8ac542055a767b9a7b843e420c9d8c720a9c5bca64f53fcb2c5",
+        "speed_candidate": true
+      },
+      "compilation_mode": 0,
+      "graph_mode": "NONE",
+      "target_graph_replays": 0,
+      "eager_rotary_repair": {
+        "calls": 80,
+        "identity": {
+          "installed_before_load": true,
+          "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+          "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+          "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+          "schema": "qwen.rotary-rne-worker.v1",
+          "scope": "Eager native MRoPE product rounding only; no installed files changed.",
+          "sha256": "17aa5ab70f2e12df93221501012bdbfc46c18b02f790ca3f8f31b6122e0075b2",
+          "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+        }
+      },
+      "speed_candidate": null
+    },
+    "eager-m8": {
+      "metadata_sha256": "2b0c81354fd9d8976cdb918b0b06558d6330be7df4022d4f71a9a64dbe42b889",
+      "private_rows_sha256": "e5ed248ca97d51400b224eb3b87ab832deaeae3f93312cea206ccce6af0d5cff",
+      "sample_sha256": "a8145c3448585336af1c13ebf30f2e32c7ae6e928de81c0038411b7cb20d00fe",
+      "binding": {
+        "arm": "eager-m8",
+        "driver_sha256": "05c2a51ea031633da523082019e86ac503c8896d6b3fcf7525752e83dd77f844",
+        "fixture_sha256": "8252bf3eb4b600afec75eaf897c38364dbea8e792f4a99c2cfcc3c829ec75c3a",
+        "head": "full-bf16",
+        "production_head": "global512",
+        "release_manifest_sha256": "08f7c01c7461ea480a5e5de608fbf914ed261d14c3c1a61ca8e07d30fc64accc",
+        "released_eager_m1": false,
+        "retained_manifest_sha256": "621b999abb596ae6ff572ae039be8b1856172719e1a6cccf72b71bf2f49ab780",
+        "retained_workers": true,
+        "serving_timing_measurement": false,
+        "snapshot_reuse": false,
+        "source_binding_sha256": "d526d7f892eff8ac542055a767b9a7b843e420c9d8c720a9c5bca64f53fcb2c5",
+        "speed_candidate": true
+      },
+      "compilation_mode": 0,
+      "graph_mode": "NONE",
+      "target_graph_replays": 0,
+      "eager_rotary_repair": {
+        "calls": 112,
+        "identity": {
+          "installed_before_load": true,
+          "native_source": "f795e2a347715d1c8e2b9953fcf6fba578ca9a648858ed9d26d27eb6bdd61d19",
+          "patched_source": "38f6aa8ab9a509258445c89534046024b4fc0679c202218676afda2558b7d428",
+          "patcher_source": "98f464b0dd53c2bbb44a4cc9e9307d520202a81a9a3175a3c091c8d95da050a0",
+          "schema": "qwen.rotary-rne-worker.v1",
+          "scope": "Eager native MRoPE product rounding only; no installed files changed.",
+          "sha256": "17aa5ab70f2e12df93221501012bdbfc46c18b02f790ca3f8f31b6122e0075b2",
+          "worker_source": "c49aeb1ee3131c271788d79dc87761e9b5d77c00ee5867fe5db68e376605c7d3"
+        }
+      },
+      "speed_candidate": null
+    }
+  },
+  "comparisons": {
+    "compiled-m1_vs_compiled-m8": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 2,
+          "candidate_boundary_tied": 2,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 84,
+          "candidate_boundary_tied": 84,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 133,
+          "candidate_boundary_tied": 133,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    },
+    "eager-m1_vs_compiled-m1": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 2,
+          "candidate_boundary_tied": 2,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 84,
+          "candidate_boundary_tied": 84,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 133,
+          "candidate_boundary_tied": 133,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    },
+    "eager-m8_vs_compiled-m8": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 2,
+          "candidate_boundary_tied": 2,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 84,
+          "candidate_boundary_tied": 84,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 133,
+          "candidate_boundary_tied": 133,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    },
+    "eager-m1_vs_compiled-m8": {
+      "decode": {
+        "positions": 320,
+        "full_logits_exact": 320,
+        "1": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 2,
+          "candidate_boundary_tied": 2,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 1.0,
+          "mean_overlap_percent": 100.0
+        },
+        "10": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 84,
+          "candidate_boundary_tied": 84,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 10.0,
+          "mean_overlap_percent": 100.0
+        },
+        "20": {
+          "set_exact": 320,
+          "ranked_exact": 320,
+          "inclusive_tie_set_exact": 320,
+          "reference_boundary_tied": 133,
+          "candidate_boundary_tied": 133,
+          "retained_scores_exact": 320,
+          "set_exact_percent": 100.0,
+          "ranked_exact_percent": 100.0,
+          "mean_overlap_tokens": 20.0,
+          "mean_overlap_percent": 100.0
+        }
+      },
+      "prefill": {
+        "full_logits_exact": true,
+        "1": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 1,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        },
+        "10": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 10,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": true,
+          "candidate_boundary_tied": true,
+          "retained_scores_exact": true
+        },
+        "20": {
+          "set_exact": true,
+          "ranked_exact": true,
+          "overlap": 20,
+          "inclusive_tie_set_exact": true,
+          "reference_boundary_tied": false,
+          "candidate_boundary_tied": false,
+          "retained_scores_exact": true
+        }
+      },
+      "first_different_prediction": null
+    }
+  },
+  "reporter_sha256": "05c2a51ea031633da523082019e86ac503c8896d6b3fcf7525752e83dd77f844",
+  "private_text_decoded_or_published": false,
+  "sha256": "9331d7b8ea592617f12a154bcc066a5c3ee04ec9950087ef4d48e01ca9974a7b"
+}
