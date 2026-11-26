@@ -38,7 +38,7 @@ def _prepared_scan_into():
     )
 
 
-def install_scan(worker):
+def install_scan(worker, *, conv_initializer=None):
     """Write the prepared scan into the layer's own output allocation."""
     import radiance_gdn
     from optimized_prefill_scan import PrefillScan
@@ -69,6 +69,11 @@ def install_scan(worker):
         output.copy_(result.outputs)
         return result
 
+    conv_replacements = ()
+    if conv_initializer is not None:
+        from prefill_conv_slot import CONV_REPLACEMENT
+
+        conv_replacements = (CONV_REPLACEMENT,)
     direct = _replace_function(
         StockPrefillAdapter.__call__,
         ((
@@ -76,8 +81,9 @@ def install_scan(worker):
             "    core_attn_out[:count].view(count, 48, 128).copy_(result.outputs)",
             "output = core_attn_out[:count].view(count, 48, 128)\n"
             "    result = produce(self, initial, packed, a[:count], b[:count], layer.A_log, layer.dt_bias, output)",
-        ),),
+        ), *conv_replacements),
         produce=produce,
+        conv_initializer=conv_initializer,
     )
     hooks = HookSet()
     hooks.replace(radiance_gdn, "forward_core_fused", MethodType(direct, adapter))

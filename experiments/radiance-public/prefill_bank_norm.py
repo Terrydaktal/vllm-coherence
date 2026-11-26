@@ -89,7 +89,7 @@ def indexed_scan_into(bank, slot, resumed, mixed, a, b, alog, bias, output):
     )
 
 
-def install_bank(worker):
+def install_bank(worker, *, conv_initializer=None):
     from gdn_prefill_direct import _replace_function
     from stock_gdn_prefill_adapter import StockPrefillAdapter
 
@@ -106,6 +106,11 @@ def install_bank(worker):
     ):
         raise ValueError("indexed bank requires the qualified prefill adapter")
     counts = {"indexed_state": 0}
+    conv_replacements = ()
+    if conv_initializer is not None:
+        from prefill_conv_slot import CONV_REPLACEMENT
+
+        conv_replacements = (CONV_REPLACEMENT,)
     updated = _replace_function(
         StockPrefillAdapter.__call__,
         (
@@ -135,10 +140,12 @@ def install_bank(worker):
     indexed_scan_into(ssm_state, md.prefill_state_indices, md.prefill_has_initial_state, packed,
                       a[:count], b[:count], layer.A_log, layer.dt_bias, core_attn_out[:count].view(count, 48, 128))""",
             ),
+            *conv_replacements,
         ),
         previous=previous,
         counts=counts,
         indexed_scan_into=indexed_scan_into,
+        conv_initializer=conv_initializer,
     )
     hooks = HookSet()
     hooks.replace(radiance_gdn, "forward_core_fused", MethodType(updated, adapter))
