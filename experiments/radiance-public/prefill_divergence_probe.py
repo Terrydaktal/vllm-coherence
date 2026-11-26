@@ -1106,6 +1106,28 @@ class PrefillDivergenceProbe:
             "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         }
 
+    def qwen_prefill_fixed_draft_context(self, action, *fixture_paths):
+        import importlib
+
+        import dflash_context_projection as projection
+
+        if action == "numeric_error":
+            import benchmark_dflash_context_projection as benchmark
+
+            return importlib.reload(benchmark).compare_release(self, *fixture_paths)
+        if fixture_paths:
+            raise ValueError("unexpected fixture paths for this diagnostic action")
+        if action == "install":
+            return importlib.reload(projection).install(self)
+        if action == "remove":
+            return projection.remove(self)
+        raise ValueError("unknown DFlash2 projection diagnostic action")
+
+    def qwen_target_cache_boundary(self, action, *args):
+        from cache_target_boundary_probe import call
+
+        return call(self, action, *args)
+
     def qwen_prefill_graph_kv_layouts(self):
         from prefill_graph_observer import target_kv_layouts
 

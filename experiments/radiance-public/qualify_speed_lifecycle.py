@@ -60,6 +60,15 @@ def check_equal(reference, observed):
     require(reference["finish"] == observed["finish"], "finish reason differs")
 
 
+def first_token_difference(left, right):
+    for index, (a, b) in enumerate(zip(left, right, strict=False)):
+        if a != b:
+            return index
+    if len(left) != len(right):
+        return min(len(left), len(right))
+    return None
+
+
 class Stream:
     def __init__(self, suite, label, chat, prompt, count):
         self.suite, self.label, self.chat = suite, label, chat
@@ -261,6 +270,8 @@ class Suite:
         require(result.get("applied") is True, "priority was not applied")
 
     async def case(self, name, operation):
+        if self.args.case_group == "sampled-replay" and name != "sampled_cancel_and_waiter_replay":
+            return
         self.report["current_case"] = name
         self.save()
         print(json.dumps({"case": name, "status": "RUNNING"}), flush=True)
@@ -522,21 +533,57 @@ class Suite:
             }
             references = {}
             for label, p, n in (("a", pa, 512), ("b", pb, 384)):
-                references[label] = await self.generate(
-                    "sampled-control-" + label, p, n
-                )
+                control = self.stream("sampled-control-" + label, p, n)
+                references[label] = (control, await control.result())
+                await self.absent(control.chat)
             a = self.stream("sampled-cancel-a", pa, 512)
             await self.wait(lambda: len(a.ids) >= 16, "sampled owner did not start")
             b = self.stream("sampled-waiter-b", pb, 384)
-            await self.wait(
-                lambda: bool(self.rows(b.chat)), "sampled waiter not admitted"
-            )
+            await self.wait(lambda: bool(self.rows(b.chat)), "sampled waiter not admitted")
             cancellation = await a.cancel()
-            check_equal(references["b"], await b.result())
-            check_equal(
-                references["a"],
-                await self.generate("sampled-replay-a", pa, 512, a.chat),
-            )
+            self.report["sampled_cancelled_prefix"] = {
+                "output_tokens": len(a.ids),
+                "sha256": digest(a.ids),
+                "first_differing_output_index": first_token_difference(
+                    references["a"][0].ids[: len(a.ids)], a.ids
+                ),
+            }
+            comparisons = self.report["sampled_replay_comparisons"] = {}
+            for name, label in (("waiter", "b"), ("cancelled_replay", "a")):
+                job = b if label == "b" else self.stream("sampled-replay-a", pa, 512, a.chat)
+                result = await job.result()
+                await self.absent(job.chat)
+                control, reference = references[label]
+                mismatch = first_token_difference(control.ids, job.ids)
+                comparisons[name] = {
+                    "prompt_tokens": len(job.prompt),
+                    "prompt_sha256": digest(job.prompt),
+                    "first_differing_output_index": mismatch,
+                    "control": reference,
+                    "observed": result,
+                }
+                if mismatch is not None:
+                    path = self.args.output.with_name(
+                        f"{self.args.output.stem}-{name}-synthetic.json"
+                    )
+                    with path.open("x") as capture:
+                        json.dump(
+                            {
+                                "synthetic": True,
+                                "prompt": job.prompt,
+                                "sampling": self.sampling,
+                                "control": control.ids,
+                                "observed": job.ids,
+                                "cancelled_prompt": a.prompt,
+                                "cancelled_output": a.ids,
+                            },
+                            capture,
+                            separators=(",", ":"),
+                        )
+                    comparisons[name]["fixture"] = path.name
+                self.save()
+            for comparison in comparisons.values():
+                check_equal(comparison["control"], comparison["observed"])
             return {
                 "sampling": self.sampling,
                 **cancellation,
@@ -592,7 +639,9 @@ def main():
         "--status-prefix", type=Path, default=Path("/dev/shm/qwen-stage-timing")
     )
     parser.add_argument("--observe", action="store_true")
-    parser.add_argument("--case-group", choices=("all", "lifecycle"), default="all")
+    parser.add_argument(
+        "--case-group", choices=("all", "lifecycle", "sampled-replay"), default="all"
+    )
     args = parser.parse_args()
     if args.output.exists():
         parser.error("refusing to overwrite evidence")
