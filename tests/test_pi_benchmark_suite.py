@@ -213,6 +213,23 @@ def test_completed_resume_does_not_generate_again(harness):
     assert second == first
 
 
+def test_deferred_analysis_preserves_failures_and_completed_checkpoint(harness):
+    h = harness
+    h.args.defer_stage_analysis = True
+    h.short = True
+    pending = h.execute()
+    assert pending["status"] == "inference_complete_stage_analysis_pending"
+    assert pending["validation_failures"] and not h.analyses
+    count = len(h.calls)
+
+    h.args.defer_stage_analysis = False
+    complete = h.execute()
+    assert complete["status"] == "complete_with_validation_failure"
+    h.args.defer_stage_analysis = True
+    assert h.execute() == complete
+    assert len(h.analyses) == 1 and len(h.calls) == count
+
+
 def test_resume_chain_reuses_coding_and_finished_stages(harness):
     h = harness
     h.fail_stage = "json"

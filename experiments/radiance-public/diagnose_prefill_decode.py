@@ -56,7 +56,8 @@ async def run(args):
                 + "\n"
             )
             print(json.dumps({"phase": "corpus_frozen", **natural_result}), flush=True)
-        await suite.rpc("qwen_prefill_probe_reload")
+        if not getattr(args, "installed", False):
+            await suite.rpc("qwen_prefill_probe_reload")
         first = len(prefix) - 3 if args.stages or args.gdn else len(prefix)
         if args.first is not None:
             first = args.first
@@ -73,6 +74,8 @@ async def run(args):
             cold = suite.stream("full-prefill", prefix + output[:-1], 1)
             start = time.monotonic()
             result = await complete(cold)
+            if (result["usage"].get("prompt_tokens_details") or {}).get("cached_tokens", 0):
+                raise ValueError("cold prefill comparison unexpectedly reused a prefix")
             print(
                 json.dumps(
                     {
@@ -136,6 +139,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rows", type=int, default=1000)
     parser.add_argument("--prefix-rows", type=int, default=1651)
+    parser.add_argument(
+        "--installed", action="store_true", help="use the installed probe without reloading modules"
+    )
     parser.add_argument("--stages", action="store_true")
     parser.add_argument("--attention", action="store_true")
     parser.add_argument("--gdn", action="store_true")

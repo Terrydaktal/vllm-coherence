@@ -20,6 +20,11 @@ from qwen_r9700_lab.diagnostic_contract import seal, write_private
 
 
 async def run(args):
+    as_installed = getattr(args, "installed", False)
+    if as_installed:
+        if args.legacy or getattr(args, "baseline_speed", False):
+            raise ValueError("installed timing only measures the active worker")
+        args.candidate_only = True
     if args.output.exists():
         raise ValueError("refusing to replace an existing result")
     original = json.loads(args.fixture.read_text())
@@ -43,6 +48,7 @@ async def run(args):
         "scope": "Unprofiled cold synthetic prefill plus one first token; same process, fresh chat generations",
         "cases": [],
         "candidate_only": args.candidate_only,
+        "as_installed": as_installed,
         "baseline_speed": getattr(args, "baseline_speed", False),
         "fixture_sha256": hashlib.sha256(args.fixture.read_bytes()).hexdigest(),
         "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -50,10 +56,15 @@ async def run(args):
     async with httpx.AsyncClient(base_url=args.base_url, timeout=1200) as client:
         suite = Suite(cfg, client)
         suite.sampling = {"temperature": 0, "top_k": 129, "seed": 0, "logprobs": 1}
-        await suite.rpc("qwen_prefill_probe_reload")
-        report["sources"] = await suite.rpc(
-            "qwen_prefill_load_candidate_sources", [str(args.sources)]
-        )
+        if as_installed:
+            # Snapshot the installed dispatch once; reloading/reinstalling a
+            # prefill probe can replace the very kernels being measured.
+            report["sources"] = await suite.rpc("qwen_prefill_runtime_info")
+        else:
+            await suite.rpc("qwen_prefill_probe_reload")
+            report["sources"] = await suite.rpc(
+                "qwen_prefill_load_candidate_sources", [str(args.sources)]
+            )
         variants = {
             "baseline": (args.baseline_attention, args.baseline_projection),
             "candidate": (args.attention, args.projection),
@@ -74,7 +85,9 @@ async def run(args):
                 if args.legacy:
                     order.insert(0, "legacy")
                 for name in order if repeat % 2 == 0 else reversed(order):
-                    if name == "legacy":
+                    if as_installed:
+                        installed = report["sources"]
+                    elif name == "legacy":
                         installed = await suite.rpc("qwen_prefill_legacy_timing")
                     else:
                         # The frozen server may itself contain the speed hooks.
@@ -164,9 +177,13 @@ if __name__ == "__main__":
         "projection",
         "output",
     ):
-        parser.add_argument("--" + name, type=Path, required=True)
+        parser.add_argument("--" + name, type=Path, required=name in {"fixture", "output"})
     parser.add_argument("--contexts", type=int, nargs="+", default=[60000, 200000])
     parser.add_argument("--repeats", type=int, default=2)
+    parser.add_argument(
+        "--installed", action="store_true",
+        help="Time the current worker with its existing dispatch in --candidate-only mode",
+    )
     parser.add_argument(
         "--candidate-only",
         action="store_true",
@@ -187,4 +204,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Include uncorrected pre-alignment attention/projection as an isolated timing control",
     )
-    asyncio.run(run(parser.parse_args()))
+    args = parser.parse_args()
+    if not args.installed and not all((args.sources, args.baseline_attention, args.baseline_projection, args.attention, args.projection)):
+        parser.error("explicit comparison requires both attention/projection builds and --sources")
+    asyncio.run(run(args))

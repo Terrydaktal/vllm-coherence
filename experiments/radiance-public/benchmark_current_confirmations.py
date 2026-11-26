@@ -289,6 +289,19 @@ def summarize_operators(source, output):
     print(json.dumps({"status": report["status"], "checks": report["checks"], "failed_checks": failed}))
 
 
+def first_stage_difference(groups):
+    for group in groups:
+        for stage in group["stages"]:
+            for variant, result in stage["variants"].items():
+                if not result["local_output_exact"] or not result["local_state_exact"]:
+                    return {
+                        "group_start": group["first_absolute_position"], "group_positions": group["positions"],
+                        "stage": stage["stage"], "instance": stage["instance"], "variant": variant,
+                        "local_output_exact": result["local_output_exact"], "local_state_exact": result["local_state_exact"],
+                    }
+    return None
+
+
 def summarize_stages(root, arm, output):
     from analyze_native_d7_stages import aggregate_groups
 
@@ -336,6 +349,7 @@ def summarize_stages(root, arm, output):
                  for stage in aggregate["stages"].values() for values in stage.values())
     report = seal({
         "schema": "coherence-current-stage-confirmations-v1",
+        "first_local_difference": first_stage_difference(groups),
         "status": "SAMPLE_CHECKED" if passed else "DISAGREEMENT_OBSERVED",
         "prefix_tokens": 60000, "decode_positions": 320, "groups": 40,
         "optimized_manifest_sha256": binding["release_manifest_sha256"],

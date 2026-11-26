@@ -203,3 +203,28 @@ and requested cache-tail flushing, not a complete Pi transcript commit.
 [matched stage capture](../benchmarks/results/compiled-global512-stage-profile-20261009.json)
 retain numeric records and source identities. Generated text, raw token arrays
 and private fixtures remain outside the repository.
+
+## Offline timing and numerical regression checks
+
+Use `--defer-stage-analysis` on a memory-constrained benchmark host to keep the
+raw traces and mark the checkpoint `inference_complete_stage_analysis_pending`.
+Copy `runs/` to a workstation and run
+`python tools/analyze_matched_stage_timings.py --root runs --head global512 --output analysis.json`.
+Add `--allow-incomplete-chunks` to recover usable intervals from an interrupted
+HIP activity capture. Review the excluded chunk hashes, exclusion reasons and
+matched interval counts before interpreting partial results.
+
+Use `benchmark_prefill_speed.py --installed` to time the worker's installed
+prefill routes. It keeps the selected dispatch in place and omits the
+counterfactual timing lanes.
+
+`qualify_numerical_gates.py run` reuses the existing probes to compare
+prefill chunk boundaries, capture actual FULL-graph output and cache state,
+and test cold, restored and forced continuations. Run it against a local
+diagnostic server with `sampled_cache_probe.SampledCacheProbe` and a
+matching shared 60K coding control. Use its `--help` for the synthetic
+fixture and capture inputs. `qualify_numerical_gates.py verify --root DIR`
+recomputes the 17 gates from the numeric reports without the GPU. The
+320-position stage report includes the first local stage mismatch when
+a difference is present. Keep raw tensors and token IDs in the private
+capture directory.

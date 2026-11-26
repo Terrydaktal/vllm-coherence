@@ -589,11 +589,15 @@ def execute(args, opener, tokenizer, rpc):
             continue_chain(args, opener, tokenizer, rpc, state, prefix, rendered)
     # Post-processing never submits inference. It uses exactly matched M8 indices
     # and GPU interval unions, not the whole-request coding mean for row 26.
-    analyze_stages(root, args.head)
     state["validation_failures"] = []
     for name in ("pi-coding-contexts.json", "pi-coding-json-compaction.json"):
         state["validation_failures"].extend(read(root / "public" / name)["validation_failures"])
-    state["status"] = "complete_with_validation_failure" if state["validation_failures"] else "complete"
+    if getattr(args, "defer_stage_analysis", False):
+        if state.get("status") not in {"complete", "complete_with_validation_failure"}:
+            state["status"] = "inference_complete_stage_analysis_pending"
+    else:
+        analyze_stages(root, args.head)
+        state["status"] = "complete_with_validation_failure" if state["validation_failures"] else "complete"
     write_private(checkpoint, state)
     return state
 
@@ -622,6 +626,8 @@ def parser():
     p.add_argument("--base-url", default="http://127.0.0.1:8081")
     p.add_argument("--head", choices=("global256", "global512"), default="global512")
     p.add_argument("--round-log", type=Path, default=Path("/dev/shm/qwen-stage-timing-rounds.jsonl"))
+    p.add_argument("--defer-stage-analysis", action="store_true",
+                   help="Finish after collecting all raw traces. Analyze them offline with tools/analyze_matched_stage_timings.py.")
     p.add_argument("--cache-telemetry-prefix", type=Path,
                    help="Actual cache-job recorder status prefix, if it differs from the round writer")
     for name, default in (("warmup-rounds", 64), ("chunk-rounds", 128), ("profile-rounds", 1152),

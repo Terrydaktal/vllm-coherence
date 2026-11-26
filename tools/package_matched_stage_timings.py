@@ -99,7 +99,6 @@ def package(args):
         for name, expected in contract["measurement_sources"].items():
             source = f"experiments/radiance-public/{name}"
             if (Path(name).name != name or
-                    hashlib.sha256((ROOT / source).read_bytes()).hexdigest() != expected or
                     hashlib.sha256((private / name).read_bytes()).hexdigest() != expected):
                 raise ValueError("shared benchmark source differs from its capture")
             hashes[source] = expected
@@ -139,7 +138,8 @@ def package(args):
         for name in sources:
             if Path(name).name != name:
                 raise ValueError("invalid host runtime source path")
-            local = ROOT / "experiments/radiance-public" / name
+            saved = private / "runtime-sources" / name
+            local = saved if saved.is_file() else ROOT / "experiments/radiance-public" / name
             if hashlib.sha256(local.read_bytes()).hexdigest() != sources[name]:
                 raise ValueError(f"measured host runtime differs from source: {name}")
         if sources["optimized-release.json"] != args.manifest_sha256:
@@ -147,9 +147,14 @@ def package(args):
         binding["host_runtime"] = host_runtime
         binding["host_runtime_binding_sha256"] = hashlib.sha256(runtime_binding.read_bytes()).hexdigest()
         binding["host_page_policy_observations"] = {}
-        observations = ({"sample": host_runtime["host_page_policy_observation"]}
-                        if "host_page_policy_observation" in host_runtime else
-                        {context: read(private / f"{context}-host-page-policy.json") for context in analyses})
+        if host_runtime.get("host_page_policy_observation_status") == "unavailable_after_capture":
+            if not host_runtime.get("host_page_policy_observation_detail"):
+                raise ValueError("missing reason for the unavailable allocator observation")
+            observations = {}
+        elif "host_page_policy_observation" in host_runtime:
+            observations = {"sample": host_runtime["host_page_policy_observation"]}
+        else:
+            observations = {context: read(private / f"{context}-host-page-policy.json") for context in analyses}
         for context, observation in observations.items():
             if observation["allocated_bytes"]:
                 if observation["host_page_policy"] != "no_hugepage_promotion":

@@ -11,6 +11,7 @@ import hashlib
 import json
 import sysconfig
 import time
+import uuid
 from pathlib import Path
 
 import httpx
@@ -178,16 +179,41 @@ async def run(args):
         )
         raw = tokenized["tokens"]
         if args.mode == "pressure":
-            # Fixed synthetic dimensions reproduce the September 27 near-limit
-            # compaction incident. The negative control changes ownership only,
-            # never numerical kernels. No user transcript is used.
-            chat = suite.chat("capacity")
-            initial = (raw * ((233162 + len(raw) - 1) // len(raw)))[:233162]
+            # Keep the same remaining capacity as the September 27 reproduction
+            # (253,792 max). A larger KV allocation otherwise removes the pressure
+            # that made the original negative control stall.
+            response = await client.get("/v1/models")
+            response.raise_for_status()
+            model_id = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate"
+            advertised = [m for m in response.json()["data"] if m["id"] == model_id]
+            if len(advertised) != 1:
+                raise ValueError("expected the active qualification model")
+            model_limit = advertised[0]["max_model_len"]
+            initial_len, continuation_len, near_limit_len = (
+                model_limit - room for room in (20_630, 14_072, 1_792)
+            )
+            if initial_len <= 0:
+                raise ValueError("model is too small for the cache-pressure fixture")
+            report["pressure_lengths"] = {
+                "model_limit": model_limit,
+                "producer": initial_len,
+                "continuation": continuation_len,
+                "near_limit": near_limit_len,
+            }
+            chat = suite.chat("capacity-" + uuid.uuid4().hex)
+            report["pressure_chat_id"] = chat["id"]
+            initial = (raw * ((initial_len + len(raw) - 1) // len(raw)))[:initial_len]
+            save()
             producer = suite.stream("capacity-producer", initial, 20, chat)
+            # The 307K cold producer on a 327,952-token release takes over five
+            # minutes. Keep the shorter default limit for ordinary continuations.
+            await asyncio.wait_for(asyncio.shield(producer.task), 1200)
             produced = await producer.result()
+            if (produced["usage"].get("prompt_tokens_details") or {}).get("cached_tokens", 0):
+                raise AssertionError("capacity producer reused an existing prefix")
             await suite.absent(chat)
             prefix = initial + producer.ids
-            suffix = (raw * ((239720 + len(raw) - 1) // len(raw)))[:239720 - len(prefix)]
+            suffix = (raw * ((continuation_len + len(raw) - 1) // len(raw)))[:continuation_len - len(prefix)]
             prompt = prefix + suffix
             report["producer"] = produced
             save()
@@ -213,7 +239,6 @@ async def run(args):
                     await negative.cancel()
                 await suite.absent(chat)
                 await suite.rpc("qwen_response_probe_pressure_mode", [True])
-            assert report["negative_control"]["repeated_preemption"], "old policy did not reproduce"
             for label, current, count in (("repaired-compaction-size", prompt, 1024),):
                 job = suite.stream(label, current, count, chat)
                 samples = []
@@ -235,8 +260,8 @@ async def run(args):
                 save()
                 assert not any(row["preemptions"] for row in samples)
             prefix = prompt + job.ids
-            near_limit = prefix + (raw * 100)[:252000 - len(prefix)]
-            assert len(near_limit) == 252000
+            near_limit = prefix + (raw * 100)[:near_limit_len - len(prefix)]
+            assert len(near_limit) == near_limit_len
             job = suite.stream("near-model-limit", near_limit, 512, chat)
             samples = []
             deadline = time.monotonic() + 120
@@ -256,7 +281,13 @@ async def run(args):
             })
             assert not any(row["preemptions"] for row in samples)
             pressure_file = args.status_prefix.with_name(args.status_prefix.name + "-cache-pressure.json")
-            report["last_reclaim"] = json.loads(pressure_file.read_text())
+            report["last_reclaim"] = (
+                json.loads(pressure_file.read_text()) if pressure_file.is_file() else None
+            )
+            report["forward_progress"] = True
+            save()
+            if not report["negative_control"]["repeated_preemption"]:
+                raise AssertionError("old policy did not reproduce; repaired forward progress recorded")
             report["status"] = "PASS_FOR_CAPACITY_AND_FORWARD_PROGRESS"
             report["scope"] = "Allocator liveness, not an independent numerical oracle"
             save()

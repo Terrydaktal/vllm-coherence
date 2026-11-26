@@ -10,7 +10,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-from analyze_release_timings import analyze
+from analyze_release_timings import IncompleteTrace, analyze
 
 ANALYZER_SHA256 = hashlib.sha256(Path(__file__).with_name("analyze_release_timings.py").read_bytes()).hexdigest()
 
@@ -28,7 +28,7 @@ def schedule(arm, worker):
     }
 
 
-def reduce_context(root, context, head="global256"):
+def reduce_context(root, context, head="global256", *, allow_incomplete_chunks=False):
     report = json.loads((root / context / "report.json").read_text())
     section = report["contexts"][context]
     workers = {arm: json.loads((root / context / f"{context}-{arm}" / "worker.json").read_text())
@@ -74,10 +74,20 @@ def reduce_context(root, context, head="global256"):
             else:
                 result = None
             if result is None:
-                result = analyze(raw, head, worker_boundaries=True,
-                                 expected_target_graphs=expected_graphs,
-                                 admitted_decode_indices={r["decode_index"] for r in workers["profile"]["rows"]
-                                                          if r["scheduled_tokens"] == 8})
+                try:
+                    result = analyze(raw, head, worker_boundaries=True,
+                                     expected_target_graphs=expected_graphs,
+                                     admitted_decode_indices={r["decode_index"] for r in workers["profile"]["rows"]
+                                                              if r["scheduled_tokens"] == 8})
+                except IncompleteTrace as error:
+                    if not allow_incomplete_chunks:
+                        raise
+                    missing = {"file": str(path.relative_to(root)), "trace_sha256": signature,
+                               "retained_rounds": 0, "status": "incomplete", "reason": str(error)}
+                    chunks.append(missing)
+                    sources.append(missing)
+                    print(json.dumps(missing), flush=True)
+                    continue
                 result["analyzer_sha256"] = analyzer_hash
                 result_path.write_text(json.dumps(result, indent=2) + "\n")
             detail = result["worker_timing"]
@@ -152,13 +162,15 @@ def reduce_context(root, context, head="global256"):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--root", required=True, type=Path)
+    p.add_argument("--allow-incomplete-chunks", action="store_true",
+                   help="Record structurally incomplete traces as omitted. Every context must still have complete matched rounds.")
     p.add_argument("--contexts", default="0K,60K,200K")
     p.add_argument("--output", required=True, type=Path)
     p.add_argument("--head", choices=["global256", "global512"], default="global256")
     args = p.parse_args()
     result = {"schema": "urn:coherence:matched-stage-analysis:v1", "contexts": {}}
     for context in args.contexts.split(","):
-        result["contexts"][context] = reduce_context(args.root, context, args.head)
+        result["contexts"][context] = reduce_context(args.root, context, args.head, allow_incomplete_chunks=args.allow_incomplete_chunks)
         args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({key: {k: row[k] for k in ("retained_rounds", "control_mean_ms", "profile_mean_ms", "observer_delta_ms", "union_corrected_remainder_ms")}
                       for key, row in result["contexts"].items()}))

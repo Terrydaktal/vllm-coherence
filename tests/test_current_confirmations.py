@@ -34,6 +34,18 @@ def reseal(value):
     return seal({k: v for k, v in value.items() if k != "sha256"})
 
 
+def test_stage_mismatch_is_visible_even_if_full_logits_match():
+    group = {"first_absolute_position": 60008, "positions": 8, "stages": [{
+        "stage": "GDN recurrence and gates", "instance": "layer.3",
+        "variants": {"fix1_m1": {"local_output_exact": True, "local_state_exact": True}},
+    }]}
+    assert MODULE.first_stage_difference([group]) is None
+    group["stages"][0]["variants"]["fix1_m1"]["local_state_exact"] = False
+    result = MODULE.first_stage_difference([group])
+    assert result["group_start"] == 60008 and result["instance"] == "layer.3"
+    assert result["local_output_exact"] and not result["local_state_exact"]
+
+
 def test_eager_control_retains_the_existing_rotary_repair():
     base = lambda *a, **kw: {"worker_cls": "original"}
     assert MODULE.current_config(base, {}, "fixed-bf16", execution_mode="eager")[

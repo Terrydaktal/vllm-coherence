@@ -31,3 +31,18 @@ def test_worker_window_clips_previous_tail_and_unions_overlap():
     assert abs(row["overhead_ms"] - .003) < 1e-12
     assert row["clipped_boundary_activity_ms"] == .001
     assert len(result["omissions"]) == 2
+
+
+def test_bad_target_overlap_excludes_whole_host_window_before_accumulation():
+    markers = [{"ph": "X", "cat": "user_annotation", "name": f"qwen_timing_round/{i}",
+                "ts": i * 10., "dur": 9.} for i in range(5)]
+    def kernel(ts, duration):
+        return {"ph": "X", "cat": "kernel", "name": "synthetic", "ts": ts,
+                "dur": duration, "args": {"device": 0, "stream": 1}}
+    tail, clean = kernel(19, 2), kernel(31, 3)
+    targets = [(("target_body", i * 10. + 1), [tail] if i == 1 else []) for i in range(5)]
+    result = analyzer().measure_worker_windows(markers + [tail, clean], targets,
+        [2, 3], {id(clean): "Clean"}, {}, incomplete_targets={1})
+    assert result["omissions"] == [{"target_index": 2, "reason": "overlapping incomplete target inventory"}]
+    assert [r["decode_index"] for r in result["rounds"]] == [3]
+    assert result["kernel_groups"][0]["ms_per_round"] == .003

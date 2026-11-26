@@ -19,6 +19,10 @@ sys.path.insert(0, str(ROOT / "reports/d7-rdna4-2026-09-17"))
 from analyze_compiled_trace import launch_groups, projection, semantic_phase
 
 
+class IncompleteTrace(ValueError):
+    """Captured GPU activity is insufficient for a matched stage sample."""
+
+
 def phase(layer, region, name):
     # A fused launch has one measured duration; its constituents cannot each be
     # assigned that duration without double counting.
@@ -138,7 +142,7 @@ def measure_round_windows(events, starts, selected, *, allow_transfers=False):
     }
 
 
-def measure_worker_windows(events, targets, selected, stages_by_event, groups, head="global256", layers_by_event=None):
+def measure_worker_windows(events, targets, selected, stages_by_event, groups, head="global256", layers_by_event=None, incomplete_targets=()):
     """Use CPU entry markers also timed by the clean control, clipping GPU work.
 
     Markers are only boundaries. Their CPU duration is never added to a stage.
@@ -153,6 +157,18 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups, h
     if not markers:
         raise ValueError("worker boundary markers missing")
     marker_starts = [m[0] for m in markers]
+    # An adjacent malformed target inventory can extend into a valid target's
+    # host interval. Omit the contaminated host window before adding any time.
+    contaminated = set()
+    for target_index in incomplete_targets:
+        for event in targets[target_index][1]:
+            begin = float(event["ts"])
+            end = begin + float(event["dur"])
+            if end <= begin:
+                continue
+            first = max(0, bisect.bisect_right(marker_starts, begin) - 1)
+            last = min(len(markers) - 1, bisect.bisect_left(marker_starts, end))
+            contaminated.update(range(first, last))
     # Include the previous round's asynchronous draft/bookkeeping tail when it
     # extends beyond the next worker entry. Target stages require full mapping.
     for (scope, _), group in groups.items():
@@ -176,6 +192,9 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups, h
         marker_index = bisect.bisect_right(marker_starts, cpu_start) - 1
         if marker_index < 0 or marker_index + 1 >= len(markers):
             raise ValueError("target scope has no matching worker-entry interval")
+        if marker_index in contaminated:
+            omissions.append({"target_index": index, "reason": "overlapping incomplete target inventory"})
+            continue
         start, duration, decode_index = markers[marker_index]
         stop, _, next_index = markers[marker_index + 1]
         if not start <= cpu_start < start + duration or next_index != decode_index + 1:
@@ -218,7 +237,7 @@ def measure_worker_windows(events, targets, selected, stages_by_event, groups, h
                      "clipped_boundary_activity_ms": clipped / 1000,
                      "kernel_count": count, "stages_ms": dict(stages)})
     if not rows:
-        raise ValueError("no matched worker intervals retained")
+        raise IncompleteTrace("no structurally complete matched worker intervals")
     count = len(rows)
     kernels = [{"stage": stage, "kernel": name, "activity_records": values[0],
                 "ms_per_round": values[1] / count}
@@ -325,23 +344,31 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
         )
     ]
     if len(selected) < min(6, len(targets) - 1):
-        raise ValueError("insufficient complete target inventories")
+        raise IncompleteTrace(f"insufficient complete target inventories ({len(selected)}/{len(targets)}), inventory failures: {dict(Counter(incomplete.values()))}")
     timing = measure_round_windows(trace["traceEvents"], starts, selected,
                                    allow_transfers=worker_boundaries)
     records, assigned, stages_by_event, layers_by_event = [], set(), {}, {}
 
+    selected_indices = set(selected)
+
     def append(e, scope, index, layer, stage):
+        # A previous target can still be on the GPU after the next host entry.
+        # Attribute that work when clipping worker windows, even when its own
+        # full GPU-to-GPU interval was ineligible for the timing average.
+        stages_by_event[id(e)] = stage
+        layers_by_event[id(e)] = layer
+        if index not in selected_indices:
+            return
         relative = e["ts"] - starts[index]
         if relative < 0 or relative + e["dur"] > starts[index + 1] - starts[index]:
             raise ValueError("stage kernel is outside its measured round")
         if id(e) in assigned:
             raise ValueError("duplicate kernel accounting")
         assigned.add(id(e))
-        stages_by_event[id(e)] = stage
-        layers_by_event[id(e)] = layer
         records.append((scope, index, layer, stage, e["name"], float(e["dur"])))
 
-    for index in selected:
+    target_indices = (i for i in range(len(targets)) if i not in incomplete) if worker_boundaries else selected
+    for index in target_indices:
         _, events = targets[index]
         if len({(e["args"]["device"], e["args"]["stream"]) for e in events}) != 1:
             raise ValueError("non-serial target stream")
@@ -405,7 +432,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
     }
     for scope in ("drafter", "target_vocabulary_head"):
         if sum(k[0] == scope for k in groups) != len(targets):
-            raise ValueError("incomplete head/drafter scopes")
+            raise IncompleteTrace(f"missing HIP activity for a compiled scope: target={len(targets)}, {scope}={sum(k[0] == scope for k in groups)}")
     for key, events in groups.items():
         scope, _ = key
         if scope == "target_body":
@@ -498,7 +525,7 @@ def analyze(raw: bytes, head: str, expected_rounds: int | None = None, *,
     }
     if worker_boundaries:
         result["worker_timing"] = measure_worker_windows(
-            trace["traceEvents"], targets, selected, stages_by_event, groups, head, layers_by_event
+            trace["traceEvents"], targets, selected, stages_by_event, groups, head, layers_by_event, incomplete
         )
     return result
 
