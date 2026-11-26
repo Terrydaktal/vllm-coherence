@@ -76,7 +76,6 @@ def crossmode_corpus_tables():
         if all_topk
         else "The complete retained-score, tie and prefill counts are in the linked evidence."
     )
-    (ROOT / "crossmode-10k-table.md").write_text("\n".join(table) + "\n")
     return {
         "{{CROSSMODE_10K_TABLE}}": "\n".join(table),
         "{{CROSSMODE_10K_SUMMARY}}": summary,
@@ -138,7 +137,6 @@ def rounding_speed_tables():
         f"{before['round_ms_range'][1]:.3f} ms before and "
         f"{after['round_ms_range'][0]:.3f} to {after['round_ms_range'][1]:.3f} ms after."
     )
-    (ROOT / "rounding-speed-table.md").write_text("\n".join(table) + "\n")
     return {"{{ROUNDING_SPEED_TABLE}}": "\n".join(table), "{{ROUNDING_SPEED_SUMMARY}}": summary}
 
 

@@ -430,12 +430,6 @@ def build(root):
             for a in exports
         },
     }
-    for name, content in [
-        ("stage-table.md", table),
-        ("layer-table.md", layer_table),
-        ("kernel-table.md", kernel_table),
-    ]:
-        (root / name).write_text("\n".join(content) + "\n")
     (root / "stage-times.json").write_text(json.dumps(result, indent=2) + "\n")
     with (root / "kernel-dispatches.csv").open("w") as out:
         writer = csv.DictWriter(out, fieldnames=list(dispatches[0]), lineterminator="\n")
