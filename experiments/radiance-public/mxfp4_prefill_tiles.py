@@ -1,4 +1,4 @@
-"""Experimental gfx1201 thin-tail dispatch for TP1 input GEMM.
+"""Experimental gfx1201 thin-tail and measured TN dispatch for TP1 input GEMM.
 
 The source retains the existing full-tile kernel as a separate specialization.
 Thin blocks skip only the WMMAs of padding rows. Each live accumulator keeps its
@@ -116,7 +116,22 @@ def load(path):
     return native
 
 
+# Both the tuning and held-out AB/BA samples had to save at least 2%. A set
+# keyed by observed shape avoids extrapolating a timing crossover to other M.
+_TN4_ROWS = {
+    14336: {512, 1024},
+    16480: {1648},
+    34816: {512, 1024},
+}
 _MEASURED_TAIL_ROWS = {129, 160, 320, 384, 513}
+
+
+def measured_config(m, n, mode, baseline_tn):
+    if mode == 3:
+        requested = m == 1024 and n in (14336, 34816)
+    else:
+        requested = m in _TN4_ROWS.get(n, ()) or (mode == 1 and n == 14336 and m == 1648)
+    return (4 if requested else baseline_tn), m in _MEASURED_TAIL_ROWS
 
 
 def install(worker, library, *, max_preprocessed_bytes=0, slab_ahead=False):
@@ -171,6 +186,7 @@ def install(worker, library, *, max_preprocessed_bytes=0, slab_ahead=False):
         "preprocessed_bytes": 0,
         "preprocessed_layers": 0,
         "thin_calls": 0,
+        "retiled_calls": 0,
         "encoded_calls": 0,
         "library": receipt["library"],
     }
@@ -221,8 +237,8 @@ def install(worker, library, *, max_preprocessed_bytes=0, slab_ahead=False):
         packed = entries[key]
         default = 4 if m >= threshold else 2
         mode = (3 if slab_ahead else 1) if packed is not None else 0
-        thin = m in _MEASURED_TAIL_ROWS
-        if packed is None and not thin:
+        tn, thin = measured_config(m, n, mode, default)
+        if packed is None and (tn, thin) == (default, False):
             return original(a, w, s, ref, scale, out, m, n, k, stream)
         if packed is not None:
             w, s = packed[0].data_ptr(), packed[1].data_ptr()
@@ -237,13 +253,14 @@ def install(worker, library, *, max_preprocessed_bytes=0, slab_ahead=False):
             n,
             k,
             stream,
-            default,
+            tn,
             mode,
             int(thin),
         )
         if status:
             raise RuntimeError(f"prefill tiles HIP status {status}")
         usage["thin_calls"] += int(thin)
+        usage["retiled_calls"] += int(tn != default)
         usage["encoded_calls"] += int(packed is not None)
 
     dispatch._coherence_input_candidate = True

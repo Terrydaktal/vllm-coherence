@@ -19,6 +19,9 @@ def measure(native, layer, m, a, scale, weight, scales, ref, *, packed, indices,
     options = [("default", tn, 0)]
     if eligible_tail(m):
         options.append(("thin", tn, 1))
+    if m in (512, 768, 1024, 1648, 2048):
+        options.append(("other_tn", 6 - tn, 0))
+
     reference = torch.empty((m, n), dtype=torch.bfloat16, device=a.device)
     dest = torch.empty_like(reference)
     stream = torch.cuda.current_stream()
