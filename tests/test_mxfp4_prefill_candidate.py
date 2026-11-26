@@ -69,6 +69,7 @@ def test_native_generator_keeps_unmodified_control_and_fails_closed(tmp_path):
         )
         in source
     )
+    assert "if (k0 + LBK < K) fetch_weights(k0 + LBK);" in source
     (tmp_path / "radiance_mxfp4_fp8.hip").write_text(hip + "\n")
     (tmp_path / "radiance_mxfp4.py").write_text(wrapper)
     with pytest.raises(ValueError, match="pinned"):
@@ -95,7 +96,7 @@ def test_r9700_every_arm_matches_corrected_control():
             a = torch.randint(0, 120, (((m + 15) // 16) * 16, k), **make)
             scale = torch.rand(m, device="cuda", generator=rng)
             control = None
-            for mode in range(2):
+            for mode in range(4):
                 weight, exponents = (packed, folded) if mode & 1 else (w, ws)
                 out = torch.empty((m, n), device="cuda", dtype=torch.bfloat16)
                 stream = torch.cuda.current_stream().cuda_stream
@@ -123,14 +124,14 @@ def test_r9700_every_arm_matches_corrected_control():
 
 
 @pytest.mark.parametrize(
-    "preprocess,mode",
-    [(False, 0), (True, 1)],
+    "preprocess,slab,mode",
+    [(False, False, 0), (True, False, 1), (False, True, 0), (True, True, 3)],
 )
 def test_serving_dispatch_requires_preprocessed_weights_and_checks_all_source_pointers(
-    preprocess, mode
+    preprocess, slab, mode
 ):
     ref_calls, native = [], []
-    usage = {"preprocessed_calls": 0}
+    usage = {"preprocessed_calls": 0, "slab_ahead_calls": 0}
     w = torch.zeros(1)
     s = torch.zeros(1)
     key = 11, 12, 13, 16480, 5120
@@ -139,6 +140,7 @@ def test_serving_dispatch_requires_preprocessed_weights_and_checks_all_source_po
         lambda *args: native.append(args) or 0,
         {key: (w, s) if preprocess else None},
         usage,
+        slab,
         2048,
     )
     args = [10, 11, 12, 13, 14, 15, 2048, 16480, 5120, 0]
@@ -154,7 +156,8 @@ def test_serving_dispatch_requires_preprocessed_weights_and_checks_all_source_po
         assert native[-1][1:3] == (w.data_ptr(), s.data_ptr())
         assert usage == {
             "preprocessed_calls": int(preprocess),
+            "slab_ahead_calls": int(slab),
         }
     else:
         assert ref_calls[-1] == tuple(args) and not native
-        assert usage == {"preprocessed_calls": 0}
+        assert usage == {"preprocessed_calls": 0, "slab_ahead_calls": 0}

@@ -21,9 +21,9 @@ LAYERS = {
     "gdn": (0, "linear_attn", ("in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a")),
     "mlp": (0, "mlp", ("gate_proj", "up_proj")),
 }
-ARMS = ("control", "preprocess")
+ARMS = ("control", "preprocess", "slab_ahead", "combined")
 # Each arm occupies every ordinal once. The reversed pairs counter thermal drift.
-ORDERS = ((0, 1), (1, 0), (0, 1), (1, 0))
+ORDERS = ((0, 1, 3, 2), (1, 2, 0, 3), (2, 3, 1, 0), (3, 0, 2, 1))
 
 
 def weights(model, index, layer):
@@ -91,7 +91,7 @@ def measure(launch, tensors, m, n, k, tn, repeats, stream, eviction_buffer):
     run(0)
     # Poison the candidate destination uniquely; failure to store is observable.
     bad = {}
-    for mode in (1,):
+    for mode in (1, 2, 3):
         out.view(torch.int16).copy_(control.view(torch.int16).bitwise_not())
         run(mode)
         different = 0

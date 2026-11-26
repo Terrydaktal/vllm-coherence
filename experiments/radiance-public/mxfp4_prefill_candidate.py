@@ -1,6 +1,6 @@
 """Isolated TP1 input-projection experiments on Coherence's corrected tiled GEMM.
 
-The candidate keeps the original model parameters for decode and fallback.
+The two variants keep the original model parameters for decode and fallback.
 The cached encoding is the mode-2 layout from SlyBase/vllm-sly-radiance
 ffeeff45, using Coherence's signed exponent difference and table.
 """
@@ -79,7 +79,7 @@ def fold_indices(scales, ref):
 
 
 def source_for_candidate(root):
-    """Derive both arms from the same checksum-pinned, repaired kernel."""
+    """Derive all four arms from the same checksum-pinned, repaired kernel."""
     from mxfp4_fold_precision import patched_sources, replace_once
 
     root = Path(root)
@@ -100,7 +100,30 @@ def source_for_candidate(root):
     control = kernel.replace(
         "radiance_mxfp4_fp8_gemm_atiled", "coherence_control_atiled"
     )
-    kernel = replace_once(kernel, "int LBK = BK>", "int LBK, bool PSW>")
+    kernel = replace_once(kernel, "int LBK = BK>", "int LBK, bool PSW, bool AHEAD>")
+    # Only move W loads. A fetch order, LDS publication barriers, WMMA order
+    # and the FP32/BF16 epilogue remain the release's own code.
+    load_start = kernel.index("    uint4_t pk[NW];")
+    load_end = kernel.index("    if constexpr (WPERM) {\n#pragma unroll", load_start)
+    declarations, loads = kernel[load_start:load_end].split("\n", 1)
+    kernel = (
+        kernel[:load_start]
+        + "    if constexpr (!AHEAD) fetch_weights(k0);\n"
+        + kernel[load_end:]
+    )
+    fetch = declarations + "\n  auto fetch_weights = [&](int k0) {\n" + loads + "  };\n"
+    kernel = replace_once(
+        kernel,
+        "  for (int k0 = 0; k0 < K; k0 += LBK) {",
+        fetch + "  if constexpr (AHEAD) fetch_weights(0);\n"
+        "  for (int k0 = 0; k0 < K; k0 += LBK) {",
+    )
+    kernel = replace_once(
+        kernel,
+        "    radiance_lds_barrier();\n\n#pragma unroll",
+        "    radiance_lds_barrier();\n"
+        "    if constexpr (AHEAD) { if (k0 + LBK < K) fetch_weights(k0 + LBK); }\n\n#pragma unroll",
+    )
     decoding = kernel.index("          int d = (int)((wref[it]")
     end = kernel.index("\n        }", decoding)
     original = kernel[decoding:end]
@@ -127,16 +150,16 @@ def source_for_candidate(root):
         + control
         + kernel
         + """
-template <bool PSW, int TN> static void launch_input(const unsigned char* a,
+template <bool PSW, bool AHEAD, int TN> static void launch_input(const unsigned char* a,
     const unsigned char* w, const unsigned char* ws, const unsigned char* ref, const float* scale,
     __bf16* out, int m, int n, int k, hipStream_t stream) {
   constexpr int width = BNF_OF(TN);
   dim3 grid((n + width - 1) / width, (m + BMF - 1) / BMF);
-  if constexpr (!PSW) {
+  if constexpr (!PSW && !AHEAD) {
     coherence_control_atiled<TN, true, TN == 2 ? 128 : 64>
         <<<grid, NTHREADS, 0, stream>>>(a, w, ws, ref, scale, out, m, n, k);
   } else {
-    radiance_mxfp4_fp8_gemm_atiled<TN, true, TN == 2 ? 128 : 64, PSW>
+    radiance_mxfp4_fp8_gemm_atiled<TN, true, TN == 2 ? 128 : 64, PSW, AHEAD>
         <<<grid, NTHREADS, 0, stream>>>(a, w, ws, ref, scale, out, m, n, k);
   }
 }
@@ -146,11 +169,13 @@ extern "C" int coherence_input_prefill(const unsigned char* a, const unsigned ch
     int m, int n, int k, hipStream_t stream, int tn, int mode) {
   if (!a || !w || !ws || !ref || !scale || !out || m <= 64 || m > 4096 || k != 5120
       || (n != 14336 && n != 16480 && n != 34816) || (tn != 2 && tn != 4)) return -1;
-#define RUN(P) if (tn == 4) launch_input<P,4>(a,w,ws,ref,scale,out,m,n,k,stream); \\
-                  else launch_input<P,2>(a,w,ws,ref,scale,out,m,n,k,stream)
+#define RUN(P, F) if (tn == 4) launch_input<P,F,4>(a,w,ws,ref,scale,out,m,n,k,stream); \\
+                  else launch_input<P,F,2>(a,w,ws,ref,scale,out,m,n,k,stream)
   switch (mode) {
-    case 0: { RUN(false); break; }
-    case 1: { RUN(true); break; }
+    case 0: { RUN(false,false); break; }
+    case 1: { RUN(true,false); break; }
+    case 2: { RUN(false,true); break; }
+    case 3: { RUN(true,true); break; }
     default: return -1;
   }
 #undef RUN
@@ -231,6 +256,7 @@ def checked_launch(library):
 def install(
     worker,
     *,
+    slab_ahead=False,
     library,
     max_preprocessed_bytes=96 << 20,
 ):
@@ -265,6 +291,7 @@ def install(
         "preprocessed_layers": 0,
         "preprocessed_bytes": 0,
         "preprocessed_calls": 0,
+        "slab_ahead_calls": 0,
     }
     for module in worker.model_runner.model.modules():
         if not getattr(module, "radiance_w4a8_ok", False):
@@ -312,13 +339,14 @@ def install(
             "no eligible MXFP4 input projections fit the selected candidate budget"
         )
 
-    launch = _make_dispatch(original, native, entries, usage, tn4_min)
+    launch = _make_dispatch(original, native, entries, usage, slab_ahead, tn4_min)
     torch.cuda.current_stream(device).synchronize()
     gemm._ext.launch_at = launch
     return usage
 
 
-def _make_dispatch(original, native, entries, usage, tn4_min):
+def _make_dispatch(original, native, entries, usage, slab_ahead, tn4_min):
+    mode = 3 if slab_ahead else 1
 
     def launch(a, w, ws, ref, scale, out, m, n, k, stream):
         packed = entries.get((w, ws, ref, n, k))
@@ -326,11 +354,12 @@ def _make_dispatch(original, native, entries, usage, tn4_min):
             return original(a, w, ws, ref, scale, out, m, n, k, stream)
         w, ws = packed[0].data_ptr(), packed[1].data_ptr()
         code = native(
-            a, w, ws, ref, scale, out, m, n, k, stream, 4 if m >= tn4_min else 2, 1
+            a, w, ws, ref, scale, out, m, n, k, stream, 4 if m >= tn4_min else 2, mode
         )
         if code:
             raise RuntimeError(f"MXFP4 input projection failed with HIP status {code}")
         usage["preprocessed_calls"] += 1
+        usage["slab_ahead_calls"] += int(slab_ahead)
 
     launch._coherence_input_candidate = True
     return launch
