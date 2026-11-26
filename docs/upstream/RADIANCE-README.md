@@ -1,5 +1,10 @@
 # vllm-radiance
 
+> Historical Radiance 1.0.16 documentation. The Dockerfiles, Compose examples
+> and TP2 benchmark harness are in the
+> [archived Radiance source tree](https://github.com/Terrydaktal/vllm-coherence/tree/3cbf9c17e8cef4736563c8ddab514b6874fd96ad).
+> For the current Coherence launch procedure, see [Quick start](../../README.md#quick-start).
+
 [![Docker Hub](https://img.shields.io/docker/v/magiccodingman/vllm-radiance?sort=semver&label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/magiccodingman/vllm-radiance)
 [![Docker Pulls](https://img.shields.io/docker/pulls/magiccodingman/vllm-radiance?logo=docker)](https://hub.docker.com/r/magiccodingman/vllm-radiance)
 
@@ -24,7 +29,7 @@ checkpoint-bound FP8 attention/KV calibration sidecars for fidelity work, and
 an offline collect → tune → verified-serve PyTorch TunableOp workflow for
 residual BLAS GEMMs. Neither is enabled until its exact model/profile passes
 the normal correctness and benchmark gates. See
-[FP8-KV calibration and persisted TunableOp](docs/FP8_KV_TUNABLEOP.md).
+[FP8-KV calibration and persisted TunableOp](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/docs/FP8_KV_TUNABLEOP.md).
 
 ## Quick start
 
@@ -61,9 +66,9 @@ docker compose down
 ```
 
 Host paths, GPU IDs, private image tags, and local overrides belong in the gitignored `.env` or an ignored
-`docker-compose.dev.yml`, never in the public Compose file. See `.env.example` and
-`docker-compose.dev.example.yml` in the
-[source repository](https://gitlab.sayou.io/lance-wright/vllm-radiance).
+`docker-compose.dev.yml`, never in the public Compose file. The archived tree retains
+[`.env.example`](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/.env.example) and
+[`docker-compose.dev.example.yml`](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/docker-compose.dev.example.yml).
 
 ## Target formats
 
@@ -123,7 +128,7 @@ not enable `RADIANCE_NORMQUANT_FUSION` or `RADIANCE_FP8_STREAM` in production;
 see the [RX4 continuation report](https://gitlab.sayou.io/lance-wright/vllm-radiance/-/blob/main/docs/MXFP4_RX4_CONTINUATION.md).
 The subsequent safe-kernel selection, FP8-KV calibration work, and complete
 RX5 negative results are recorded in the
-[RX5 continuation report](docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
+[RX5 continuation report](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
 
 ## Serving modes
 
@@ -235,7 +240,7 @@ HIP error is drained and all ranks coherently use slower pageable DMA. Use
 one whole-region registration. Positive chunk sizes are experimental until
 qualified on the deployment host. The dual-R9700 32/36 GiB investigation and
 reproducible maintenance probe are documented in
-[ROCm KV-offload registration hardening](docs/ROCM_KV_OFFLOAD_REGISTRATION.md).
+[ROCm KV-offload registration hardening](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/docs/ROCM_KV_OFFLOAD_REGISTRATION.md).
 
 ## Measured performance
 
@@ -268,7 +273,7 @@ arm completed 24/24 requests. These are the standard 8K/C8 laboratory results at
 prefix caching and CPU offload disabled; the 128K/C4 production profile above intentionally has a different
 capacity/latency contract. Exact category TTFT, ITL, prefill, run metadata, and immutable raw results are in
 the [current safe-subset BetterBench report](https://github.com/Terrydaktal/vllm-coherence/blob/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results/20260908T1905Z_safe-rx5-final/safe-wperm-nt-betterbench-standard/betterbench/report.md)
-and [RX5 continuation report](docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
+and [RX5 continuation report](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/docs/MXFP4_RX5_FP8KV_CONTINUATION.md).
 
 DFlash remains experimental and opt-in because strict speculative/non-spec greedy equivalence has not passed,
 even though the stable-default lane passed its meaningful-output and sampled tool-call qualification. The
@@ -335,7 +340,8 @@ docker build \
 The multi-stage build compiles the stack for `gfx1201`, prunes unrelated ROCm device code, builds libr4d with
 the image's `hipcc`, and copies only the runtime into the release stage. A compiler and headers remain in the
 release image because AITER JIT-compiles kernels on first use. The pruned image measured 3.66 GiB compressed,
-down from 9.35 GiB before pruning. A full build takes hours; `Dockerfile.patch` provides a guarded overlay for
+down from 9.35 GiB before pruning. A full build takes hours. The
+[archived Dockerfile.patch](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/Dockerfile.patch) provides a guarded overlay for
 ordinary Radiance/libr4d iteration without rebuilding PyTorch and the compiler stack.
 
 Do not independently bump PyTorch, Triton, torchvision, or vLLM. The qualified versions are a compiler stack,

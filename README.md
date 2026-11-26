@@ -94,8 +94,9 @@ The first commit is the unchanged Radiance 1.0.16 source at
 `f295b9ef51ad413a68e4192371e0377741a354ce`. Later commits group Coherence's additions
 by feature. This is a standalone GitHub repository with that documented fork
 lineage. [Attribution and individual upstream fixes](ATTRIBUTION.md) retain the
-exact source links and pins; the inherited [Radiance README](docs/upstream/RADIANCE-README.md)
-and [Dockerfile](Dockerfile) document its base stack.
+exact source links and pins. The base stack is documented in the inherited
+[Radiance README](docs/upstream/RADIANCE-README.md) and the
+[archived Radiance Dockerfile](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/Dockerfile).
 
 ## What Terrydaktal adds in Coherence
 
@@ -822,19 +823,22 @@ configs/profiles/              Finite-precision numerical contracts
 tests/                         Synthetic regressions and negative controls
 reports/                       Public numerical report and aggregate evidence
 docs/                          Setup, architecture, verification and performance records
-benchmarks/                    Current Coherence results and retained upstream harness/fixtures
-Dockerfile, patch_*, radiance_* Original base/build and focused upstream-facing changes
+benchmarks/                    Published Coherence results and verification fixtures
+verification/                  Behavior and evidence coverage inventory
+radiance_drafthead.py          Drafter head source used in the combined candidate build
+radiance_verifyhead.py         Target head source used in CPU verification
+radiance_mxfp4*                 MXFP4 control source for kernel builds and experiments
 ```
 
-The `qwen_r9700_lab` namespace and wire-format names remain for evidence/snapshot
-compatibility. Root Radiance Dockerfiles support upstream reproduction;
-**`tools/coherence` launches the assembled Coherence profile**. Research drivers
-require explicit inputs and do not run automatically during serving.
+The `qwen_r9700_lab` namespace and wire-format names preserve evidence and snapshot
+compatibility. **`tools/coherence` launches the assembled Coherence profile** using
+the pinned image and versioned release manifest. Research drivers run separately
+from serving and require explicit inputs.
 
-Inherited Radiance run artifacts remain in the
-[original base commit](https://github.com/Terrydaktal/vllm-coherence/tree/4e604dcccb311ca709858a4bd57a11fc636e7f43/benchmarks/results).
-The working tree keeps Coherence's measurements. Root Compose files and
-`.env.example` are labelled upstream reproduction examples, not Coherence launchers.
+The inherited Docker builds, Compose examples and TP2 benchmarks are available
+in the [archived Radiance source tree at `3cbf9c1`](https://github.com/Terrydaktal/vllm-coherence/tree/3cbf9c17e8cef4736563c8ddab514b6874fd96ad).
+The [benchmark index](benchmarks/README.md) links to earlier run evidence and
+the current suite.
 
 ## Contributing
 

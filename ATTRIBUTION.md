@@ -20,7 +20,7 @@ session work described in the [README](README.md#what-terrydaktal-adds-in-cohere
 | RDNA4 kernels | [StillDeadcode/libr4d](https://codeberg.org/StillDeadcode/libr4d) |
 | MXFP4/W4A8 foundation | [Brian / GGZ14](https://github.com/GGZ14/vllm-mxfp4) and the earlier [ggz14/radiance-vllm-mxfp4](https://codeberg.org/ggz14/radiance-vllm-mxfp4), adapted by Radiance before Coherence's own backports |
 | Performance backports | [GGZ14 `3f542b7`](https://github.com/GGZ14/vllm-mxfp4/commit/3f542b7cbfce3fa0d01dc55665af4c77a7093ce8), guarded/adapted to the repaired arithmetic |
-| GPU runtime and compiler stack | [ROCm](https://github.com/ROCm/rocm-systems), [AMD PyTorch](https://github.com/ROCm/pytorch), [AMD Triton](https://github.com/ROCm/triton); exact inherited build pins in [Dockerfile](Dockerfile) |
+| GPU runtime and compiler stack | [ROCm](https://github.com/ROCm/rocm-systems), [AMD PyTorch](https://github.com/ROCm/pytorch), and [AMD Triton](https://github.com/ROCm/triton). Exact inherited build pins are in the [archived Dockerfile](https://github.com/Terrydaktal/vllm-coherence/blob/3cbf9c17e8cef4736563c8ddab514b6874fd96ad/Dockerfile). |
 | Operator libraries | [AITER](https://github.com/ROCm/aiter) and [Flash Linear Attention](https://github.com/fla-org/flash-linear-attention), used through the serving stack |
 | Model and drafting method | [Qwen](https://github.com/QwenLM), [DFlash](https://github.com/z-lab/dflash), and the authors of the separately supplied target/drafter checkpoints |
 | Pi client | [earendil-works/pi](https://github.com/earendil-works/pi), pinned 0.84.2, plus Coherence patches/extensions |

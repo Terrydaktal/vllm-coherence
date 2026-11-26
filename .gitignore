@@ -10,7 +10,7 @@ vllm-cache/
 benchmarks/runs/
 # local R4D checkout/build output; the image fetches its own immutable pin
 libr4d/
-# build outputs; rocm-bandwidth-test is built in the Dockerfile
+# native build outputs
 *.so
 rocm-bandwidth-test
 
@@ -27,7 +27,6 @@ __pycache__/
 .ruff_cache/
 node_modules/
 .env
-!.env.example
 *.so
 *.hsaco
 *.pt
