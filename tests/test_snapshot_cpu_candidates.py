@@ -49,14 +49,20 @@ def test_four_width_and_aggregate_byte_reservations(variant):
     assert pool.remaining == pool.capacity
 
 
-def test_written_bytes_match_stock_with_mutable_buffers(variant, tmp_path):
+def test_written_bytes_and_verification_of_mixed_head(variant, tmp_path):
     raw = __import__("random").Random(84).randbytes(8192)
     compressed = bytes(len(raw))
     store = variant.ChatStore(tmp_path, {"id": "1" * 64, "generation": "2" * 64})
     store.activate()
-    keys = [f"g0-{idx:064x}.qkv" for idx in range(4)]
-    for key, data in zip(keys, (raw, compressed, raw, compressed)):
+    keys = [f"g0-{idx:064x}.qkv" for idx in range(6)]
+    for key, data in zip(keys[:4], (raw, compressed, raw, compressed)):
         assert store.write(key, memoryview(bytearray(data)))
         assert store.path(key).read_bytes() == radiance_cache.encode_block(data)
+    for key in keys[2:4]:
+        store.path(key).write_bytes(store.path(key).read_bytes()[:-2])
+    actual = store.prepare_publication(list(reversed(keys)), len(raw))
+    assert list(actual["verified"]) == keys[:2]
+    assert actual["invalid"] == keys[2:4]
+    assert actual["missing"] == keys[4:]
     assert list(store.read_many(keys[:2], len(raw))) == [raw, compressed]
     assert type(store.read(keys[0], len(raw))) is bytes

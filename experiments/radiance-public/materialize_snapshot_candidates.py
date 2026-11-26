@@ -19,7 +19,7 @@ def cache_source(source):
     source = replace_once(
         source,
         "_READ_SLOTS = threading.BoundedSemaphore(READ_WORKERS)",
-        "from snapshot_cpu_candidates import ByteBudget\n"
+        "from snapshot_cpu_candidates import ByteBudget, parallel_verifier\n"
         "_BUFFER_POOL = ByteBudget(READ_INFLIGHT_BYTES)\n"
         "_READ_SLOTS = threading.BoundedSemaphore(READ_WORKERS)",
     )
@@ -81,6 +81,11 @@ def _encode_parts(data):
         source,
         "_release_payload_page_cache(stream.fileno(), len(content))",
         "_release_payload_page_cache(stream.fileno(), size)",
+    )
+    source = replace_once(
+        source,
+        "def _maintenance_json(",
+        "import sys as _sys\nChatStore.prepare_publication = parallel_verifier(_sys.modules[__name__], _BUFFER_POOL)\n\n\ndef _maintenance_json(",
     )
     return source
 
