@@ -1,4 +1,4 @@
-"""Time verified snapshot restores and native prefix comparisons."""
+"""Time verified snapshot writes, restores and native prefix comparisons."""
 
 import json, os, statistics, tempfile, time
 from array import array
@@ -63,13 +63,24 @@ def run():
         sys.modules[spec.name] = candidate
         spec.loader.exec_module(candidate)
         read4 = candidate.ChatStore.read_many
+        writer = candidate.ChatStore.write_many
         store = c.ChatStore(tmp, {"id": "a" * 64, "generation": "b" * 64})
         store.activate()
         for raw in (False, True):
             data = os.urandom(n if raw else n // 2).ljust(n, b"\0")
-            for key in keys:
-                store.path(key).unlink(missing_ok=True)
-            assert store.write_many((key, memoryview(data)) for key in keys)
+            for name, f in (("base", c.ChatStore.write_many), ("candidate", writer)):
+
+                def write(f=f):
+                    for k in keys:
+                        store.path(k).unlink(missing_ok=True)
+                    assert f(store, ((k, memoryview(data)) for k in keys))
+
+                if name == "base":
+                    funcs = {"base": write}
+                else:
+                    funcs[name] = write
+            result[f"write_raw={raw}"] = alternating(funcs)
+            assert store.path(keys[0]).read_bytes() == c.encode_block(data)
 
             dest = bytearray(n)
 

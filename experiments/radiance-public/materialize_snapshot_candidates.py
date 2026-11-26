@@ -38,6 +38,50 @@ def cache_source(source):
         "data = decode_block(encoded, expected_size)",
         "data = decode_block(memoryview(encoded), expected_size)",
     )
+    source = replace_once(
+        source,
+        "def encode_block(data: memoryview | bytes) -> bytes:",
+        """def encode_block(data: memoryview | bytes) -> bytes:
+    return b"".join(_encode_parts(data))
+
+
+def _encode_parts(data):
+    if not isinstance(data, bytes) and not isinstance(memoryview(data).obj, bytes):
+        data = bytes(data)""",
+    )
+    source = replace_once(
+        source,
+        '    with cache_telemetry.span("encoded_buffer_copy", bytes=len(payload)):\n        return HEADER.pack(magic, len(data), digest) + bytes(payload)',
+        "    return HEADER.pack(magic, len(data), digest), payload",
+    )
+    source = replace_once(
+        source,
+        "                        encoded = encode_block(data)",
+        "                        encoded = _encode_parts(data)",
+    )
+    source = replace_once(
+        source,
+        'counts["written_file_bytes"] += len(encoded)',
+        'counts["written_file_bytes"] += sum(map(len, encoded))',
+    )
+    source = replace_once(
+        source,
+        "def atomic_write(path: Path, content: bytes, *, release_page_cache: bool = False) -> None:",
+        "def atomic_write(path: Path, content, *, release_page_cache: bool = False) -> None:\n"
+        "    parts = content if isinstance(content, tuple) else (content,)\n"
+        "    size = sum(map(len, parts))",
+    )
+    source = replace_once(
+        source,
+        'with cache_telemetry.span("disk_write", bytes=len(content)):',
+        'with cache_telemetry.span("disk_write", bytes=size):',
+    )
+    source = replace_once(source, "stream.write(content)", "stream.writelines(parts)")
+    source = replace_once(
+        source,
+        "_release_payload_page_cache(stream.fileno(), len(content))",
+        "_release_payload_page_cache(stream.fileno(), size)",
+    )
     return source
 
 

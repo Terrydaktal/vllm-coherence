@@ -47,3 +47,16 @@ def test_four_width_and_aggregate_byte_reservations(variant):
     with pool.reserve(4 * charge):
         assert pool.remaining == variant.READ_INFLIGHT_BYTES - 4 * charge
     assert pool.remaining == pool.capacity
+
+
+def test_written_bytes_match_stock_with_mutable_buffers(variant, tmp_path):
+    raw = __import__("random").Random(84).randbytes(8192)
+    compressed = bytes(len(raw))
+    store = variant.ChatStore(tmp_path, {"id": "1" * 64, "generation": "2" * 64})
+    store.activate()
+    keys = [f"g0-{idx:064x}.qkv" for idx in range(4)]
+    for key, data in zip(keys, (raw, compressed, raw, compressed)):
+        assert store.write(key, memoryview(bytearray(data)))
+        assert store.path(key).read_bytes() == radiance_cache.encode_block(data)
+    assert list(store.read_many(keys[:2], len(raw))) == [raw, compressed]
+    assert type(store.read(keys[0], len(raw))) is bytes
