@@ -408,6 +408,10 @@ test("paused compaction retains round telemetry without charging the GPU wait to
   f.progress.update({ phase: "generate", outputTokens: 1 });
   f.advance(1000, false);
   f.progress.update({ outputTokens: 41 });
+  observation.requestPhase = { phase: "handover", phase_elapsed_ms: 100 };
+  f.advance(0);
+  assert.match(f.messages.at(-1), /paused: switching active gpu chat cache/);
+  delete observation.requestPhase;
   observation = { ...observation, activeChat: otherChat, otherRunningChatId: otherChat.chat_id,
     request: { ...observation.request, state: "paused" } };
   f.advance(0);
@@ -439,7 +443,7 @@ test("a fully prepared prompt waits for first output without claiming isolated G
   f.progress.update({ phase: "wait", inputTokens: 239265, cacheRead: 239265 });
   assert.match(f.messages.at(-1), /Radiance compaction: Await first checkpoint output/);
   assert.match(f.messages.at(-1), /the prompt is ready; checkpoint output has not reached Pi yet/);
-  assert.match(f.messages.at(-1), /Prompt prefill: not observed yet/);
+  assert.doesNotMatch(f.messages.at(-1), /Prompt prefill:/);
   assert.match(f.messages.at(-1), /cached 239,265 \(100.0%\) · uncached 0/);
 });
 
@@ -600,7 +604,7 @@ test("compaction separates concurrent disk load components from GPU restore wall
   assert.match(message, /Decompression:.*3.0s.*wall.*5.0s.*worker/);
   assert.match(message, /SHA-256 verification:.*0.4s.*wall.*0.5s.*worker/);
   assert.match(message, /RAM restore-buffer copy:.*0.4s.*wall.*0.5s.*worker/);
-  assert.match(message, /Restore cached context into GPU: not observed yet/);
+  assert.doesNotMatch(message, /GPU queue:|Allocate RAM for chat handover:|Restore cached context into GPU:/);
   assert.equal(report.waitPhases.restore.elapsedMs, 0, "CPU worker sums are never charged to GPU transfer");
   assert.equal(report.cacheLoadProgress.elapsed_ms, 4000);
   assert.equal(Object.values(report.cacheLoadProgress.stage_ms).reduce((sum, ms) => sum + ms, 0), 9000);
@@ -620,7 +624,7 @@ test("completed disk components remain visible through GPU restore, prefill, gen
   f.progress.update({ phase: "wait" });
   assert.match(f.messages.at(-1), /✓ Load cached context from disk: 4.0s wall/);
   assert.match(f.messages.at(-1), /Restore cached context into GPU: 1.1s/);
-  observation = { ...observation, requestPhase: { ...observation.requestPhase, phase: "prefill",
+  observation = { ...observation, phaseObservedAt: wallNow + 100, requestPhase: { ...observation.requestPhase, phase: "prefill",
     timings_ms: { cache_lookup: 4500, cache_restore: 1100, prefill: 200 } } };
   f.advance(100);
   assert.match(f.messages.at(-1), /Disk read:.*3.0s.*worker/);
@@ -634,6 +638,46 @@ test("completed disk components remain visible through GPU restore, prefill, gen
   assert.equal(f.reports[0].cacheLoadProgress.status, "complete");
   assert.equal(f.reports[0].cacheLoadProgress.stage_wall_ms.decompression, 3000);
   assert.equal(f.reports[0].waitPhases.restore.elapsedMs, 1100);
+});
+
+test("one prefill clock advances between backend samples without repeating completed disk work", (t) => {
+  const wallNow = 100000;
+  let observation = cacheLoadObservation(wallNow - 1300, { status: "complete", completed_blocks: 10,
+    completed_bytes: 20 * 1024 ** 2,
+    active_stages: { disk_read: 0, decompression: 0, checksum: 0, restore_buffer_copy: 0 } });
+  observation.requestPhase = { ...observation.requestPhase, phase: "prefill", phase_elapsed_ms: 74000,
+    timings_ms: { prefill: 74000 }, input_tokens: 292842, computed_tokens: 105472, cached_tokens: 0 };
+  const f = fixture(t, { observationAt: () => observation, schedulerNow: (clock) => wallNow + clock });
+  const prefill = () => f.messages.at(-1).split("\n").find((line) => line.includes("Prompt prefill:"));
+  f.progress.update({ phase: "wait", inputTokens: 292842 });
+  assert.equal(prefill(), "  › Prompt prefill: 1m 15s · 105,472 / 292,842 uncached tok processed · 0 reused");
+  f.advance(100);
+  assert.equal(f.progress.snapshot().waitPhases.prefill.elapsedMs, 75400);
+  f.advance(5900);
+  assert.equal(prefill(), "  › Prompt prefill: 1m 21s · 105,472 / 292,842 uncached tok processed · 0 reused");
+  assert.match(f.messages.at(-1), /✓ Load cached context from disk: 4.0s wall/);
+
+  // A queue interruption can change the authoritative total. Only the active
+  // phase advances between samples, including when prefill is resumed.
+  observation = { ...observation, phaseObservedAt: wallNow + 6100, requestPhase: {
+    ...observation.requestPhase, phase: "gpu_queue", timings_ms: { prefill: 79000, gpu_queue: 1000 } } };
+  f.advance(100);
+  f.advance(1000);
+  assert.equal(prefill(), "  ✓ Prompt prefill: 1m 19s");
+  assert.equal(f.progress.snapshot().waitPhases.queue.elapsedMs, 2000);
+
+  observation = { ...observation, phaseObservedAt: wallNow + 7200, requestPhase: {
+    ...observation.requestPhase, phase: "prefill", phase_elapsed_ms: 200,
+    timings_ms: { prefill: 79200, gpu_queue: 1900 }, computed_tokens: 109568 } };
+  f.advance(100);
+  assert.equal(prefill(), "  › Prompt prefill: 1m 19s · 109,568 / 292,842 uncached tok processed · 0 reused");
+  f.advance(1000);
+  f.progress.update({ phase: "generate", outputTokens: 1 });
+  f.advance(2000);
+  assert.equal(prefill(), "  ✓ Prompt prefill: 1m 20s");
+  assert.equal(f.progress.snapshot().waitPhases.prefill.elapsedMs, 80200);
+  assert.equal(f.progress.snapshot().waitPhases.queue.elapsedMs, 1900);
+  assert.match(f.messages.at(-1), /✓ Load cached context from disk: 4.0s wall/);
 });
 
 test("compaction rejects stale, cross-request and malformed disk component samples", (t) => {

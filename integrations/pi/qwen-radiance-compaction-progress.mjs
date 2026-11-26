@@ -27,7 +27,6 @@ const WAIT_STAGES = [
   ["first_token", "Await first checkpoint output"],
   ["unknown", "Unclassified backend wait"],
 ];
-const ALWAYS_VISIBLE_WAIT_STAGES = new Set(["queue", "restore", "prefill"]);
 const KEY = "qwen-compaction";
 export const COMPACTION_TIMING_ENTRY = "qwen-radiance-compaction-timing-v1";
 // Pi loads the TS compactor and the JS cache extension separately. Share the
@@ -63,11 +62,11 @@ export function classifyCompactionWait(observation, now = Date.now()) {
     };
   }
   const request = observation.request;
-  const exact = requestPhaseStatus(observation, now);
-  if (exact) return {
-    id: BACKEND_WAIT_PHASES[observation.requestPhase.phase] ?? "first_token",
-    detail: `${exact.phase} · ${exact.detail}`,
-  };
+  const exact = requestPhaseStatus(observation, now, { includeTimings: false });
+  if (exact) {
+    const id = BACKEND_WAIT_PHASES[observation.requestPhase.phase] ?? "first_token";
+    return { id, detail: exact.detail || (id === "handover" ? exact.phase : undefined) };
+  }
   if (observation.toolGrace && request?.state !== "running") {
     return { id: "queue", detail: toolGraceDescription(observation.toolGrace) };
   }
@@ -189,7 +188,7 @@ export function startCompactionProgress(ctx, {
   const waitPhases = new Map(WAIT_STAGES.map(([id]) => [id, { observed: false, elapsedMs: 0 }]));
   const waitDetails = new Map();
   let phase = "prepare", phaseStarted = started, state = "running", lastRender = -Infinity, timer, saving, finishedAt;
-  let activeWaitId, activeWaitStarted, schedulerStopped = false;
+  let activeWaitId, activeWaitStarted, lastWaitSample, schedulerStopped = false;
   let cacheLoad;
   let transcriptAppended = false, durableCommit = false, reusedCheckpoint = false, finishRequested = false, forcedCheckpoint = false;
   let finishAvailable;
@@ -274,8 +273,9 @@ export function startCompactionProgress(ctx, {
 
   function observeWait(at, observation = readScheduler()) {
     if (state !== "running" || phase !== "wait") return;
-    observeCacheLoad(observation);
-    const activity = classifyCompactionWait(observation, schedulerNow());
+    const wallNow = schedulerNow();
+    const liveCacheLoad = observeCacheLoad(observation, wallNow);
+    const activity = classifyCompactionWait(observation, wallNow);
     if (activity.id !== activeWaitId) {
       if (activeWaitId !== undefined && activeWaitStarted !== undefined) {
         waitPhases.get(activeWaitId).elapsedMs += at - activeWaitStarted;
@@ -285,21 +285,31 @@ export function startCompactionProgress(ctx, {
       waitPhases.get(activeWaitId).observed = true;
     }
     waitDetails.set(activity.id, activity.detail);
-    if (observation.requestPhase) {
-      const measured = new Map();
-      for (const [backend, elapsedMs] of Object.entries(observation.requestPhase.timings_ms)) {
-        const id = BACKEND_WAIT_PHASES[backend];
-        if (id) measured.set(id, (measured.get(id) ?? 0) + elapsedMs);
-      }
-      for (const [id, elapsedMs] of measured) {
-        Object.assign(waitPhases.get(id), { observed: true, elapsedMs });
-      }
-      if (measured.has(activeWaitId)) activeWaitStarted = at;
+    const { requestPhase: row, phaseObservedAt } = observation;
+    if (!row || !observation.available) return liveCacheLoad;
+    const hasTimestamp = Number.isFinite(phaseObservedAt);
+    if (hasTimestamp && lastWaitSample?.at === phaseObservedAt &&
+        lastWaitSample.requestId === row.request_id) return liveCacheLoad;
+    lastWaitSample = { at: phaseObservedAt, requestId: row.request_id };
+
+    const measured = new Map();
+    for (const [backend, elapsedMs] of Object.entries(row.timings_ms)) {
+      const id = BACKEND_WAIT_PHASES[backend];
+      if (id) measured.set(id, (measured.get(id) ?? 0) + elapsedMs);
     }
+    for (const [id, elapsedMs] of measured) {
+      Object.assign(waitPhases.get(id), { observed: true, elapsedMs });
+    }
+    if (BACKEND_WAIT_PHASES[row.phase] === activeWaitId && measured.has(activeWaitId)) {
+      // The backend total already includes elapsed time through its sample.
+      // Advance from that sample on Pi's monotonic clock until a new one arrives.
+      activeWaitStarted = at - (hasTimestamp ? Math.max(0, wallNow - phaseObservedAt) : 0);
+    }
+    return liveCacheLoad;
   }
 
-  function observeCacheLoad(observation) {
-    const current = cacheLoadStatus(observation, schedulerNow());
+  function observeCacheLoad(observation, wallNow = schedulerNow()) {
+    const current = cacheLoadStatus(observation, wallNow);
     if (current && cacheLoad && (!sameIdentity(current.progress, cacheLoad.progress) ||
         current.progress.request_id !== cacheLoad.progress.request_id)) return undefined;
     if (current) {
@@ -358,17 +368,14 @@ export function startCompactionProgress(ctx, {
     for (const [id, label] of WAIT_STAGES) {
       if (id === "restore") pushCacheLoadLines(lines, liveCacheLoad);
       const timing = report.waitPhases[id];
-      if (!ALWAYS_VISIBLE_WAIT_STAGES.has(id) && !timing.observed) continue;
+      if (!timing.observed) continue;
       const current = state === "running" && phase === "wait" && id === activeWaitId && activeWaitStarted !== undefined;
       // The prompt-ready sample and first stream output can arrive together.
       // Keep a useful live wait, but omit an unmeasured or zero-duration row.
       if (id === "first_token" && !current && timing.elapsedMs === 0) continue;
-      const marker = current ? "›" : timing.observed ? "✓" : "·";
-      const value = timing.observed
-        ? duration(timing.elapsedMs)
-        : state === "running" && phase === "wait" ? "not observed yet" : "not observed";
+      const marker = current ? "›" : "✓";
       const detail = current || id === "queue" || id === "handover" ? waitDetails.get(id) : undefined;
-      lines.push(`  ${marker} ${label}: ${value}${detail ? ` · ${detail}` : ""}`);
+      lines.push(`  ${marker} ${label}: ${duration(timing.elapsedMs)}${detail ? ` · ${detail}` : ""}`);
     }
   }
 
@@ -382,9 +389,8 @@ export function startCompactionProgress(ctx, {
     force ||= wasPaused !== Boolean(generationWait);
     if (!force && at - lastRender < TICK_MS) return;
     lastRender = at;
-    observeWait(at, observation);
-    const liveCacheLoad = state === "running" && ["wait", "generate", "finalize"].includes(phase)
-      ? observeCacheLoad(observation) : undefined;
+    const liveCacheLoad = phase === "wait" ? observeWait(at, observation) :
+      state === "running" && ["generate", "finalize"].includes(phase) ? observeCacheLoad(observation) : undefined;
     const report = snapshot(at);
     const label = ["generate", "finalize"].includes(phase) && generationWait
       ? phase === "finalize" ? "Checkpoint finalization paused" : "Checkpoint generation paused" :
@@ -479,7 +485,6 @@ export function startCompactionProgress(ctx, {
       }
       phase = value.phase; phaseStarted = at;
       stages.get(phase).state = "running";
-      if (phase === "wait") observeWait(at);
     }
     const tokensAdvanced = validCount(value.outputTokens) && value.outputTokens > (tokens.outputTokens ?? 0);
     const outputAdvanced = tokensAdvanced || (validCount(value.characters) && value.characters > (tokens.characters ?? 0));

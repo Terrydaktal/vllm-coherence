@@ -181,42 +181,44 @@ export function formatGenerationStats(observation) {
 	return values.join(" \u2022 ");
 }
 
-export function requestPhaseStatus(observation, now = Date.now()) {
+export function requestPhaseStatus(observation, now = Date.now(), { includeTimings = true } = {}) {
 	const row = observation?.requestPhase;
 	if (!row || row.phase === "complete") return undefined;
-	const seconds = Math.max(0, row.phase_elapsed_ms + (now - (observation.phaseObservedAt ?? now))) / 1000;
-	const load = cacheLoadStatus(observation, now);
+	const load = includeTimings ? cacheLoadStatus(observation, now) : undefined;
 	if (row.phase === "cache_lookup" && load) return { phase: load.phase, detail: load.detail };
 	const blocker = row.blocker && (row.blocker.chat_id === row.chat_id
 		? "an earlier request in this chat" : `another chat ${row.blocker.chat_id.slice(0, 12)}`);
-	let detail = `${seconds.toFixed(1)}s`;
+	const detail = [];
+	if (includeTimings) {
+		const seconds = Math.max(0, row.phase_elapsed_ms + (now - (observation.phaseObservedAt ?? now))) / 1000;
+		detail.push(`${seconds.toFixed(1)}s` + (load && row.phase === "cache_restore" ? " GPU restore" : ""));
+	}
 	if (row.phase === "gpu_queue") {
 		const ownerPhase = observation.blockingRequestPhase?.phase;
 		const work = ownerPhase ? `is ${REQUEST_PHASE_LABELS[ownerPhase].toLowerCase()}` : "owns the GPU";
-		detail += ` · ${blocker ?? "another request"} ${work}; waiting for its response to finish`;
+		detail.push(`${blocker ?? "another request"} ${work}; waiting for its response to finish`);
 	}
-	if (row.phase === "priority_wait") detail += ` · ${blocker ?? "another chat"} keeps the GPU through tools until its answer finishes`;
-	if (row.phase === "priority_preempt") detail += ` · waiting for a safe GPU/cache handover from ${blocker ?? "the current owner"}`;
-	if (row.phase === "tool_grace") detail += ` · ${toolGraceDescription(observation.toolGrace ?? {
+	if (row.phase === "priority_wait") detail.push(`${blocker ?? "another chat"} keeps the GPU through tools until its answer finishes`);
+	if (row.phase === "priority_preempt") detail.push(`waiting for a safe GPU/cache handover from ${blocker ?? "the current owner"}`);
+	if (row.phase === "tool_grace") detail.push(toolGraceDescription(observation.toolGrace ?? {
 		chat_id: row.blocker?.chat_id ?? row.chat_id, phase: "response_outcome",
-	})}`;
+	}));
 	if (row.phase === "prefill" && row.cached_tokens !== null) {
 		const uncached = Math.max(0, row.input_tokens - row.cached_tokens);
 		const prepared = Math.min(uncached, Math.max(0, row.computed_tokens - row.cached_tokens));
-		detail += ` · ${prepared.toLocaleString("en-US")} / ${uncached.toLocaleString("en-US")} uncached tok processed` +
-			` · ${row.cached_tokens.toLocaleString("en-US")} reused`;
+		detail.push(`${prepared.toLocaleString("en-US")} / ${uncached.toLocaleString("en-US")} uncached tok processed`,
+			`${row.cached_tokens.toLocaleString("en-US")} reused`);
 	} else if (row.phase === "prefill") {
-		detail += ` · ${Math.min(row.computed_tokens, row.input_tokens).toLocaleString("en-US")} / ` +
-			`${row.input_tokens.toLocaleString("en-US")} prompt tok prepared · cached split pending`;
+		detail.push(`${Math.min(row.computed_tokens, row.input_tokens).toLocaleString("en-US")} / ` +
+			`${row.input_tokens.toLocaleString("en-US")} prompt tok prepared`, "cached split pending");
 	}
 	if (load && row.phase !== "generate") {
-		if (row.phase === "cache_restore") detail = `${seconds.toFixed(1)}s GPU restore`;
-		detail += ` · cache load ${(load.progress.elapsed_ms / 1000).toFixed(1)}s wall · ${cacheLoadStageSummary(load.progress)}`;
+		detail.push(`cache load ${(load.progress.elapsed_ms / 1000).toFixed(1)}s wall`, cacheLoadStageSummary(load.progress));
 		if (row.phase !== "cache_restore" && typeof row.timings_ms?.cache_restore === "number") {
-			detail += ` · GPU restore ${(row.timings_ms.cache_restore / 1000).toFixed(1)}s`;
+			detail.push(`GPU restore ${(row.timings_ms.cache_restore / 1000).toFixed(1)}s`);
 		}
 	}
-	return { phase: REQUEST_PHASE_LABELS[row.phase].toLowerCase(), detail };
+	return { phase: REQUEST_PHASE_LABELS[row.phase].toLowerCase(), detail: detail.join(" · ") };
 }
 const DEFAULT_HELPER = resolve(
 	dirname(fileURLToPath(import.meta.url)),
