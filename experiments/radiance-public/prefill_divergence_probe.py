@@ -1106,6 +1106,24 @@ class PrefillDivergenceProbe:
             "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         }
 
+    def qwen_prefill_graph_kv_layouts(self):
+        from prefill_graph_observer import target_kv_layouts
+
+        return target_kv_layouts(self.model_runner)
+
+    def qwen_prefill_graph_observer(self, action, *args):
+        if action == "begin" and not hasattr(self, "_graph_output_observer"):
+            from prefill_graph_observer import GraphOutputObserver
+
+            self._graph_output_observer = GraphOutputObserver(self.model_runner, *args)
+            return {"installed": True}
+        if action == "finish" and hasattr(self, "_graph_output_observer"):
+            try:
+                return self._graph_output_observer.finish()
+            finally:
+                del self._graph_output_observer
+        raise ValueError("invalid graph observer transition")
+
     def qwen_prefill_capture_begin(
         self,
         destination,
