@@ -1,5 +1,6 @@
 """Opt-in single-sequence prefill and indexed-decode data-movement experiments."""
 
+import inspect
 from types import MethodType
 
 import torch
@@ -151,3 +152,46 @@ def install_bank(worker, *, conv_initializer=None):
     hooks.replace(radiance_gdn, "forward_core_fused", MethodType(updated, adapter))
     performance._indexed_bank_hooks = hooks
     return counts
+
+
+def hoisted_recurrent(adapter, stable_parameters):
+    """Round each immutable FP32 gate parameter once, prior to graph capture."""
+    from gdn_prefill_direct import _replace_function
+
+    # Keep strong references to both sides. Unrecognised arguments retain the
+    # normal conversion, including transient tensors whose addresses get reused.
+    cached = {id(bias): (bias, bias.to(torch.bfloat16)) for bias in stable_parameters}
+
+    def narrow(bias):
+        known = cached.get(id(bias))
+        return (
+            known[1]
+            if known is not None and known[0] is bias
+            else bias.to(torch.bfloat16)
+        )
+
+    return _replace_function(
+        type(adapter).__call__,
+        (("bias = dt_bias.to(t.bfloat16)", "bias = narrow(dt_bias)"),),
+        narrow=narrow,
+    )
+
+
+def install_bias(worker):
+    import radiance_gdn
+    from qwen_r9700_lab.conformance_instrumentation import HookSet
+
+    captures = inspect.getclosurevars(radiance_gdn.recurrent_update).nonlocals
+    adapter = captures.get("recur")
+    modules = [
+        m
+        for m in worker.model_runner.model.modules()
+        if type(m).__name__ == "QwenGatedDeltaNetAttention"
+    ]
+    if adapter is None or len(modules) != 48:
+        raise ValueError("bias hoist needs the pinned packed GDN recurrence")
+    widened = [radiance_gdn._gate_params(m)[1] for m in modules]
+    hooks = HookSet()
+    hooks.replace(type(adapter), "__call__", hoisted_recurrent(adapter, widened))
+    worker._qwen_performance_repairs._decode_bias_hooks = hooks
+    return {"cached_layer_biases": len(widened)}

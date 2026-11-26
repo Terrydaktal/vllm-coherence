@@ -4,10 +4,11 @@ import argparse
 import json
 import statistics
 from pathlib import Path
+from types import MethodType
 
 import torch
 from gdn_prefill_direct import _prepared_scan_into
-from prefill_bank_norm import indexed_scan_into
+from prefill_bank_norm import hoisted_recurrent, indexed_scan_into
 
 
 def exact(a, b):
@@ -94,12 +95,73 @@ def scan(rows, repeats):
     }
 
 
+def bias_case(qualification, repeats):
+    directory = qualification / "diagnostics/packed-gdn-build-001"
+    import sys
+
+    sys.path.insert(0, str(directory))
+    from packed_recurrent import StockIndexedAdapter
+
+    adapter = StockIndexedAdapter(torch)
+    wide = torch.randn(48, device="cuda").bfloat16().float()
+    fused = MethodType(hoisted_recurrent(adapter, [wide]), adapter)
+    packed = torch.randn(8, 10240, dtype=torch.bfloat16, device="cuda")
+    q, k, v = [t.view(8, -1, 128) for t in packed.split((2048, 2048, 6144), dim=1)]
+    gates = [torch.randn(8, 48, dtype=torch.bfloat16, device="cuda") for _ in range(2)]
+    log = torch.randn(48, device="cuda")
+    state = torch.randn(10, 48, 128, 128, device="cuda") * 0.05
+    banks = [state.clone(), state.clone()]
+    outs = [torch.empty_like(v, memory_format=torch.contiguous_format) for _ in banks]
+    cu = torch.tensor([0, 8], device="cuda", dtype=torch.int32)
+    indices = torch.tensor([[3, 6, 1, 4, 2, 8, 7, 5]], device="cuda", dtype=torch.int32)
+    accepted = torch.ones(1, device="cuda", dtype=torch.int32)
+
+    def call(which, val):
+        (adapter if which == 0 else fused)(
+            q,
+            k,
+            v,
+            *gates,
+            log,
+            val,
+            banks[which],
+            outs[which],
+            cu,
+            indices,
+            accepted,
+            1,
+            48,
+            16,
+            128**-0.5,
+        )
+
+    for i in range(1, 9):
+        accepted.fill_(i)
+        val = wide.clone() if i == 7 else wide
+        call(0, val)
+        call(1, val)
+        if not exact(banks[0], banks[1]) or not exact(outs[0], outs[1]):
+            raise ValueError("hoisted BF16 bias changed outputs or state")
+    return {
+        "stage": "packed_decode_bias",
+        "rows": 8,
+        "correctness": "all eight acceptances, full banks and outputs; uncached-bias fallback",
+        **measure(lambda: call(0, wide), lambda: call(1, wide), repeats, graph=True),
+    }
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    for opt in ("build", "output"):
+    for opt in ("qualification", "build", "output"):
         p.add_argument("--" + opt, type=Path, required=True)
     p.add_argument("--bank-rows", type=int, nargs="+", default=(129, 1648, 3296))
     p.add_argument("--repeats", type=int, default=9)
+    p.add_argument(
+        "--modes",
+        nargs="+",
+        choices=("bias", "bank"),
+        default=("bias", "bank"),
+    )
     args = p.parse_args()
     torch.manual_seed(20261126)
     torch.set_num_threads(4)
@@ -123,8 +185,11 @@ def main():
             flush=True,
         )
 
-    for rows in args.bank_rows:
-        record(scan(rows, args.repeats))
+    if "bias" in args.modes:
+        record(bias_case(args.qualification, args.repeats))
+    if "bank" in args.modes:
+        for rows in args.bank_rows:
+            record(scan(rows, args.repeats))
 
 
 if __name__ == "__main__":
