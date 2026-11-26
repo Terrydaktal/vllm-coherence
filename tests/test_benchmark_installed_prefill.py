@@ -2,6 +2,41 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
+def test_symbolic_graph_obeys_gdn_actual_runtime_rows(tmp_path, monkeypatch):
+    import pytest
+    import torch
+
+    pytest.importorskip("triton.experimental.gluon")
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "experiments/radiance-public"))
+    from gdn_prefill_direct import _project_for_runtime_rows
+
+    calls = {"projection_direct": 0, "direct_rows": {}, "fallback_rows": {}}
+    weight = torch.tensor([1.0])
+    originals = {weight.data_ptr(): lambda x, z: x + z}
+
+    @torch.library.custom_op("coherence_test::symbolic_projection_dispatch", mutates_args=())
+    def project(x: torch.Tensor, z: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+        return _project_for_runtime_rows(x, z, w, originals, calls, lambda: x - z)
+
+    @project.register_fake
+    def fake(x, z, w):
+        return x.new_empty(x.shape)
+
+    # Trace a prefill first, then execute decode and both sides of the cutoff
+    # through the same dynamically shaped compiled entry point.
+    compiled = torch.compile(
+        lambda x, z: project(x, z, weight),
+        backend="eager",
+        dynamic=True,
+        fullgraph=True,
+    )
+    for m in (128, 8, 63, 64, 1, 1648):
+        x, z = torch.full((m, 4), 3.0), torch.ones(m, 4)
+        assert torch.equal(compiled(x, z), x - z if m >= 64 else x + z)
+    assert calls["fallback_rows"] == {1: 1, 8: 1, 63: 1}
+    assert calls["direct_rows"] == {64: 1, 128: 1, 1648: 1}
+
+
 def test_wide_norm_build_changes_only_native_admission(tmp_path, monkeypatch):
     import hashlib
 
