@@ -1,13 +1,15 @@
 import importlib.util
 import sys
+from array import array
 from pathlib import Path
 
 import pytest
-from qwen_r9700_lab import radiance_cache
+from qwen_r9700_lab import radiance_cache, radiance_prefix_lineage
 
 BASE = Path(__file__).resolve().parents[1] / "experiments/radiance-public"
 sys.path.insert(0, str(BASE))
 from materialize_snapshot_candidates import build
+from snapshot_cpu_candidates import fast_comparison
 
 
 @pytest.fixture()
@@ -20,6 +22,20 @@ def variant(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, spec.name, module)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize(
+    "factory", [str, lambda v: array("i", v), list, lambda v: array("d", v)]
+)
+def test_prefix_semantics(factory):
+    reference = radiance_prefix_lineage.compare_sequences
+    compare = fast_comparison(reference)
+    for seq in ([], [1], [2, 3], [1, 2, 3], [1, 4, 3]):
+        for seq2 in ([], [1, 2, 3], seq + [4]):
+            for prefix in (False, True):
+                assert compare(factory(seq), factory(seq2), prefix=prefix) == reference(
+                    factory(seq), factory(seq2), prefix=prefix
+                )
 
 
 def test_four_width_and_aggregate_byte_reservations(variant):

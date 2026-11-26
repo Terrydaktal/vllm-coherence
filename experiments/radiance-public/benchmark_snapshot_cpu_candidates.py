@@ -1,8 +1,10 @@
-"""Time verified snapshot restores."""
+"""Time verified snapshot restores and native prefix comparisons."""
 
 import json, os, statistics, tempfile, time
+from array import array
 from pathlib import Path
-from qwen_r9700_lab import radiance_cache as c
+from qwen_r9700_lab import radiance_cache as c, radiance_prefix_lineage as lineage
+from snapshot_cpu_candidates import fast_comparison
 from materialize_snapshot_candidates import build
 import importlib.util
 import sys
@@ -26,6 +28,28 @@ def alternating(functions):
 
 def run():
     result = {}
+    fast = fast_comparison(lineage.compare_sequences)
+    for n in (60000, 200000, 320000):
+        a = array("i", range(n))
+        b = array("i", a)
+        b.append(123)
+        for diff in (None, 0, n // 2, n - 1):
+            if diff is not None:
+                b[diff] = -1
+            assert fast(a, b, prefix=True) == lineage.compare_sequences(
+                a, b, prefix=True
+            )
+            if diff is not None:
+                b[diff] = a[diff]
+        result[f"prefix_{n}"] = alternating(
+            {
+                name: lambda f=f: f(a, b, prefix=True)
+                for name, f in (
+                    ("reference", lineage.compare_sequences),
+                    ("candidate", fast),
+                )
+            }
+        )
     n = 27000832
     keys = [f"g0-{i:064x}.qkv" for i in range(8)]
     read3 = reader_variant(c.ChatStore.read_many)

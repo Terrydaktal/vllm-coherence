@@ -41,11 +41,21 @@ def cache_source(source):
     return source
 
 
+def lineage_source(source):
+    return replace_once(
+        source,
+        "def _get(value, name, default=None):",
+        "from snapshot_cpu_candidates import fast_comparison\n"
+        "compare_sequences = fast_comparison(compare_sequences)\n\n\ndef _get(value, name, default=None):",
+    )
+
+
 def build(src, dest):
     dest.mkdir(parents=True, exist_ok=True)
     report = {}
     for name, transform in (
         ("radiance_cache.py", cache_source),
+        ("radiance_prefix_lineage.py", lineage_source),
     ):
         original = (src / name).read_bytes()
         encoded = transform(original.decode()).encode()
