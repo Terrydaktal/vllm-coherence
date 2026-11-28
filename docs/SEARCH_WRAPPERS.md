@@ -10,12 +10,17 @@ classes and measurements do not establish universal acceleration or correctness.
 
 | Entry point | Current behavior |
 | --- | --- |
-| `search_file_contents` | Uses Pi's native content search; `files_only: true` returns matching filenames once each. |
+| `search_file_contents` | Uses ripgrep. `files_only: true` returns matching filenames once each. |
+| `find_files` | Uses fd with an early result limit. |
 | Model-issued Bash `grep` for `qwen-r9700` | Uses the built Rust grep2rg engine. If it is unavailable, the retained C dispatcher or GNU grep remains usable. |
 | Model-issued Bash `find` for `qwen-r9700` | Uses the built Rust find2fd engine, or GNU find if the build is unavailable. |
 | User `!` commands, other providers, child scripts, explicit bypasses | Keep ordinary system executables. |
 
 The native tools remain the preferred interface for repository inspection.
+The Linux Qwen integration reuses local executable lookups and selects worker
+counts for filename and content searches separately. Context formatting reads
+only through the last requested line and preserves Pi's line numbering and
+formatting.
 Narrow the directory, use `literal: true` for exact paths/symbols/errors and
 request context only after finding the relevant matches. Multiple traversal
 exclusions or ignored build files can use explicit shell `rg` with scoped paths
@@ -37,6 +42,12 @@ Use `GREP2RG_ACCELERATION=gnu` or `FIND2FD_ACCELERATION=off` to force GNU.
 JavaScript/rg/fd experiments; these are not the default Rust engines and do not
 promise a speedup. GNU remains necessary for unsupported options, descriptors,
 actions and other compatibility boundaries.
+
+The Rust grep route includes bounded ASCII text searches in C.UTF-8 and
+en_GB.UTF-8. It checks the input before producing output and delegates to GNU
+when it encounters unsupported bytes. Recursive quiet grep can stop traversing
+once it finds a match. The Rust find route supports qualified `-prune` and
+`-quit` expressions and preserves GNU traversal order in its output.
 
 The `files_only` addition preserves the native search schema and default
 execution. It uses rg's hidden/ignore/glob/literal/case behavior, returns at most
@@ -93,7 +104,7 @@ and actual `execve` proof that the default hook launches both Rust engines:
 cargo test --locked --manifest-path integrations/pi/search-wrappers/grep2rg/rust/Cargo.toml --bin grep2rg-rust
 cargo test --locked --manifest-path integrations/pi/search-wrappers/find2fd/rust/Cargo.toml --bin find2fd-rust
 node --test tests/test_shell_search_wrappers.mjs tests/test_files_only_search.mjs
-node --test tests/test_tool_names_sdk.mjs
+node --test tests/test_tool_names_sdk.mjs tests/test_dedicated_search.mjs
 ```
 
 The shell tests require GNU grep/find, Bash, rg, fd/fdfind, `strace` and the built

@@ -41,8 +41,15 @@ const COMPILER_PATTERN =
 const BENCHMARK_PATTERN =
     /\b(?:\d+(?:\.\d+)?\s*(?:ms|s|us|µs|ns|t\/s|tok(?:en)?s?\/s|MB\/s|GB\/s)|latency|throughput|elapsed|median|p\d{2}|speedup)\b/i;
 const DIFF_PATTERN = /^(?:diff --git|index [0-9a-f]+\.\.[0-9a-f]+|@@ |--- |\+\+\+ |[+-](?![+-]))/;
-const TABLE_PATTERN = /(?:^\s*\|.*\|\s*$)|(?:\S+\s{2,}\S+\s{2,}\S+)/;
 const JSON_PATTERN = /^\s*(?:[{}\[\]]|"[^"\n]+"\s*:)/;
+const SIGNAL_PATTERNS = {
+    benchmarks: BENCHMARK_PATTERN,
+    compiler: COMPILER_PATTERN,
+    diffs: DIFF_PATTERN,
+    json: JSON_PATTERN,
+    tables: null,
+    tests: TEST_PATTERN,
+};
 const MAX_LINE_CHARACTERS = 180;
 const MAX_SIGNAL_SCAN_CHARACTERS = 16 * 1024;
 const GUIDANCE_MARKER = "Qwen bounded tool-output discipline:";
@@ -313,40 +320,12 @@ function textLines(text) {
     return lines;
 }
 
-function entriesMatching(lines, pattern, maximum = 24) {
-    const entries = [];
-    for (let index = 0; index < lines.length && entries.length < maximum; index += 1) {
-        const line = lines[index];
-        const matches =
-            pattern === TABLE_PATTERN
-                ? isTableLine(line)
-                : pattern.test(line.slice(0, MAX_SIGNAL_SCAN_CHARACTERS));
-        if (matches) entries.push({ line: index + 1, text: clampLine(line) });
-    }
-    return entries;
-}
-
-function isTableLine(line) {
-    const bounded = line.slice(0, MAX_SIGNAL_SCAN_CHARACTERS);
-    const trimmed = bounded.trim();
+function isTableLine(line, fieldSeparator) {
+    const trimmed = line.trim();
     if (trimmed.startsWith("|") && trimmed.endsWith("|")) return true;
 
-    let separatedFields = 0;
-    let sawNonWhitespace = false;
-    for (let index = 0; index < bounded.length; ) {
-        if (!/\s/.test(bounded[index])) {
-            sawNonWhitespace = true;
-            index += 1;
-            continue;
-        }
-        const start = index;
-        while (index < bounded.length && /\s/.test(bounded[index])) index += 1;
-        if (sawNonWhitespace && index - start >= 2 && index < bounded.length) {
-            separatedFields += 1;
-            if (separatedFields >= 2) return true;
-        }
-    }
-    return false;
+    fieldSeparator.lastIndex = 0;
+    return fieldSeparator.test(trimmed) && fieldSeparator.test(trimmed);
 }
 
 function errorBlocks(lines) {
@@ -373,12 +352,14 @@ function errorBlocks(lines) {
         }
         if (blocks.length > 0 && start <= blocks.at(-1).end + 1) {
             blocks.at(-1).end = Math.max(blocks.at(-1).end, end);
-        } else {
+        } else if (blocks.length < 8) {
             blocks.push({ start, end });
+        } else {
+            break;
         }
         index = end + 1;
     }
-    return blocks.slice(0, 8).map(({ start, end }) => ({
+    return blocks.map(({ start, end }) => ({
         end: end + 1,
         lines: lines.slice(start, end + 1).map((line, offset) => ({
             line: start + offset + 1,
@@ -391,23 +372,41 @@ function errorBlocks(lines) {
     }));
 }
 
-export function inspectText(text) {
+export function inspectText(text, bytes = Buffer.byteLength(text, "utf8")) {
     const lines = textLines(text);
-    const entries = lines.map((line, index) => ({ line: index + 1, text: clampLine(line) }));
+    const signals = Object.fromEntries(Object.keys(SIGNAL_PATTERNS).map((name) => [name, []]));
+    const collectors = Object.entries(SIGNAL_PATTERNS).map(([name, pattern]) => ({
+        pattern,
+        entries: signals[name],
+    }));
+    // Trimmed input has no leading or trailing separator. A whitespace run is
+    // one separator even when it mixes spaces, tabs and Unicode whitespace.
+    const fieldSeparator = /\s{2,}/g;
+    const head = [];
+    const tail = [];
+    for (const [index, line] of lines.entries()) {
+        let entry;
+        const bounded = line.slice(0, MAX_SIGNAL_SCAN_CHARACTERS);
+        for (const collector of collectors) {
+            if (collector.entries.length >= 24) continue;
+            if (collector.pattern ? collector.pattern.test(bounded) : isTableLine(bounded, fieldSeparator)) {
+                entry ??= { line: index + 1, text: clampLine(line) };
+                collector.entries.push(entry);
+            }
+        }
+        if (index < 12 || index >= lines.length - 16) {
+            entry ??= { line: index + 1, text: clampLine(line) };
+            if (index < 12) head.push(entry);
+            if (index >= lines.length - 16) tail.push(entry);
+        }
+    }
     return {
-        bytes: Buffer.byteLength(text, "utf8"),
+        bytes,
         errorBlocks: errorBlocks(lines),
-        head: entries.slice(0, 12),
+        head,
         lines: lines.length,
-        signals: {
-            benchmarks: entriesMatching(lines, BENCHMARK_PATTERN),
-            compiler: entriesMatching(lines, COMPILER_PATTERN),
-            diffs: entriesMatching(lines, DIFF_PATTERN),
-            json: entriesMatching(lines, JSON_PATTERN),
-            tables: entriesMatching(lines, TABLE_PATTERN),
-            tests: entriesMatching(lines, TEST_PATTERN),
-        },
-        tail: entries.slice(-16),
+        signals,
+        tail,
     };
 }
 
@@ -584,8 +583,9 @@ export default function qwenToolOutputCondense(pi) {
         try {
             const maxBytes = configuredMaxBytes();
             const exactText = retainedBashText(event, contentText);
-            const inspection = inspectText(exactText);
-            if (inspection.bytes <= maxBytes) return undefined;
+            const bytes = Buffer.byteLength(exactText, "utf8");
+            if (bytes <= maxBytes) return undefined;
+            const inspection = inspectText(exactText, bytes);
             const archive = retainText(exactText);
             const summary = buildCondensedSummary(
                 {

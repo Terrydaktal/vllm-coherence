@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+if [[ $# == 1 && ($1 == --version || $1 == -V) ]]; then
+	exec -a find find "$@"
+fi
+
 # Disable before any native or Node startup. The exact experimental opt-in
 # retains the older JS/fd compatibility engine; unset uses the Rust release.
 if [[ ${FIND2FD_ACCELERATION-} == off || ${FIND2FD_ACCELERATION-} == 0 || (${FIND2FD_EXPERIMENTAL_FD+x} && ${FIND2FD_EXPERIMENTAL_FD-} != 1) ]]; then

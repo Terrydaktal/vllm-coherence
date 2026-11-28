@@ -20,6 +20,10 @@ export function withGrepWrapper(context, shellPath) {
   // The locale change stays in one subshell and never reaches either backend.
   const prefix = `if [ -n "\${BASH_VERSION-}" ]; then
 \tgrep() {
+\t\tif [[ $# == 1 && ( $1 == --version || $1 == -V ) ]]; then
+\t\t\tcommand grep "$@"
+\t\t\treturn
+\t\tfi
 \t\tif [[ \${GREP2RG_EXPERIMENTAL_RG-} != 1 ]]; then
 \t\t\tif [[ \${GREP2RG_ACCELERATION-} == gnu || ! -e /proc/"$BASHPID"/fd/0 || ! -e /proc/"$BASHPID"/fd/1 || ! -e /proc/"$BASHPID"/fd/2 ]]; then
 \t\t\t\tcommand grep "$@"

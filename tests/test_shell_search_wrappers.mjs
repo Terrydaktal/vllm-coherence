@@ -41,6 +41,7 @@ test("combined search wrappers preserve GNU bytes, diagnostics, status and Bash 
     "grep -LF absent tree/a.txt",
     "grep -q alpha missing tree/a.txt",
     "grep --does-not-exist alpha tree/a.txt",
+    "grep --version",
     "printf 'alpha\\nbeta 12\\n' | grep -E '[0-9]+'",
     "grep -F -f <(printf 'alpha\\n') tree/a.txt",
     "find tree -type f -name '*.txt'",
@@ -48,6 +49,7 @@ test("combined search wrappers preserve GNU bytes, diagnostics, status and Bash 
     "find tree -name .hidden -prune -o -type f -print",
     "find tree -maxdepth 1 -type f -exec wc -c '{}' +",
     "find missing -print",
+    "find --version",
     "find tree -type invalid",
     "set -eu; grep -F alpha tree/a.txt; find tree -name a.txt",
     "command grep -nF alpha tree/a.txt; command find tree -name a.txt",
@@ -181,4 +183,19 @@ test("default combined model hook launches both Rust engines without Node, fd or
   assert.match(executions, /rust\/target\/release\/find2fd-rust/);
   assert.doesNotMatch(executions, /execve\("[^"\n]*\/(?:node|fd|fdfind|rg|grep2rg-native)"/);
   assert.equal(execute("type -t grep; type -t find", cwd, false).stdout, "file\nfile\n");
+});
+
+test("model grep accelerates UTF-8 source searches and preserves GNU binary output", t => {
+  const cwd = mkdtempSync(join(tmpdir(), "coherence-search-utf8-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, "tree"));
+  const text = join(cwd, "tree", "text.txt");
+  writeFileSync(text, "alpha\nbeta\nalpha\n");
+  const command = "LC_ALL=C.UTF-8 GREP2RG_ENGINE_REPORT=engine.json grep -rnF alpha tree";
+  for (const binary of [false, true]) {
+    if (binary) writeFileSync(join(cwd, "tree", "binary.txt"), Buffer.from("alpha\0tail\n"));
+    assert.deepEqual(execute(command, cwd), execute(command, cwd, false));
+    const report = JSON.parse(readFileSync(join(cwd, "engine.json"), "utf8"));
+    assert.equal(report.engine, binary ? "gnu" : "rust");
+  }
 });

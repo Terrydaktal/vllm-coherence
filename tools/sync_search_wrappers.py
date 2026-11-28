@@ -34,7 +34,8 @@ def runtime_files(source: Path) -> dict[str, bytes]:
         elif name == "rust":
             # Cargo targets contain generated metadata as well as ELF binaries.
             # Pin only the locked source inventory, without walking build trees.
-            items = [path / "Cargo.toml", path / "Cargo.lock", *sorted((path / "src").rglob("*"))]
+            items = [path / "Cargo.toml", path / "Cargo.lock", path / "build.rs",
+                     *sorted((path / "src").rglob("*"))]
         else:
             items = sorted(path.rglob("*")) if path.is_dir() else [path]
         for item in items:

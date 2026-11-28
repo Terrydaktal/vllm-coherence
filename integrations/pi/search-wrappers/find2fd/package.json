@@ -28,6 +28,8 @@
     "find2fd-shell-prefix": "bin/find2fd-shell-prefix.mjs"
   },
   "files": [
+    "APP-VERSION",
+    "build-support/",
     "src/",
     "bin/",
     "pi/",

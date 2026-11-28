@@ -36,7 +36,7 @@ jobs:
           cargo test --locked --manifest-path integrations/pi/search-wrappers/grep2rg/rust/Cargo.toml --bin grep2rg-rust
           cargo test --locked --manifest-path integrations/pi/search-wrappers/find2fd/rust/Cargo.toml --bin find2fd-rust
           mkdir -p artifacts
-          node --test --test-reporter=tap tests/test_shell_search_wrappers.mjs tests/test_files_only_search.mjs tests/test_running_build.mjs tests/test_running_build_title.mjs tests/test_running_build_title_sdk.mjs tests/test_running_build_title_tmux.mjs tests/test_build_process_record.mjs > artifacts/search-tests.tap 2>&1
+          node --test --test-reporter=tap tests/test_shell_search_wrappers.mjs tests/test_files_only_search.mjs tests/test_dedicated_search.mjs tests/test_running_build.mjs tests/test_running_build_title.mjs tests/test_running_build_title_sdk.mjs tests/test_running_build_title_tmux.mjs tests/test_build_process_record.mjs > artifacts/search-tests.tap 2>&1
       - name: Verify offline Pi restoration and model request admission
         run: node --test --test-reporter=tap tests/test_radiance_connection.mjs tests/test_radiance_backend.mjs tests/test_backend_status.mjs tests/test_radiance_compaction.mjs tests/test_context_picker.mjs tests/test_context_picker_sdk.mjs > artifacts/offline-pi-tests.tap 2>&1
       - uses: actions/upload-artifact@v4

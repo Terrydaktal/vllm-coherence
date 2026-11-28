@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+if [[ $# == 1 && ($1 == --version || $1 == -V) ]]; then
+	exec -a grep grep "$@"
+fi
+
 # Prefer the integrated Rust search engine. The historical C dispatcher and
 # GNU retain compatibility when Rust was not built; JavaScript is opt-in.
 if [[ ${GREP2RG_EXPERIMENTAL_RG-} != 1 ]]; then

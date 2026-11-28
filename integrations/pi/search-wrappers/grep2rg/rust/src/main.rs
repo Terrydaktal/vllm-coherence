@@ -11,7 +11,7 @@ use std::ffi::{CString, OsStr, OsString};
 use std::fs::{self, File, FileType};
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::os::fd::AsRawFd;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
@@ -43,6 +43,9 @@ struct Options {
     patterns: Vec<Vec<u8>>,
     operands: Vec<OsString>,
     include: Vec<CString>,
+    exclude_dirs: Vec<OsString>,
+    max_count: Option<usize>,
+    validate_ascii: bool,
 }
 
 fn option_value(
@@ -57,6 +60,14 @@ fn option_value(
     args.get(*index)
         .map(|x| x.as_bytes().to_vec())
         .ok_or("missing option argument")
+}
+
+fn max_count(value: &[u8]) -> Result<usize, &'static str> {
+    std::str::from_utf8(value)
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n > 0 && n <= isize::MAX as usize)
+        .ok_or("GNU max-count boundary")
 }
 
 fn add_pattern(options: &mut Options, value: &[u8]) {
@@ -150,6 +161,27 @@ fn parse(args: &[OsString]) -> Result<Options, &'static str> {
                                 .push(CString::new(val).map_err(|_| "NUL include pattern")?);
                         }
                     }
+                    b"exclude-dir" | b"max-count" => {
+                        let val = match value {
+                            Some(v) => v.to_vec(),
+                            None => option_value(args, &mut i, b"")?,
+                        };
+                        if name == b"max-count" {
+                            o.max_count = Some(max_count(&val)?);
+                        } else {
+                            // GNU matches path globs differently for command-line roots and children.
+                            // Only literal directory basenames use this byte-comparison shortcut.
+                            if val.is_empty()
+                                || matches!(val.as_slice(), b"." | b"..")
+                                || !val
+                                    .iter()
+                                    .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(b))
+                            {
+                                return Err("GNU directory exclusion pattern");
+                            }
+                            o.exclude_dirs.push(OsString::from_vec(val));
+                        }
+                    }
                     b"binary-files" if value == Some(b"text".as_slice()) => o.text = true,
                     b"binary-files" if value == Some(b"binary".as_slice()) => o.text = false,
                     b"color" | b"colour" if value == Some(b"never".as_slice()) => {}
@@ -160,6 +192,11 @@ fn parse(args: &[OsString]) -> Result<Options, &'static str> {
         } else if !end_options && arg.len() > 1 && arg[0] == b'-' {
             let mut j = 1;
             while j < arg.len() {
+                if arg[j] == b'm' {
+                    let value = option_value(args, &mut i, &arg[j + 1..])?;
+                    o.max_count = Some(max_count(&value)?);
+                    break;
+                }
                 if arg[j] == b'e' || arg[j] == b'f' {
                     explicit_pattern = true;
                     let val = option_value(args, &mut i, &arg[j + 1..])?;
@@ -192,6 +229,17 @@ fn parse(args: &[OsString]) -> Result<Options, &'static str> {
     {
         return Err("GNU recursive pathname normalization");
     }
+    if !o.exclude_dirs.is_empty()
+        && (!o.recursive
+            || !o.include.is_empty()
+            || o.operands.iter().any(|p| {
+                p.as_bytes().ends_with(b"/")
+                    || p.as_bytes().ends_with(b"/.")
+                    || p.as_bytes().ends_with(b"/..")
+            }))
+    {
+        return Err("GNU directory exclusion operand");
+    }
     if o.fixed as usize + o.extended as usize + o.basic as usize > 1 {
         return Err("conflicting matchers");
     }
@@ -219,7 +267,33 @@ fn parse(args: &[OsString]) -> Result<Options, &'static str> {
         return Err("locale-sensitive semantics");
     }
     if !c_locale && !o.text && o.listing.is_none() && !o.quiet {
-        return Err("locale-sensitive binary detection");
+        // In these UTF-8 locales a nonempty ASCII literal has byte-identical
+        // matching on NUL-free ASCII files. Validate owned inputs before output.
+        let utf8 = locale.as_deref().is_some_and(|name| {
+            [
+                b"C.UTF-8".as_slice(),
+                b"C.utf8",
+                b"en_GB.UTF-8",
+                b"en_GB.utf8",
+            ]
+            .iter()
+            .any(|valid| name.as_bytes().eq_ignore_ascii_case(valid))
+        });
+        if !utf8
+            || o.extended
+            || o.only
+            || o.invert
+            || o.whole
+            || o.null_records
+            || o.patterns.len() != 1
+            || o.patterns[0].is_empty()
+            || !o.patterns[0].is_ascii()
+            || (o.operands.is_empty() && !o.recursive)
+            || o.operands.iter().any(|x| x == "-")
+        {
+            return Err("locale-sensitive binary detection");
+        }
+        o.validate_ascii = true;
     }
     if o.extended {
         if o.patterns.iter().any(|p| {
@@ -346,14 +420,20 @@ impl Matcher {
             let finder = Box::new(memmem::Finder::new(&bytes).into_owned());
             Ok(Self::Literal { bytes, finder })
         } else {
+            let extract = o.only && !o.word && !o.whole && patterns.iter().all(|p| !p.is_empty());
             let ac = AhoCorasick::builder()
+                .match_kind(if extract {
+                    aho_corasick::MatchKind::LeftmostLongest
+                } else {
+                    aho_corasick::MatchKind::Standard
+                })
                 .ascii_case_insensitive(o.ignore_case)
                 .build(patterns)
                 .map_err(|_| "literal compilation")?;
             Ok(Self::Literals {
                 patterns: patterns.to_vec(),
                 ac,
-                finders: (!o.ignore_case && patterns.len() <= 8).then(|| {
+                finders: (!o.only && !o.ignore_case && patterns.len() <= 8).then(|| {
                     patterns
                         .iter()
                         .map(|p| memmem::Finder::new(p).into_owned())
@@ -411,6 +491,22 @@ impl Matcher {
         mut emit: impl FnMut(usize, usize) -> io::Result<()>,
     ) -> io::Result<()> {
         // POSIX literal extraction chooses the earliest, then longest accepted span.
+        if let Self::Literals { ac, .. } = self {
+            if ac.match_kind() == aho_corasick::MatchKind::LeftmostLongest {
+                for m in ac.find_iter(record) {
+                    emit(m.start(), m.end())?;
+                }
+                return Ok(());
+            }
+        }
+        if let Self::Literal { bytes, finder } = self {
+            if !bytes.is_empty() && !o.word && !o.whole {
+                for s in finder.find_iter(record) {
+                    emit(s, s + bytes.len())?;
+                }
+                return Ok(());
+            }
+        }
         let patterns: Vec<&[u8]> = match self {
             Self::Literal { bytes, .. } => vec![bytes],
             Self::Literals { patterns, .. } => patterns.iter().map(Vec::as_slice).collect(),
@@ -478,13 +574,16 @@ enum Data {
     Map(Mmap),
     Reader,
     Selected,
+    Summary { matched: bool, output: Vec<u8> },
 }
 impl Data {
     fn bytes(&self) -> &[u8] {
         match self {
             Self::Bytes(b) => b,
             Self::Map(m) => m,
-            Self::Reader | Self::Selected => panic!("streamed file requires worker buffer"),
+            Self::Reader | Self::Selected | Self::Summary { .. } => {
+                panic!("streamed file requires worker buffer")
+            }
         }
     }
 }
@@ -504,6 +603,8 @@ struct Plan {
     prefix: bool,
     bytes: u64,
     directory_operand: bool,
+    quiet_match: bool,
+    quiet_files: usize,
     pool: Option<rayon::ThreadPool>,
     workers: usize,
 }
@@ -546,10 +647,15 @@ fn plan(o: &Options, matcher: &Matcher) -> Result<Plan, &'static str> {
         prefix: false,
         bytes: 0,
         directory_operand: false,
+        quiet_match: false,
+        quiet_files: 0,
         pool: None,
         workers: 1,
     };
     if o.operands.is_empty() && !o.recursive || o.operands.len() == 1 && o.operands[0] == "-" {
+        if o.max_count.is_some() {
+            return Err("GNU max-count stdin positioning");
+        }
         p.stdin = true;
         p.prefix = o.prefix.unwrap_or(false);
         let metadata = fs::metadata("/proc/self/fd/0").map_err(|_| "stdin metadata")?;
@@ -583,8 +689,57 @@ fn plan(o: &Options, matcher: &Matcher) -> Result<Plan, &'static str> {
         o.operands.clone()
     };
     let mut ancestors = HashSet::new();
+    let mut visit = |path: &Path, plan: &mut Plan| {
+        // GNU strips the implicit "./" only when recursion supplied the root.
+        let path = if o.operands.is_empty() {
+            path.strip_prefix(".").unwrap_or(path)
+        } else {
+            path
+        };
+        if o.validate_ascii && (plan.files.len() >= 256 || !path.as_os_str().as_bytes().is_ascii())
+        {
+            return Err("UTF-8 input validation budget or pathname");
+        }
+        let mut input = Input {
+            path: path.as_os_str().to_owned(),
+            data: None,
+            len: 0,
+        };
+        if !o.quiet {
+            plan.files.push(input);
+            return Ok(false);
+        }
+        // Before a quiet match no native output has escaped. A diagnostic
+        // can still delegate the original invocation to GNU in operand order.
+        load_input(&mut input, o, output, None)?;
+        plan.bytes = plan.bytes.saturating_add(input.len);
+        plan.quiet_files += 1;
+        scan(
+            input.bytes(),
+            path.as_os_str().as_bytes(),
+            o,
+            matcher,
+            false,
+            &mut io::sink(),
+        )
+        .map_err(|_| "quiet file scan")
+    };
     for name in &operands {
-        walk(Path::new(name), true, None, o, &mut p, &mut ancestors)?;
+        if walk(
+            Path::new(name),
+            true,
+            None,
+            o,
+            &mut p,
+            &mut ancestors,
+            &mut visit,
+        )? {
+            p.quiet_match = true;
+            break;
+        }
+    }
+    if o.quiet {
+        return Ok(p);
     }
     p.prefix = o
         .prefix
@@ -593,7 +748,7 @@ fn plan(o: &Options, matcher: &Matcher) -> Result<Plan, &'static str> {
     // for the actual file sizes and whether filename matches finish immediately.
     let sampled = p.files.len().min(8);
     for input in &mut p.files[..sampled] {
-        load_input(input, o, output, false, None)?;
+        load_input(input, o, output, None)?;
     }
     let sample_bytes: u64 = p.files[..sampled].iter().map(|input| input.len).sum();
     let estimated_bytes = if sampled == 0 {
@@ -608,14 +763,13 @@ fn plan(o: &Options, matcher: &Matcher) -> Result<Plan, &'static str> {
             .iter()
             .filter(|input| {
                 let data = input.bytes();
-                let first = &data[..memchr(if o.null_records { 0 } else { b'\n' }, data)
-                    .unwrap_or(data.len())
-                    .min(4096)];
-                matcher.selected(first, o)
+                let probe = &data[..data.len().min(4096)];
+                memchr(if o.null_records { 0 } else { b'\n' }, probe)
+                    .is_some_and(|end| matcher.selected(&probe[..end], o))
             })
             .count()
             >= 6;
-    if !o.quiet && p.files.len() >= 64 && estimated_bytes >= 8 * 1024 * 1024 {
+    if p.files.len() >= 64 && estimated_bytes >= 8 * 1024 * 1024 {
         p.workers = std::thread::available_parallelism()
             .map_or(4, usize::from)
             .min(
@@ -630,32 +784,51 @@ fn plan(o: &Options, matcher: &Matcher) -> Result<Plan, &'static str> {
             .build()
             .map_err(|_| "worker pool initialization")?;
         pool.install(|| {
-            p.files[sampled..].par_iter_mut().try_for_each(|input| {
-                load_input(
-                    input,
-                    o,
-                    output,
-                    true,
-                    if early_dense { Some(matcher) } else { None },
-                )
-            })
+            p.files[sampled..].par_iter_mut().try_for_each_init(
+                SearchBuffer::default,
+                |buffer, input| {
+                    load_input(
+                        input,
+                        o,
+                        output,
+                        Some(WorkerInput {
+                            matcher,
+                            prefix: p.prefix,
+                            early_dense,
+                            buffer,
+                        }),
+                    )
+                },
+            )
         })?;
         p.pool = Some(pool);
     } else {
         for input in &mut p.files[sampled..] {
-            load_input(input, o, output, false, None)?;
+            load_input(input, o, output, None)?;
         }
     }
     p.bytes = p.files.iter().map(|input| input.len).sum();
     Ok(p)
 }
 
+#[derive(Default)]
+struct SearchBuffer {
+    bytes: Vec<u8>,
+    regex: Option<regex_automata::meta::Cache>,
+}
+
+struct WorkerInput<'a> {
+    matcher: &'a Matcher,
+    prefix: bool,
+    early_dense: bool,
+    buffer: &'a mut SearchBuffer,
+}
+
 fn load_input(
     input: &mut Input,
     o: &Options,
     output: (u64, u64),
-    stream: bool,
-    early_matcher: Option<&Matcher>,
+    worker: Option<WorkerInput<'_>>,
 ) -> Result<(), &'static str> {
     // All access, identity and binary checks finish before any native output.
     let file = File::open(&input.path).map_err(|_| "input open")?;
@@ -666,7 +839,7 @@ fn load_input(
     if metadata.dev() == output.0 && metadata.ino() == output.1 {
         return Err("input is output");
     }
-    if let Some(matcher) = early_matcher {
+    if let Some(worker) = worker.as_ref().filter(|w| w.early_dense) {
         // A complete first record can establish a filename/quiet match without
         // mapping or copying the remainder of a dense input. No guessed match
         // or truncated-record test is used here.
@@ -682,19 +855,54 @@ fn load_input(
             }
         };
         if let Some(end) = memchr(if o.null_records { 0 } else { b'\n' }, &first[..read]) {
-            if matcher.selected(&first[..end], o) {
+            if worker.matcher.selected(&first[..end], o) {
                 input.len = metadata.len();
                 input.data = Some(Data::Selected);
                 return Ok(());
             }
         }
     }
-    let data = if stream
+    let data = if o.validate_ascii {
+        // Both limits cap speculative preflight at 64 MiB. Keep precisely
+        // these bytes for scanning so a pathname change cannot bypass validation.
+        const FILE_LIMIT: u64 = 256 * 1024;
+        if metadata.len() > FILE_LIMIT {
+            return Err("UTF-8 input validation budget");
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize + 1);
+        file.take(FILE_LIMIT + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "input read")?;
+        if bytes.len() as u64 > FILE_LIMIT || !bytes.is_ascii() {
+            return Err("GNU UTF-8 binary detection");
+        }
+        Data::Bytes(bytes)
+    } else if worker.is_some()
         && metadata.len() >= 4096
         && metadata.len() < 1024 * 1024
         && (o.text || o.listing.is_some() || o.quiet || o.null_records)
     {
-        Data::Reader
+        if o.count || o.listing.is_some() {
+            // A count or filename is bounded output. Compute it while the
+            // verified descriptor is open; publish in GNU order after preflight.
+            let worker = worker.expect("parallel input worker");
+            read_buffer(&file, metadata.len(), &mut worker.buffer.bytes)
+                .map_err(|_| "input read")?;
+            let mut output = Vec::new();
+            let matched = scan_cached(
+                &worker.buffer.bytes,
+                input.path.as_bytes(),
+                o,
+                worker.matcher,
+                worker.prefix,
+                &mut output,
+                &mut worker.buffer.regex,
+            )
+            .map_err(|_| "file summary")?;
+            Data::Summary { matched, output }
+        } else {
+            Data::Reader
+        }
     } else if metadata.len() < 4096 {
         let mut bytes = Vec::<u8>::with_capacity(metadata.len() as usize + 1);
         loop {
@@ -747,7 +955,8 @@ fn walk(
     o: &Options,
     p: &mut Plan,
     ancestors: &mut HashSet<(u64, u64)>,
-) -> Result<(), &'static str> {
+    visit: &mut impl FnMut(&Path, &mut Plan) -> Result<bool, &'static str>,
+) -> Result<bool, &'static str> {
     // Directory entries already carry d_type on common filesystems. Avoid a
     // serial lstat for regular files; opened descriptors are checked in preflight.
     let link = if known_type.is_some() {
@@ -757,7 +966,7 @@ fn walk(
     };
     let kind = known_type.unwrap_or_else(|| link.as_ref().unwrap().file_type());
     if kind.is_symlink() && !command_line && !o.follow {
-        return Ok(());
+        return Ok(false);
     }
     let metadata = if kind.is_symlink() {
         Some(fs::metadata(path).map_err(|_| "input symlink target")?)
@@ -777,6 +986,12 @@ fn walk(
             return Err("directory operand");
         }
         let metadata = metadata.unwrap();
+        if path
+            .file_name()
+            .is_some_and(|name| o.exclude_dirs.iter().any(|pattern| pattern == name))
+        {
+            return Ok(false);
+        }
         let key = (metadata.dev(), metadata.ino());
         if !ancestors.insert(key) {
             return Err("recursive directory loop");
@@ -784,13 +999,15 @@ fn walk(
         for entry in fs::read_dir(path).map_err(|_| "directory read")? {
             let entry = entry.map_err(|_| "directory entry read")?;
             let kind = entry.file_type().map_err(|_| "directory entry type")?;
-            walk(&entry.path(), false, Some(kind), o, p, ancestors)?;
+            if walk(&entry.path(), false, Some(kind), o, p, ancestors, visit)? {
+                return Ok(true);
+            }
         }
         ancestors.remove(&key);
     } else {
         if !is_file {
             if !command_line && !o.follow {
-                return Ok(());
+                return Ok(false);
             }
             return Err("special input file");
         }
@@ -802,34 +1019,41 @@ fn walk(
                 .iter()
                 .any(|pattern| unsafe { libc::fnmatch(pattern.as_ptr(), name.as_ptr(), 0) == 0 })
             {
-                return Ok(());
+                return Ok(false);
             }
         }
-        p.files.push(Input {
-            path: path.as_os_str().to_os_string(),
-            data: None,
-            len: 0,
-        });
+        return visit(path, p);
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Per-file output rolls to an anonymous temporary file, keeping ordered parallel
 /// rendering bounded even for a file consisting entirely of selected records.
 enum Spool {
     Memory(Vec<u8>),
-    Disk(File),
+    Disk(BufWriter<File>),
 }
 impl Spool {
     fn new() -> Self {
         Self::Memory(Vec::new())
+    }
+    fn with_bytes<T>(&mut self, consume: impl FnOnce(&[u8]) -> io::Result<T>) -> io::Result<T> {
+        match self {
+            Self::Memory(data) => consume(data),
+            Self::Disk(file) => {
+                file.flush()?;
+                // Only this process can write the anonymous spill.
+                let map = unsafe { Mmap::map(file.get_ref())? };
+                consume(&map)
+            }
+        }
     }
     fn render(&mut self, out: &mut impl Write) -> io::Result<()> {
         match self {
             Self::Memory(data) => out.write_all(data),
             Self::Disk(file) => {
                 file.seek(SeekFrom::Start(0))?;
-                io::copy(file, out)?;
+                io::copy(file.get_mut(), out)?;
                 Ok(())
             }
         }
@@ -844,7 +1068,7 @@ impl Write for Spool {
             }
             let mut file = tempfile::tempfile()?;
             file.write_all(data)?;
-            *self = Self::Disk(file);
+            *self = Self::Disk(BufWriter::with_capacity(64 * 1024, file));
         }
         if let Self::Disk(file) = self {
             file.write(buf)
@@ -935,23 +1159,45 @@ fn scan(
     prefix: bool,
     out: &mut impl Write,
 ) -> io::Result<bool> {
+    scan_cached(data, name, o, matcher, prefix, out, &mut None)
+}
+
+fn scan_cached(
+    data: &[u8],
+    name: &[u8],
+    o: &Options,
+    matcher: &Matcher,
+    prefix: bool,
+    out: &mut impl Write,
+    cache: &mut Option<regex_automata::meta::Cache>,
+) -> io::Result<bool> {
     let delimiter = if o.null_records { 0 } else { b'\n' };
     let early = o.quiet || o.listing.is_some();
     let mut count = 0;
+    if o.invert && (!o.count || early || o.max_count.is_some()) {
+        return scan_records(data, name, o, matcher, prefix, out);
+    }
     if !o.only && !o.word {
         match matcher {
             Matcher::Regex(regex) if !o.null_records && !regex.is_match(b"".as_slice()) => {
                 // An explicit local cache avoids lock contention per record.
                 // Only the end of a match is needed to identify its record;
                 // earliest half searches avoid computing POSIX-irrelevant spans.
-                let mut cache = regex.create_cache();
+                let cache = cache.get_or_insert_with(|| regex.create_cache());
+                if early && !o.invert {
+                    let found = regex
+                        .search_half_with(cache, &RegexInput::new(data).earliest(true))
+                        .is_some();
+                    finish(out, name, usize::from(found), o, prefix)?;
+                    return Ok(found);
+                }
                 let mut search_at = 0;
                 let matches = std::iter::from_fn(|| {
                     if search_at >= data.len() {
                         return None;
                     }
                     let found = regex.search_half_with(
-                        &mut cache,
+                        cache,
                         &RegexInput::new(data)
                             .range(search_at..data.len())
                             .earliest(true),
@@ -959,7 +1205,7 @@ fn scan(
                     let hit = found.offset().checked_sub(1)?;
                     let end = memchr(delimiter, &data[hit..]).map_or(data.len(), |x| hit + x);
                     search_at = end.saturating_add(1);
-                    Some((hit, found.offset()))
+                    Some((hit, Some(end)))
                 });
                 return scan_matches(data, name, o, matcher, prefix, out, matches);
             }
@@ -983,7 +1229,7 @@ fn scan(
                             .min_by_key(|(_, s)| *s)?;
                         let end = start + patterns[index].len();
                         next[index] = finders[index].find(&data[end..]).map(|s| end + s);
-                        Some((start, end))
+                        Some((start, None))
                     });
                     return scan_matches(data, name, o, matcher, prefix, out, matches);
                 }
@@ -994,7 +1240,7 @@ fn scan(
                     matcher,
                     prefix,
                     out,
-                    ac.find_iter(data).map(|m| (m.start(), m.end())),
+                    ac.find_iter(data).map(|m| (m.start(), None)),
                 );
             }
             _ => {}
@@ -1012,11 +1258,11 @@ fn scan(
                     break;
                 };
                 let hit = cursor + offset;
-                let end = memchr(delimiter, &data[hit..]).map_or(data.len(), |x| hit + x);
                 count += 1;
                 if early && !o.invert {
                     break;
                 }
+                let end = memchr(delimiter, &data[hit..]).map_or(data.len(), |x| hit + x);
                 if !o.invert && !o.count && o.listing.is_none() && !o.quiet {
                     let start =
                         memrchr(delimiter, &data[cursor..hit]).map_or(cursor, |x| cursor + x + 1);
@@ -1026,16 +1272,15 @@ fn scan(
                     }
                     emit_record(out, name, &data[start..end], number, o, matcher, prefix)?;
                 }
+                if o.max_count == Some(count) {
+                    break;
+                }
                 cursor = end.saturating_add(1);
             }
             if o.invert {
-                if o.count || early {
-                    let records = memchr_iter(delimiter, data).count()
-                        + usize::from(!data.is_empty() && data.last() != Some(&delimiter));
-                    count = records - count;
-                } else {
-                    return scan_records(data, name, o, matcher, prefix, out);
-                }
+                let records = memchr_iter(delimiter, data).count()
+                    + usize::from(!data.is_empty() && data.last() != Some(&delimiter));
+                count = records - count;
             }
             finish(out, name, count, o, prefix)?;
             return Ok(count > 0);
@@ -1051,25 +1296,26 @@ fn scan_matches(
     matcher: &Matcher,
     prefix: bool,
     out: &mut impl Write,
-    matches: impl Iterator<Item = (usize, usize)>,
+    matches: impl Iterator<Item = (usize, Option<usize>)>,
 ) -> io::Result<bool> {
     let delimiter = if o.null_records { 0 } else { b'\n' };
     let mut cursor = 0;
     let mut numbered_at = 0;
     let mut number = 1;
     let mut count = 0;
-    for (hit, _) in matches {
+    for (hit, record_end) in matches {
         if hit < cursor {
             continue;
         }
         if hit == data.len() {
             break;
         }
-        let end = memchr(delimiter, &data[hit..]).map_or(data.len(), |x| hit + x);
         count += 1;
         if (o.quiet || o.listing.is_some()) && !o.invert {
             break;
         }
+        let end = record_end
+            .unwrap_or_else(|| memchr(delimiter, &data[hit..]).map_or(data.len(), |x| hit + x));
         if !o.invert && !o.count && o.listing.is_none() && !o.quiet {
             let start = memrchr(delimiter, &data[cursor..hit]).map_or(cursor, |x| cursor + x + 1);
             if o.number {
@@ -1078,16 +1324,15 @@ fn scan_matches(
             }
             emit_record(out, name, &data[start..end], number, o, matcher, prefix)?;
         }
+        if o.max_count == Some(count) {
+            break;
+        }
         cursor = end.saturating_add(1);
     }
     if o.invert {
-        if o.count || o.quiet || o.listing.is_some() {
-            let records = memchr_iter(delimiter, data).count()
-                + usize::from(!data.is_empty() && data.last() != Some(&delimiter));
-            count = records - count;
-        } else {
-            return scan_records(data, name, o, matcher, prefix, out);
-        }
+        let records = memchr_iter(delimiter, data).count()
+            + usize::from(!data.is_empty() && data.last() != Some(&delimiter));
+        count = records - count;
     }
     finish(out, name, count, o, prefix)?;
     Ok(count > 0)
@@ -1116,6 +1361,9 @@ fn scan_records(
             if !o.count {
                 emit_record(out, name, record, number, o, matcher, prefix)?;
             }
+            if o.max_count == Some(count) {
+                break;
+            }
         }
         start = end.saturating_add(1);
         number += 1;
@@ -1138,54 +1386,46 @@ fn scan_stdin(
     let stdin = io::stdin();
     let mut input = BufReader::with_capacity(64 * 1024, stdin.lock());
     let delimiter = if o.null_records { 0 } else { b'\n' };
-    let mut pending = Vec::new();
+    let mut pending: Option<Spool> = None;
     let mut count = 0;
     let mut number = 1;
+    let mut record = |bytes: &[u8]| -> io::Result<bool> {
+        if matcher.selected(bytes, o) {
+            count += 1;
+            if o.quiet || o.listing.is_some() {
+                return Ok(true);
+            }
+            if !o.count {
+                emit_record(out, b"(standard input)", bytes, number, o, matcher, prefix)?;
+            }
+        }
+        number += 1;
+        Ok(false)
+    };
     loop {
         let data = input.fill_buf()?;
         if data.is_empty() {
-            if !pending.is_empty() && matcher.selected(&pending, o) {
-                count += 1;
-                if !o.count && o.listing.is_none() && !o.quiet {
-                    emit_record(
-                        out,
-                        b"(standard input)",
-                        &pending,
-                        number,
-                        o,
-                        matcher,
-                        prefix,
-                    )?;
-                }
+            if let Some(mut partial) = pending {
+                partial.with_bytes(&mut record)?;
             }
             break;
         }
-        let length = match memchr(delimiter, data) {
-            Some(end) => {
-                let record = if pending.is_empty() {
-                    &data[..end]
-                } else {
-                    pending.extend_from_slice(&data[..end]);
-                    &pending[..]
-                };
-                if matcher.selected(record, o) {
-                    count += 1;
-                    if o.quiet || o.listing.is_some() {
-                        input.consume(end + 1);
-                        break;
-                    }
-                    if !o.count {
-                        emit_record(out, b"(standard input)", record, number, o, matcher, prefix)?;
-                    }
-                }
-                pending.clear();
-                number += 1;
-                end + 1
+        let length = if let Some(end) = memchr(delimiter, data) {
+            let stop = if let Some(mut partial) = pending.take() {
+                partial.write_all(&data[..end])?;
+                partial.with_bytes(&mut record)?
+            } else {
+                record(&data[..end])?
+            };
+            if stop {
+                break;
             }
-            None => {
-                pending.extend_from_slice(data);
-                data.len()
-            }
+            end + 1
+        } else {
+            // Most records borrow one input block. Bound heap use even for
+            // an unbounded pipe that supplies no newline or NUL separator.
+            pending.get_or_insert_with(Spool::new).write_all(data)?;
+            data.len()
         };
         input.consume(length);
     }
@@ -1274,7 +1514,7 @@ fn gnu(args: &[OsString], reason: &str) -> ! {
 }
 
 fn prepare_stdin(args: &[OsString], o: &Options) -> io::Result<Option<Spool>> {
-    if o.listing.is_none() && !o.quiet {
+    if o.listing.is_none() && !o.quiet && !o.text && !o.null_records {
         // A pipe is replayable after bounded spooling. Inspect before producing
         // output so GNU owns all binary diagnostics, including mixed text/binary.
         let mut spool = Spool::new();
@@ -1292,7 +1532,7 @@ fn prepare_stdin(args: &[OsString], o: &Options) -> io::Result<Option<Spool>> {
         }
         if binary && !o.text && !o.null_records {
             let mut replay = match spool {
-                Spool::Disk(file) => file,
+                Spool::Disk(file) => file.into_inner().map_err(|e| e.into_error())?,
                 Spool::Memory(data) => {
                     let mut file = tempfile::tempfile()?;
                     file.write_all(&data)?;
@@ -1310,58 +1550,67 @@ fn prepare_stdin(args: &[OsString], o: &Options) -> io::Result<Option<Spool>> {
     Ok(None)
 }
 
+fn read_buffer(file: &File, length: u64, buffer: &mut Vec<u8>) -> io::Result<()> {
+    buffer.clear();
+    let required = length as usize + 1;
+    if buffer.capacity() < required {
+        buffer.reserve_exact(required);
+    }
+    loop {
+        if buffer.len() == buffer.capacity() {
+            buffer.reserve(64 * 1024);
+        }
+        let spare = buffer.spare_capacity_mut();
+        let n = unsafe { libc::read(file.as_raw_fd(), spare.as_mut_ptr().cast(), spare.len()) };
+        if n == -1 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        if n == 0 {
+            break;
+        }
+        unsafe {
+            buffer.set_len(buffer.len() + n as usize);
+        }
+    }
+    Ok(())
+}
+
 fn scan_input(
     input: &Input,
     o: &Options,
     matcher: &Matcher,
     prefix: bool,
     out: &mut impl Write,
-    buffer: &mut Vec<u8>,
+    buffer: &mut SearchBuffer,
 ) -> io::Result<bool> {
+    if let Some(Data::Summary { matched, output }) = &input.data {
+        out.write_all(output)?;
+        return Ok(*matched);
+    }
     if let Some(Data::Selected) = &input.data {
         finish(out, input.path.as_bytes(), 1, o, prefix)?;
         return Ok(true);
     }
-    if let Some(Data::Reader) = &input.data {
-        // Opening per search job bounds descriptor residency independently of
-        // corpus size; its initialized byte buffer is reused across files.
+    let data = if let Some(Data::Reader) = &input.data {
         let file = File::open(&input.path)?;
-        buffer.clear();
-        let required = input.len as usize + 1;
-        if buffer.capacity() < required {
-            buffer.reserve_exact(required);
-        }
-        loop {
-            if buffer.len() == buffer.capacity() {
-                buffer.reserve(64 * 1024);
-            }
-            let spare = buffer.spare_capacity_mut();
-            let n = unsafe { libc::read(file.as_raw_fd(), spare.as_mut_ptr().cast(), spare.len()) };
-            if n == -1 {
-                let error = io::Error::last_os_error();
-                if error.kind() == io::ErrorKind::Interrupted {
-                    continue;
-                }
-                return Err(error);
-            }
-            if n == 0 {
-                break;
-            }
-            unsafe {
-                buffer.set_len(buffer.len() + n as usize);
-            }
-        }
-        scan(buffer, input.path.as_bytes(), o, matcher, prefix, out)
+        read_buffer(&file, input.len, &mut buffer.bytes)?;
+        &buffer.bytes
     } else {
-        scan(
-            input.bytes(),
-            input.path.as_bytes(),
-            o,
-            matcher,
-            prefix,
-            out,
-        )
-    }
+        input.bytes()
+    };
+    scan_cached(
+        data,
+        input.path.as_bytes(),
+        o,
+        matcher,
+        prefix,
+        out,
+        &mut buffer.regex,
+    )
 }
 
 fn execute(
@@ -1371,27 +1620,28 @@ fn execute(
     workers: usize,
     replay: Option<Spool>,
 ) -> io::Result<bool> {
+    if o.quiet && !plan.stdin {
+        return Ok(plan.quiet_match);
+    }
     let stdout = io::stdout();
     let mut out = BufWriter::with_capacity(64 * 1024, stdout.lock());
     let mut selected = false;
     if plan.stdin {
         selected = match replay {
-            Some(Spool::Memory(data)) => scan(
-                &data,
-                b"(standard input)",
-                o,
-                matcher,
-                plan.prefix,
-                &mut out,
-            )?,
-            Some(Spool::Disk(file)) => {
-                let map = unsafe { Mmap::map(&file)? };
-                scan(&map, b"(standard input)", o, matcher, plan.prefix, &mut out)?
-            }
+            Some(mut spool) => spool.with_bytes(|data| {
+                scan(data, b"(standard input)", o, matcher, plan.prefix, &mut out)
+            })?,
             None => scan_stdin(o, matcher, plan.prefix, &mut out)?,
         };
-    } else if workers == 1 {
-        let mut buffer = Vec::new();
+    } else if workers == 1
+        || plan
+            .files
+            .iter()
+            .skip(8)
+            .all(|f| matches!(f.data, Some(Data::Summary { .. } | Data::Selected)))
+    {
+        // Precomputed summaries are already indexed in GNU order.
+        let mut buffer = SearchBuffer::default();
         for input in &plan.files {
             selected |= scan_input(input, o, matcher, plan.prefix, &mut out, &mut buffer)?;
             if o.quiet && selected {
@@ -1405,7 +1655,7 @@ fn execute(
                 batch
                     .par_iter()
                     .with_min_len(16)
-                    .map_init(Vec::new, |buffer, input| {
+                    .map_init(SearchBuffer::default, |buffer, input| {
                         let mut output = Spool::new();
                         let matched =
                             scan_input(input, o, matcher, plan.prefix, &mut output, buffer)?;
@@ -1425,10 +1675,17 @@ fn execute(
 }
 
 fn main() {
+    mod app_version_runtime {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../build-support/app_version_runtime.rs"
+        ));
+    }
+    let args: Vec<OsString> = env::args_os().skip(1).collect();
+    app_version_runtime::handle_cli(&args);
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
-    let args: Vec<OsString> = env::args_os().skip(1).collect();
     if env::var_os("POSIXLY_CORRECT").is_some() {
         gnu(&args, "POSIXLY_CORRECT option parsing");
     }
@@ -1442,7 +1699,7 @@ fn main() {
     let strategy = if workers > 1 {
         "parallel-buffered"
     } else if plan.stdin {
-        if o.quiet || o.listing.is_some() {
+        if o.quiet || o.listing.is_some() || o.text || o.null_records {
             "stream"
         } else {
             "spooled-stdin"
@@ -1466,7 +1723,7 @@ fn main() {
         strategy,
         "supported GNU byte semantics",
         workers,
-        plan.files.len(),
+        plan.files.len() + plan.quiet_files,
         plan.bytes,
     );
     match execute(&o, &matcher, &plan, workers, replay) {

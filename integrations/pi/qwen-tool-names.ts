@@ -1,13 +1,16 @@
 import {
   createReadToolDefinition, createBashToolDefinition, createEditToolDefinition,
   createWriteToolDefinition, createGrepToolDefinition, createFindToolDefinition,
-  createLsToolDefinition, getAgentDir, SettingsManager, type ExtensionAPI,
+  createLsToolDefinition, getAgentDir, SettingsManager, DEFAULT_MAX_BYTES, truncateHead, truncateLine, formatSize, type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { activateCanonicalTools, canonicalToolName, canonicalizeToolMessages } from "./qwen-tool-names.mjs";
 import { withSearchWrappers } from "./qwen-shell-search-wrappers.mjs";
 import { withFilesOnlySearch } from "./qwen-files-only-search.mjs";
+import { findPaths, searchContents, searchExecutable } from "./qwen-dedicated-search.mjs";
+
+const searchFormatting = { DEFAULT_MAX_BYTES, truncateHead, truncateLine, formatSize };
 
 const namedGuidance = (text: string) => text.replace(/\b(read|bash|edit|write|grep|find|ls)\b/g, canonicalToolName);
 const filenameSearch = (definition, cwd: string) => {
@@ -44,6 +47,16 @@ export default function namedTools(pi: ExtensionAPI) {
         : definition.promptSnippet && namedGuidance(definition.promptSnippet),
       promptGuidelines: [...(definition.promptGuidelines?.map(namedGuidance) ?? []), ...guidelines],
       execute: (id, params, signal, onUpdate, ctx) => {
+        // Other platforms, missing local tools, and unusual numeric inputs keep
+        // the SDK's platform-specific resolution, download, and error handling.
+        if (process.platform === "linux" && ctx.model?.provider === "qwen-r9700" &&
+            (definition.name === "find" || (definition.name === "grep" && !params.files_only)) &&
+            (params.limit === undefined || Number.isSafeInteger(params.limit) && params.limit > 0) &&
+            (params.context === undefined || Number.isSafeInteger(params.context))) {
+          const find = definition.name === "find";
+          const binary = searchExecutable(find ? "fd" : "rg", getAgentDir());
+          if (binary) return (find ? findPaths : searchContents)(binary, params, ctx.cwd, signal, searchFormatting);
+        }
         // Honor persisted Pi shell/image options just as native tools do. Read
         // on invocation so /settings changes are not stranded in this delegate.
         const settings = ["read", "bash"].includes(definition.name)

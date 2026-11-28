@@ -50,6 +50,7 @@ fn entry() -> Entry {
         kind: b'f',
         depth: 0,
         parent_directory: None,
+        leaf_output: None,
     }
 }
 fn evaluate(expression: &[&str]) -> (bool, Vec<u8>) {
@@ -292,10 +293,35 @@ fn shared_budgets_accept_exact_limits_and_reject_one_more_without_large_allocati
     budget.reserve_output(OUTPUT_LIMIT).unwrap();
     assert_eq!(budget.reserve_output(1), Err("rendered output byte bound"));
     let budget = Budget::new();
-    budget.reserve_discovery(DISCOVERY_BYTES_LIMIT).unwrap();
+    {
+        let mut local = WalkBudget::new(&budget);
+        assert!(WalkBudget::charge(
+            &mut local.bytes,
+            &budget.discovery_bytes,
+            DISCOVERY_BYTES_LIMIT,
+            1,
+            128
+        ));
+        assert_eq!(budget.discovery_bytes.load(Ordering::Relaxed), 128);
+        assert_eq!(local.bytes, 127);
+        assert!(WalkBudget::charge(
+            &mut local.bytes,
+            &budget.discovery_bytes,
+            DISCOVERY_BYTES_LIMIT,
+            DISCOVERY_BYTES_LIMIT - 1,
+            128
+        ));
+        assert!(!WalkBudget::charge(
+            &mut local.bytes,
+            &budget.discovery_bytes,
+            DISCOVERY_BYTES_LIMIT,
+            1,
+            128
+        ));
+    }
     assert_eq!(
-        budget.reserve_discovery(1),
-        Err("discovery path byte bound")
+        budget.discovery_bytes.load(Ordering::Relaxed),
+        DISCOVERY_BYTES_LIMIT
     );
     let budget = Budget {
         started: Instant::now() - Duration::from_secs(11),

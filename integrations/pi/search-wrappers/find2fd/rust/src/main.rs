@@ -55,10 +55,14 @@ impl Glob {
         }
         let byte_locale = byte_locale();
         let complex = pattern.iter().any(|b| matches!(b, b'?' | b'[' | b'\\'));
-        if !byte_locale && (fold || complex || !pattern.is_ascii()) {
+        // GNU find uses the locale's fnmatch folding, including for non-ASCII
+        // filenames matched against an ASCII pattern. Keep that behavior.
+        let locale_fold =
+            !byte_locale && fold && pattern.is_ascii() && !complex && utf8_case_locale();
+        if !byte_locale && !locale_fold && (fold || complex || !pattern.is_ascii()) {
             return Err("GNU locale-sensitive pattern");
         }
-        if complex {
+        if complex || locale_fold {
             Ok(Self::Posix {
                 pattern: CString::new(pattern).map_err(|_| "NUL pattern")?,
                 fold,
@@ -167,6 +171,15 @@ fn simple_glob(pattern: &[u8], value: &[u8], fold: bool) -> bool {
     p == pattern.len()
 }
 
+fn utf8_case_locale() -> bool {
+    let locale = unsafe { libc::setlocale(libc::LC_CTYPE, std::ptr::null()) };
+    !locale.is_null()
+        && matches!(
+            unsafe { CStr::from_ptr(locale) }.to_bytes(),
+            b"C.UTF-8" | b"C.utf8" | b"en_GB.UTF-8" | b"en_GB.utf8"
+        )
+}
+
 fn byte_locale() -> bool {
     env::var_os("LC_ALL")
         .filter(|s| !s.is_empty())
@@ -182,6 +195,8 @@ enum Expr {
     Name(Glob),
     Path(Glob),
     Print(u8),
+    Prune,
+    Quit,
     Not(Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
@@ -195,7 +210,18 @@ impl Expr {
         output: &mut Output,
         budget: &Budget,
     ) -> Result<bool, Failure> {
+        if output.quit {
+            return Ok(false);
+        }
         Ok(match self {
+            Self::Prune => {
+                output.prune = true;
+                true
+            }
+            Self::Quit => {
+                output.quit = true;
+                false
+            }
             Self::True => true,
             Self::False => false,
             Self::Type(kind) => *kind == entry.kind,
@@ -225,7 +251,58 @@ struct Options {
     min_depth: usize,
     max_depth: usize,
     expression: Expr,
+    leaf_filter: Option<LeafFilter>,
+    can_quit: bool,
     newline_output: bool,
+}
+
+// For pure basename/type queries, a rejected leaf never needs an owned path.
+struct LeafFilter {
+    name: Glob,
+    kind: Option<u8>,
+    separator: u8,
+}
+
+impl LeafFilter {
+    fn from_expression(expression: &Expr) -> Option<Self> {
+        let Expr::And(test, action) = expression else {
+            return None;
+        };
+        let Expr::Print(separator) = **action else {
+            return None;
+        };
+        let (name, kind) = match &**test {
+            Expr::Name(name) => (name, None),
+            Expr::And(left, right) => match (&**left, &**right) {
+                (Expr::Name(name), Expr::Type(kind)) | (Expr::Type(kind), Expr::Name(name)) => {
+                    (name, Some(*kind))
+                }
+                _ => return None,
+            },
+            _ => return None,
+        };
+        Some(Self {
+            name: name.clone(),
+            kind,
+            separator,
+        })
+    }
+    fn matches(&self, record: &DirectoryRecord, kind: u8) -> bool {
+        if self.kind.is_some_and(|wanted| kind != wanted) {
+            return false;
+        }
+        if let Glob::Posix { pattern, fold } = &self.name {
+            // directory_record validates the NUL immediately after this name.
+            return unsafe {
+                libc::fnmatch(
+                    pattern.as_ptr(),
+                    record.name.as_ptr().cast(),
+                    if *fold { libc::FNM_CASEFOLD } else { 0 },
+                ) == 0
+            };
+        }
+        self.name.matches(record.name)
+    }
 }
 
 struct Parser<'a> {
@@ -233,6 +310,7 @@ struct Parser<'a> {
     index: usize,
     nodes: usize,
     explicit_print: bool,
+    can_quit: bool,
     newline_output: bool,
 }
 
@@ -292,6 +370,11 @@ impl Parser<'_> {
                 } else {
                     Expr::Name(glob)
                 }
+            }
+            b"-prune" => Expr::Prune,
+            b"-quit" => {
+                self.can_quit = true;
+                Expr::Quit
             }
             b"-print" | b"-print0" => {
                 self.explicit_print = true;
@@ -362,6 +445,7 @@ fn parse(args: &[OsString]) -> Result<Options, Failure> {
         index: 0,
         nodes: 0,
         explicit_print: false,
+        can_quit: false,
         newline_output: false,
     };
     if parser.peek() == Some(b"-P") {
@@ -420,7 +504,9 @@ fn parse(args: &[OsString]) -> Result<Options, Failure> {
         roots,
         min_depth,
         max_depth,
+        leaf_filter: LeafFilter::from_expression(&expression),
         expression,
+        can_quit: parser.can_quit,
         newline_output: parser.newline_output,
     })
 }
@@ -431,6 +517,7 @@ struct Entry {
     kind: u8,
     depth: usize,
     parent_directory: Option<Arc<File>>,
+    leaf_output: Option<u8>,
 }
 impl Entry {
     fn name(&self) -> &[u8] {
@@ -477,6 +564,7 @@ fn root_entry(path: &[u8]) -> Result<Entry, Failure> {
         kind: kind(metadata.file_type()),
         depth: 0,
         parent_directory: None,
+        leaf_output: None,
     })
 }
 
@@ -486,6 +574,7 @@ struct Budget {
     bytes: AtomicUsize,
     discovery_bytes: AtomicUsize,
     started: Instant,
+    cancelled: AtomicBool,
 }
 impl Budget {
     fn new() -> Self {
@@ -495,9 +584,13 @@ impl Budget {
             bytes: AtomicUsize::new(0),
             discovery_bytes: AtomicUsize::new(0),
             started: Instant::now(),
+            cancelled: AtomicBool::new(false),
         }
     }
     fn entries(&self, count: usize) -> Result<(), Failure> {
+        if self.cancelled.load(Ordering::Relaxed) {
+            return Err("worker traversal cancelled");
+        }
         if self
             .entries
             .fetch_add(count, Ordering::Relaxed)
@@ -523,16 +616,59 @@ impl Budget {
             Ok(())
         }
     }
-    fn reserve_discovery(&self, bytes: usize) -> Result<(), Failure> {
-        if self
-            .discovery_bytes
-            .fetch_add(bytes, Ordering::Relaxed)
-            .saturating_add(bytes)
-            > DISCOVERY_BYTES_LIMIT
-        {
-            Err("discovery path byte bound")
-        } else {
-            Ok(())
+}
+
+// Each worker charges directory, entry and path budgets in blocks. Keeping
+// unused credits private avoids a shared atomic write for every small directory.
+struct WalkBudget<'a> {
+    shared: &'a Budget,
+    directories: usize,
+    entries: usize,
+    bytes: usize,
+    seen: usize,
+}
+
+impl<'a> WalkBudget<'a> {
+    fn new(shared: &'a Budget) -> Self {
+        Self {
+            shared,
+            directories: 0,
+            entries: 0,
+            bytes: 0,
+            seen: 0,
+        }
+    }
+    fn charge(
+        credit: &mut usize,
+        shared: &AtomicUsize,
+        limit: usize,
+        wanted: usize,
+        batch: usize,
+    ) -> bool {
+        if *credit < wanted {
+            let needed = wanted - *credit;
+            let previous = shared.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                let remaining = limit.checked_sub(used)?;
+                (remaining >= needed).then(|| used + needed.max(batch.min(remaining)))
+            });
+            let Ok(used) = previous else { return false };
+            *credit += needed.max(batch.min(limit - used));
+        }
+        *credit -= wanted;
+        true
+    }
+}
+
+impl Drop for WalkBudget<'_> {
+    fn drop(&mut self) {
+        for (counter, unused) in [
+            (&self.shared.directories, self.directories),
+            (&self.shared.entries, self.entries),
+            (&self.shared.discovery_bytes, self.bytes),
+        ] {
+            if unused != 0 {
+                counter.fetch_sub(unused, Ordering::Relaxed);
+            }
         }
     }
 }
@@ -540,12 +676,16 @@ impl Budget {
 struct Output {
     bytes: Vec<u8>,
     credited: usize,
+    prune: bool,
+    quit: bool,
 }
 impl Output {
     fn new() -> Self {
         Self {
             bytes: Vec::new(),
             credited: 0,
+            prune: false,
+            quit: false,
         }
     }
     fn print(&mut self, path: &[u8], separator: u8, budget: &Budget) -> Result<(), Failure> {
@@ -573,10 +713,9 @@ impl Output {
 
 fn child_entry(
     parent: &Entry,
-    directory: &Arc<File>,
+    parent_directory: Option<Arc<File>>,
     name: &[u8],
     kind: u8,
-    options: &Options,
 ) -> Result<Entry, Failure> {
     let mut path = Vec::with_capacity(parent.path.len() + 1 + name.len());
     path.extend_from_slice(&parent.path);
@@ -594,15 +733,12 @@ fn child_entry(
         name_range: (name_start, name_end),
         kind,
         depth: parent.depth + 1,
-        parent_directory: if kind == b'd' && parent.depth + 1 < options.max_depth {
-            Some(Arc::clone(directory))
-        } else {
-            None
-        },
+        leaf_output: None,
+        parent_directory,
     })
 }
 
-fn open_directory(entry: &Entry) -> Result<Arc<File>, Failure> {
+fn open_directory(entry: &Entry) -> Result<File, Failure> {
     let (parent, name) = match &entry.parent_directory {
         Some(parent) => (parent.as_raw_fd(), entry.name()),
         None => (libc::AT_FDCWD, entry.path.as_slice()),
@@ -620,7 +756,7 @@ fn open_directory(entry: &Entry) -> Result<Arc<File>, Failure> {
     if descriptor < 0 {
         return Err("physical directory anchor or namespace error");
     }
-    Ok(Arc::new(unsafe { File::from_raw_fd(descriptor) }))
+    Ok(unsafe { File::from_raw_fd(descriptor) })
 }
 
 struct DirectoryRecord<'a> {
@@ -652,7 +788,7 @@ fn directory_record(buffer: &[u8]) -> Result<DirectoryRecord<'_>, Failure> {
         length,
     })
 }
-fn record_kind(record: &DirectoryRecord<'_>, directory: &File) -> Result<u8, Failure> {
+fn record_kind(record: &DirectoryRecord<'_>, directory: std::os::fd::RawFd) -> Result<u8, Failure> {
     Ok(match record.dtype {
         libc::DT_DIR => b'd',
         libc::DT_REG => b'f',
@@ -667,7 +803,7 @@ fn record_kind(record: &DirectoryRecord<'_>, directory: &File) -> Result<u8, Fai
             // after this borrowed name; no CString allocation is necessary.
             if unsafe {
                 libc::fstatat(
-                    directory.as_raw_fd(),
+                    directory,
                     record.name.as_ptr().cast(),
                     &mut stat,
                     libc::AT_SYMLINK_NOFOLLOW,
@@ -692,24 +828,47 @@ fn record_kind(record: &DirectoryRecord<'_>, directory: &File) -> Result<u8, Fai
 }
 
 #[inline(never)]
-fn children(parent: &Entry, options: &Options, budget: &Budget) -> Result<Vec<Entry>, Failure> {
+fn children(
+    parent: &Entry,
+    options: &Options,
+    work: &mut WalkBudget,
+) -> Result<Vec<Entry>, Failure> {
+    let budget = work.shared;
     if parent.kind != b'd' || parent.depth >= options.max_depth {
         return Ok(Vec::new());
     }
     if parent.depth >= DEPTH_LIMIT {
         return Err("traversal depth bound");
     }
-    if budget.directories.fetch_add(1, Ordering::Relaxed) >= DIRECTORY_LIMIT {
+    if budget.cancelled.load(Ordering::Relaxed) {
+        return Err("worker traversal cancelled");
+    }
+    if work.directories == 0 && budget.started.elapsed() > Duration::from_secs(10) {
+        return Err("traversal time bound");
+    }
+    if !WalkBudget::charge(
+        &mut work.directories,
+        &budget.directories,
+        DIRECTORY_LIMIT,
+        1,
+        32,
+    ) {
         return Err("directory count bound");
     }
-    let anchor = open_directory(parent)?;
+    let directory = open_directory(parent)?;
+    let fd = directory.as_raw_fd();
+    // Keep leaf-directory descriptors on the stack. Only a descending child
+    // needs shared ownership of this anchor after enumeration returns.
+    let mut local = Some(directory);
+    let mut shared = None;
     let mut entries = Vec::new();
+    let mut total = 0;
     let mut raw = std::mem::MaybeUninit::<[u8; 32768]>::uninit();
     loop {
         let size = unsafe {
             libc::syscall(
                 libc::SYS_getdents64,
-                anchor.as_raw_fd(),
+                fd,
                 raw.as_mut_ptr().cast::<u8>(),
                 32768,
             )
@@ -725,32 +884,90 @@ fn children(parent: &Entry, options: &Options, budget: &Budget) -> Result<Vec<En
         }
         let buffer =
             unsafe { std::slice::from_raw_parts(raw.as_ptr().cast::<u8>(), size as usize) };
+        if buffer.is_empty() {
+            break;
+        }
+        // Charge an upper bound for this kernel block before allocating its
+        // paths. Only a walk near its global byte limit needs an exact prepass.
+        let per_entry = parent.path.len() + 1 + std::mem::size_of::<Entry>();
+        let mut reserved = (buffer.len() / 20) * per_entry + buffer.len();
+        if !WalkBudget::charge(
+            &mut work.bytes,
+            &budget.discovery_bytes,
+            DISCOVERY_BYTES_LIMIT,
+            reserved,
+            32768,
+        ) {
+            let mut cursor = 0;
+            reserved = 0;
+            while cursor < buffer.len() {
+                let record = directory_record(&buffer[cursor..])?;
+                cursor += record.length;
+                if record.inode != 0 && !matches!(record.name, b"." | b"..") {
+                    reserved += per_entry + record.name.len();
+                }
+            }
+            if !WalkBudget::charge(
+                &mut work.bytes,
+                &budget.discovery_bytes,
+                DISCOVERY_BYTES_LIMIT,
+                reserved,
+                0,
+            ) {
+                return Err("discovery path byte bound");
+            }
+        }
         let (mut offset, mut count, mut bytes) = (0, 0, 0);
         while offset < buffer.len() {
             let record = directory_record(&buffer[offset..])?;
-            if record.inode != 0 && !matches!(record.name, b"." | b"..") {
-                count += 1;
-                bytes += parent.path.len() + 1 + record.name.len() + std::mem::size_of::<Entry>();
-            }
             offset += record.length;
+            if record.inode == 0 || matches!(record.name, b"." | b"..") {
+                continue;
+            }
+            count += 1;
+            bytes += per_entry + record.name.len();
+            let kind = record_kind(&record, fd)?;
+            let mut leaf_output = None;
+            if kind != b'd' {
+                if let Some(filter) = &options.leaf_filter {
+                    if parent.depth + 1 < options.min_depth || !filter.matches(&record, kind) {
+                        let length = parent.path.len()
+                            + usize::from(!parent.path.ends_with(b"/"))
+                            + record.name.len();
+                        if length >= PATH_LIMIT {
+                            return Err("GNU anchored long-path traversal");
+                        }
+                        continue;
+                    }
+                    leaf_output = Some(filter.separator);
+                }
+            }
+            let anchor = if kind == b'd' && parent.depth + 1 < options.max_depth {
+                Some(Arc::clone(
+                    shared.get_or_insert_with(|| Arc::new(local.take().unwrap())),
+                ))
+            } else {
+                None
+            };
+            let mut child = child_entry(parent, anchor, record.name, kind)?;
+            child.leaf_output = leaf_output;
+            entries.push(child);
         }
-        if entries.len() + count > CHILD_LIMIT {
+        work.bytes += reserved - bytes;
+        if !WalkBudget::charge(&mut work.entries, &budget.entries, ENTRY_LIMIT, count, 256) {
+            return Err("entry count bound");
+        }
+        work.seen += count;
+        total += count;
+        // FTS may sort wide directories by inode. Zero or one retained leaf
+        // has the same output in either order. An unopened directory can
+        // still produce matches or errors, so it cannot use this exception.
+        if total > CHILD_LIMIT
+            && (options.leaf_filter.is_none()
+                || entries.len() > 1
+                || entries.first().is_some_and(|e| e.kind == b'd'))
+        {
             return Err("GNU FTS large-directory ordering");
-        }
-        budget.entries(count)?;
-        budget.reserve_discovery(bytes)?;
-        if size == 0 {
-            break;
-        }
-        entries.reserve(count);
-        offset = 0;
-        while offset < buffer.len() {
-            let record = directory_record(&buffer[offset..])?;
-            if record.inode != 0 && !matches!(record.name, b"." | b"..") {
-                let kind = record_kind(&record, &anchor)?;
-                entries.push(child_entry(parent, &anchor, record.name, kind, options)?);
-            }
-            offset += record.length;
         }
     }
     Ok(entries)
@@ -762,7 +979,10 @@ fn evaluate(
     budget: &Budget,
     output: &mut Output,
 ) -> Result<(), Failure> {
-    if entry.depth >= options.min_depth {
+    output.prune = false;
+    if let Some(separator) = entry.leaf_output {
+        output.print(&entry.path, separator, budget)?;
+    } else if entry.depth >= options.min_depth {
         options.expression.evaluate(entry, output, budget)?;
     }
     Ok(())
@@ -771,86 +991,171 @@ fn evaluate(
 fn walk(
     entry: &Entry,
     options: &Options,
-    budget: &Budget,
+    work: &mut WalkBudget,
     output: &mut Output,
 ) -> Result<(), Failure> {
-    evaluate(entry, options, budget, output)?;
-    for child in children(entry, options, budget)? {
-        walk(&child, options, budget, output)?;
+    evaluate(entry, options, work.shared, output)?;
+    if output.prune || output.quit || entry.kind != b'd' {
+        return Ok(());
+    }
+    for child in children(entry, options, work)? {
+        walk(&child, options, work, output)?;
+        if output.quit {
+            break;
+        }
     }
     Ok(())
 }
 
 struct ResultSet {
-    output: Vec<u8>,
+    output: Vec<Vec<u8>>,
     workers: usize,
     entries: usize,
     directories: usize,
+}
+
+#[derive(Default)]
+struct Traversal {
+    chunks: Vec<Vec<u8>>,
+    pool: Option<rayon::ThreadPool>,
+    workers: usize,
+}
+
+impl Traversal {
+    fn flush_chunk(&mut self, output: &mut Output, budget: &Budget) {
+        if !output.bytes.is_empty() {
+            let chunk = std::mem::replace(output, Output::new()).into_bytes(budget);
+            self.chunks.push(chunk);
+        }
+    }
+
+    fn start_pool(&mut self, directories: usize) -> Result<(), Failure> {
+        if self.pool.is_some() {
+            return Ok(());
+        }
+        let mut limit: libc::rlimit = unsafe { std::mem::zeroed() };
+        let descriptor_workers = if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } == 0
+        {
+            (limit.rlim_cur.saturating_sub(16) / 4).clamp(1, 16) as usize
+        } else {
+            1
+        };
+        let threads = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .min(descriptor_workers)
+            .min(directories);
+        if threads > 1 {
+            self.pool = Some(
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .map_err(|_| "worker pool creation")?,
+            );
+            self.workers = threads;
+        }
+        Ok(())
+    }
+
+    fn visit(
+        &mut self,
+        entry: &Entry,
+        options: &Options,
+        work: &mut WalkBudget,
+        output: &mut Output,
+    ) -> Result<(), Failure> {
+        let budget = work.shared;
+        if options.can_quit {
+            return walk(entry, options, work, output);
+        }
+        evaluate(entry, options, budget, output)?;
+        if output.prune || entry.kind != b'd' || entry.depth >= options.max_depth {
+            return Ok(());
+        }
+        let list = children(entry, options, work)?;
+        let mut directories = list
+            .iter()
+            .filter(|e| e.kind == b'd' && e.depth < options.max_depth)
+            .count();
+        let mut siblings = list.into_iter();
+        let before = work.seen;
+        // Observe real descendant work before paying for threads. Looking at
+        // each depth also admits a wide subtree below a narrow starting path.
+        if directories >= 64 {
+            self.start_pool(directories)?;
+        }
+        if directories < 64 || self.pool.is_none() {
+            for child in siblings.by_ref() {
+                let directory = child.kind == b'd' && child.depth < options.max_depth;
+                self.visit(&child, options, work, output)?;
+                if directory {
+                    directories -= 1;
+                    if directories >= 8 && (work.seen - before >= 8 || self.pool.is_some()) {
+                        self.start_pool(directories)?;
+                        if self.pool.is_some() {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if siblings.len() == 0 {
+            return Ok(());
+        }
+
+        self.flush_chunk(output, budget);
+        let pool = self.pool.as_ref().unwrap();
+        let first_error = std::sync::OnceLock::new();
+        let chunk_size = siblings.len().div_ceil(self.workers * 16);
+        let parts: Vec<Vec<u8>> = pool.install(|| {
+            siblings
+                .as_slice()
+                .par_chunks(chunk_size)
+                .map(|group| {
+                    let mut part = Output::new();
+                    let mut local = WalkBudget::new(budget);
+                    for child in group {
+                        if budget.cancelled.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        if let Err(reason) = walk(child, options, &mut local, &mut part) {
+                            first_error.get_or_init(|| reason);
+                            budget.cancelled.store(true, Ordering::Relaxed);
+                            break;
+                        }
+                    }
+                    part.into_bytes(budget)
+                })
+                .collect()
+        });
+        if let Some(reason) = first_error.into_inner() {
+            return Err(reason);
+        }
+        self.chunks
+            .extend(parts.into_iter().filter(|part| !part.is_empty()));
+        Ok(())
+    }
 }
 
 fn prepare(options: &Options) -> Result<ResultSet, Failure> {
     check_stdout(options)?;
     let budget = Budget::new();
     let mut output = Output::new();
-    let mut workers = 1;
-    let mut pool = None;
+    let mut traversal = Traversal::default();
+    let mut work = WalkBudget::new(&budget);
     for root in &options.roots {
         let entry = root_entry(root)?;
         budget.entries(1)?;
-        evaluate(&entry, options, &budget, &mut output)?;
-        let children = children(&entry, options, &budget)?;
-        let child_directories = children
-            .iter()
-            .filter(|e| e.kind == b'd' && e.depth < options.max_depth)
-            .count();
-        let parallel = children.len() >= 32 && child_directories >= 4;
-        if parallel {
-            if pool.is_none() {
-                let mut descriptor_limit: libc::rlimit = unsafe { std::mem::zeroed() };
-                let descriptor_workers = if unsafe {
-                    libc::getrlimit(libc::RLIMIT_NOFILE, &mut descriptor_limit)
-                } == 0
-                {
-                    (descriptor_limit.rlim_cur.saturating_sub(16) / 4).clamp(1, 16) as usize
-                } else {
-                    1
-                };
-                let threads = std::thread::available_parallelism()
-                    .map_or(1, |n| n.get())
-                    .min(descriptor_workers);
-                pool = Some(
-                    rayon::ThreadPoolBuilder::new()
-                        .num_threads(threads)
-                        .build()
-                        .map_err(|_| "worker pool creation")?,
-                );
-                workers = threads;
-            }
-            output.settle(&budget);
-            let parts: Vec<Result<Vec<u8>, Failure>> = pool.as_ref().unwrap().install(|| {
-                children
-                    .par_iter()
-                    .map(|child| {
-                        let mut part = Output::new();
-                        walk(child, options, &budget, &mut part)?;
-                        Ok(part.into_bytes(&budget))
-                    })
-                    .collect()
-            });
-            for part in parts {
-                output.bytes.extend_from_slice(&part?);
-            }
-            output.credited = output.bytes.len();
-        } else {
-            for child in children {
-                walk(&child, options, &budget, &mut output)?;
-            }
+        traversal.visit(&entry, options, &mut work, &mut output)?;
+        if output.quit {
+            break;
         }
     }
+    drop(work);
     budget.entries(0)?;
+    traversal.flush_chunk(&mut output, &budget);
     Ok(ResultSet {
-        output: output.into_bytes(&budget),
-        workers,
+        output: traversal.chunks,
+        workers: traversal.workers.max(1),
         entries: budget.entries.load(Ordering::Relaxed),
         directories: budget.directories.load(Ordering::Relaxed),
     })
@@ -907,6 +1212,14 @@ fn gnu(args: &[OsString]) -> ! {
 }
 
 fn main() {
+    mod app_version_runtime {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../build-support/app_version_runtime.rs"
+        ));
+    }
+    let mut args: Vec<OsString> = env::args_os().skip(1).collect();
+    app_version_runtime::handle_cli(&args);
     unsafe {
         libc::signal(
             libc::SIGPIPE,
@@ -918,7 +1231,6 @@ fn main() {
         );
         libc::setlocale(libc::LC_ALL, c"".as_ptr());
     }
-    let mut args: Vec<OsString> = env::args_os().skip(1).collect();
     let diagnostic = args.first().is_some_and(|s| s == "--find2fd-route-json");
     if diagnostic {
         args.remove(0);
@@ -939,17 +1251,7 @@ fn main() {
     let result = result.unwrap_or_else(|_| gnu(&args));
     // std::io::stdout has a process-global line buffer. A successful write_all
     // can therefore defer NUL-record failures until an ignored shutdown flush.
-    let mut remaining = result.output.as_slice();
-    while !remaining.is_empty() {
-        let written = unsafe { libc::write(1, remaining.as_ptr().cast(), remaining.len()) };
-        if written > 0 {
-            remaining = &remaining[written as usize..];
-            continue;
-        }
-        let error = io::Error::last_os_error();
-        if error.raw_os_error() == Some(libc::EINTR) {
-            continue;
-        }
+    if let Err(error) = write_output(&result.output) {
         let detail =
             unsafe { CStr::from_ptr(libc::strerror(error.raw_os_error().unwrap_or(libc::EIO))) };
         if byte_locale() {
@@ -965,6 +1267,29 @@ fn main() {
         }
         std::process::exit(1);
     }
+}
+
+// Write in order without copying every parallel result into a second buffer.
+// Direct file writes retain GNU's observable flush/error behavior.
+fn write_output(chunks: &[Vec<u8>]) -> io::Result<()> {
+    use std::io::{IoSlice, Write};
+    let mut stdout = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(1) });
+    for batch in chunks.chunks(64) {
+        let mut slices = [IoSlice::new(&[]); 64];
+        for (slice, chunk) in slices.iter_mut().zip(batch) {
+            *slice = IoSlice::new(chunk);
+        }
+        let mut pending = &mut slices[..batch.len()];
+        while !pending.is_empty() {
+            match stdout.write_vectored(pending) {
+                Ok(0) => return Err(io::Error::from_raw_os_error(libc::EIO)),
+                Ok(n) => IoSlice::advance_slices(&mut pending, n),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

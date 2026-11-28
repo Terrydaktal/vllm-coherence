@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { availableParallelism, homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,7 +38,7 @@ export function withFilesOnlySearch(definition, { cwd, rgPath = "rg", timeoutMs 
   };
 }
 
-function resolveSearchPath(rawPath, cwd) {
+export function resolveSearchPath(rawPath, cwd) {
   let searchPath = rawPath || ".";
   // Match the native SDK's pasted-path conveniences and home expansion.
   searchPath = searchPath.replace(/[\u00a0\u2000-\u200a\u202f\u205f\u3000]/g, " ");
@@ -46,6 +46,10 @@ function resolveSearchPath(rawPath, cwd) {
   if (searchPath === "~" || searchPath.startsWith("~/")) searchPath = homedir() + searchPath.slice(1);
   if (searchPath.startsWith("file://")) searchPath = fileURLToPath(searchPath);
   return resolve(cwd, searchPath);
+}
+
+export function ripgrepThreads(directory) {
+  return String(directory ? Math.min(4, availableParallelism()) : 1);
 }
 
 export async function searchFilenames(params, { cwd, signal, rgPath = "rg", timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -62,7 +66,7 @@ export async function searchFilenames(params, { cwd, signal, rgPath = "rg", time
   try { directory = (await stat(searchPath)).isDirectory(); }
   catch { throw new Error(`Path not found: ${searchPath}`); }
   if (signal?.aborted) throw new Error("Operation aborted");
-  const args = ["--files-with-matches", "--null", "--color=never", "--hidden"];
+  const args = ["--threads", ripgrepThreads(directory), "--files-with-matches", "--null", "--color=never", "--hidden"];
   if (params.ignoreCase) args.push("--ignore-case");
   if (params.literal) args.push("--fixed-strings");
   if (params.glob) args.push("--glob", params.glob);

@@ -13,6 +13,10 @@ export function withFindWrapper(context, shellPath) {
   if (shellPath && !/^bash(?:\.exe)?$/.test(basename(shellPath))) return context;
   const prefix = `if [ -n "\${BASH_VERSION-}" ]; then
 \tfind() {
+\t\tif [[ $# == 1 && ( $1 == --version || $1 == -V ) ]]; then
+\t\t\tcommand find "$@"
+\t\t\treturn
+\t\tfi
 \t\tif [[ \${FIND2FD_ACCELERATION-} == off || \${FIND2FD_ACCELERATION-} == 0 || (\${FIND2FD_EXPERIMENTAL_FD+x} && \${FIND2FD_EXPERIMENTAL_FD-} != 1) ]]; then
 \t\t\tcommand find "$@"
 \t\t\treturn
