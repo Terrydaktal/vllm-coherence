@@ -12,7 +12,7 @@ import { canonicalToolName } from "../integrations/pi/qwen-tool-names.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sdkRoot = process.env.QWEN_TEST_PI_ROOT ?? join(homedir(), ".local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works");
 const opsecGuest = process.env.QWEN_TEST_OPSEC_SEARCH_GUEST ?? "/home/lewis/tasks/opsec/vm/search/guest";
-const searchRoot = process.env.QWEN_TEST_SEARCHTOOL_ROOT ?? "/home/lewis/tasks/searchtool";
+const searchRoot = process.env.QWEN_TEST_SEARCHTOOL_ROOT ?? "/home/lewis/Dev/pi-search-tools";
 
 test("Opsec facade preserves builtin inspection provenance and plan mode never trusts custom tool names", {
   skip: !existsSync(join(sdkRoot, "pi-coding-agent/dist/core/sdk.js")) ||

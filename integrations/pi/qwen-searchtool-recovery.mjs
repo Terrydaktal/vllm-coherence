@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 
 export const SESSION_ID = "01a02132-9518-735b-805a-7b66a18c023d";
-export const PROJECT = "/home/lewis/Dev/searchtool";
+export const PROJECT = "/home/lewis/Dev/pi-search-tools";
 export const CONTROL = "qwen-searchtool-recovery-v1";
 export const MAX_RECOVERIES = 2;
 export const RADIANCE_MODEL = "qwen3.8-27b-uncensored-mxfp4-public-snapshot-candidate";

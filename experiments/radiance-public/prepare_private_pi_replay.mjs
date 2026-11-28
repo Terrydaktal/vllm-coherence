@@ -37,7 +37,7 @@ const loader = new sdk.DefaultResourceLoader({
   additionalExtensionPaths: [
     path.join(source, "integrations/pi/qwen-tool-output-condense.mjs"),
     path.join(source, "integrations/pi/qwen-tool-turn-rehydrate.mjs"),
-    "/home/lewis/tasks/searchtool/index.ts",
+    "/home/lewis/Dev/pi-search-tools/web-search/index.ts",
   ],
 });
 await loader.reload();

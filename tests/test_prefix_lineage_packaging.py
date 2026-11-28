@@ -123,7 +123,7 @@ def test_portable_pi_reaches_the_existing_lineage_installer_and_checks(
     )
     args = SimpleNamespace(state=state, ssh=None, search_extension=None)
     assert pi.launch(args, ["--continue"]) == 0
-    extension = str(ROOT / "integrations/pi/qwen-session-search.mjs")
+    extension = "/home/lewis/Dev/pi-search-tools/session-search/index.mjs"
     assert len(launches) == 1
     assert launches[0].count(extension) == 1
     assert launches[0][launches[0].index(extension) - 1] == "--extension"

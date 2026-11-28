@@ -177,18 +177,30 @@ def launch(args, pi_args):
         private_directory(telemetry / "clients")
         history = Path.cwd() / ".pi/sessions"
         history.mkdir(mode=0o700, parents=True, exist_ok=True)
-        extensions = [
-            "qwen-progress.mjs",
-            "qwen-running-build-title.mjs",
-            "qwen-client-commands.mjs",
-            "qwen-gpu-temperature.mjs",
-            "qwen-tool-output-condense.mjs",
-            "qwen-tool-turn-rehydrate.mjs",
-            "qwen-session-search.mjs",
-            "qwen-task-plan.ts",
-            "qwen-radiance-compaction.ts",
-            "qwen-radiance-cache.mjs",
-            "qwen-tool-names.ts",
+        search_tools_root = Path(
+            os.environ.get("QWEN_PI_SEARCH_TOOLS_ROOT")
+            or "/home/lewis/Dev/pi-search-tools"
+        ).expanduser()
+        extension_paths = [
+            ROOT / "integrations/pi" / name
+            for name in (
+                "qwen-progress.mjs",
+                "qwen-running-build-title.mjs",
+                "qwen-client-commands.mjs",
+                "qwen-gpu-temperature.mjs",
+                "qwen-tool-output-condense.mjs",
+                "qwen-tool-turn-rehydrate.mjs",
+            )
+        ] + [
+            search_tools_root / "session-search/index.mjs",
+        ] + [
+            ROOT / "integrations/pi" / name
+            for name in (
+                "qwen-task-plan.ts",
+                "qwen-radiance-compaction.ts",
+                "qwen-radiance-cache.mjs",
+                "qwen-tool-names.ts",
+            )
         ]
         command = [
             str(binary),
@@ -203,8 +215,8 @@ def launch(args, pi_args):
             "--exclude-tools",
             "read,bash,edit,write,grep,find,ls",
         ]
-        for name in extensions:
-            command += ["--extension", str(ROOT / "integrations/pi" / name)]
+        for extension_path in extension_paths:
+            command += ["--extension", str(extension_path)]
         if args.search_extension:
             extension = Path(args.search_extension).expanduser().resolve(strict=True)
             command += ["--extension", str(extension)]

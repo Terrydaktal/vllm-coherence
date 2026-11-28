@@ -11,7 +11,7 @@ import { CONTEXT_POLICY_ENTRY } from "../integrations/pi/qwen-context-policy.mjs
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sdkRoot = process.env.QWEN_TEST_PI_ROOT ?? join(homedir(), ".local/share/qwen-r9700/pi/0.84.2/node_modules/@earendil-works");
-const searchRoot = process.env.QWEN_TEST_SEARCHTOOL_ROOT ?? "/home/lewis/tasks/searchtool";
+const searchRoot = process.env.QWEN_TEST_SEARCHTOOL_ROOT ?? "/home/lewis/Dev/pi-search-tools";
 const textOf = (result) => result.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
 
 test("installed Pi exposes canonical tools and preserves native execution and historical context", {
@@ -59,8 +59,8 @@ test("installed Pi exposes canonical tools and preserves native execution and hi
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
     additionalExtensionPaths: [join(root, "integrations/pi/qwen-radiance-compaction.ts"),
       join(root, "integrations/pi/qwen-task-plan.ts"), join(root, "integrations/pi/qwen-tool-output-condense.mjs"),
-      join(root, "integrations/pi/qwen-tool-turn-rehydrate.mjs"), join(root, "integrations/pi/qwen-session-search.mjs"),
-      join(searchRoot, "index.ts"), namingPath] });
+      join(root, "integrations/pi/qwen-tool-turn-rehydrate.mjs"), join(searchRoot, "session-search/index.mjs"),
+      join(searchRoot, "web-search/index.ts"), namingPath] });
   await resourceLoader.reload();
   assert.deepEqual(resourceLoader.getExtensions().errors, []);
   assert.equal(resourceLoader.getExtensions().extensions.at(-1).path, namingPath, "normalization loads after context selection");

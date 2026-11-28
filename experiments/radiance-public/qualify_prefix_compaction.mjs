@@ -65,7 +65,7 @@ async function openSession(manager) {
     noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,
     additionalExtensionPaths: [
       ...(args.extensions === "launcher" ? [join(repository, "integrations/pi/qwen-progress.mjs"),
-        join(repository, "integrations/pi/qwen-tool-output-condense.mjs"), "/home/lewis/tasks/searchtool/index.ts"] : []),
+        join(repository, "integrations/pi/qwen-tool-output-condense.mjs"), "/home/lewis/Dev/pi-search-tools/web-search/index.ts"] : []),
       join(repository, "integrations/pi/qwen-radiance-compaction.ts"),
     ] });
   await loader.reload();

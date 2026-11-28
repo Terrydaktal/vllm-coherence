@@ -236,8 +236,10 @@ test("plan tool provenance rejects custom replacements for read and bash", () =>
     assert.equal(isTrustedPlanTool(name, { sourceInfo: { source: "builtin", path: `<builtin:${name}>` } }), false);
     assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-task-plan.ts") } }), false);
   }
+  const searchToolsRoot = process.env.QWEN_PI_SEARCH_TOOLS_ROOT || "/home/lewis/Dev/pi-search-tools";
   for (const name of ["session_search", "pi_session_search"]) {
-    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-session-search.mjs") } }), true);
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(searchToolsRoot, "session-search/index.mjs") } }), true);
+    assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(searchToolsRoot, "index.ts") } }), true);
   }
   for (const name of ["qwen_rehydrate_tool_turn", "read_archived_tool_result", "rehydrate_tool_result"]) {
     assert.equal(isTrustedPlanTool(name, { sourceInfo: { path: join(import.meta.dirname, "../integrations/pi/qwen-tool-turn-rehydrate.mjs") } }), true);

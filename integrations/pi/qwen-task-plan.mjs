@@ -371,11 +371,16 @@ export function validateReadOnlyBash(command) {
 const READ_TOOLS = new Set(["read", "grep", "find", "ls", "session_search", "qwen_rehydrate_tool_turn", "qwen_plan"].map(canonicalToolName));
 const BUILTIN_READ_TOOLS = new Set(["read", "grep", "find", "ls", "bash"]);
 const extensionDirectory = dirname(fileURLToPath(import.meta.url));
+const searchToolsRoot = () => process.env.QWEN_PI_SEARCH_TOOLS_ROOT || "/home/lewis/Dev/pi-search-tools";
 const TRUSTED_EXTENSIONS = {
-  [SESSION_SEARCH_TOOL_NAME]: ["qwen-session-search.mjs"],
-  [REHYDRATE_TOOL_NAME]: ["qwen-tool-turn-rehydrate.mjs"],
-  [TOOL_NAME]: ["qwen-task-plan.mjs", "qwen-task-plan.ts"],
-  ...Object.fromEntries([...BUILTIN_READ_TOOLS].map((name) => [canonicalToolName(name), ["qwen-tool-names.ts"]])),
+  [SESSION_SEARCH_TOOL_NAME]: () => [
+    join(extensionDirectory, "session-search/index.mjs"),
+    join(searchToolsRoot(), "session-search/index.mjs"),
+    join(searchToolsRoot(), "index.ts"),
+  ],
+  [REHYDRATE_TOOL_NAME]: () => [join(extensionDirectory, "qwen-tool-turn-rehydrate.mjs")],
+  [TOOL_NAME]: () => [join(extensionDirectory, "qwen-task-plan.mjs"), join(extensionDirectory, "qwen-task-plan.ts")],
+  ...Object.fromEntries([...BUILTIN_READ_TOOLS].map((name) => [canonicalToolName(name), () => [join(extensionDirectory, "qwen-tool-names.ts")]])),
 };
 export function isTrustedPlanTool(name, info) {
   if (BUILTIN_READ_TOOLS.has(name)) return info?.sourceInfo?.source === "builtin" && info.sourceInfo.path === `<builtin:${name}>`;
@@ -383,7 +388,9 @@ export function isTrustedPlanTool(name, info) {
   if (!TRUSTED_EXTENSIONS[canonical] || typeof info?.sourceInfo?.path !== "string") return false;
   try {
     const source = realpathSync(info.sourceInfo.path);
-    return TRUSTED_EXTENSIONS[canonical].some((file) => source === realpathSync(join(extensionDirectory, file)));
+    return TRUSTED_EXTENSIONS[canonical]().some((candidate) => {
+      try { return source === realpathSync(candidate); } catch { return false; }
+    });
   } catch { return false; }
 }
 const planDigest = (state, maxChars) => createHash("sha256").update(taskPlanContext(state, { maxChars })).digest("hex");

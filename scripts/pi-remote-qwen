@@ -92,7 +92,7 @@ readonly OUTCOME_EXTENSION_SHA256='6d4b4172be7d79541afe09eaac2c1ca69e926cfa450f3
 readonly OUTCOME_EXTENSION_BYTES='12859'
 readonly OUTCOME_PROBE_SHA256='1bcfc77104eeef18695289df2fc7ee2e80e0ac5fd9c47275aa76cac52eaf58a8'
 readonly OUTCOME_PROBE_BYTES='21464'
-readonly SEARCHTOOL_EXTENSION='/home/lewis/tasks/searchtool/index.ts'
+readonly SEARCHTOOL_EXTENSION='/home/lewis/Dev/pi-search-tools/web-search/index.ts'
 readonly SNAPSHOT_STAGE_MINIMUM_TOKENS='8258'
 readonly SNAPSHOT_STAGE_INCREMENT_TOKENS='8240'
 # These hashes are part of snapshot-bootstrap-v5. A future controller/verifier

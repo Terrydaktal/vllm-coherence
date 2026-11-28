@@ -54,7 +54,7 @@ const repository = resolve(import.meta.dirname, "../..");
 const settings = coding.SettingsManager.inMemory(JSON.parse(await readFile(join(agentDir, "settings.json"), "utf8")));
 const loader = new coding.DefaultResourceLoader({ cwd, agentDir, settingsManager: settings, noExtensions: true,
   additionalExtensionPaths: ["qwen-progress.mjs", "qwen-tool-output-condense.mjs", "qwen-radiance-compaction.ts"].map((name) => join(repository, "integrations/pi", name))
-    .concat("/home/lewis/tasks/searchtool/index.ts") });
+    .concat("/home/lewis/Dev/pi-search-tools/web-search/index.ts") });
 await loader.reload();
 assert.equal(loader.getExtensions().errors.length, 0, "extension loading failed");
 const runtime = await coding.ModelRuntime.create({ modelsPath: join(agentDir, "models.json"), authPath: join(agentDir, "auth.json") });

@@ -45,7 +45,7 @@ test("authorized recovery treats a legacy project alias and its new canonical di
       assert.equal(getAuthorizedChat({ ...ctx, sessionManager: { ...ctx.sessionManager, getCwd: () => unrelated } }), undefined);
     }
   }
-  assert.equal(PROJECT, "/home/lewis/Dev/searchtool");
+  assert.equal(PROJECT, "/home/lewis/Dev/pi-search-tools");
 });
 
 test("automatic follow-up preserves the stopped answer and never injects partial arguments", () => {

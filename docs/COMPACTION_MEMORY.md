@@ -59,7 +59,7 @@ GPU work.
 8. **Historical recovery.** `pi_session_search` retrieves original entries using the
    recorded IDs or keywords. Instructions tell the resumed model to retrieve
    missing evidence before repeating completed work, reversing a decision, or
-   asserting an unverified historical result. See [SESSION_SEARCH.md](SESSION_SEARCH.md).
+   asserting an unverified historical result. See [pi-search-tools SESSION_SEARCH.md](https://github.com/Terrydaktal/pi-search-tools/blob/main/docs/SESSION_SEARCH.md).
 
 The entire restoration appendix shares a maximum of **20,000 characters**,
 reduced when context headroom is small. Headers, quoted paths, source IDs,
